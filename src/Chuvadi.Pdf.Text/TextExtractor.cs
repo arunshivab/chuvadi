@@ -105,6 +105,35 @@ public sealed class TextExtractor
             : new OperatorExtractor().Extract(fragments);
     }
 
+    /// <summary>
+    /// Extracts positioned text fragments from the given page.
+    /// </summary>
+    /// <remarks>
+    /// Each fragment is a piece of text shown by a single Tj or TJ entry with
+    /// the X, Y position (PDF user space) and font size at the time of rendering.
+    /// Returned in operator order, not reading order — callers wanting reading
+    /// order should apply layout reconstruction.
+    /// </remarks>
+    /// <param name="page">The page to extract fragments from.</param>
+    /// <returns>A list of fragments, or an empty list when the page has no text.</returns>
+    public List<TextFragment> ExtractFragments(PdfPage page)
+    {
+        if (page is null)
+        {
+            throw new ArgumentNullException(nameof(page));
+        }
+
+        byte[] contentBytes = ReadContentBytes(page);
+
+        if (contentBytes.Length == 0)
+        {
+            return new List<TextFragment>();
+        }
+
+        ContentStreamParser parser = new ContentStreamParser(_objects, page.Resources);
+        return parser.Parse(contentBytes);
+    }
+
     // ── Private: content stream loading ──────────────────────────────────
 
     /// <summary>

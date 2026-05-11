@@ -22,7 +22,15 @@ Initialises `RedactionOptions` with default values.
 IList<RedactionRect> Rectangles
 ```
 
-Gets or initialises the list of rectangles to redact, by page.
+Gets the list of explicit rectangles to redact, by page.
+
+### `Patterns`
+
+```csharp
+IList<PatternRule> Patterns
+```
+
+Gets the list of regex patterns to redact. Each matching span across extracted text on a targeted page is resolved to a device-space rectangle and added to the redaction set.
 
 ### `OverlayColor`
 
@@ -31,6 +39,14 @@ ColorF OverlayColor
 ```
 
 Gets or initialises the colour painted over each redacted rectangle. Default: opaque black.
+
+### `PatternPadding`
+
+```csharp
+double PatternPadding
+```
+
+Gets or initialises the padding (PDF points) added around each pattern-derived rectangle to compensate for font-metric approximation. Default: 1.0.
 
 ---
 

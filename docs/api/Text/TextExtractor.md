@@ -34,6 +34,22 @@ Extracts all text from the given page as a plain Unicode string.
 
 **Returns:** The extracted text, or an empty string when the page has no text.
 
+### `ExtractFragments`
+
+```csharp
+List<TextFragment> ExtractFragments(PdfPage page)
+```
+
+Extracts positioned text fragments from the given page.
+
+**Parameters**
+
+- `page` — The page to extract fragments from.
+
+**Returns:** A list of fragments, or an empty list when the page has no text.
+
+**Remarks:** Each fragment is a piece of text shown by a single Tj or TJ entry with the X, Y position (PDF user space) and font size at the time of rendering. Returned in operator order, not reading order — callers wanting reading order should apply layout reconstruction.
+
 ---
 
 _Source: [`src/Chuvadi.Pdf.Text/TextExtractor.cs`](../../../src/Chuvadi.Pdf.Text/TextExtractor.cs)_

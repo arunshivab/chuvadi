@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Encryption</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Encryption</RootNamespace>
+    <Description>
+      PDF encryption per ISO 32000-1:2008 §7.6 and ISO 32000-2:2020 §7.6.
+
+      Supports:
+      - V≤3 (R=2, R=3): RC4 with 40-bit and 128-bit keys
+      - V=4 (R=4): RC4 or AES-128 via /CF crypt filters
+      - V=5 (R=6): AES-256 (ISO 32000-2 standardised key derivation)
+
+      Read side decrypts strings and stream data per object/generation using the
+      standard security handler. Write side encrypts using AES-128 or AES-256;
+      writing RC4-encrypted PDFs is intentionally not supported (legacy algorithm,
+      AES-128 has been the practical minimum since PDF 1.6 / 2007).
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+  </ItemGroup>
+
+</Project>

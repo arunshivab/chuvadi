@@ -75,10 +75,24 @@ public static class Redactor
         // and only contains resolved objects, so we must walk the graph before iterating.
         PreloadAllObjects(document);
 
+        // Resolve pattern rules into explicit rectangles by extracting text from each
+        // page and matching the patterns against it.
+        List<RedactionRect> allRects = new List<RedactionRect>(options.Rectangles);
+
+        if (options.Patterns.Count > 0)
+        {
+            for (int p = 0; p < document.PageCount; p++)
+            {
+                List<RedactionRect> resolved = PatternMatcher.Resolve(
+                    document, p, options.Patterns, options.PatternPadding);
+                allRects.AddRange(resolved);
+            }
+        }
+
         // Group rectangles by page
         Dictionary<int, List<RectangleF>> byPage = new Dictionary<int, List<RectangleF>>();
 
-        foreach (RedactionRect rect in options.Rectangles)
+        foreach (RedactionRect rect in allRects)
         {
             if (!byPage.TryGetValue(rect.PageIndex, out List<RectangleF>? list))
             {

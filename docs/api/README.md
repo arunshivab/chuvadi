@@ -8,12 +8,6 @@ Regenerate with:
 python tools/gen_api_docs.py
 ```
 
-## Chuvadi.Pdf.
-
-| Type | Kind | Description |
-|---|---|---|
-| [Class1](/Class1.md) | class | — |
-
 ## Chuvadi.Pdf.Annotations
 
 | Type | Kind | Description |
@@ -50,6 +44,20 @@ python tools/gen_api_docs.py
 | [PdfPage](Documents/PdfPage.md) | class | Represents a single page in a PDF document. |
 | [PdfPageCollection](Documents/PdfPageCollection.md) | class | Provides lazy, random-access to the pages of a PDF document. |
 | [PdfRectangle](Documents/PdfRectangle.md) | struct | An immutable rectangle in PDF user space (points, 1/72 inch). |
+
+## Chuvadi.Pdf.Encryption
+
+| Type | Kind | Description |
+|---|---|---|
+| [AesCrypto](Encryption/AesCrypto.md) | class | AES-CBC encryption/decryption with PDF's IV-prefix wire format. |
+| [Decryptor](Encryption/Decryptor.md) | class | Decrypts individual strings and streams in an encrypted PDF. |
+| [EncryptionAlgorithm](Encryption/EncryptionAlgorithm.md) | enum | Identifies which encryption algorithm a PDF uses. |
+| [EncryptionDictionary](Encryption/EncryptionDictionary.md) | class | Parsed view of a PDF's /Encrypt trailer entry. |
+| [EncryptionException](Encryption/EncryptionException.md) | class | Thrown when a PDF encryption or decryption operation fails. |
+| [Encryptor](Encryption/Encryptor.md) | class | Encrypts individual strings and streams for writing an encrypted PDF. |
+| [PdfEncryption](Encryption/PdfEncryption.md) | class | Top-level helper for decrypting an encrypted PDF. |
+| [Rc4](Encryption/Rc4.md) | class | RC4 stream cipher. |
+| [StandardSecurityHandler](Encryption/StandardSecurityHandler.md) | class | Standard security handler: derives a file encryption key from a user/owner password and the document's /Encrypt dictionary. |
 
 ## Chuvadi.Pdf.Filters
 
@@ -132,6 +140,9 @@ python tools/gen_api_docs.py
 | [JpegDecoder](Images/JpegDecoder.md) | class | Decodes a baseline sequential DCT JPEG (SOF0) into an `ImageFrame`. |
 | [PngDecoder](Images/PngDecoder.md) | class | Decodes a PNG image into an `ImageFrame`. |
 | [PngEncoder](Images/PngEncoder.md) | class | Encodes an `ImageFrame` to PNG format. |
+| [TiffDecoder](Images/TiffDecoder.md) | class | Decodes TIFF images per TIFF 6.0 baseline. |
+| [TiffEncoder](Images/TiffEncoder.md) | class | Encodes one or more `ImageFrame` objects to a baseline TIFF 6.0 byte stream. |
+| [TiffException](Images/TiffException.md) | class | Thrown when a TIFF operation fails. |
 
 ## Chuvadi.Pdf.Objects
 
@@ -178,6 +189,8 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [CommonPatterns](Redaction/CommonPatterns.md) | class | Pre-built regex strings for common PHI / PII tokens. |
+| [PatternRule](Redaction/PatternRule.md) | class | A regex pattern that locates text to redact, with optional per-page filtering. |
 | [RedactionException](Redaction/RedactionException.md) | class | Thrown when a redaction operation fails. |
 | [RedactionOptions](Redaction/RedactionOptions.md) | class | Top-level configuration for a redaction operation. |
 | [RedactionRect](Redaction/RedactionRect.md) | class | One rectangle of content to permanently remove from a PDF page. |
