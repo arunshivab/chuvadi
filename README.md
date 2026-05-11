@@ -54,6 +54,9 @@ air-gap-deployed kiosks.
 Full module list and dependency graph: see `docs/BASELINE.md`.
 Decision history: see `docs/CHANGE-LOG.md`.
 
+API reference (one Markdown file per public type, auto-generated from XML doc
+comments): see [`docs/api/`](docs/api/README.md).
+
 ---
 
 ## Quick start (library)

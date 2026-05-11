@@ -334,7 +334,9 @@ def main():
             total_issues += 1
             continue
 
-        # Skip build artefacts (auto-generated AssemblyInfo, etc.)
+        # Skip non-C# files and build artefacts (auto-generated AssemblyInfo, etc.)
+        if not path.endswith('.cs'):
+            continue
         norm = path.replace(os.sep, '/')
         if '/bin/' in norm or '/obj/' in norm:
             continue
