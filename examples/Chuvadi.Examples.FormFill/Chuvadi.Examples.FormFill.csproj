@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.FormFill</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.FormFill</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Read and fill AcroForm fields in a PDF.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Forms\Chuvadi.Pdf.Forms.csproj" />
+  </ItemGroup>
+
+</Project>

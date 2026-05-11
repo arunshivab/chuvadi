@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.Watermark</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.Watermark</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Add a diagonal text watermark to every page of a PDF.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Watermark\Chuvadi.Pdf.Watermark.csproj" />
+  </ItemGroup>
+
+</Project>

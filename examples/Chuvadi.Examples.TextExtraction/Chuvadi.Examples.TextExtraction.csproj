@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.TextExtraction</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.TextExtraction</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Extract text from a PDF using the operator and layout strategies.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Text\Chuvadi.Pdf.Text.csproj" />
+  </ItemGroup>
+
+</Project>

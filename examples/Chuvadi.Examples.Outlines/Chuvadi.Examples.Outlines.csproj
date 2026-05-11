@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.Outlines</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.Outlines</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Read and display the document outline (bookmarks) tree.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Forms\Chuvadi.Pdf.Forms.csproj" />
+  </ItemGroup>
+
+</Project>

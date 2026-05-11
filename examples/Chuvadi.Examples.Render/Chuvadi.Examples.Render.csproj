@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.Render</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.Render</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Rasterize PDF pages to PNG using the built-in scanline rasterizer.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Rendering\Chuvadi.Pdf.Rendering.csproj" />
+  </ItemGroup>
+
+</Project>

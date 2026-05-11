@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.Annotations</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.Annotations</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Read existing annotations and add new ones (text, highlight, stamp).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Annotations\Chuvadi.Pdf.Annotations.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+  </ItemGroup>
+
+</Project>
