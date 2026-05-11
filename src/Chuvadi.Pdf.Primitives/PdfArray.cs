@@ -86,7 +86,7 @@ public sealed class PdfArray : PdfPrimitive, IReadOnlyList<PdfPrimitive>
     /// <summary>Returns the PDF syntax representation, e.g. <c>[1 0 R /Name 42]</c>.</summary>
     public override string ToString()
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.Append('[');
 
         for (int i = 0; i < _items.Count; i++)

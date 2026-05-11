@@ -98,7 +98,7 @@ public sealed class PdfString : PdfPrimitive, IEquatable<PdfString>
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        var hash = new HashCode();
+        HashCode hash = new HashCode();
         hash.AddBytes(Bytes);
         return hash.ToHashCode();
     }
@@ -108,7 +108,7 @@ public sealed class PdfString : PdfPrimitive, IEquatable<PdfString>
 
     private string ToHexForm()
     {
-        var sb = new StringBuilder(Bytes.Length * 2 + 2);
+        StringBuilder sb = new StringBuilder(Bytes.Length * 2 + 2);
         sb.Append('<');
 
         foreach (byte b in Bytes)
@@ -123,7 +123,7 @@ public sealed class PdfString : PdfPrimitive, IEquatable<PdfString>
     private string ToLiteralForm()
     {
         // PDF 32000-1:2008 §7.3.4.2 — escape sequences for literal strings.
-        var sb = new StringBuilder(Bytes.Length + 2);
+        StringBuilder sb = new StringBuilder(Bytes.Length + 2);
         sb.Append('(');
 
         foreach (byte b in Bytes)

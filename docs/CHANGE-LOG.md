@@ -337,3 +337,107 @@ first-class features, not afterthoughts.
 **Version milestone:** 1.0.0 after Phase 2 rendering is stable.
                        Phase 1 = 0.9.x pre-release.
 
+
+---
+
+## A14 — Phase 2 Completion: Rasterization Stack Delivered
+
+**Date:** 2026-05-11
+**Scope:** Modules 1–4 of Phase 2 (rendering)
+
+Four foundational modules shipped, every pixel owned by the repository:
+
+- **Chuvadi.Pdf.Graphics** — Vector geometry, paths (with adaptive de Casteljau flattening), 2D affine transforms, colour spaces (Gray/RGB/CMYK), pixel buffer with Porter-Duff blending.
+- **Chuvadi.Pdf.Images** — BMP, PNG (all filter types, all colour types, 1-16 bpp), JPEG (baseline DCT with AAN IDCT). Adler32 promoted to public.
+- **Chuvadi.Pdf.Fonts.Rendering** — TrueType/OTF table parser (head, hhea, maxp, loca, glyf, hmtx, cmap-format-4); quadratic-Bezier→cubic conversion; one-level composite glyph resolution; glyph caching.
+- **Chuvadi.Pdf.Rendering** — Scanline rasterizer with edge-table fill (both fill rules), stroke expander (butt/square caps), full content-stream interpreter via `PdfTokenizer`. Standard 14 PDF fonts plus embedded TTF support.
+
+**Files affected:** `src/Chuvadi.Pdf.Graphics/**`, `src/Chuvadi.Pdf.Images/**`,
+`src/Chuvadi.Pdf.Fonts.Rendering/**`, `src/Chuvadi.Pdf.Rendering/**`.
+
+---
+
+## A15 — PHI-Safe Redaction Pattern
+
+**Date:** 2026-05-11
+**Scope:** Definition of "true redaction" in Chuvadi
+
+Visual cover-up is not redaction. Drawing a black rectangle over text leaves
+the underlying bytes in the content stream; Ctrl+A + copy recovers it. Chuvadi
+defines redaction as **byte-level removal**:
+
+1. Re-tokenise the content stream and track graphics + text state
+   (CTM stack, text matrix, font size, text origin).
+2. For each `Tj` / `TJ` / `'` / `"` operator, compute its device-space text
+   box. If it intersects ANY redaction rectangle, drop the operand AND the
+   operator from the rewritten stream.
+3. **TJ conservative rule:** if any string in a TJ array falls inside a
+   redaction rect, drop the entire array.
+4. Track the original content-stream object IDs and exclude them from
+   the output object table — otherwise direct-object retrieval (`5 0 R`)
+   recovers the text even after the stream is rewritten.
+5. Append an overlay content stream drawing opaque rectangles at the
+   redaction positions; replace page `/Contents` with
+   `[redactedStream, overlayStream]`.
+
+The PHI guarantee: the redacted text is byte-by-byte absent from the
+output PDF, both at the operator level AND the indirect-object level.
+Tests grep the output bytes for the redacted string and fail if it appears.
+
+**Files affected:** `src/Chuvadi.Pdf.Redaction/Redactor.cs`,
+`tests/Chuvadi.Pdf.Redaction.Tests/RedactionTests.cs`.
+
+---
+
+## A16 — PdfObjectStore Is Lazy: PreloadAllObjects Required for Rewrites
+
+**Date:** 2026-05-11
+**Scope:** Coding rule for any module that rewrites the object graph
+
+`PdfObjectStore.Objects` returns `_objects.Values` — a snapshot of what has
+already been resolved, NOT the full object graph. When `PdfDocument.Open`
+runs, only the trailer and catalog are eagerly loaded. Pages, content
+streams, resources, and fonts are resolved on first access.
+
+This caused three test failures in Redactor before being identified.
+Any module that iterates `document.Objects.Objects` to write a new PDF
+MUST first call a `PreloadAllObjects` helper that walks the page graph
+recursively, calling `Resolve` on every reference to populate the cache.
+
+Modules that follow this pattern:
+- `Chuvadi.Pdf.Redaction.Redactor` — `PreloadAllObjects(document)`
+- `Chuvadi.Pdf.Forms.FormFiller` — `PreloadAllObjects(document)` plus AcroForm tree walk
+- `Chuvadi.Pdf.Watermark.WatermarkStamper` — implicit (only modifies one page)
+
+**Files affected:** `Redactor.cs`, `FormFiller.cs`. Pattern documented in CLAUDE.md.
+
+---
+
+## A17 — Phase 2 Completion: Forms, CLI, 1.0 Tag
+
+**Date:** 2026-05-11
+**Scope:** Final Phase 2 deliverables, version 1.0.0
+
+- **Chuvadi.Pdf.Watermark** — Text and image watermarks via appended content
+  streams + ExtGState opacity. Standard PDF fonts only (no embedding).
+- **Chuvadi.Pdf.Redaction** — True PHI-safe rectangle redaction (see A15).
+- **Chuvadi.Pdf.Forms** — AcroForm read (FullyQualifiedName, type, value,
+  object ID) and fill (sets `/V`, button `/AS`, AcroForm `/NeedAppearances`).
+  Document outlines (bookmarks) read in same module.
+- **Chuvadi.Pdf.Cli** — 17 verbs total. User-facing: info, render, watermark,
+  redact, form-fill, extract-text, outlines, merge, split, delete, rotate.
+  Debug: tokenize, dump-objects, parse-content, decode-stream, inspect-xref,
+  validate-fonts. Mixed verb + flag style (`chuvadi watermark in.pdf --output out.pdf --text DRAFT`).
+
+**Deferred to Phase 1.1 (see BACKLOG.md):**
+- Annotations (Phase 2 Step 8 — descoped after Forms covered the outline
+  half of the original scope and AcroForm widget annotations).
+- Pattern-based redaction (SSN regex, email patterns) — Phase 2 ships
+  rectangle-only.
+- Form XObjects and inline images inside redaction targets.
+
+**Version milestone reached: 1.0.0** (Phase 1 was 0.9.x pre-release).
+
+**Test totals at tag:** ~564 tests across 19 test projects, 0 failures.
+
+---
