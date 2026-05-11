@@ -7,13 +7,12 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# Cancel superseded runs on the same branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ── Style check: fast pre-flight on Linux only ────────────────────────────
+  # ── Style check ───────────────────────────────────────────────────────────
   style:
     name: style
     runs-on: ubuntu-latest
@@ -28,10 +27,33 @@ jobs:
 
       - name: Run style checker
         run: |
-          find src tests tools -name '*.cs' -print0 \
+          find src tests tools examples -name '*.cs' -print0 \
             | xargs -0 python3 tools/check_style.py
 
-  # ── Build and test: cross-platform matrix ─────────────────────────────────
+  # ── API docs freshness check ──────────────────────────────────────────────
+  docs:
+    name: docs-up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Regenerate API docs
+        run: python3 tools/gen_api_docs.py
+
+      - name: Verify docs/api/ matches committed state
+        run: |
+          if ! git diff --exit-code -- docs/api/; then
+            echo "::error::docs/api/ is stale. Run 'python3 tools/gen_api_docs.py' and commit the result."
+            exit 1
+          fi
+
+  # ── Build and test matrix ─────────────────────────────────────────────────
   build:
     name: build-${{ matrix.os }}
     needs: style
