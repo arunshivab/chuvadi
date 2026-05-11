@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Text</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Text</RootNamespace>
+    <Description>
+      Text extraction for the Chuvadi PDF library.
+      Combines content stream parsing and font handling to produce
+      human-readable text from PDF pages.
+
+      Three extraction strategies, each optimal in different scenarios:
+
+      1. OperatorExtractor — follows text-showing operators literally.
+         Fastest. Preserves original operator order. Use when you need
+         raw text output or are processing PDFs with simple single-column
+         layouts. Accuracy: exact (no reordering artefacts).
+
+      2. LayoutExtractor — reconstructs reading order from glyph positions.
+         Groups glyphs into words, words into lines, lines into paragraphs.
+         Handles multi-column layouts, tables, mixed RTL/LTR text.
+         Use for documents where reading order matters (most documents).
+         Accuracy: high; edge cases in complex table layouts.
+
+      3. GlyphExtractor — returns individual positioned glyphs with full
+         metadata (position, size, font, Unicode, confidence).
+         Use when you need complete control — building your own layout
+         analysis, feeding a downstream ML model, measuring positions.
+         Accuracy: exact; interpretation is the caller's responsibility.
+
+      All three strategies are exposed via a common ITextExtractor interface
+      so callers can swap strategies without changing surrounding code.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Content\Chuvadi.Pdf.Content.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Fonts\Chuvadi.Pdf.Fonts.csproj" />
+  </ItemGroup>
+
+</Project>

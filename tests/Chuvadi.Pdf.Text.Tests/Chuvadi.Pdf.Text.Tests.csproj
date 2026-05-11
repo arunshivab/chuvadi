@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Text.Tests</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Text.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Tests: warnings as errors still apply, but XML doc not required -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="FsCheck.Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Text\Chuvadi.Pdf.Text.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Redaction</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Redaction</RootNamespace>
+    <Description>
+      True PHI-safe redaction for the Chuvadi PDF library.
+      Permanently removes text-showing operators from content streams whose
+      visible position falls inside a redaction rectangle, then overlays an
+      opaque rectangle for visual indication. The underlying text is destroyed,
+      not merely hidden. Zero external dependencies.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+  </ItemGroup>
+
+</Project>

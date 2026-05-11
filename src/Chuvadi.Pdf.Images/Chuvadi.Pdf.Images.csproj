@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Images</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Images</RootNamespace>
+    <Description>
+      Image codecs for the Chuvadi PDF library.
+      Provides JPEG baseline decode, PNG decode and encode,
+      and BMP encode. Uses PixelBuffer from Chuvadi.Pdf.Graphics
+      as the shared pixel container. Zero external dependencies.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+  </ItemGroup>
+
+</Project>

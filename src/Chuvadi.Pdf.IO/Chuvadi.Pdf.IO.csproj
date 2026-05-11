@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.IO</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.IO</RootNamespace>
+    <Description>
+      PDF file reading and writing for the Chuvadi PDF library.
+      PdfReader: opens a PDF from a Stream, parses the xref (classic
+        and cross-reference stream), reads the trailer, resolves indirect
+        objects lazily, recovers from malformed xref tables.
+      PdfWriter: serialises a modified object graph back to a Stream,
+        generates a valid xref (classic or cross-reference stream),
+        supports both full-rewrite and incremental-update strategies.
+      Supports classic xref tables and PDF 1.5+ cross-reference streams.
+      Memory-streaming throughout — large PDFs never fully loaded into RAM.
+    </Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,163 @@
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C# files
+[*.cs]
+indent_size = 4
+
+# XML project files
+[*.{csproj,props,targets}]
+indent_size = 2
+
+# JSON files
+[*.json]
+indent_size = 2
+
+# YAML files
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+
+##############################################################################
+# .NET and C# code style rules
+##############################################################################
+
+[*.cs]
+
+# --- Naming conventions ---
+
+# Types: PascalCase
+dotnet_naming_rule.types_should_be_pascal_case.severity = error
+dotnet_naming_rule.types_should_be_pascal_case.symbols = types
+dotnet_naming_rule.types_should_be_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.types.applicable_kinds = class, struct, interface, enum, delegate
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# Interfaces: IPascalCase
+dotnet_naming_rule.interface_should_be_begins_with_i.severity = error
+dotnet_naming_rule.interface_should_be_begins_with_i.symbols = interface
+dotnet_naming_rule.interface_should_be_begins_with_i.style = begins_with_i
+dotnet_naming_symbols.interface.applicable_kinds = interface
+dotnet_naming_style.begins_with_i.required_prefix = I
+dotnet_naming_style.begins_with_i.capitalization = pascal_case
+
+# Public members: PascalCase
+dotnet_naming_rule.public_members_pascal_case.severity = error
+dotnet_naming_rule.public_members_pascal_case.symbols = public_members
+dotnet_naming_rule.public_members_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.public_members.applicable_kinds = property, method, event, field
+dotnet_naming_symbols.public_members.applicable_accessibilities = public, protected, internal, protected_internal
+
+# Private fields: _camelCase
+dotnet_naming_rule.private_fields_underscore.severity = error
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private, private_protected
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+# Local variables and parameters: camelCase
+dotnet_naming_rule.locals_camel_case.severity = error
+dotnet_naming_rule.locals_camel_case.symbols = locals
+dotnet_naming_rule.locals_camel_case.style = camel_case_style
+dotnet_naming_symbols.locals.applicable_kinds = local, parameter
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# Constants: PascalCase (not ALL_CAPS)
+dotnet_naming_rule.constants_pascal_case.severity = error
+dotnet_naming_rule.constants_pascal_case.symbols = constants
+dotnet_naming_rule.constants_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+
+# --- Language keywords over type names ---
+dotnet_style_predefined_type_for_locals_parameters_members = true : error
+dotnet_style_predefined_type_for_member_access = true : error
+
+# --- Modifier order ---
+csharp_preferred_modifier_order = public, private, protected, internal, file, static, extern, new, virtual, abstract, sealed, override, readonly, unsafe, required, volatile, async : error
+
+# --- this. qualifier: never ---
+dotnet_style_qualification_for_field = false : error
+dotnet_style_qualification_for_property = false : error
+dotnet_style_qualification_for_method = false : error
+dotnet_style_qualification_for_event = false : error
+
+# --- var usage ---
+# Use var only when the type is obvious from the right side
+csharp_style_var_for_built_in_types = false : error
+csharp_style_var_when_type_is_apparent = true : suggestion
+csharp_style_var_elsewhere = false : suggestion
+
+# --- Expression bodies ---
+csharp_style_expression_bodied_methods = when_on_single_line : suggestion
+csharp_style_expression_bodied_properties = when_on_single_line : suggestion
+csharp_style_expression_bodied_constructors = false : error
+
+# --- Null checking ---
+dotnet_style_coalesce_expression = true : error
+dotnet_style_null_propagation = true : error
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true : error
+
+# --- Braces: always required ---
+csharp_prefer_braces = true : error
+
+# --- Namespace style: file-scoped ---
+csharp_style_namespace_declarations = file_scoped : error
+
+# --- Using directives: outside namespace ---
+csharp_using_directive_placement = outside_namespace : error
+
+# --- new() ---
+dotnet_style_object_initializer = true : suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true : suggestion
+
+# --- Pattern matching ---
+csharp_style_pattern_matching_over_is_with_cast_check = true : error
+csharp_style_pattern_matching_over_as_with_null_check = true : error
+
+# --- String interpolation over concatenation ---
+dotnet_style_prefer_inferred_tuple_names = true : suggestion
+
+# --- Spacing ---
+csharp_space_after_cast = false
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+
+# --- New lines ---
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+
+# --- Indentation ---
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+# --- Unnecessary code ---
+dotnet_diagnostic.IDE0051.severity = error    # Remove unused private members
+dotnet_diagnostic.IDE0052.severity = error    # Remove unread private members
+dotnet_diagnostic.IDE0060.severity = error    # Remove unused parameter
+dotnet_diagnostic.IDE0005.severity = error    # Remove unnecessary using
+
+# --- Specific analyzer rules for a library ---
+dotnet_diagnostic.CA1062.severity = error     # Validate arguments of public methods
+dotnet_diagnostic.CA1031.severity = suggestion # Do not catch general exception types
+dotnet_diagnostic.CA1032.severity = error     # Implement standard exception constructors
+dotnet_diagnostic.CA2201.severity = error     # Do not raise reserved exception types
+dotnet_diagnostic.CA1711.severity = suggestion # Identifiers should not have incorrect suffix

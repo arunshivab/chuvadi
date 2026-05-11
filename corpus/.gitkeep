@@ -1,0 +1,13 @@
+# This directory holds real-world PDF files for integration testing.
+# PDFs are intentionally excluded from git (see .gitignore).
+# Add your own PDFs here locally — they will never be committed.
+#
+# Recommended corpus structure:
+#   corpus/
+#     born-digital/       PDFs created by software (Word, LaTeX, etc.)
+#     scanned/            Scanned documents with image pages
+#     forms/              PDFs with AcroForm fields
+#     encrypted/          Password-protected PDFs (include passwords in a local notes file)
+#     malformed/          PDFs that violate the spec — for robustness testing
+#     large/              Large PDFs (100+ pages, 50MB+) — for streaming tests
+#     medical/            (gitignored separately) — real patient documents, NEVER commit

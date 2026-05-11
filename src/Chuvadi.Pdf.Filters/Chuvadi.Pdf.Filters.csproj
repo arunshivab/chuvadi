@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Filters</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Filters</RootNamespace>
+    <Description>
+      PDF stream filter implementations for the Chuvadi PDF library.
+      Implements all standard PDF filters from scratch in pure .NET:
+        - FlateDecode  (DEFLATE — RFC 1951 — the dominant filter)
+        - ASCII85Decode (base-85 encoding for text-safe streams)
+        - ASCIIHexDecode (hex encoding)
+        - LZWDecode     (Lempel–Ziv–Welch, for legacy compatibility)
+        - RunLengthDecode (simple run-length encoding)
+      Phase 2 will add: CCITTFaxDecode, JBIG2Decode, DCTDecode, JPXDecode.
+      Phase 3 will add: Crypt filter (encryption integration).
+    </Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+  </ItemGroup>
+
+</Project>

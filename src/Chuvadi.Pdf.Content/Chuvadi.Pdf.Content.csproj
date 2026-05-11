@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Content</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Content</RootNamespace>
+    <Description>
+      PDF content stream parser for the Chuvadi PDF library.
+      Interprets PDF page content streams at the operator level:
+        - ContentStreamParser: tokenises and dispatches operators
+        - GraphicsState / GraphicsStateStack: full graphics state machine
+          (CTM, line width, dash pattern, color space, fill/stroke color,
+           text state, clipping path)
+        - TextState: font, font size, text matrix, rendering mode
+        - All text-showing operators: Tj, TJ, ', ", Tf, Tm, Td, TD, T*
+        - Path construction operators: m, l, c, v, y, h, re
+        - Path painting operators: S, s, f, F, f*, B, B*, b, b*, n
+        - Color operators: cs, CS, sc, SC, scn, SCN, g, G, rg, RG, k, K
+        - Graphics state operators: q, Q, cm, w, J, j, M, d, ri, i, gs
+        - Marked content: BMC, BDC, EMC, MP, DP
+      Foundation that Chuvadi.Pdf.Text and Phase 2 rendering depend on.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Fonts\Chuvadi.Pdf.Fonts.csproj" />
+  </ItemGroup>
+
+</Project>

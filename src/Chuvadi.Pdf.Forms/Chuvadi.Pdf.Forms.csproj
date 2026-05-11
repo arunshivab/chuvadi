@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Forms</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Forms</RootNamespace>
+    <Description>
+      AcroForm reading and filling plus document outline (bookmark) traversal
+      for the Chuvadi PDF library. Supports text, checkbox, radio, choice, and
+      signature fields. Form filling preserves the rest of the document and
+      sets /NeedAppearances=true so viewers regenerate field appearances.
+      Zero external dependencies.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+  </ItemGroup>
+
+</Project>

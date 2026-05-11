@@ -1,0 +1,74 @@
+# ── Build output ──────────────────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# ── User-specific Visual Studio / Rider files ─────────────────────────────
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Build / restore artefacts ─────────────────────────────────────────────
+project.lock.json
+project.fragment.lock.json
+artifacts/
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+*.snupkg
+.nuget/
+nuget.exe
+*.snk
+
+# ── Code coverage and test output ─────────────────────────────────────────
+*.coverage
+*.coveragexml
+TestResult.xml
+TestResults/
+[Cc]overage/
+coverage.json
+coverage.xml
+*.trx
+.coverlet/
+
+# ── Native build outputs ──────────────────────────────────────────────────
+*.dll
+*.pdb
+*.exe
+*.lib
+*.so
+*.dylib
+!docs/**/*.dll
+!docs/**/*.pdb
+!docs/**/*.exe
+
+# ── OS clutter ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── Project-specific ──────────────────────────────────────────────────────
+# Transient delivery zips and staging folder
+*.zip
+chuvadi-scaffold/
+Downloads/
+
+# Local scratch
+scratch/
+tmp/

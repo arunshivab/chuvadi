@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Integration.Tests</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Integration.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Integration tests work end-to-end against real PDFs in the /corpus directory.
+    They test cross-project behaviour: open a PDF, merge it, extract text,
+    write it back, reopen and verify.
+
+    Corpus PDFs are never committed to git (see .gitignore).
+    Tests that require corpus files are skipped gracefully when the
+    corpus directory is empty (CI environment).
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- References all src projects for end-to-end testing -->
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Operations\Chuvadi.Pdf.Operations.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Text\Chuvadi.Pdf.Text.csproj" />
+  </ItemGroup>
+
+</Project>

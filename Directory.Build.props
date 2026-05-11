@@ -1,0 +1,70 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Target framework -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Language version: always use latest C# -->
+    <LangVersion>latest</LangVersion>
+
+    <!-- Nullable reference types: mandatory, no exceptions -->
+    <Nullable>enable</Nullable>
+
+    <!-- No implicit usings: every dependency must be explicit -->
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <!-- Warnings are errors: no warning is ignorable in a foundational library -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Latest .NET analysis rules -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!-- Allow unsafe code in projects that declare it explicitly -->
+    <!-- Each project opts in via <AllowUnsafeBlocks>true</AllowUnsafeBlocks> -->
+
+    <!-- Package metadata shared across all src projects -->
+    <Authors>Chuvadi Contributors</Authors>
+    <Company>Chuvadi</Company>
+    <Product>Chuvadi PDF Library</Product>
+    <Copyright>Copyright © 2025 Chuvadi Contributors</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/chuvadi/chuvadi</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/chuvadi/chuvadi</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>pdf;document;parse;extract;merge;split;dotnet;csharp</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
+
+    <!-- Deterministic builds -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Generate XML documentation for every project -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Suppress XML doc warnings for incomplete docs during active development.
+         Remove this line before 1.0 release — every public member must be documented. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Embed PDB into the DLL for easier debugging of the library by consumers -->
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+
+    <!-- Source Link: maps compiled code back to GitHub source -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!-- Version: controlled by build, not hardcoded here.
+       Pass /p:Version=x.y.z on the dotnet pack command.
+       Default to 0.1.0 during development. -->
+  <PropertyGroup Condition="'$(Version)' == ''">
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0-dev</InformationalVersion>
+  </PropertyGroup>
+
+</Project>

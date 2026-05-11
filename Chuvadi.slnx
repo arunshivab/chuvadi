@@ -1,0 +1,42 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Chuvadi.Pdf.Content/Chuvadi.Pdf.Content.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Documents/Chuvadi.Pdf.Documents.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Filters/Chuvadi.Pdf.Filters.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Fonts.Rendering/Chuvadi.Pdf.Fonts.Rendering.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Fonts/Chuvadi.Pdf.Fonts.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Forms/Chuvadi.Pdf.Forms.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Graphics/Chuvadi.Pdf.Graphics.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Images/Chuvadi.Pdf.Images.csproj" />
+    <Project Path="src/Chuvadi.Pdf.IO/Chuvadi.Pdf.IO.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Objects/Chuvadi.Pdf.Objects.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Operations/Chuvadi.Pdf.Operations.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Primitives/Chuvadi.Pdf.Primitives.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Redaction/Chuvadi.Pdf.Redaction.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Rendering/Chuvadi.Pdf.Rendering.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Text/Chuvadi.Pdf.Text.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Watermark/Chuvadi.Pdf.Watermark.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Chuvadi.Pdf.Content.Tests/Chuvadi.Pdf.Content.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Documents.Tests/Chuvadi.Pdf.Documents.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Filters.Tests/Chuvadi.Pdf.Filters.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Fonts.Rendering.Tests/Chuvadi.Pdf.Fonts.Rendering.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Fonts.Tests/Chuvadi.Pdf.Fonts.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Forms.Tests/Chuvadi.Pdf.Forms.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Graphics.Tests/Chuvadi.Pdf.Graphics.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Images.Tests/Chuvadi.Pdf.Images.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Integration.Tests/Chuvadi.Pdf.Integration.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.IO.Tests/Chuvadi.Pdf.IO.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Objects.Tests/Chuvadi.Pdf.Objects.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Operations.Tests/Chuvadi.Pdf.Operations.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Primitives.Tests/Chuvadi.Pdf.Primitives.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Redaction.Tests/Chuvadi.Pdf.Redaction.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Rendering.Tests/Chuvadi.Pdf.Rendering.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Text.Tests/Chuvadi.Pdf.Text.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Watermark.Tests/Chuvadi.Pdf.Watermark.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Chuvadi.Pdf.Cli/Chuvadi.Pdf.Cli.csproj" />
+  </Folder>
+</Solution>

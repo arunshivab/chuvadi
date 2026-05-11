@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Documents</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Documents</RootNamespace>
+    <Description>
+      High-level PDF document model for the Chuvadi PDF library.
+      Exposes the structured view of a PDF that application code works with:
+        - PdfDocument: root entry point, pages, metadata, outlines, info
+        - PdfPage: individual page with resources, MediaBox, CropBox, rotation
+        - PdfPageTree: lazy page tree navigation
+        - PdfOutline / PdfBookmark: document outline (bookmarks)
+        - PdfMetadata: Info dictionary and XMP metadata read/write
+        - PdfPageLabels: custom page numbering schemes
+        - PdfNamedDestinations: named navigation targets
+        - PdfAnnotationCollection: typed annotation access (read; write in Phase 2)
+        - PdfFormFields: AcroForm field enumeration (read; fill in Phase 2)
+        - PdfResourceInventory: enumerate fonts, images, color spaces
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+  </ItemGroup>
+
+</Project>

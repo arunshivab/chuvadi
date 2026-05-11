@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+    Central Package Management.
+    All NuGet package versions are declared here.
+    Individual projects reference packages without specifying versions.
+
+    POLICY: Test projects may use xUnit and related packages.
+            Source projects (src/) have ZERO NuGet dependencies.
+            This file exists only for test and tooling packages.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Test framework -->
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+
+    <!-- Assertions: makes test failures readable -->
+    <PackageVersion Include="FluentAssertions" Version="7.0.0" />
+
+    <!-- Property-based testing: for round-trip and parser tests -->
+    <PackageVersion Include="FsCheck.Xunit" Version="3.0.0-rc3" />
+
+    <!-- Benchmarking: for performance regression tests -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
+  </ItemGroup>
+
+</Project>

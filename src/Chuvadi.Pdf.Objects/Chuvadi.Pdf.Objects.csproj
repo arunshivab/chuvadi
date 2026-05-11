@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Objects</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Objects</RootNamespace>
+    <Description>
+      PDF indirect object model and object store for the Chuvadi PDF library.
+      Manages the full PDF object graph: indirect object resolution,
+      object streams (PDF 1.5+), cross-reference tables (classic xref
+      and cross-reference streams), lazy loading, and object identity.
+      Consumers work with typed PdfObject wrappers rather than raw bytes.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+  </ItemGroup>
+
+</Project>

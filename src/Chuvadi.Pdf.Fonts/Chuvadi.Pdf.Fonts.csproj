@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Fonts</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Fonts</RootNamespace>
+    <Description>
+      PDF font handling for the Chuvadi PDF library.
+      Parses embedded font programs and maps glyph identifiers to Unicode
+      codepoints — the essential step for correct text extraction.
+
+      Phase 1 scope (sufficient for text extraction):
+        - ToUnicode CMap parsing (covers ~90% of modern PDFs)
+        - Standard 14 PDF fonts and their built-in encodings
+        - MacRomanEncoding, WinAnsiEncoding, PDFDocEncoding, StandardEncoding
+        - TrueType: cmap table (format 0, 2, 4, 6, 12) parsing for glyph→Unicode
+        - CFF (Type 1C / OpenType-CFF): CharStrings and charset for glyph→Unicode
+        - Type 1: AFM metrics and encoding vector
+        - CIDFont / Type0 composite fonts with identity and custom CMaps
+        - Glyph width extraction for layout-aware text extraction
+
+      Phase 2 will add: full TrueType outline parsing for rendering,
+        CFF charstring interpreter, hinting, subpixel rendering.
+    </Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+  </ItemGroup>
+
+</Project>

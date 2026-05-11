@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Fonts.Rendering</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Fonts.Rendering</RootNamespace>
+    <Description>
+      TrueType and OpenType glyph outline extraction for the Chuvadi
+      PDF rasterizer. Reads font tables (head, hhea, maxp, loca, glyf,
+      hmtx, cmap) from raw font bytes and converts glyph contours to
+      Path objects from Chuvadi.Pdf.Graphics. Zero external dependencies.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+  </ItemGroup>
+
+</Project>

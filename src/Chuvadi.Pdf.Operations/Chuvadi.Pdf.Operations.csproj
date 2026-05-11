@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Operations</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Operations</RootNamespace>
+    <Description>
+      High-level PDF document operations for the Chuvadi PDF library.
+      The primary entry point for application code that needs to
+      manipulate PDF documents without working with the object model directly.
+
+      Phase 1 operations:
+        - PdfMerger:   combine N PDFs into one, with resource deduplication
+                       option and outline preservation
+        - PdfSplitter: extract page ranges, split by bookmark, split every N pages
+        - PdfPageEditor: delete pages, rotate pages, reorder pages, replace pages
+        - PdfTextExtractionOperation: extract text from a document using any
+                       of the three strategies in Chuvadi.Pdf.Text
+
+      Phase 2 will add: watermarking, redaction, image operations,
+        form filling, annotation creation.
+
+      All operations stream — large PDFs are not fully loaded into RAM.
+      All operations preserve bookmarks, metadata, page labels,
+        hyperlinks, and resource cross-references correctly.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Content\Chuvadi.Pdf.Content.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Fonts\Chuvadi.Pdf.Fonts.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Text\Chuvadi.Pdf.Text.csproj" />
+  </ItemGroup>
+
+</Project>

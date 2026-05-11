@@ -1,0 +1,273 @@
+// Copyright 2025 Chuvadi Contributors
+// SPDX-License-Identifier: Apache-2.0
+// SPEC:  PDF 32000-1:2008 §9.10 — Extraction of text content
+// PHASE: Phase 1 — Chuvadi.Pdf.Text
+// Public API: wires PdfPage -> content stream -> parser -> extractor -> string.
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Chuvadi.Pdf.Content;
+using Chuvadi.Pdf.Documents;
+using Chuvadi.Pdf.Filters;
+using Chuvadi.Pdf.Objects;
+using Chuvadi.Pdf.Primitives;
+
+namespace Chuvadi.Pdf.Text;
+
+/// <summary>
+/// Specifies the text extraction strategy.
+/// </summary>
+public enum ExtractionStrategy
+{
+    /// <summary>
+    /// Stream-order extraction. Fastest. Correct for most born-digital PDFs.
+    /// </summary>
+    Operator,
+
+    /// <summary>
+    /// Layout-aware extraction. Groups by line, sorts by X position.
+    /// Better for multi-column and table-heavy PDFs.
+    /// </summary>
+    Layout,
+}
+
+/// <summary>
+/// Extracts plain text from a PDF page.
+/// </summary>
+/// <remarks>
+/// <see cref="TextExtractor"/> is the top-level public API for Phase 1 text extraction.
+/// It wires together all layers:
+/// <list type="number">
+///   <item>Resolves the page's /Contents entry to one or more content streams.</item>
+///   <item>Decodes each stream through its filter chain (FlateDecode etc.).</item>
+///   <item>Concatenates streams and passes them to <see cref="ContentStreamParser"/>.</item>
+///   <item>Applies the chosen <see cref="ExtractionStrategy"/> to the resulting fragments.</item>
+///   <item>Returns the extracted text as a plain Unicode string.</item>
+/// </list>
+///
+/// Phase 1 scope: born-digital text only. Image-embedded text requires OCR (Phase 3).
+/// PDF 32000-1:2008 §9.10 — Extraction of text content.
+/// </remarks>
+public sealed class TextExtractor
+{
+    private readonly PdfObjectStore _objects;
+    private readonly ExtractionStrategy _strategy;
+    private readonly FilterPipeline _pipeline;
+
+    /// <summary>
+    /// Initialises a <see cref="TextExtractor"/> for a document's object store.
+    /// </summary>
+    /// <param name="objects">The document's object store, used to resolve references.</param>
+    /// <param name="strategy">
+    /// The extraction strategy to use. Defaults to <see cref="ExtractionStrategy.Operator"/>.
+    /// </param>
+    public TextExtractor(
+        PdfObjectStore objects,
+        ExtractionStrategy strategy = ExtractionStrategy.Operator)
+    {
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
+        _strategy = strategy;
+        _pipeline = FilterRegistry.CreateDefaultPipeline();
+    }
+
+    // ── Public API ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Extracts all text from the given page as a plain Unicode string.
+    /// </summary>
+    /// <param name="page">The page to extract text from.</param>
+    /// <returns>The extracted text, or an empty string when the page has no text.</returns>
+    public string ExtractText(PdfPage page)
+    {
+        if (page is null)
+        {
+            throw new ArgumentNullException(nameof(page));
+        }
+
+        byte[] contentBytes = ReadContentBytes(page);
+
+        if (contentBytes.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        ContentStreamParser parser = new ContentStreamParser(_objects, page.Resources);
+        List<TextFragment> fragments = parser.Parse(contentBytes);
+
+        if (fragments.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return _strategy == ExtractionStrategy.Layout
+            ? new LayoutExtractor().Extract(fragments)
+            : new OperatorExtractor().Extract(fragments);
+    }
+
+    // ── Private: content stream loading ──────────────────────────────────
+
+    /// <summary>
+    /// Reads, decodes, and concatenates all content streams for the page.
+    /// Handles /Contents as a single reference, an array of references,
+    /// or an inline stream dictionary.
+    /// PDF 32000-1:2008 §7.8.2 — Content streams.
+    /// </summary>
+    private byte[] ReadContentBytes(PdfPage page)
+    {
+        PdfPrimitive? contents = page.Contents;
+
+        if (contents is null || contents is PdfNull)
+        {
+            return [];
+        }
+
+        // Resolve indirect reference if needed.
+        PdfPrimitive resolved = _objects.Resolve(contents);
+
+        // Single stream.
+        if (resolved is PdfStream singleStream)
+        {
+            return DecodeStream(singleStream);
+        }
+
+        // Array of stream references.
+        if (resolved is PdfArray array)
+        {
+            return ConcatenateStreams(array);
+        }
+
+        return [];
+    }
+
+    private byte[] ConcatenateStreams(PdfArray array)
+    {
+        using (MemoryStream ms = new MemoryStream())
+        {
+            for (int i = 0; i < array.Count; i++)
+            {
+                PdfPrimitive item = _objects.Resolve(array[i]);
+
+                if (item is PdfStream stream)
+                {
+                    byte[] decoded = DecodeStream(stream);
+                    ms.Write(decoded, 0, decoded.Length);
+
+                    // Separate streams with a space to prevent token merging.
+                    if (i < array.Count - 1)
+                    {
+                        ms.WriteByte(32); // space
+                    }
+                }
+            }
+
+            return ms.ToArray();
+        }
+    }
+
+    private byte[] DecodeStream(PdfStream stream)
+    {
+        if (!stream.IsFiltered)
+        {
+            return stream.RawBytes;
+        }
+
+        PdfPrimitive? filter = stream.Filter;
+
+        // Single filter name.
+        if (filter is PdfName filterName)
+        {
+            string resolved = FilterRegistry.ResolveAlias(filterName.Value);
+
+            return _pipeline.Decode(
+                resolved,
+                stream.RawBytes,
+                BuildFilterParams(stream.Dictionary, 0));
+        }
+
+        // Array of filter names applied in sequence.
+        if (filter is PdfArray filterArray)
+        {
+            byte[] data = stream.RawBytes;
+
+            for (int i = 0; i < filterArray.Count; i++)
+            {
+                PdfName? fn = filterArray.GetAs<PdfName>(i);
+
+                if (fn is null)
+                {
+                    continue;
+                }
+
+                string resolved = FilterRegistry.ResolveAlias(fn.Value);
+                data = _pipeline.Decode(resolved, data, BuildFilterParams(stream.Dictionary, i));
+            }
+
+            return data;
+        }
+
+        return stream.RawBytes;
+    }
+
+    private static FilterParameters? BuildFilterParams(PdfDictionary dict, int index)
+    {
+        // /DecodeParms may be a single dictionary or an array of dictionaries.
+        if (!dict.TryGetValue(PdfName.Intern("DecodeParms"), out PdfPrimitive? parms))
+        {
+            return null;
+        }
+
+        PdfDictionary? parmsDict = null;
+
+        if (parms is PdfDictionary singleParms)
+        {
+            parmsDict = singleParms;
+        }
+        else if (parms is PdfArray parmsArray)
+        {
+            parmsDict = parmsArray.GetAs<PdfDictionary>(index);
+        }
+
+        if (parmsDict is null)
+        {
+            return null;
+        }
+
+        int predictor = 1;
+        int columns = 1;
+        int colors = 1;
+        int bitsPerComponent = 8;
+
+        if (parmsDict.TryGetValue(PdfName.Intern("Predictor"), out PdfPrimitive? pred)
+            && pred is PdfInteger predInt)
+        {
+            predictor = predInt.Value;
+        }
+
+        if (parmsDict.TryGetValue(PdfName.Intern("Columns"), out PdfPrimitive? cols)
+            && cols is PdfInteger colsInt)
+        {
+            columns = colsInt.Value;
+        }
+
+        if (parmsDict.TryGetValue(PdfName.Intern("Colors"), out PdfPrimitive? colorsPrim)
+            && colorsPrim is PdfInteger colorsInt)
+        {
+            colors = colorsInt.Value;
+        }
+
+        if (parmsDict.TryGetValue(PdfName.Intern("BitsPerComponent"), out PdfPrimitive? bpc)
+            && bpc is PdfInteger bpcInt)
+        {
+            bitsPerComponent = bpcInt.Value;
+        }
+
+        return new FilterParameters
+        {
+            Predictor = predictor,
+            Columns = columns,
+            Colors = colors,
+            BitsPerComponent = bitsPerComponent,
+        };
+    }
+}

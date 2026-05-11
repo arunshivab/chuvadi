@@ -1,0 +1,50 @@
+# Default: normalise line endings to LF in repo, restore native on checkout.
+* text=auto
+
+# ── Source files: text, LF in repo ────────────────────────────────────────
+*.cs        text diff=csharp
+*.csproj    text
+*.sln       text
+*.slnx      text
+*.md        text
+*.json      text
+*.xml       text
+*.yml       text
+*.yaml      text
+*.py        text
+*.sh        text eol=lf
+
+# ── Windows-native scripts: keep CRLF ─────────────────────────────────────
+*.ps1       text eol=crlf
+*.psm1      text eol=crlf
+*.psd1      text eol=crlf
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+# ── Binary files: never diff, never normalise ─────────────────────────────
+*.pdf       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.bmp       binary
+*.tiff      binary
+*.tif       binary
+*.ico       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.dll       binary
+*.exe       binary
+*.pdb       binary
+*.ttf       binary
+*.otf       binary
+*.woff      binary
+*.woff2     binary
+*.snk       binary
+*.pfx       binary
+
+# ── Linguist hints for GitHub language stats ──────────────────────────────
+docs/*       linguist-documentation
+*.md         linguist-documentation
+tools/check_style.py linguist-detectable

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Graphics</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Graphics</RootNamespace>
+    <Description>
+      2D geometry foundation for the Chuvadi PDF rasterizer.
+      Provides coordinate types (Point, Size, Rectangle), colour
+      representations (Gray, RGB, CMYK), affine transforms, path
+      construction, stroke styles, pixel buffers, and Bezier curve
+      flattening. Shared by Chuvadi.Pdf.Rendering, Chuvadi.Pdf.Watermark,
+      and Chuvadi.Pdf.Redaction. Zero NuGet dependencies.
+    </Description>
+  </PropertyGroup>
+
+</Project>
