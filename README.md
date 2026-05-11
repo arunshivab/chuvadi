@@ -202,3 +202,4 @@ Apache-2.0. See `LICENSE`.
 
 Chuvadi is and will remain free for all use including commercial.
 There is no dual-licensing tier and no premium edition.
+
