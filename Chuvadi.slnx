@@ -1,4 +1,14 @@
 <Solution>
+  <Folder Name="/examples/">
+    <Project Path="examples/Chuvadi.Examples.Annotations/Chuvadi.Examples.Annotations.csproj" />
+    <Project Path="examples/Chuvadi.Examples.FormFill/Chuvadi.Examples.FormFill.csproj" />
+    <Project Path="examples/Chuvadi.Examples.Outlines/Chuvadi.Examples.Outlines.csproj" />
+    <Project Path="examples/Chuvadi.Examples.PageOps/Chuvadi.Examples.PageOps.csproj" />
+    <Project Path="examples/Chuvadi.Examples.Redaction/Chuvadi.Examples.Redaction.csproj" />
+    <Project Path="examples/Chuvadi.Examples.Render/Chuvadi.Examples.Render.csproj" />
+    <Project Path="examples/Chuvadi.Examples.TextExtraction/Chuvadi.Examples.TextExtraction.csproj" />
+    <Project Path="examples/Chuvadi.Examples.Watermark/Chuvadi.Examples.Watermark.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Chuvadi.Pdf.Annotations/Chuvadi.Pdf.Annotations.csproj" />
     <Project Path="src/Chuvadi.Pdf.Content/Chuvadi.Pdf.Content.csproj" />

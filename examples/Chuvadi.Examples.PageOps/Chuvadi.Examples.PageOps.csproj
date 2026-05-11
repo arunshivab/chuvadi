@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Chuvadi.Examples.PageOps</RootNamespace>
+    <AssemblyName>Chuvadi.Examples.PageOps</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Merge, split, delete, and rotate PDF pages.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Operations\Chuvadi.Pdf.Operations.csproj" />
+  </ItemGroup>
+
+</Project>
