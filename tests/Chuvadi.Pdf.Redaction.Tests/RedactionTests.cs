@@ -342,3 +342,89 @@ public sealed class RedactorTests
         return ms;
     }
 }
+
+// ── Phase 1.1.2: Pattern-based redaction ──────────────────────────────────
+
+public sealed class PatternRuleTests
+{
+    [Fact]
+    public void Construct_FromString_CompilesRegex()
+    {
+        PatternRule rule = new(@"\d{3}-\d{2}-\d{4}");
+        rule.Regex.IsMatch("123-45-6789").Should().BeTrue();
+        rule.Regex.IsMatch("hello").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Construct_NullPattern_Throws()
+    {
+        Action act = () => new PatternRule((string)null!);
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void Construct_FromRegex_StoresIt()
+    {
+        System.Text.RegularExpressions.Regex r = new("foo");
+        PatternRule rule = new(r);
+        rule.Regex.Should().BeSameAs(r);
+    }
+
+    [Fact]
+    public void AppliesToPage_NoFilter_AlwaysTrue()
+    {
+        PatternRule rule = new("x");
+        rule.AppliesToPage(0).Should().BeTrue();
+        rule.AppliesToPage(100).Should().BeTrue();
+    }
+
+    [Fact]
+    public void AppliesToPage_WithFilter_RestrictsToListed()
+    {
+        PatternRule rule = new("x", new[] { 1, 3 });
+        rule.AppliesToPage(0).Should().BeFalse();
+        rule.AppliesToPage(1).Should().BeTrue();
+        rule.AppliesToPage(2).Should().BeFalse();
+        rule.AppliesToPage(3).Should().BeTrue();
+    }
+}
+
+public sealed class CommonPatternsTests
+{
+    [Theory]
+    [InlineData(CommonPatterns.UsSsn, "123-45-6789", true)]
+    [InlineData(CommonPatterns.UsSsn, "12-45-6789", false)]
+    [InlineData(CommonPatterns.Email, "user@example.com", true)]
+    [InlineData(CommonPatterns.Email, "not an email", false)]
+    [InlineData(CommonPatterns.IsoDate, "2025-12-31", true)]
+    [InlineData(CommonPatterns.IsoDate, "31/12/2025", false)]
+    public void Pattern_Matches(string pattern, string input, bool expected)
+    {
+        new System.Text.RegularExpressions.Regex(pattern).IsMatch(input).Should().Be(expected);
+    }
+}
+
+public sealed class RedactionOptionsExtensionTests
+{
+    [Fact]
+    public void Patterns_DefaultEmpty()
+    {
+        RedactionOptions opts = new();
+        opts.Patterns.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public void PatternPadding_DefaultOnePoint()
+    {
+        RedactionOptions opts = new();
+        opts.PatternPadding.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void Patterns_AddRule()
+    {
+        RedactionOptions opts = new();
+        opts.Patterns.Add(new PatternRule(CommonPatterns.UsSsn));
+        opts.Patterns.Should().HaveCount(1);
+    }
+}

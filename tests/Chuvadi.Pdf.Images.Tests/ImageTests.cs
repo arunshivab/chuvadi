@@ -289,3 +289,97 @@ public sealed class JpegDecoderTests
         }
     }
 }
+
+// ── Phase 1.1.9: TIFF ─────────────────────────────────────────────────────
+
+public sealed class TiffExceptionTests
+{
+    [Fact]
+    public void Default_HasMessage()
+    {
+        new TiffException().Message.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Message_Preserved()
+    {
+        new TiffException("bad tag").Message.Should().Be("bad tag");
+    }
+}
+
+public sealed class TiffEncoderTests
+{
+    [Fact]
+    public void Encode_NullFrame_Throws()
+    {
+        Action act = () => TiffEncoder.Encode(null!);
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void EncodeAll_Empty_Throws()
+    {
+        Action act = () => TiffEncoder.EncodeAll(System.Linq.Enumerable.Empty<ImageFrame>());
+        act.Should().Throw<TiffException>();
+    }
+
+    [Fact]
+    public void Encode_SingleFrame_StartsWithLittleEndianHeader()
+    {
+        ImageFrame frame = ImageFrame.Create(8, 8, ImageColorFormat.Rgb24);
+        byte[] tiff = TiffEncoder.Encode(frame);
+
+        tiff[0].Should().Be((byte)'I');
+        tiff[1].Should().Be((byte)'I');
+        // Magic = 42, little endian
+        tiff[2].Should().Be(42);
+        tiff[3].Should().Be(0);
+    }
+}
+
+public sealed class TiffRoundTripTests
+{
+    [Fact]
+    public void Encode_Then_Decode_PreservesSize()
+    {
+        ImageFrame source = ImageFrame.Create(32, 24, ImageColorFormat.Rgb24);
+
+        byte[] tiff = TiffEncoder.Encode(source);
+        System.Collections.Generic.List<ImageFrame> decoded = TiffDecoder.Decode(tiff);
+
+        decoded.Should().HaveCount(1);
+        decoded[0].Width.Should().Be(32);
+        decoded[0].Height.Should().Be(24);
+    }
+
+    [Fact]
+    public void Encode_MultiFrame_DecodesAsMultiPage()
+    {
+        ImageFrame a = ImageFrame.Create(16, 16, ImageColorFormat.Rgb24);
+        ImageFrame b = ImageFrame.Create(32, 32, ImageColorFormat.Rgb24);
+        ImageFrame c = ImageFrame.Create(8, 8, ImageColorFormat.Rgb24);
+
+        byte[] tiff = TiffEncoder.EncodeAll(new[] { a, b, c });
+        System.Collections.Generic.List<ImageFrame> decoded = TiffDecoder.Decode(tiff);
+
+        decoded.Should().HaveCount(3);
+        decoded[0].Width.Should().Be(16);
+        decoded[1].Width.Should().Be(32);
+        decoded[2].Width.Should().Be(8);
+    }
+
+    [Fact]
+    public void Decode_Truncated_Throws()
+    {
+        Action act = () => TiffDecoder.Decode(new byte[] { 0x49, 0x49 });
+        act.Should().Throw<TiffException>();
+    }
+
+    [Fact]
+    public void Decode_BadByteOrder_Throws()
+    {
+        byte[] bad = new byte[8] { 0xAB, 0xCD, 0x00, 0x2A, 0, 0, 0, 0 };
+        Action act = () => TiffDecoder.Decode(bad);
+        act.Should().Throw<TiffException>();
+    }
+}

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Encryption.Tests</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Encryption.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Encryption\Chuvadi.Pdf.Encryption.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+  </ItemGroup>
+
+</Project>

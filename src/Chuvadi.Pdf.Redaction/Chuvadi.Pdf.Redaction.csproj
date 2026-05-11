@@ -4,21 +4,29 @@
     <AssemblyName>Chuvadi.Pdf.Redaction</AssemblyName>
     <RootNamespace>Chuvadi.Pdf.Redaction</RootNamespace>
     <Description>
-      True PHI-safe redaction for the Chuvadi PDF library.
-      Permanently removes text-showing operators from content streams whose
-      visible position falls inside a redaction rectangle, then overlays an
-      opaque rectangle for visual indication. The underlying text is destroyed,
-      not merely hidden. Zero external dependencies.
+      PHI-safe redaction for the Chuvadi PDF library.
+      Removes targeted content from PDFs at the byte level — text-showing operators
+      whose visible position falls inside a redaction rectangle are stripped from
+      the content stream and the original content-stream objects are excluded from
+      the output. Cover-up alone is not redaction (BASELINE B15).
+
+      Two ways to target content:
+      1. Explicit rectangles in PDF user space.
+      2. Regex patterns matched against extracted text (Phase 1.1.2), resolved to
+         rectangles automatically. Pre-built patterns for SSN, phone, email, ICD-10,
+         credit card, ZIP, NHS number, ISO date.
     </Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Content\Chuvadi.Pdf.Content.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Text\Chuvadi.Pdf.Text.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
-    <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
   </ItemGroup>
 
 </Project>
