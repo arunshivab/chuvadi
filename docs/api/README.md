@@ -8,6 +8,12 @@ Regenerate with:
 python tools/gen_api_docs.py
 ```
 
+## Chuvadi.Pdf.
+
+| Type | Kind | Description |
+|---|---|---|
+| [Class1](/Class1.md) | class | — |
+
 ## Chuvadi.Pdf.Annotations
 
 | Type | Kind | Description |
