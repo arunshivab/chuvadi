@@ -11,6 +11,9 @@ string removed — owned by this repository, auditable line by line.
 - **Target:** .NET 10
 - **Version:** 1.0.0
 
+**New to Chuvadi?** Start with the [Getting Started guide](docs/getting-started.md)
+— 10 minutes from `git clone` to working code.
+
 ---
 
 ## Why Chuvadi
@@ -202,4 +205,3 @@ Apache-2.0. See `LICENSE`.
 
 Chuvadi is and will remain free for all use including commercial.
 There is no dual-licensing tier and no premium edition.
-
