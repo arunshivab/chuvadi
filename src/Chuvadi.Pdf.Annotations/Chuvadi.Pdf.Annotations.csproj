@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Annotations</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Annotations</RootNamespace>
+    <Description>
+      PDF annotation reading and writing for the Chuvadi PDF library.
+      Supports the markup subtypes most relevant to clinical and document-review
+      workflows: Text (sticky notes), Link, FreeText, Highlight, Underline,
+      StrikeOut, Squiggly, Stamp, and Ink. Reads any subtype as a generic
+      annotation when the specific kind isn't modelled. Zero external dependencies.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+  </ItemGroup>
+
+</Project>

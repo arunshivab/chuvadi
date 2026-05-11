@@ -105,7 +105,7 @@ public sealed class DeflateFilter : IStreamFilter
         }
 
         // Inflate the DEFLATE payload.
-        var inflater = new DeflateInflater(compressed, payloadStart, payloadEnd - payloadStart);
+        DeflateInflater inflater = new DeflateInflater(compressed, payloadStart, payloadEnd - payloadStart);
         byte[] decompressed = inflater.Inflate();
 
         // Verify Adler-32 checksum (big-endian, RFC 1950 §2.2).
@@ -147,7 +147,7 @@ public sealed class DeflateFilter : IStreamFilter
         byte[] toCompress = ApplyPredictorForward(raw, encodeParms);
 
         // Compress using fixed Huffman DEFLATE.
-        var deflater = new DeflateDeflater(toCompress);
+        DeflateDeflater deflater = new DeflateDeflater(toCompress);
         byte[] compressed = deflater.Deflate();
 
         // Write zlib header: CM=8, CINFO=7 (32K window), FCHECK computed.
@@ -522,7 +522,7 @@ internal sealed class DeflateInflater
 
     internal byte[] Inflate()
     {
-        var output = new System.Collections.Generic.List<byte>(Math.Max(_length * 4, 256));
+        System.Collections.Generic.List<byte> output = new System.Collections.Generic.List<byte>(Math.Max(_length * 4, 256));
         bool isFinalBlock;
 
         do
@@ -793,7 +793,7 @@ internal sealed class DeflateDeflater
         // Stored blocks are valid DEFLATE and produce correct output
         // at the cost of larger file size.
 
-        var output = new System.Collections.Generic.List<byte>();
+        System.Collections.Generic.List<byte> output = new System.Collections.Generic.List<byte>();
 
         int remaining = _data.Length;
         int pos = 0;
@@ -915,7 +915,7 @@ internal sealed class HuffmanTree
         }
 
         // Assign codes to symbols (RFC 1951 step 3).
-        var entries = new System.Collections.Generic.List<(int, int, int)>();
+        System.Collections.Generic.List<(int, int, int)> entries = new System.Collections.Generic.List<(int, int, int)>();
 
         for (int symbol = 0; symbol < lengths.Length; symbol++)
         {

@@ -110,7 +110,7 @@ public sealed class PdfName : PdfPrimitive, IEquatable<PdfName>
     /// </summary>
     public override string ToString()
     {
-        var sb = new StringBuilder(Value.Length + 1);
+        StringBuilder sb = new StringBuilder(Value.Length + 1);
         sb.Append('/');
 
         foreach (char c in Value)
@@ -145,7 +145,7 @@ public sealed class PdfName : PdfPrimitive, IEquatable<PdfName>
 
     private static string DecodeNameBytes(ReadOnlySpan<byte> raw)
     {
-        var sb = new StringBuilder(raw.Length);
+        StringBuilder sb = new StringBuilder(raw.Length);
         int i = 0;
 
         while (i < raw.Length)

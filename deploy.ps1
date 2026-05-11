@@ -148,6 +148,14 @@ $fileMap = @(
     @{ File = "DebugCommands.cs";                    Dest = "tools\Chuvadi.Pdf.Cli\Commands";       As = "DebugCommands.cs" }
     @{ File = "Chuvadi.Pdf.Cli.Tests.csproj";       Dest = "tests\Chuvadi.Pdf.Cli.Tests";           As = "Chuvadi.Pdf.Cli.Tests.csproj" }
     @{ File = "CliTests.cs";                         Dest = "tests\Chuvadi.Pdf.Cli.Tests";           As = "CliTests.cs" }
+    @{ File = "Chuvadi.Pdf.Annotations.csproj";      Dest = "src\Chuvadi.Pdf.Annotations";            As = "Chuvadi.Pdf.Annotations.csproj" }
+    @{ File = "AnnotationException.cs";              Dest = "src\Chuvadi.Pdf.Annotations";            As = "AnnotationException.cs" }
+    @{ File = "AnnotationType.cs";                   Dest = "src\Chuvadi.Pdf.Annotations";            As = "AnnotationType.cs" }
+    @{ File = "Annotations.cs";                      Dest = "src\Chuvadi.Pdf.Annotations";            As = "Annotations.cs" }
+    @{ File = "AnnotationReader.cs";                 Dest = "src\Chuvadi.Pdf.Annotations";            As = "AnnotationReader.cs" }
+    @{ File = "AnnotationWriter.cs";                 Dest = "src\Chuvadi.Pdf.Annotations";            As = "AnnotationWriter.cs" }
+    @{ File = "Chuvadi.Pdf.Annotations.Tests.csproj";Dest = "tests\Chuvadi.Pdf.Annotations.Tests";   As = "Chuvadi.Pdf.Annotations.Tests.csproj" }
+    @{ File = "AnnotationTests.cs";                  Dest = "tests\Chuvadi.Pdf.Annotations.Tests";   As = "AnnotationTests.cs" }
     @{ File = "PdfPrimitivesTests.cs";              Dest = "tests\Chuvadi.Pdf.Primitives.Tests";   As = "PdfPrimitivesTests.cs" }
     @{ File = "PdfTokenizerTests.cs";               Dest = "tests\Chuvadi.Pdf.Primitives.Tests";   As = "PdfTokenizerTests.cs" }
     @{ File = "DeflateFilterTests.cs";              Dest = "tests\Chuvadi.Pdf.Filters.Tests";      As = "DeflateFilterTests.cs" }

@@ -263,3 +263,69 @@ The sustainability model does not affect the license or the code.
 
 *End of BASELINE.md*
 *Last updated: 2025-05-09 — A10, A11 decisions reflected.*
+
+---
+
+## B15 — PHI Safety: Byte-Level Removal, Not Visual Cover-Up
+
+Any operation labelled "redaction," "scrubbing," or "PHI removal" in this
+library must remove the underlying data from the PDF byte stream, not
+merely hide it visually.
+
+Specifically:
+- Text-showing operators (`Tj`, `TJ`, `'`, `"`) whose visible position
+  falls inside a redaction rectangle MUST be removed from the content
+  stream (both the operand and the operator keyword).
+- Original content-stream indirect objects MUST be excluded from the
+  output object table after they have been replaced. Leaving them in
+  the output allows direct-object retrieval (`5 0 R`) to recover the
+  redacted text.
+- When in doubt, over-redact. If any string inside a TJ array intersects
+  a redaction rectangle, the entire array is dropped.
+- Drawing an overlay rectangle is permitted (visual reinforcement) but
+  is NEVER sufficient on its own.
+
+Test verification: redaction tests grep the output PDF bytes for the
+redacted string. A test that does not enforce byte-level absence is
+not a redaction test.
+
+Violation signal: a "redaction" operation whose output contains either
+the redacted operator OR an indirect object holding the original
+content stream.
+
+Reference: CHANGE-LOG A15.
+
+---
+
+## B16 — Preload Before Iterating the Object Graph
+
+`PdfObjectStore` is lazy: `Objects.Objects` returns only what has been
+explicitly resolved. Any module that rewrites the PDF object graph
+(redaction, form-fill, watermark, page operations, future
+annotation/signature/encryption modules) MUST first walk the page
+graph and force-resolve every reachable reference, populating the
+store cache. Otherwise the iteration sees an incomplete snapshot and
+the output PDF loses content streams, fonts, or resources.
+
+Pattern (idiomatic):
+
+```csharp
+private static void PreloadAllObjects(PdfDocument document)
+{
+    HashSet<int> visited = new HashSet<int>();
+    for (int i = 0; i < document.PageCount; i++)
+    {
+        Visit(document.Objects, document.Pages[i].Dictionary, visited);
+    }
+}
+```
+
+`Visit` recurses into PdfReference (calling `Resolve`), PdfArray,
+PdfDictionary, and PdfStream values, with a visited set for cycle
+protection.
+
+Violation signal: an output PDF missing objects that were present in
+the input, where the rewriting module read `document.Objects.Objects`
+without a preload.
+
+Reference: CHANGE-LOG A16.
