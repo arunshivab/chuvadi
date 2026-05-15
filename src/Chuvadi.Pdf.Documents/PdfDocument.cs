@@ -60,6 +60,37 @@ public sealed class PdfDocument : IDisposable
     }
 
     /// <summary>
+    /// Opens an encrypted PDF using the given user or owner password.
+    /// </summary>
+    /// <param name="stream">Readable, seekable PDF stream.</param>
+    /// <param name="password">User or owner password. Empty string for default.</param>
+    /// <param name="leaveOpen">Whether to leave the underlying stream open on dispose.</param>
+    public static PdfDocument Open(Stream stream, string password, bool leaveOpen = false)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(password);
+
+        PdfReader reader = PdfReader.Open(stream, password, leaveOpen);
+        return new PdfDocument(reader);
+    }
+
+    /// <summary>Opens an encrypted PDF from a file path using the given password.</summary>
+    public static PdfDocument Open(string path, string password)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(password);
+
+        FileStream stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read);
+
+        PdfReader reader = PdfReader.Open(stream, password, leaveOpen: false);
+        return new PdfDocument(reader);
+    }
+
+    /// <summary>
     /// Opens a PDF document from a file path.
     /// </summary>
     /// <param name="path">The path to the PDF file.</param>
@@ -148,6 +179,36 @@ public sealed class PdfDocument : IDisposable
     /// Gets the raw trailer dictionary.
     /// </summary>
     public PdfDictionary Trailer => _reader.Trailer;
+
+    /// <summary>
+    /// Gets the document's linearization parameter dictionary, or null when the
+    /// document is not linearized (Fast Web View).
+    /// </summary>
+    public LinearizationInfo? Linearization
+    {
+        get
+        {
+            if (_linearization is null && !_linearizationProbed)
+            {
+                // Determine the highest object number from the trailer's /Size.
+                int maxObjNum = 5;
+                if (_reader.Trailer.TryGetValue(PdfName.Size, out PdfPrimitive? sizePrim) &&
+                    sizePrim is PdfInteger sizeInt && sizeInt.Value > 0)
+                {
+                    maxObjNum = sizeInt.Value - 1;
+                }
+                _linearization = LinearizationReader.TryRead(_reader.Objects, maxObjNum);
+                _linearizationProbed = true;
+            }
+            return _linearization;
+        }
+    }
+
+    /// <summary>Returns true when the document is linearized (Fast Web View).</summary>
+    public bool IsLinearized => Linearization is not null;
+
+    private LinearizationInfo? _linearization;
+    private bool _linearizationProbed;
 
     /// <summary>
     /// Gets the raw document information dictionary, or null when absent.

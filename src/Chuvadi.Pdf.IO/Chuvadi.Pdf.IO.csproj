@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Encryption\Chuvadi.Pdf.Encryption.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
   </ItemGroup>
 

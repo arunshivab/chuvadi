@@ -11,6 +11,7 @@ using System.IO;
 using System.Text;
 using Chuvadi.Pdf.Filters;
 using Chuvadi.Pdf.Objects;
+using Chuvadi.Pdf.Encryption;
 using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.IO;
@@ -43,7 +44,30 @@ public sealed class PdfReader : IDisposable
     // ── Factory ───────────────────────────────────────────────────────────
 
     /// <summary>Opens a PDF file from the given readable, seekable stream.</summary>
+    /// <exception cref="PdfReaderException">
+    /// Thrown when the file is encrypted. Use the password overload to open
+    /// encrypted PDFs.
+    /// </exception>
     public static PdfReader Open(Stream stream, bool leaveOpen = false)
+    {
+        return OpenInternal(stream, password: null, leaveOpen);
+    }
+
+    /// <summary>
+    /// Opens a PDF file with the given password. For unencrypted PDFs the
+    /// password is ignored.
+    /// </summary>
+    /// <param name="stream">Readable, seekable stream containing the PDF.</param>
+    /// <param name="password">User or owner password. Empty string for default.</param>
+    /// <param name="leaveOpen">Whether to leave the stream open on dispose.</param>
+    /// <exception cref="PdfReaderException">Thrown when the password is incorrect.</exception>
+    public static PdfReader Open(Stream stream, string password, bool leaveOpen = false)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        return OpenInternal(stream, password, leaveOpen);
+    }
+
+    private static PdfReader OpenInternal(Stream stream, string? password, bool leaveOpen)
     {
         if (stream is null)
         {
@@ -64,10 +88,103 @@ public sealed class PdfReader : IDisposable
 
         PdfObjectParser parser = new PdfObjectParser(stream);
 
+        // Check for encryption. The /Encrypt entry in the trailer holds the
+        // encryption dictionary (or an indirect reference to it).
+        Decryptor? decryptor = null;
+        int encryptObjectNumber = -1;
+        bool encryptMetadata = true;
+
+        if (trailer.TryGetValue(PdfName.Intern("Encrypt"), out PdfPrimitive? encryptPrim))
+        {
+            (decryptor, encryptObjectNumber, encryptMetadata) = BuildDecryptor(
+                parser, xref, trailer, encryptPrim, password);
+        }
+
+        Decryptor? finalDecryptor = decryptor;
+        int finalEncryptObjNum = encryptObjectNumber;
+        bool finalEncryptMetadata = encryptMetadata;
+
         PdfObjectStore objects = new PdfObjectStore(id =>
-            LoadObjectFromFile(parser, xref, id));
+        {
+            PdfIndirectObject? loaded = LoadObjectFromFile(parser, xref, id);
+
+            if (loaded is null || finalDecryptor is null)
+            {
+                return loaded;
+            }
+
+            // The /Encrypt object itself is NEVER decrypted (chicken-and-egg).
+            if (id.ObjectNumber == finalEncryptObjNum)
+            {
+                return loaded;
+            }
+
+            PdfPrimitive decryptedValue = EncryptionVisitor.Transform(
+                loaded.Value,
+                id.ObjectNumber,
+                id.Generation,
+                finalDecryptor.Decrypt,
+                skipMetadataEncryption: !finalEncryptMetadata);
+
+            return new PdfIndirectObject(loaded.Id, decryptedValue);
+        });
 
         return new PdfReader(stream, leaveOpen, trailer, objects);
+    }
+
+    private static (Decryptor decryptor, int encryptObjectNumber, bool encryptMetadata)
+        BuildDecryptor(
+            PdfObjectParser parser,
+            XrefTable xref,
+            PdfDictionary trailer,
+            PdfPrimitive encryptPrim,
+            string? password)
+    {
+        PdfDictionary encryptDict;
+        int encryptObjectNumber = -1;
+
+        if (encryptPrim is PdfReference encRef)
+        {
+            encryptObjectNumber = encRef.ObjectId.ObjectNumber;
+            PdfIndirectObject? indirect = LoadObjectFromFile(parser, xref, encRef.ObjectId);
+
+            if (indirect?.Value is not PdfDictionary d)
+            {
+                throw new PdfReaderException(
+                    "Document /Encrypt entry could not be resolved to a dictionary.");
+            }
+
+            encryptDict = d;
+        }
+        else if (encryptPrim is PdfDictionary inlineDict)
+        {
+            encryptDict = inlineDict;
+        }
+        else
+        {
+            throw new PdfReaderException("Document /Encrypt entry has an invalid type.");
+        }
+
+        byte[] firstFileId = Array.Empty<byte>();
+
+        if (trailer.TryGetValue(PdfName.Intern("ID"), out PdfPrimitive? idPrim) &&
+            idPrim is PdfArray idArr && idArr.Count >= 1 && idArr[0] is PdfString idStr)
+        {
+            firstFileId = idStr.Bytes;
+        }
+
+        Decryptor decryptor = PdfEncryption.TryOpen(encryptDict, firstFileId, password ?? string.Empty)
+            ?? throw new PdfReaderException(
+                "PDF is encrypted; provide the correct user or owner password.");
+
+        bool encryptMetadata = true;
+        if (encryptDict.TryGetValue(PdfName.Intern("EncryptMetadata"), out PdfPrimitive? emPrim) &&
+            emPrim is PdfBoolean emb)
+        {
+            encryptMetadata = emb.Value;
+        }
+
+        return (decryptor, encryptObjectNumber, encryptMetadata);
     }
 
     // ── Public API ────────────────────────────────────────────────────────

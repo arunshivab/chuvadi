@@ -30,6 +30,14 @@ PdfDictionary Trailer => _reader.Trailer
 
 Gets the raw trailer dictionary.
 
+### `IsLinearized`
+
+```csharp
+bool IsLinearized => Linearization is not null
+```
+
+Returns true when the document is linearized (Fast Web View).
+
 ### `Info`
 
 ```csharp
@@ -62,6 +70,32 @@ Opens a PDF document from the given stream.
 
 - `stream` — A readable, seekable PDF stream.
 - `leaveOpen` — True to leave the stream open when this document is disposed.
+
+### `Open`
+
+__static__
+
+```csharp
+static PdfDocument Open(Stream stream, string password, bool leaveOpen = false)
+```
+
+Opens an encrypted PDF using the given user or owner password.
+
+**Parameters**
+
+- `stream` — Readable, seekable PDF stream.
+- `password` — User or owner password. Empty string for default.
+- `leaveOpen` — Whether to leave the underlying stream open on dispose.
+
+### `Open`
+
+__static__
+
+```csharp
+static PdfDocument Open(string path, string password)
+```
+
+Opens an encrypted PDF from a file path using the given password.
 
 ### `Open`
 

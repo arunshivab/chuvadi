@@ -36,7 +36,23 @@ __static__
 static PdfReader Open(Stream stream, bool leaveOpen = false)
 ```
 
-Opens a PDF file from the given readable, seekable stream.
+Opens a PDF file from the given readable, seekable stream. <exception cref="PdfReaderException"> Thrown when the file is encrypted. Use the password overload to open encrypted PDFs. </exception>
+
+### `Open`
+
+__static__
+
+```csharp
+static PdfReader Open(Stream stream, string password, bool leaveOpen = false)
+```
+
+Opens a PDF file with the given password. For unencrypted PDFs the password is ignored.
+
+**Parameters**
+
+- `stream` — Readable, seekable stream containing the PDF.
+- `password` — User or owner password. Empty string for default.
+- `leaveOpen` — Whether to leave the stream open on dispose. <exception cref="PdfReaderException">Thrown when the password is incorrect.</exception>
 
 ### `Dispose`
 
