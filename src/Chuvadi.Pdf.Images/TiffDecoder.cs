@@ -274,6 +274,23 @@ public static class TiffDecoder
                     gg = (byte)((g0 * 255) / max);
                     bb = (byte)((b0 * 255) / max);
                 }
+                else if (spp == 4 && photometric == 5)
+                {
+                    // CMYK (separated). Store as BGRA with B=C, G=M, R=Y, A=K so
+                    // the encoder round-trips losslessly. Callers that expect RGB
+                    // should run CmykConverter first.
+                    int c0 = ReadSample(raw, rowStart, x * spp,     bps);
+                    int m0 = ReadSample(raw, rowStart, x * spp + 1, bps);
+                    int y0 = ReadSample(raw, rowStart, x * spp + 2, bps);
+                    int k0 = ReadSample(raw, rowStart, x * spp + 3, bps);
+                    int max = (1 << bps) - 1;
+                    buf.SetPixelBgra(x, y,
+                        (byte)((c0 * 255) / max),
+                        (byte)((m0 * 255) / max),
+                        (byte)((y0 * 255) / max),
+                        (byte)((k0 * 255) / max));
+                    continue;
+                }
                 else
                 {
                     throw new TiffException(
@@ -284,7 +301,19 @@ public static class TiffDecoder
             }
         }
 
-        ImageColorFormat fmt = (spp == 1) ? ImageColorFormat.Gray8 : ImageColorFormat.Rgb24;
+        ImageColorFormat fmt;
+        if (spp == 1)
+        {
+            fmt = ImageColorFormat.Gray8;
+        }
+        else if (spp == 4 && photometric == 5)
+        {
+            fmt = ImageColorFormat.Cmyk32;
+        }
+        else
+        {
+            fmt = ImageColorFormat.Rgb24;
+        }
         return new ImageFrame(buf, fmt);
     }
 

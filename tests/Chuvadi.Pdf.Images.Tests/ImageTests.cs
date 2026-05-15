@@ -383,3 +383,95 @@ public sealed class TiffRoundTripTests
         act.Should().Throw<TiffException>();
     }
 }
+
+// ── Phase 1.1.8: CMYK ─────────────────────────────────────────────────────
+
+public sealed class CmykConverterTests
+{
+    [Fact]
+    public void Pure_Black_Yields_K_255()
+    {
+        PixelBuffer buf = new(1, 1);
+        buf.SetPixelBgra(0, 0, 0, 0, 0, 255);
+
+        byte[] cmyk = CmykConverter.ToCmyk(buf);
+        cmyk[0].Should().Be(0);   // C
+        cmyk[1].Should().Be(0);   // M
+        cmyk[2].Should().Be(0);   // Y
+        cmyk[3].Should().Be(255); // K
+    }
+
+    [Fact]
+    public void Pure_White_Yields_All_Zero()
+    {
+        PixelBuffer buf = new(1, 1);
+        buf.SetPixelBgra(0, 0, 255, 255, 255, 255);
+
+        byte[] cmyk = CmykConverter.ToCmyk(buf);
+        cmyk[0].Should().Be(0);
+        cmyk[1].Should().Be(0);
+        cmyk[2].Should().Be(0);
+        cmyk[3].Should().Be(0);
+    }
+
+    [Fact]
+    public void Pure_Red_Yields_M_And_Y_255()
+    {
+        PixelBuffer buf = new(1, 1);
+        buf.SetPixelBgra(0, 0, 0, 0, 255, 255);
+
+        byte[] cmyk = CmykConverter.ToCmyk(buf);
+        cmyk[0].Should().Be(0);   // C
+        cmyk[1].Should().Be(255); // M
+        cmyk[2].Should().Be(255); // Y
+        cmyk[3].Should().Be(0);   // K
+    }
+
+    [Fact]
+    public void Null_Source_Throws()
+    {
+        System.Action act = () => CmykConverter.ToCmyk(null!);
+        act.Should().Throw<System.ArgumentNullException>();
+    }
+
+    [Fact]
+    public void ToCmykFrame_TagsFormat()
+    {
+        PixelBuffer buf = new(2, 2);
+        ImageFrame frame = CmykConverter.ToCmykFrame(buf);
+        frame.OriginalFormat.Should().Be(ImageColorFormat.Cmyk32);
+        frame.Width.Should().Be(2);
+        frame.Height.Should().Be(2);
+    }
+}
+
+public sealed class CmykTiffRoundTripTests
+{
+    [Fact]
+    public void CmykFrame_EncodesAndDecodes()
+    {
+        // Build a 2×2 BGRA buffer with known colours
+        PixelBuffer rgb = new(2, 2);
+        rgb.SetPixelBgra(0, 0, 0, 0, 255, 255);     // red
+        rgb.SetPixelBgra(1, 0, 0, 255, 0, 255);     // green
+        rgb.SetPixelBgra(0, 1, 255, 0, 0, 255);     // blue
+        rgb.SetPixelBgra(1, 1, 255, 255, 255, 255); // white
+
+        ImageFrame cmyk = CmykConverter.ToCmykFrame(rgb);
+
+        byte[] tiff = TiffEncoder.Encode(cmyk);
+
+        System.Collections.Generic.List<ImageFrame> decoded = TiffDecoder.Decode(tiff);
+        decoded.Should().HaveCount(1);
+        decoded[0].OriginalFormat.Should().Be(ImageColorFormat.Cmyk32);
+        decoded[0].Width.Should().Be(2);
+        decoded[0].Height.Should().Be(2);
+
+        // Re-decoded white should still have all CMYK channels at zero
+        (byte B, byte G, byte R, byte A) white = decoded[0].Pixels.GetPixelBgra(1, 1);
+        white.B.Should().Be(0); // C
+        white.G.Should().Be(0); // M
+        white.R.Should().Be(0); // Y
+        white.A.Should().Be(0); // K
+    }
+}

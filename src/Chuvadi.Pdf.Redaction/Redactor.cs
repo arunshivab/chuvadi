@@ -312,9 +312,55 @@ public static class Redactor
                 }
                 return false;
 
+            // ── Image / XObject painting (Phase 1.1.3) ─────────────────────
+            case "Do":
+                // Paints the XObject named by the operand at the current CTM.
+                // The image (or form) occupies the unit square [0,1]×[0,1] in
+                // its local space. We compute the device-space bounding box of
+                // the four corners and drop the Do if any rect intersects.
+                return ShouldRedactImageAtCtm(state, rects);
+
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Returns true if the unit square (0,0)-(1,1) transformed by the current CTM
+    /// intersects any redaction rectangle on this page.
+    /// </summary>
+    private static bool ShouldRedactImageAtCtm(RedactState state, List<RectangleF> rects)
+    {
+        if (rects.Count == 0)
+        {
+            return false;
+        }
+
+        // Four corners of the unit square in local space.
+        PointF tl = state.Ctm.TransformPoint(new PointF(0, 0));
+        PointF tr = state.Ctm.TransformPoint(new PointF(1, 0));
+        PointF bl = state.Ctm.TransformPoint(new PointF(0, 1));
+        PointF br = state.Ctm.TransformPoint(new PointF(1, 1));
+
+        double minX = Math.Min(Math.Min(tl.X, tr.X), Math.Min(bl.X, br.X));
+        double maxX = Math.Max(Math.Max(tl.X, tr.X), Math.Max(bl.X, br.X));
+        double minY = Math.Min(Math.Min(tl.Y, tr.Y), Math.Min(bl.Y, br.Y));
+        double maxY = Math.Max(Math.Max(tl.Y, tr.Y), Math.Max(bl.Y, br.Y));
+
+        foreach (RectangleF r in rects)
+        {
+            double rMinX = r.X;
+            double rMaxX = r.X + r.Width;
+            double rMinY = r.Y;
+            double rMaxY = r.Y + r.Height;
+
+            if (minX < rMaxX && maxX > rMinX && minY < rMaxY && maxY > rMinY)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ── Operator state updates ────────────────────────────────────────────
@@ -591,6 +637,13 @@ public static class Redactor
     {
         foreach (PdfToken t in tokens)
         {
+            // PdfTokenizer.ReadName strips the leading '/' from a Name token's
+            // RawBytes (it stores just the name content). We re-prepend it here
+            // when serialising back to a content stream.
+            if (t.Type == PdfTokenType.Name)
+            {
+                output.WriteByte((byte)'/');
+            }
             output.Write(t.RawBytes, 0, t.RawBytes.Length);
             output.WriteByte(32);
         }
