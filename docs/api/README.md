@@ -133,6 +133,9 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [EncryptionOptions](IO/EncryptionOptions.md) | class | Options that drive encrypted PDF writing. |
+| [LinearizationInfo](IO/LinearizationInfo.md) | class | Parsed view of a PDF's linearization parameter dictionary. |
+| [LinearizationReader](IO/LinearizationReader.md) | class | Detects linearization and parses the parameter dictionary. |
 | [PdfReader](IO/PdfReader.md) | class | Opens an existing PDF file and provides access to its object graph. |
 | [PdfReaderException](IO/PdfReaderException.md) | class | Thrown when `PdfReader` encounters a PDF file structure it cannot parse or recover from. |
 | [PdfWriter](IO/PdfWriter.md) | class | Writes a complete PDF file to an output stream. |

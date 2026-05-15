@@ -10,6 +10,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using Chuvadi.Pdf.Objects;
+using Chuvadi.Pdf.Encryption;
 using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.IO;
@@ -54,47 +55,119 @@ public static class PdfWriter
         IEnumerable<PdfIndirectObject> objects,
         PdfDictionary trailer)
     {
-        if (output is null)
-        {
-            throw new ArgumentNullException(nameof(output));
-        }
+        Write(output, objects, trailer, encryption: null);
+    }
 
-        if (objects is null)
-        {
-            throw new ArgumentNullException(nameof(objects));
-        }
+    /// <summary>
+    /// Writes a linearized (Fast Web View) PDF.
+    /// </summary>
+    /// <param name="output">Writable output stream.</param>
+    /// <param name="objects">Indirect objects to write.</param>
+    /// <param name="trailer">Trailer dictionary with /Root.</param>
+    /// <remarks>
+    /// Per ISO 32000-1 Annex F, the output is laid out so that the first page
+    /// can be rendered after reading only the file's prefix. Encryption is not
+    /// yet supported in combination with linearization.
+    /// </remarks>
+    public static void WriteLinearized(
+        Stream output,
+        IEnumerable<PdfIndirectObject> objects,
+        PdfDictionary trailer)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(objects);
+        ArgumentNullException.ThrowIfNull(trailer);
 
-        if (trailer is null)
-        {
-            throw new ArgumentNullException(nameof(trailer));
-        }
+        List<PdfIndirectObject> list = new List<PdfIndirectObject>(objects);
+        LinearizedWriter.Write(output, list, trailer);
+    }
+
+    /// <summary>
+    /// Writes a PDF with optional encryption applied to every string and stream
+    /// inside the written objects.
+    /// </summary>
+    /// <param name="output">Writable, seekable output stream.</param>
+    /// <param name="objects">Indirect objects to write.</param>
+    /// <param name="trailer">
+    /// Trailer dictionary. When <paramref name="encryption"/> is supplied, this
+    /// method appends an /Encrypt entry referencing a newly created encryption
+    /// dictionary; the trailer must NOT already contain one.
+    /// </param>
+    /// <param name="encryption">
+    /// Encryption configuration. When null, no encryption is applied.
+    /// </param>
+    public static void Write(
+        Stream output,
+        IEnumerable<PdfIndirectObject> objects,
+        PdfDictionary trailer,
+        EncryptionOptions? encryption)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(objects);
+        ArgumentNullException.ThrowIfNull(trailer);
 
         // Write PDF header.
         output.Write(PdfHeader, 0, PdfHeader.Length);
 
-        // Build sorted object list and record byte offsets.
+        // Build sorted object list.
         List<PdfIndirectObject> sortedObjects = new List<PdfIndirectObject>(objects);
         sortedObjects.Sort((a, b) => a.Id.ObjectNumber.CompareTo(b.Id.ObjectNumber));
 
-        XrefTable xref = new XrefTable();
         int maxObjectNumber = 0;
-
         foreach (PdfIndirectObject obj in sortedObjects)
         {
-            long offset = output.Position;
-            WriteIndirectObject(output, obj);
-            xref.Set(new XrefEntry(obj.Id.ObjectNumber, obj.Id.Generation, offset));
-
             if (obj.Id.ObjectNumber > maxObjectNumber)
             {
                 maxObjectNumber = obj.Id.ObjectNumber;
             }
         }
 
-        // Write xref table and remember its offset.
-        long xrefOffset = xref.Write(output);
+        // If encrypting, create the /Encrypt indirect object and append to objects.
+        int encryptObjectNumber = -1;
+        Encryptor? encryptor = null;
+        bool encryptMetadata = true;
 
-        // Write trailer.
+        if (encryption is not null)
+        {
+            encryptObjectNumber = maxObjectNumber + 1;
+            PdfObjectId encryptId = new PdfObjectId(encryptObjectNumber, 0);
+
+            PdfDictionary encryptDict = EncryptionDictionaryBuilder.Build(
+                encryption, GetOrCreateFileId(trailer));
+
+            sortedObjects.Add(new PdfIndirectObject(encryptId, encryptDict));
+            maxObjectNumber = encryptObjectNumber;
+
+            trailer.Set(PdfName.Intern("Encrypt"), new PdfReference(encryptId));
+            encryptor = new Encryptor(encryption.FileKey, encryption.Algorithm);
+            encryptMetadata = encryption.EncryptMetadata;
+        }
+
+        XrefTable xref = new XrefTable();
+
+        foreach (PdfIndirectObject obj in sortedObjects)
+        {
+            long offset = output.Position;
+            PdfIndirectObject toWrite = obj;
+
+            // Encrypt every object EXCEPT the /Encrypt dictionary itself.
+            if (encryptor is not null && obj.Id.ObjectNumber != encryptObjectNumber)
+            {
+                PdfPrimitive encryptedValue = EncryptionVisitor.Transform(
+                    obj.Value,
+                    obj.Id.ObjectNumber,
+                    obj.Id.Generation,
+                    encryptor.Encrypt,
+                    skipMetadataEncryption: !encryptMetadata);
+                toWrite = new PdfIndirectObject(obj.Id, encryptedValue);
+            }
+
+            WriteIndirectObject(output, toWrite);
+            xref.Set(new XrefEntry(obj.Id.ObjectNumber, obj.Id.Generation, offset));
+        }
+
+        // Xref + trailer + EOF.
+        long xrefOffset = xref.Write(output);
         int size = maxObjectNumber + 1;
         trailer.Set(PdfName.Size, size);
 
@@ -103,15 +176,35 @@ public static class PdfWriter
         WriteValue(output, trailer);
         output.WriteByte((byte)'\n');
 
-        // Write startxref and %%EOF.
         string startxref = $"\nstartxref\n{xrefOffset}\n%%EOF\n";
         byte[] startxrefBytes = Encoding.ASCII.GetBytes(startxref);
         output.Write(startxrefBytes, 0, startxrefBytes.Length);
     }
 
+    private static byte[] GetOrCreateFileId(PdfDictionary trailer)
+    {
+        if (trailer.TryGetValue(PdfName.Intern("ID"), out PdfPrimitive? idPrim) &&
+            idPrim is PdfArray idArr && idArr.Count >= 1 && idArr[0] is PdfString idStr)
+        {
+            return idStr.Bytes;
+        }
+
+        // Generate a fresh /ID (two identical 16-byte random IDs for a new doc).
+        byte[] fid = new byte[16];
+        using (System.Security.Cryptography.RandomNumberGenerator rng =
+            System.Security.Cryptography.RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(fid);
+        }
+
+        PdfString idString = new PdfString(fid);
+        trailer.Set(PdfName.Intern("ID"), new PdfArray([idString, idString]));
+        return fid;
+    }
+
     // ── Object serialisation ──────────────────────────────────────────────
 
-    private static void WriteIndirectObject(Stream output, PdfIndirectObject obj)
+    internal static void WriteIndirectObject(Stream output, PdfIndirectObject obj)
     {
         // Write: "N G obj\n<value>\nendobj\n"
         string header = $"{obj.Id.ObjectNumber} {obj.Id.Generation} obj\n";
@@ -122,7 +215,7 @@ public static class PdfWriter
         output.Write(endobj, 0, endobj.Length);
     }
 
-    private static void WriteValue(Stream output, PdfPrimitive value)
+    internal static void WriteValue(Stream output, PdfPrimitive value)
     {
         switch (value)
         {
