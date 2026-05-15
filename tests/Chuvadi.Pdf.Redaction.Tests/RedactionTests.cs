@@ -428,3 +428,117 @@ public sealed class RedactionOptionsExtensionTests
         opts.Patterns.Should().HaveCount(1);
     }
 }
+
+// ── Phase 1.1.3: Image / Form XObject redaction ───────────────────────────
+
+public sealed class ImageRedactionTests
+{
+    [Fact]
+    public void DoOperator_InsideRect_IsDropped()
+    {
+        // Build a minimal page whose content stream paints an XObject "/Im0"
+        // at a CTM that places its unit square inside (100, 700, 200, 50).
+        // After redaction with a rect covering (100, 700, 200, 50), the
+        // Do operator should be removed from the content stream.
+        PdfDocument doc = BuildPageWithDo(
+            ctmCm: "100 0 0 50 100 700",  // place image at (100,700) size 100×50
+            xobjectName: "/Im0");
+
+        using MemoryStream output = new();
+        RedactionOptions opts = new();
+        opts.Rectangles.Add(new RedactionRect(0, new RectangleF(80, 680, 240, 100)));
+
+        Redactor.Apply(output, doc, opts);
+
+        byte[] outBytes = output.ToArray();
+        string asText = System.Text.Encoding.Latin1.GetString(outBytes);
+        asText.Should().NotContain("/Im0 Do",
+            "the Do operator that fell inside the redaction rectangle must be removed");
+    }
+
+    [Fact]
+    public void DoOperator_OutsideRect_IsPreserved()
+    {
+        PdfDocument doc = BuildPageWithDo(
+            ctmCm: "100 0 0 50 100 100",  // image at bottom of page (100, 100)
+            xobjectName: "/Im0");
+
+        using MemoryStream output = new();
+        RedactionOptions opts = new();
+        opts.Rectangles.Add(new RedactionRect(0, new RectangleF(80, 680, 240, 100)));
+
+        Redactor.Apply(output, doc, opts);
+
+        string asText = System.Text.Encoding.Latin1.GetString(output.ToArray());
+        asText.Should().Contain("/Im0 Do");
+    }
+
+    private static PdfDocument BuildPageWithDo(string ctmCm, string xobjectName)
+    {
+        // Indirect objects: catalog, pages, page, contents (stream)
+        PdfObjectId catalogId = new(1, 0);
+        PdfObjectId pagesId = new(2, 0);
+        PdfObjectId pageId = new(3, 0);
+        PdfObjectId contentsId = new(4, 0);
+        PdfObjectId imId = new(5, 0);
+
+        string streamText = $"q {ctmCm} cm {xobjectName} Do Q";
+        byte[] streamBytes = System.Text.Encoding.Latin1.GetBytes(streamText);
+
+        PdfDictionary streamDict = new();
+        streamDict.Set(PdfName.Intern("Length"), streamBytes.Length);
+        PdfStream contents = new(streamDict, streamBytes);
+
+        // Image XObject dictionary
+        PdfDictionary imDict = new();
+        imDict.Set(PdfName.Type, PdfName.Intern("XObject"));
+        imDict.Set(PdfName.Intern("Subtype"), PdfName.Intern("Image"));
+        imDict.Set(PdfName.Intern("Width"), 1);
+        imDict.Set(PdfName.Intern("Height"), 1);
+        imDict.Set(PdfName.Intern("BitsPerComponent"), 8);
+        imDict.Set(PdfName.Intern("ColorSpace"), PdfName.Intern("DeviceGray"));
+        imDict.Set(PdfName.Intern("Length"), 1);
+        PdfStream im = new(imDict, new byte[] { 0xFF });
+
+        // Page resources reference the image
+        PdfDictionary xobjects = new();
+        xobjects.Set(PdfName.Intern("Im0"), new PdfReference(imId));
+        PdfDictionary resources = new();
+        resources.Set(PdfName.Intern("XObject"), xobjects);
+
+        PdfDictionary pageDict = new();
+        pageDict.Set(PdfName.Type, PdfName.Page);
+        pageDict.Set(PdfName.Parent, new PdfReference(pagesId));
+        pageDict.Set(PdfName.MediaBox, new PdfArray([
+            new PdfInteger(0), new PdfInteger(0),
+            new PdfInteger(612), new PdfInteger(792),
+        ]));
+        pageDict.Set(PdfName.Intern("Resources"), resources);
+        pageDict.Set(PdfName.Intern("Contents"), new PdfReference(contentsId));
+
+        PdfDictionary pagesDict = new();
+        pagesDict.Set(PdfName.Type, PdfName.Pages);
+        pagesDict.Set(PdfName.Kids, new PdfArray([new PdfReference(pageId)]));
+        pagesDict.Set(PdfName.Count, 1);
+
+        PdfDictionary catalogDict = new();
+        catalogDict.Set(PdfName.Type, PdfName.Catalog);
+        catalogDict.Set(PdfName.Pages, new PdfReference(pagesId));
+
+        List<PdfIndirectObject> objects = [
+            new(catalogId, catalogDict),
+            new(pagesId, pagesDict),
+            new(pageId, pageDict),
+            new(contentsId, contents),
+            new(imId, im),
+        ];
+
+        PdfDictionary trailer = new();
+        trailer.Set(PdfName.Root, new PdfReference(catalogId));
+
+        MemoryStream ms = new();
+        PdfWriter.Write(ms, objects, trailer);
+        ms.Seek(0, SeekOrigin.Begin);
+        return PdfDocument.Open(ms, leaveOpen: true);
+    }
+}

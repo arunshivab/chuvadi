@@ -80,19 +80,37 @@ public static class TiffEncoder
             int width = frame.Width;
             int height = frame.Height;
 
-            // Build RGB bytes from the BGRA pixel buffer.
-            byte[] rgb = new byte[width * height * 3];
+            // Re-pack pixels for the target colour space.
+            //   Rgb24/Rgba32/Gray8 → RGB photometric=2, 3 channels
+            //   Cmyk32             → Separated photometric=5, 4 channels
+            bool isCmyk = frame.OriginalFormat == ImageColorFormat.Cmyk32;
+            int samplesPerPixel = isCmyk ? 4 : 3;
+            byte[] raw = new byte[width * height * samplesPerPixel];
             ReadOnlySpan<byte> pixels = frame.Pixels.Pixels;
             int dst = 0;
 
-            for (int p = 0; p < pixels.Length; p += 4)
+            if (isCmyk)
             {
-                rgb[dst++] = pixels[p + 2]; // R
-                rgb[dst++] = pixels[p + 1]; // G
-                rgb[dst++] = pixels[p];     // B
+                // BGRA buffer encodes B=C, G=M, R=Y, A=K (see CmykConverter.ToCmykFrame).
+                for (int p = 0; p < pixels.Length; p += 4)
+                {
+                    raw[dst++] = pixels[p];     // C
+                    raw[dst++] = pixels[p + 1]; // M
+                    raw[dst++] = pixels[p + 2]; // Y
+                    raw[dst++] = pixels[p + 3]; // K
+                }
+            }
+            else
+            {
+                for (int p = 0; p < pixels.Length; p += 4)
+                {
+                    raw[dst++] = pixels[p + 2]; // R
+                    raw[dst++] = pixels[p + 1]; // G
+                    raw[dst++] = pixels[p];     // B
+                }
             }
 
-            byte[] compressed = PackBitsCompress(rgb);
+            byte[] compressed = PackBitsCompress(raw);
 
             // Write strip data at current position
             long stripOffset = ms.Position;
@@ -122,29 +140,33 @@ public static class TiffEncoder
             // Compute its offset after the IFD body.
             long ifdBodyEnd = ms.Position + (numEntries * 12) + 4;
             long bitsPerSampleOffset = ifdBodyEnd;
+            // BitsPerSample takes samplesPerPixel × 2 bytes (each is a SHORT).
+            long xResOffset = bitsPerSampleOffset + (samplesPerPixel * 2);
+            long yResOffset = xResOffset + 8;
 
             // Write entries (tag, type, count, value-or-offset)
             WriteEntry(w, 256, 4, 1, (uint)width);                // ImageWidth (LONG)
             WriteEntry(w, 257, 4, 1, (uint)height);               // ImageLength (LONG)
-            WriteEntry(w, 258, 3, 3, (uint)bitsPerSampleOffset);  // BitsPerSample → external
+            WriteEntry(w, 258, 3, (uint)samplesPerPixel, (uint)bitsPerSampleOffset);  // BitsPerSample → external
             WriteEntry(w, 259, 3, 1, 32773);                       // Compression: PackBits
-            WriteEntry(w, 262, 3, 1, 2);                           // Photometric: RGB
-            WriteEntry(w, 273, 4, 1, (uint)stripOffset);          // StripOffsets
-            WriteEntry(w, 277, 3, 1, 3);                           // SamplesPerPixel: 3
-            WriteEntry(w, 278, 4, 1, (uint)height);               // RowsPerStrip
-            WriteEntry(w, 279, 4, 1, (uint)compressed.Length);    // StripByteCounts
-            WriteEntry(w, 282, 5, 1, (uint)(ifdBodyEnd + 6));     // XResolution → external
-            WriteEntry(w, 283, 5, 1, (uint)(ifdBodyEnd + 14));    // YResolution → external
+            WriteEntry(w, 262, 3, 1, isCmyk ? 5u : 2u);            // Photometric: 2=RGB, 5=CMYK
+            WriteEntry(w, 273, 4, 1, (uint)stripOffset);           // StripOffsets
+            WriteEntry(w, 277, 3, 1, (uint)samplesPerPixel);       // SamplesPerPixel
+            WriteEntry(w, 278, 4, 1, (uint)height);                // RowsPerStrip
+            WriteEntry(w, 279, 4, 1, (uint)compressed.Length);     // StripByteCounts
+            WriteEntry(w, 282, 5, 1, (uint)xResOffset);            // XResolution → external
+            WriteEntry(w, 283, 5, 1, (uint)yResOffset);            // YResolution → external
             WriteEntry(w, 296, 3, 1, 2);                           // ResolutionUnit: inch
 
             // NextIFDOffset: 0 for now, will be patched on next iteration
             previousNextIfdPos = ms.Position;
             WriteU32(w, 0);
 
-            // External value for BitsPerSample (three SHORTs = 6 bytes)
-            WriteU16(w, 8);
-            WriteU16(w, 8);
-            WriteU16(w, 8);
+            // External value for BitsPerSample (one SHORT per sample, 8 bits each)
+            for (int k = 0; k < samplesPerPixel; k++)
+            {
+                WriteU16(w, 8);
+            }
 
             // XResolution (RATIONAL: 72/1)
             WriteU32(w, 72);
