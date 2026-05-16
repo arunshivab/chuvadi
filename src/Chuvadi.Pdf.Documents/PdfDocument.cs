@@ -220,6 +220,12 @@ public sealed class PdfDocument : IDisposable
     /// </summary>
     public PdfObjectStore Objects => _reader.Objects;
 
+    /// <summary>
+    /// Gets the underlying <see cref="PdfReader"/> for low-level access such as
+    /// reading raw file bytes for signature byte-range extraction.
+    /// </summary>
+    public PdfReader Reader => _reader;
+
     // ── IDisposable ───────────────────────────────────────────────────────
 
     /// <inheritdoc/>

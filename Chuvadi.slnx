@@ -10,6 +10,7 @@
     <Project Path="examples/Chuvadi.Examples.Watermark/Chuvadi.Examples.Watermark.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Chuvadi.Cryptography/Chuvadi.Cryptography.csproj" />
     <Project Path="src/Chuvadi.Pdf.Annotations/Chuvadi.Pdf.Annotations.csproj" />
     <Project Path="src/Chuvadi.Pdf.Content/Chuvadi.Pdf.Content.csproj" />
     <Project Path="src/Chuvadi.Pdf.Documents/Chuvadi.Pdf.Documents.csproj" />
@@ -26,6 +27,7 @@
     <Project Path="src/Chuvadi.Pdf.Primitives/Chuvadi.Pdf.Primitives.csproj" />
     <Project Path="src/Chuvadi.Pdf.Redaction/Chuvadi.Pdf.Redaction.csproj" />
     <Project Path="src/Chuvadi.Pdf.Rendering/Chuvadi.Pdf.Rendering.csproj" />
+    <Project Path="src/Chuvadi.Pdf.Signatures/Chuvadi.Pdf.Signatures.csproj" />
     <Project Path="src/Chuvadi.Pdf.Text/Chuvadi.Pdf.Text.csproj" />
     <Project Path="src/Chuvadi.Pdf.Watermark/Chuvadi.Pdf.Watermark.csproj" />
   </Folder>
@@ -47,6 +49,7 @@
     <Project Path="tests/Chuvadi.Pdf.Primitives.Tests/Chuvadi.Pdf.Primitives.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Redaction.Tests/Chuvadi.Pdf.Redaction.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Rendering.Tests/Chuvadi.Pdf.Rendering.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Signatures.Tests/Chuvadi.Pdf.Signatures.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Text.Tests/Chuvadi.Pdf.Text.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Watermark.Tests/Chuvadi.Pdf.Watermark.Tests.csproj" />
   </Folder>

@@ -17,6 +17,9 @@ namespace Chuvadi.Cryptography.Asn1;
 /// </remarks>
 public sealed class Asn1Exception : Exception
 {
+	/// <summary>Initialises a new <see cref="Asn1Exception"/> with no message.</summary>
+    public Asn1Exception() { }
+	
     /// <summary>Initialises a new <see cref="Asn1Exception"/>.</summary>
     public Asn1Exception(string message) : base(message) { }
 

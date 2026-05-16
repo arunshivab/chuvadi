@@ -227,6 +227,84 @@ public sealed class PdfReader : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads a contiguous byte range directly from the underlying PDF file.
+    /// </summary>
+    /// <remarks>
+    /// Signature verification needs the raw bytes of the file at known offsets —
+    /// the signature dictionary's /ByteRange entry identifies them. This method
+    /// exposes that capability without requiring callers to keep their own copy
+    /// of the file.
+    /// </remarks>
+    /// <param name="offset">Absolute byte offset within the PDF file.</param>
+    /// <param name="count">Number of bytes to read.</param>
+    /// <returns>A newly allocated byte array of length <paramref name="count"/>.</returns>
+    public byte[] ReadFileBytes(long offset, int count)
+    {
+        if (_disposed) { throw new ObjectDisposedException(nameof(PdfReader)); }
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset), "offset must be non-negative.");
+        }
+        if (count < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be non-negative.");
+        }
+
+        byte[] buffer = new byte[count];
+        _stream.Position = offset;
+        int total = 0;
+        while (total < count)
+        {
+            int read = _stream.Read(buffer, total, count - total);
+            if (read <= 0)
+            {
+                throw new EndOfStreamException(
+                    $"Reached end of file while reading {count} bytes at offset {offset} " +
+                    $"(read {total} bytes).");
+            }
+            total += read;
+        }
+        return buffer;
+    }
+
+    /// <summary>
+    /// Copies a contiguous byte range from the file directly into <paramref name="destination"/>.
+    /// </summary>
+    /// <remarks>
+    /// Use this for hash computation over large byte ranges — feeds the destination
+    /// stream incrementally without materialising the bytes as a single array.
+    /// </remarks>
+    public void CopyFileBytes(long offset, long count, Stream destination)
+    {
+        if (_disposed) { throw new ObjectDisposedException(nameof(PdfReader)); }
+        ArgumentNullException.ThrowIfNull(destination);
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset), "offset must be non-negative.");
+        }
+        if (count < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be non-negative.");
+        }
+
+        _stream.Position = offset;
+        byte[] buffer = new byte[8192];
+        long remaining = count;
+        while (remaining > 0)
+        {
+            int want = (int)Math.Min(remaining, buffer.Length);
+            int read = _stream.Read(buffer, 0, want);
+            if (read <= 0)
+            {
+                throw new EndOfStreamException(
+                    "Reached end of file while copying byte range.");
+            }
+            destination.Write(buffer, 0, read);
+            remaining -= read;
+        }
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {

@@ -14,6 +14,10 @@ The decoder never throws NullReferenceException, IndexOutOfRangeException, or In
 
 ## Constructors
 
+### `Asn1Exception()`
+
+Initialises a new `Asn1Exception` with no message.
+
 ### `Asn1Exception(string message) : base(message)`
 
 Initialises a new `Asn1Exception`.

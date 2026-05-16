@@ -54,6 +54,33 @@ Opens a PDF file with the given password. For unencrypted PDFs the password is i
 - `password` — User or owner password. Empty string for default.
 - `leaveOpen` — Whether to leave the stream open on dispose. <exception cref="PdfReaderException">Thrown when the password is incorrect.</exception>
 
+### `ReadFileBytes`
+
+```csharp
+byte[] ReadFileBytes(long offset, int count)
+```
+
+Reads a contiguous byte range directly from the underlying PDF file.
+
+**Parameters**
+
+- `offset` — Absolute byte offset within the PDF file.
+- `count` — Number of bytes to read.
+
+**Returns:** A newly allocated byte array of length `count`.
+
+**Remarks:** Signature verification needs the raw bytes of the file at known offsets — the signature dictionary's /ByteRange entry identifies them. This method exposes that capability without requiring callers to keep their own copy of the file.
+
+### `CopyFileBytes`
+
+```csharp
+void CopyFileBytes(long offset, long count, Stream destination)
+```
+
+Copies a contiguous byte range from the file directly into `destination`.
+
+**Remarks:** Use this for hash computation over large byte ranges — feeds the destination stream incrementally without materialising the bytes as a single array.
+
 ### `Dispose`
 
 ```csharp
