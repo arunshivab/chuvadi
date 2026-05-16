@@ -73,6 +73,10 @@ python tools/gen_api_docs.py
 | [ContentInfo](Cryptography/ContentInfo.md) | class | The outermost CMS structure — a tagged container that says "the following bytes are of contentType X." |
 | [CrlDistributionPointsExtension](Cryptography/CrlDistributionPointsExtension.md) | class | The CRL Distribution Points extension — locations from which the issuer's Certificate Revocation List may be retrieved. |
 | [DistributionPoint](Cryptography/DistributionPoint.md) | class | One distribution point inside a CRLDistributionPoints extension. |
+| [EcCurve](Cryptography/EcCurve.md) | class | A named elliptic curve over a prime field — the parameters needed to perform ECDSA verification. |
+| [EcPoint](Cryptography/EcPoint.md) | class | A point on a short Weierstrass elliptic curve in affine coordinates. |
+| [EcdsaPublicKey](Cryptography/EcdsaPublicKey.md) | class | An ECDSA public key — a point on a named curve. |
+| [EcdsaVerifier](Cryptography/EcdsaVerifier.md) | class | Verifies ECDSA signatures per FIPS 186-4 §6.4. |
 | [EncapsulatedContentInfo](Cryptography/EncapsulatedContentInfo.md) | class | The content being signed (attached) or referenced (detached) by a SignedData. |
 | [ExtendedKeyUsageExtension](Cryptography/ExtendedKeyUsageExtension.md) | class | The Extended Key Usage extension — additional or alternative purposes for which the certified public key may be used. |
 | [GeneralName](Cryptography/GeneralName.md) | class | One alternative naming form for a certificate subject or other entity. |
@@ -80,15 +84,20 @@ python tools/gen_api_docs.py
 | [HashAlgorithmName](Cryptography/HashAlgorithmName.md) | enum | Enumeration of the hash algorithms Chuvadi implements. |
 | [HashFactory](Cryptography/HashFactory.md) | class | Constructs hash algorithm instances by name or by OID. |
 | [IHashAlgorithm](Cryptography/IHashAlgorithm.md) | interface | A streaming cryptographic hash function. |
+| [IPublicKey](Cryptography/IPublicKey.md) | interface | Marker interface implemented by all Chuvadi public-key types. |
 | [IssuerAndSerialNumber](Cryptography/IssuerAndSerialNumber.md) | class | Identifies an X.509 certificate by its issuer's distinguished name and the certificate's serial number. |
 | [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
 | [KnownOids](Cryptography/KnownOids.md) | class | Named ObjectIdentifier constants for the OIDs Chuvadi cares about. |
 | [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
 | [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
+| [PublicKeyAlgorithm](Cryptography/PublicKeyAlgorithm.md) | enum | Public-key algorithm families Chuvadi recognises. |
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
+| [RsaPublicKey](Cryptography/RsaPublicKey.md) | class | An RSA public key — modulus n and public exponent e. |
+| [RsaVerifier](Cryptography/RsaVerifier.md) | class | Verifies RSA signatures in PKCS#1 v1.5 (RSASSA-PKCS1-v1_5) and PSS (RSASSA-PSS) formats per RFC 8017. |
 | [Sha256](Cryptography/Sha256.md) | class | SHA-256 hash function per FIPS 180-4 §6.2. |
 | [Sha512](Cryptography/Sha512.md) | class | SHA-512 and SHA-384 hash functions per FIPS 180-4 §6.4 and §6.5. |
+| [SignatureVerifier](Cryptography/SignatureVerifier.md) | class | Top-level signature-verification dispatcher. |
 | [SignedData](Cryptography/SignedData.md) | class | A decoded CMS SignedData structure. |
 | [SignerIdentifier](Cryptography/SignerIdentifier.md) | class | Identifies which certificate in the SignedData.certificates set produced a particular SignerInfo. |
 | [SignerIdentifierKind](Cryptography/SignerIdentifierKind.md) | enum | The two variants of a SignerIdentifier. |

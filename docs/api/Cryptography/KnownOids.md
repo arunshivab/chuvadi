@@ -115,6 +115,16 @@ RSASSA-PSS. RFC 8017.
 __static__
 
 ```csharp
+static readonly ObjectIdentifier Mgf1 = new("1.2.840.113549.1.1.8")
+```
+
+id-mgf1 mask generation function. RFC 4055 §2.1.
+
+### `new`
+
+__static__
+
+```csharp
 static readonly ObjectIdentifier EcPublicKey = new("1.2.840.10045.2.1")
 ```
 
