@@ -32,6 +32,7 @@ using Chuvadi.Cryptography.Asn1;
 using System.Collections.Generic;
 using Chuvadi.Cryptography.Cms;
 using Chuvadi.Cryptography.PathValidation;
+using Chuvadi.Cryptography.Revocation;
 using Chuvadi.Cryptography.Hashing;
 using Chuvadi.Cryptography.Oids;
 using Chuvadi.Cryptography.PublicKey;
@@ -279,8 +280,30 @@ public static class PdfSignatureVerifier
                 validatedPath: null);
         }
 
+        // Gather CRLs: ones embedded in the CMS envelope (when AutoExtractCmsCrls)
+        // plus any caller-supplied extras.
+        List<CertificateList> allCrls = new();
+        if (opts.AutoExtractCmsCrls)
+        {
+            foreach (byte[] crlBytes in signedData.Crls)
+            {
+                try { allCrls.Add(CertificateList.Decode(crlBytes)); }
+                catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
+                                              or NotSupportedException
+                                              or ArgumentException)
+                {
+                    // Skip malformed or unsupported CRLs rather than failing the whole
+                    // verification — a bad CRL shouldn't poison a valid signature.
+                }
+            }
+        }
+        if (opts.ExtraCrls is not null)
+        {
+            allCrls.AddRange(opts.ExtraCrls);
+        }
+
         CertificatePathValidationResult pathResult =
-            CertificatePathValidator.Validate(paths, validationTime);
+            CertificatePathValidator.Validate(paths, validationTime, allCrls);
 
         if (pathResult.IsValid)
         {
@@ -298,6 +321,7 @@ public static class PdfSignatureVerifier
             CertificatePathValidationStatus.NoPathFound => SignatureVerificationStatus.TrustChainBroken,
             CertificatePathValidationStatus.CertificateExpired => SignatureVerificationStatus.TrustChainCertificateOutOfValidity,
             CertificatePathValidationStatus.CertificateNotYetValid => SignatureVerificationStatus.TrustChainCertificateOutOfValidity,
+            CertificatePathValidationStatus.CertificateRevoked => SignatureVerificationStatus.TrustChainCertificateRevoked,
             _ => SignatureVerificationStatus.TrustChainInvalid,
         };
         return new SignatureVerificationResult(

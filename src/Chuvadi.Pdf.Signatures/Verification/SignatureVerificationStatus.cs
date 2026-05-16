@@ -51,4 +51,10 @@ public enum SignatureVerificationStatus
     /// validity-period violation.
     /// </summary>
     TrustChainInvalid = 9,
+
+    /// <summary>
+    /// The signature is cryptographically valid and chains to a trust anchor,
+    /// but a certificate in the chain is on a Certificate Revocation List.
+    /// </summary>
+    TrustChainCertificateRevoked = 10,
 }
