@@ -3,6 +3,7 @@
 // PHASE: Phase 1.1.4 — Signature verification orchestration
 
 using System;
+using Chuvadi.Cryptography.PathValidation;
 using Chuvadi.Cryptography.X509;
 
 namespace Chuvadi.Pdf.Signatures.Verification;
@@ -17,13 +18,17 @@ public sealed class SignatureVerificationResult
         SignatureVerificationStatus status,
         string message,
         X509Certificate? signerCertificate,
-        bool integrityVerified)
+        bool integrityVerified,
+        bool trustValidated = false,
+        CertificatePath? validatedPath = null)
     {
         ArgumentNullException.ThrowIfNull(message);
         Status = status;
         Message = message;
         SignerCertificate = signerCertificate;
         IntegrityVerified = integrityVerified;
+        TrustValidated = trustValidated;
+        ValidatedPath = validatedPath;
     }
 
     /// <summary>The overall outcome.</summary>
@@ -32,23 +37,28 @@ public sealed class SignatureVerificationResult
     /// <summary>A human-readable explanation of the result.</summary>
     public string Message { get; }
 
-    /// <summary>
-    /// The signer's certificate, when it was found inside the CMS envelope.
-    /// May be null when <see cref="Status"/> is
-    /// <see cref="SignatureVerificationStatus.SignerCertificateNotFound"/>.
-    /// </summary>
+    /// <summary>The signer's certificate, when located inside the CMS envelope.</summary>
     public X509Certificate? SignerCertificate { get; }
 
     /// <summary>
-    /// True when the cryptographic signature checks out and the message digest
-    /// matches the bytes covered by /ByteRange.
+    /// True iff the cryptographic signature checks out AND the signed bytes' digest
+    /// matches the messageDigest signed attribute. This is the strict cryptographic
+    /// answer regardless of whether the signer is to be believed.
     /// </summary>
-    /// <remarks>
-    /// This is the strict cryptographic answer. It is set to true only for
-    /// <see cref="SignatureVerificationStatus.Valid"/>. Trust evaluation
-    /// (whether the signer is to be believed) is a separate concern.
-    /// </remarks>
     public bool IntegrityVerified { get; }
+
+    /// <summary>
+    /// True iff <see cref="IntegrityVerified"/> is true AND the signer's certificate
+    /// chain validates to a configured trust anchor per RFC 5280 §6.1.
+    /// False when no trust store was supplied or path validation failed.
+    /// </summary>
+    public bool TrustValidated { get; }
+
+    /// <summary>
+    /// The certificate path that validated against the trust store, when
+    /// <see cref="TrustValidated"/> is true.
+    /// </summary>
+    public CertificatePath? ValidatedPath { get; }
 
     /// <summary>Convenience shorthand for <c>Status == Valid</c>.</summary>
     public bool IsValid => Status == SignatureVerificationStatus.Valid;

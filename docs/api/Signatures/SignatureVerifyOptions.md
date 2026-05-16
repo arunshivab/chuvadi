@@ -8,9 +8,31 @@ Options controlling signature verification.
 public sealed class SignatureVerifyOptions
 ```
 
-## Remarks
+## Properties
 
-Currently a placeholder with no options. The shape is reserved for future additions such as configurable trust anchors, OCSP/CRL revocation checks, and clock-skew tolerances.
+### `TrustStore`
+
+```csharp
+TrustStore? TrustStore
+```
+
+Trust anchors to validate the signer's certificate against. When null, trust evaluation is skipped and the result reports only cryptographic integrity.
+
+### `ExtraIntermediates`
+
+```csharp
+IReadOnlyList<X509Certificate>? ExtraIntermediates
+```
+
+Extra intermediate-CA certificates available for path building, in addition to those embedded in the CMS envelope.
+
+### `ValidationTime`
+
+```csharp
+DateTimeOffset? ValidationTime
+```
+
+The instant at which to evaluate certificate validity. Defaults to the signing time declared by the signature, or — failing that — the current UTC time.
 
 ## Methods
 
@@ -22,7 +44,7 @@ __static__
 static readonly SignatureVerifyOptions Default = new()
 ```
 
-The default options.
+The default options (no trust evaluation).
 
 ---
 

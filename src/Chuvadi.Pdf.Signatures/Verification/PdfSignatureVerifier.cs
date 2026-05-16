@@ -29,7 +29,9 @@
 
 using System;
 using Chuvadi.Cryptography.Asn1;
+using System.Collections.Generic;
 using Chuvadi.Cryptography.Cms;
+using Chuvadi.Cryptography.PathValidation;
 using Chuvadi.Cryptography.Hashing;
 using Chuvadi.Cryptography.Oids;
 using Chuvadi.Cryptography.PublicKey;
@@ -206,11 +208,105 @@ public static class PdfSignatureVerifier
                 integrityVerified: false);
         }
 
-        return new SignatureVerificationResult(
-            SignatureVerificationStatus.Valid,
-            "Signature is cryptographically valid. (Trust evaluation of the signer's certificate is a separate check.)",
+        // Integrity verified. Optionally run path validation against the trust store.
+        SignatureVerifyOptions opts = options ?? SignatureVerifyOptions.Default;
+        if (opts.TrustStore is null)
+        {
+            return new SignatureVerificationResult(
+                SignatureVerificationStatus.Valid,
+                "Signature is cryptographically valid. (No trust store supplied; certificate trust was not evaluated.)",
+                signerCert,
+                integrityVerified: true,
+                trustValidated: false,
+                validatedPath: null);
+        }
+
+        return RunPathValidation(
             signerCert,
-            integrityVerified: true);
+            signedData,
+            opts,
+            signature.SigningTimeFromDictionary,
+            signer);
+    }
+
+    private static SignatureVerificationResult RunPathValidation(
+        X509Certificate signerCert,
+        SignedData signedData,
+        SignatureVerifyOptions opts,
+        DateTimeOffset? declaredSigningTime,
+        SignerInfo signer)
+    {
+        // Choose validation time. Prefer signer's CMS signingTime attribute (more
+        // trustworthy than the /M field in the PDF dict, but still untimestamped).
+        // Fall back to the /M field, and finally to UtcNow.
+        DateTimeOffset validationTime = opts.ValidationTime
+            ?? signer.SigningTime
+            ?? declaredSigningTime
+            ?? DateTimeOffset.UtcNow;
+
+        // Assemble intermediates: cert envelope + any extras.
+        List<X509Certificate> intermediates = new();
+        foreach (X509Certificate c in signedData.Certificates)
+        {
+            // Skip the signer's own certificate — it's the leaf, not an intermediate.
+            if (c.RawEncoding.Length == signerCert.RawEncoding.Length)
+            {
+                bool same = true;
+                for (int i = 0; i < c.RawEncoding.Length; i++)
+                {
+                    if (c.RawEncoding[i] != signerCert.RawEncoding[i]) { same = false; break; }
+                }
+                if (same) { continue; }
+            }
+            intermediates.Add(c);
+        }
+        if (opts.ExtraIntermediates is not null)
+        {
+            intermediates.AddRange(opts.ExtraIntermediates);
+        }
+
+        IReadOnlyList<CertificatePath> paths = CertificatePathBuilder.BuildPaths(
+            signerCert, intermediates, opts.TrustStore!);
+
+        if (paths.Count == 0)
+        {
+            return new SignatureVerificationResult(
+                SignatureVerificationStatus.TrustChainBroken,
+                "Signature is cryptographically valid, but the signer's certificate does not chain to any configured trust anchor.",
+                signerCert,
+                integrityVerified: true,
+                trustValidated: false,
+                validatedPath: null);
+        }
+
+        CertificatePathValidationResult pathResult =
+            CertificatePathValidator.Validate(paths, validationTime);
+
+        if (pathResult.IsValid)
+        {
+            return new SignatureVerificationResult(
+                SignatureVerificationStatus.Valid,
+                $"Signature is cryptographically valid and the signer's certificate chain validates to a trust anchor ('{pathResult.ValidatedPath!.Anchor.Subject}').",
+                signerCert,
+                integrityVerified: true,
+                trustValidated: true,
+                validatedPath: pathResult.ValidatedPath);
+        }
+
+        SignatureVerificationStatus status = pathResult.Status switch
+        {
+            CertificatePathValidationStatus.NoPathFound => SignatureVerificationStatus.TrustChainBroken,
+            CertificatePathValidationStatus.CertificateExpired => SignatureVerificationStatus.TrustChainCertificateOutOfValidity,
+            CertificatePathValidationStatus.CertificateNotYetValid => SignatureVerificationStatus.TrustChainCertificateOutOfValidity,
+            _ => SignatureVerificationStatus.TrustChainInvalid,
+        };
+        return new SignatureVerificationResult(
+            status,
+            $"Signature is cryptographically valid but trust-chain validation failed: {pathResult.Message}",
+            signerCert,
+            integrityVerified: true,
+            trustValidated: false,
+            validatedPath: null);
     }
 
     /// <summary>

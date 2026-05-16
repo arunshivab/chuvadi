@@ -67,6 +67,11 @@ python tools/gen_api_docs.py
 | [AuthorityKeyIdentifierExtension](Cryptography/AuthorityKeyIdentifierExtension.md) | class | The Authority Key Identifier extension — identifies the public key whose holder signed this certificate. |
 | [BasicConstraintsExtension](Cryptography/BasicConstraintsExtension.md) | class | The Basic Constraints extension — identifies CA certificates and bounds the depth of the chain they may issue. |
 | [BitStringValue](Cryptography/BitStringValue.md) | class | A decoded ASN.1 BIT STRING — an octet sequence plus a count of unused trailing bits in the final octet. |
+| [CertificatePath](Cryptography/CertificatePath.md) | class | A certificate path: an ordered sequence from the end-entity (leaf) to a trust anchor, plus the matching anchor. |
+| [CertificatePathBuilder](Cryptography/CertificatePathBuilder.md) | class | Builds candidate certificate paths from a leaf certificate to a trust anchor. |
+| [CertificatePathValidationResult](Cryptography/CertificatePathValidationResult.md) | class | The result of running the path-validation algorithm against one or more candidate paths. |
+| [CertificatePathValidationStatus](Cryptography/CertificatePathValidationStatus.md) | enum | The outcome of validating a single certificate path. |
+| [CertificatePathValidator](Cryptography/CertificatePathValidator.md) | class | Validates X.509 certificate paths against a trust store, per RFC 5280 §6.1. |
 | [CmsAttribute](Cryptography/CmsAttribute.md) | class | A generic CMS Attribute — an OID identifying the attribute type, plus a SET of one or more values whose content is defined per OID. |
 | [CmsAttributeTable](Cryptography/CmsAttributeTable.md) | class | A collection of `CmsAttribute` values, with OID lookup and the raw encoded bytes preserved for signature verification. |
 | [CmsDecoder](Cryptography/CmsDecoder.md) | class | Decodes CMS / PKCS#7 byte streams into structured Chuvadi objects. |
@@ -106,6 +111,8 @@ python tools/gen_api_docs.py
 | [SubjectKeyIdentifierExtension](Cryptography/SubjectKeyIdentifierExtension.md) | class | The Subject Key Identifier extension — a short octet string identifying the certificate's public key, used to find issuer certificates during path building. |
 | [SubjectPublicKeyInfo](Cryptography/SubjectPublicKeyInfo.md) | class | The public key carried by an X.509 certificate, together with the algorithm identifier needed to interpret its bytes. |
 | [TbsCertificate](Cryptography/TbsCertificate.md) | class | The "to-be-signed" body of an X.509 certificate. |
+| [TrustAnchor](Cryptography/TrustAnchor.md) | class | A trust anchor — a CA the verifier trusts to vouch for certificates it issues. |
+| [TrustStore](Cryptography/TrustStore.md) | class | A collection of trust anchors, with subject-name lookup. |
 | [Validity](Cryptography/Validity.md) | class | The validity period of an X.509 certificate. |
 | [X509Certificate](Cryptography/X509Certificate.md) | class | A fully-decoded X.509 certificate. |
 | [X509Extension](Cryptography/X509Extension.md) | class | A single X.509 v3 extension — an OID, a criticality flag, and an opaque OCTET STRING value whose contents are defined per OID. |
