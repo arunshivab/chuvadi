@@ -206,6 +206,14 @@ bool HasContextSpecific(int tagNumber)
 
 Returns true if a context-specific [`tagNumber`] element is next. Useful for OPTIONAL fields.
 
+### `PeekEncoded`
+
+```csharp
+byte[] PeekEncoded()
+```
+
+Returns the complete encoded bytes of the next element (tag, length, content) without consuming it. Useful for capturing a region while still needing to parse it.
+
 ### `ReadEncoded`
 
 ```csharp
