@@ -57,6 +57,9 @@ public static class KnownOids
     /// <summary>RSASSA-PSS. RFC 8017.</summary>
     public static readonly ObjectIdentifier RsaSsaPss = new("1.2.840.113549.1.1.10");
 
+    /// <summary>id-mgf1 mask generation function. RFC 4055 §2.1.</summary>
+    public static readonly ObjectIdentifier Mgf1 = new("1.2.840.113549.1.1.8");
+
     /// <summary>ECDSA with public key. RFC 5480.</summary>
     public static readonly ObjectIdentifier EcPublicKey = new("1.2.840.10045.2.1");
 
