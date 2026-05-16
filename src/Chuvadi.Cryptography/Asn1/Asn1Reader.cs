@@ -244,6 +244,25 @@ public sealed class Asn1Reader
     // ── Raw access ────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Returns the complete encoded bytes of the next element (tag, length,
+    /// content) without consuming it. Useful for capturing a region while still
+    /// needing to parse it.
+    /// </summary>
+    public byte[] PeekEncoded()
+    {
+        if (_pos >= _end)
+        {
+            throw new Asn1Exception("Peek past end of buffer", _pos);
+        }
+        int start = _pos;
+        int after = Asn1TagLength.Read(_source, _pos, out _, out _, out _);
+        int totalLen = after - start;
+        byte[] copy = new byte[totalLen];
+        Array.Copy(_source, start, copy, 0, totalLen);
+        return copy;
+    }
+
+    /// <summary>
     /// Reads the next element and returns its complete encoded bytes including
     /// tag and length. Useful for capturing TBS regions for signature verification.
     /// </summary>

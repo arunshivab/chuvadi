@@ -45,6 +45,8 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [AccessDescription](Cryptography/AccessDescription.md) | class | One access description inside an AuthorityInfoAccess extension. |
+| [AlgorithmIdentifier](Cryptography/AlgorithmIdentifier.md) | class | An ASN.1 AlgorithmIdentifier as defined by RFC 5280 §4.1.1.2. |
 | [Asn1BitString](Cryptography/Asn1BitString.md) | class | Encode and decode ASN.1 BIT STRING values. |
 | [Asn1Boolean](Cryptography/Asn1Boolean.md) | class | Encode and decode ASN.1 BOOLEAN values. |
 | [Asn1Exception](Cryptography/Asn1Exception.md) | class | Raised when an ASN.1 decoder encounters malformed or non-conforming input. |
@@ -60,10 +62,30 @@ python tools/gen_api_docs.py
 | [Asn1Time](Cryptography/Asn1Time.md) | class | Encode and decode ASN.1 UTCTime and GeneralizedTime values. |
 | [Asn1UniversalTag](Cryptography/Asn1UniversalTag.md) | enum | Universal-class ASN.1 tag numbers as assigned by ITU-T X.680. |
 | [Asn1Writer](Cryptography/Asn1Writer.md) | class | Build-style writer for nested ASN.1 DER structures. |
+| [AttributeTypeAndValue](Cryptography/AttributeTypeAndValue.md) | class | One attribute within a RelativeDistinguishedName — an OID identifying the attribute type plus its value. |
+| [AuthorityInformationAccessExtension](Cryptography/AuthorityInformationAccessExtension.md) | class | The Authority Information Access extension — pointers to additional resources about the certificate's issuer (typically caIssuers and OCSP). |
+| [AuthorityKeyIdentifierExtension](Cryptography/AuthorityKeyIdentifierExtension.md) | class | The Authority Key Identifier extension — identifies the public key whose holder signed this certificate. |
+| [BasicConstraintsExtension](Cryptography/BasicConstraintsExtension.md) | class | The Basic Constraints extension — identifies CA certificates and bounds the depth of the chain they may issue. |
 | [BitStringValue](Cryptography/BitStringValue.md) | class | A decoded ASN.1 BIT STRING — an octet sequence plus a count of unused trailing bits in the final octet. |
+| [CrlDistributionPointsExtension](Cryptography/CrlDistributionPointsExtension.md) | class | The CRL Distribution Points extension — locations from which the issuer's Certificate Revocation List may be retrieved. |
+| [DistributionPoint](Cryptography/DistributionPoint.md) | class | One distribution point inside a CRLDistributionPoints extension. |
+| [ExtendedKeyUsageExtension](Cryptography/ExtendedKeyUsageExtension.md) | class | The Extended Key Usage extension — additional or alternative purposes for which the certified public key may be used. |
+| [GeneralName](Cryptography/GeneralName.md) | class | One alternative naming form for a certificate subject or other entity. |
+| [GeneralNameKind](Cryptography/GeneralNameKind.md) | enum | The variant types within a GeneralName CHOICE. |
+| [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
+| [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
 | [KnownOids](Cryptography/KnownOids.md) | class | Named ObjectIdentifier constants for the OIDs Chuvadi cares about. |
 | [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
 | [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
+| [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
+| [SubjectAlternativeNameExtension](Cryptography/SubjectAlternativeNameExtension.md) | class | The Subject Alternative Name extension — additional naming forms for the certificate subject. |
+| [SubjectKeyIdentifierExtension](Cryptography/SubjectKeyIdentifierExtension.md) | class | The Subject Key Identifier extension — a short octet string identifying the certificate's public key, used to find issuer certificates during path building. |
+| [SubjectPublicKeyInfo](Cryptography/SubjectPublicKeyInfo.md) | class | The public key carried by an X.509 certificate, together with the algorithm identifier needed to interpret its bytes. |
+| [TbsCertificate](Cryptography/TbsCertificate.md) | class | The "to-be-signed" body of an X.509 certificate. |
+| [Validity](Cryptography/Validity.md) | class | The validity period of an X.509 certificate. |
+| [X509Certificate](Cryptography/X509Certificate.md) | class | A fully-decoded X.509 certificate. |
+| [X509Extension](Cryptography/X509Extension.md) | class | A single X.509 v3 extension — an OID, a criticality flag, and an opaque OCTET STRING value whose contents are defined per OID. |
+| [X509Name](Cryptography/X509Name.md) | class | An X.500 distinguished name — a sequence of Relative Distinguished Names. |
 
 ## Chuvadi.Pdf.Documents
 
