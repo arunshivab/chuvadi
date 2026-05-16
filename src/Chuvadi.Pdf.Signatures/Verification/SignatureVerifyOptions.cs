@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using Chuvadi.Cryptography.PathValidation;
+using Chuvadi.Cryptography.Revocation;
 using Chuvadi.Cryptography.X509;
 
 namespace Chuvadi.Pdf.Signatures.Verification;
@@ -36,4 +37,19 @@ public sealed class SignatureVerifyOptions
     /// UTC time.
     /// </summary>
     public DateTimeOffset? ValidationTime { get; init; }
+
+    /// <summary>
+    /// CRLs to consult for revocation checks during path validation. May be
+    /// null. CRLs embedded inside the CMS envelope are still consumed
+    /// automatically (subject to <see cref="AutoExtractCmsCrls"/>); this
+    /// property provides extras such as locally-cached CRLs.
+    /// </summary>
+    public IReadOnlyList<CertificateList>? ExtraCrls { get; init; }
+
+    /// <summary>
+    /// When true (the default), CRLs embedded in the CMS SignedData envelope
+    /// are decoded and added to the revocation set. Set to false to ignore
+    /// embedded CRLs and rely only on <see cref="ExtraCrls"/>.
+    /// </summary>
+    public bool AutoExtractCmsCrls { get; init; } = true;
 }

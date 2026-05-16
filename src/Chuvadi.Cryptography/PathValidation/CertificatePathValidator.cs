@@ -29,6 +29,7 @@ using Chuvadi.Cryptography.Asn1;
 using Chuvadi.Cryptography.Hashing;
 using Chuvadi.Cryptography.Oids;
 using Chuvadi.Cryptography.PublicKey;
+using Chuvadi.Cryptography.Revocation;
 using Chuvadi.Cryptography.X509;
 
 namespace Chuvadi.Cryptography.PathValidation;
@@ -59,6 +60,23 @@ public static class CertificatePathValidator
     public static CertificatePathValidationResult Validate(
         IReadOnlyList<CertificatePath> paths,
         DateTimeOffset validationTime)
+        => Validate(paths, validationTime, crls: null);
+
+    /// <summary>
+    /// Validates each candidate path against the trust store and the supplied
+    /// CRLs, returning the first one that passes.
+    /// </summary>
+    /// <param name="paths">Candidate paths (typically from <see cref="CertificatePathBuilder"/>).</param>
+    /// <param name="validationTime">The instant at which to check validity periods.</param>
+    /// <param name="crls">
+    /// Optional CRLs. When non-null, every certificate in the path is checked
+    /// against any CRL whose issuer matches the certificate's issuer. Revocation
+    /// is opportunistic: a cert without a covering CRL is accepted (soft-fail).
+    /// </param>
+    public static CertificatePathValidationResult Validate(
+        IReadOnlyList<CertificatePath> paths,
+        DateTimeOffset validationTime,
+        IReadOnlyList<CertificateList>? crls)
     {
         ArgumentNullException.ThrowIfNull(paths);
         if (paths.Count == 0)
@@ -72,7 +90,7 @@ public static class CertificatePathValidator
         CertificatePathValidationResult? lastFailure = null;
         foreach (CertificatePath path in paths)
         {
-            CertificatePathValidationResult result = ValidatePath(path, validationTime);
+            CertificatePathValidationResult result = ValidatePath(path, validationTime, crls);
             if (result.IsValid) { return result; }
             lastFailure = result;
         }
@@ -83,6 +101,13 @@ public static class CertificatePathValidator
     public static CertificatePathValidationResult ValidatePath(
         CertificatePath path,
         DateTimeOffset validationTime)
+        => ValidatePath(path, validationTime, crls: null);
+
+    /// <summary>Validates a single path with optional CRL revocation checking.</summary>
+    public static CertificatePathValidationResult ValidatePath(
+        CertificatePath path,
+        DateTimeOffset validationTime,
+        IReadOnlyList<CertificateList>? crls)
     {
         ArgumentNullException.ThrowIfNull(path);
 
@@ -120,6 +145,14 @@ public static class CertificatePathValidator
             {
                 return Fail(CertificatePathValidationStatus.NameChainBroken,
                     $"Issuer DN of '{cert.Subject}' does not match expected '{currentIssuerName}'.");
+            }
+
+            // 6.3 — revocation check against any supplied CRL whose issuer matches.
+            if (crls is not null && crls.Count > 0)
+            {
+                CertificatePathValidationResult? revFail =
+                    CheckRevocation(cert, currentIssuerName, currentIssuerSpki, crls, validationTime);
+                if (revFail is not null) { return revFail; }
             }
 
             // 6.1.4(n) — unrecognised critical extensions reject
@@ -319,6 +352,45 @@ public static class CertificatePathValidator
         {
             return null;
         }
+    }
+
+    private static CertificatePathValidationResult? CheckRevocation(
+        X509Certificate cert,
+        X509Name issuerName,
+        SubjectPublicKeyInfo issuerSpki,
+        IReadOnlyList<CertificateList> crls,
+        DateTimeOffset validationTime)
+    {
+        foreach (CertificateList crl in crls)
+        {
+            // CRL applies only if its issuer matches this certificate's issuer.
+            if (!TrustStore.NameEquals(crl.Issuer, issuerName)) { continue; }
+
+            // CRL must be valid at the validation time.
+            if (validationTime < crl.ThisUpdate) { continue; }
+            if (crl.NextUpdate is DateTimeOffset next && validationTime > next) { continue; }
+
+            // The CRL must be signed by the issuer whose name matches.
+            if (!CertificateListSignatureVerifier.Verify(crl, issuerSpki)) { continue; }
+
+            // Is this cert's serial on it?
+            RevokedCertificate? entry = crl.FindRevocation(cert.Tbs.SerialNumber);
+            if (entry is null) { continue; }
+
+            // Per RFC 5280 §5.3.3 — RemoveFromCrl reverses a prior CertificateHold;
+            // its presence on a delta CRL means "no longer revoked". On a base
+            // CRL it is anomalous but we treat it the same way (not revoked).
+            if (entry.Reason == CrlReason.RemoveFromCrl) { continue; }
+
+            // The cert was revoked. Honour the revocation date — a cert revoked
+            // AFTER the validation time is still considered valid at that earlier
+            // moment (this matters for retroactive verification of old signatures).
+            if (entry.RevocationDate > validationTime) { continue; }
+
+            return Fail(CertificatePathValidationStatus.CertificateRevoked,
+                $"Certificate '{cert.Subject}' was revoked at {entry.RevocationDate:u} (reason: {entry.Reason}).");
+        }
+        return null;
     }
 
     private static CertificatePathValidationResult Fail(

@@ -23,6 +23,7 @@ public enum CertificatePathValidationStatus
 | `PathLengthExceeded` | A path-length constraint was exceeded. |
 | `UnsupportedCriticalExtension` | A critical extension in some certificate is not recognised by Chuvadi. |
 | `NameChainBroken` | Name chaining is broken: an issuer DN does not match the next subject DN. |
+| `CertificateRevoked` | A certificate in the path is on a CRL. |
 
 ---
 

@@ -39,4 +39,7 @@ public enum CertificatePathValidationStatus
 
     /// <summary>Name chaining is broken: an issuer DN does not match the next subject DN.</summary>
     NameChainBroken = 10,
+
+    /// <summary>A certificate in the path is on a CRL.</summary>
+    CertificateRevoked = 11,
 }

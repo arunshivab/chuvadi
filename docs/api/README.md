@@ -67,6 +67,8 @@ python tools/gen_api_docs.py
 | [AuthorityKeyIdentifierExtension](Cryptography/AuthorityKeyIdentifierExtension.md) | class | The Authority Key Identifier extension — identifies the public key whose holder signed this certificate. |
 | [BasicConstraintsExtension](Cryptography/BasicConstraintsExtension.md) | class | The Basic Constraints extension — identifies CA certificates and bounds the depth of the chain they may issue. |
 | [BitStringValue](Cryptography/BitStringValue.md) | class | A decoded ASN.1 BIT STRING — an octet sequence plus a count of unused trailing bits in the final octet. |
+| [CertificateList](Cryptography/CertificateList.md) | class | A parsed X.509 Certificate Revocation List (CRL). |
+| [CertificateListSignatureVerifier](Cryptography/CertificateListSignatureVerifier.md) | class | Verifies the signature on a `CertificateList` against the issuing CA's public key. |
 | [CertificatePath](Cryptography/CertificatePath.md) | class | A certificate path: an ordered sequence from the end-entity (leaf) to a trust anchor, plus the matching anchor. |
 | [CertificatePathBuilder](Cryptography/CertificatePathBuilder.md) | class | Builds candidate certificate paths from a leaf certificate to a trust anchor. |
 | [CertificatePathValidationResult](Cryptography/CertificatePathValidationResult.md) | class | The result of running the path-validation algorithm against one or more candidate paths. |
@@ -77,6 +79,7 @@ python tools/gen_api_docs.py
 | [CmsDecoder](Cryptography/CmsDecoder.md) | class | Decodes CMS / PKCS#7 byte streams into structured Chuvadi objects. |
 | [ContentInfo](Cryptography/ContentInfo.md) | class | The outermost CMS structure — a tagged container that says "the following bytes are of contentType X." |
 | [CrlDistributionPointsExtension](Cryptography/CrlDistributionPointsExtension.md) | class | The CRL Distribution Points extension — locations from which the issuer's Certificate Revocation List may be retrieved. |
+| [CrlReason](Cryptography/CrlReason.md) | enum | The reason a certificate was revoked, as encoded in the per-entry `reasonCode` CRL extension (OID 2.5.29.21). |
 | [DistributionPoint](Cryptography/DistributionPoint.md) | class | One distribution point inside a CRLDistributionPoints extension. |
 | [EcCurve](Cryptography/EcCurve.md) | class | A named elliptic curve over a prime field — the parameters needed to perform ECDSA verification. |
 | [EcPoint](Cryptography/EcPoint.md) | class | A point on a short Weierstrass elliptic curve in affine coordinates. |
@@ -98,6 +101,7 @@ python tools/gen_api_docs.py
 | [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
 | [PublicKeyAlgorithm](Cryptography/PublicKeyAlgorithm.md) | enum | Public-key algorithm families Chuvadi recognises. |
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
+| [RevokedCertificate](Cryptography/RevokedCertificate.md) | class | One revocation entry from a CRL. |
 | [RsaPublicKey](Cryptography/RsaPublicKey.md) | class | An RSA public key — modulus n and public exponent e. |
 | [RsaVerifier](Cryptography/RsaVerifier.md) | class | Verifies RSA signatures in PKCS#1 v1.5 (RSASSA-PKCS1-v1_5) and PSS (RSASSA-PSS) formats per RFC 8017. |
 | [Sha256](Cryptography/Sha256.md) | class | SHA-256 hash function per FIPS 180-4 §6.2. |

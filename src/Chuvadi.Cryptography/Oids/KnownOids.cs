@@ -188,6 +188,21 @@ public static class KnownOids
     /// <summary>cRLDistributionPoints.</summary>
     public static readonly ObjectIdentifier CrlDistributionPoints = new("2.5.29.31");
 
+    /// <summary>cRLNumber — monotonically increasing sequence number on a CRL. RFC 5280 §5.2.3.</summary>
+    public static readonly ObjectIdentifier CrlNumber = new("2.5.29.20");
+
+    /// <summary>cRLReason — per-entry revocation reason code. RFC 5280 §5.3.1.</summary>
+    public static readonly ObjectIdentifier CrlReasonCode = new("2.5.29.21");
+
+    /// <summary>invalidityDate — per-entry invalidity time. RFC 5280 §5.3.2.</summary>
+    public static readonly ObjectIdentifier InvalidityDate = new("2.5.29.24");
+
+    /// <summary>deltaCRLIndicator — marks a delta CRL. RFC 5280 §5.2.4. Chuvadi rejects delta CRLs.</summary>
+    public static readonly ObjectIdentifier DeltaCrlIndicator = new("2.5.29.27");
+
+    /// <summary>issuingDistributionPoint — CRL scope marker. RFC 5280 §5.2.5.</summary>
+    public static readonly ObjectIdentifier IssuingDistributionPoint = new("2.5.29.28");
+
     /// <summary>certificatePolicies.</summary>
     public static readonly ObjectIdentifier CertificatePolicies = new("2.5.29.32");
 

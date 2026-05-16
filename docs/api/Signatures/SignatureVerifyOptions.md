@@ -34,6 +34,22 @@ DateTimeOffset? ValidationTime
 
 The instant at which to evaluate certificate validity. Defaults to the signing time declared by the signature, or — failing that — the current UTC time.
 
+### `ExtraCrls`
+
+```csharp
+IReadOnlyList<CertificateList>? ExtraCrls
+```
+
+CRLs to consult for revocation checks during path validation. May be null. CRLs embedded inside the CMS envelope are still consumed automatically (subject to `AutoExtractCmsCrls`); this property provides extras such as locally-cached CRLs.
+
+### `AutoExtractCmsCrls`
+
+```csharp
+bool AutoExtractCmsCrls
+```
+
+When true (the default), CRLs embedded in the CMS SignedData envelope are decoded and added to the revocation set. Set to false to ignore embedded CRLs and rely only on `ExtraCrls`.
+
 ## Methods
 
 ### `new`

@@ -22,6 +22,7 @@ public enum SignatureVerificationStatus
 | `TrustChainBroken` | The signature is cryptographically valid, but the signer's certificate does not chain to any trust anchor in the supplied trust store. |
 | `TrustChainCertificateOutOfValidity` | The signature is cryptographically valid, but a certificate in the chain has expired or is not yet valid at the validation time. |
 | `TrustChainInvalid` | The signature is cryptographically valid, but the signer's certificate chain failed RFC 5280 §6.1 path validation for a reason other than validity-period violation. |
+| `TrustChainCertificateRevoked` | The signature is cryptographically valid and chains to a trust anchor, but a certificate in the chain is on a Certificate Revocation List. |
 
 ---
 
