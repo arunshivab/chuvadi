@@ -2,7 +2,7 @@
 """
 Generate API reference Markdown from C# XML doc comments.
 
-Scans src/Chuvadi.Pdf.*/**/*.cs, parses class/struct/enum/interface
+Scans src/Chuvadi.*/**/*.cs, parses class/struct/enum/interface
 declarations and their XML doc comments, and writes one Markdown file per
 public type to docs/api/<Module>/<TypeName>.md.
 
@@ -206,7 +206,12 @@ def parse_file(path: Path) -> list[TypeDecl]:
             bases_raw = type_match.group("bases") or ""
             bases = [b.strip() for b in bases_raw.split(",") if b.strip()] if bases_raw else []
 
-            module = namespace.replace("Chuvadi.Pdf.", "").split(".")[0]
+            if namespace.startswith("Chuvadi.Pdf."):
+                module = namespace[len("Chuvadi.Pdf."):].split(".")[0]
+            elif namespace.startswith("Chuvadi."):
+                module = namespace[len("Chuvadi."):].split(".")[0]
+            else:
+                module = namespace.split(".")[0]
 
             td = TypeDecl(
                 name=type_match.group("name"),
@@ -584,7 +589,13 @@ def render_index(types_by_module: dict[str, list[TypeDecl]]) -> str:
 
     for module in sorted(types_by_module.keys()):
         types = sorted(types_by_module[module], key=lambda t: t.name)
-        out.append(f"## Chuvadi.Pdf.{module}")
+        # Render heading based on whether this module is under Chuvadi.Pdf or top-level Chuvadi.
+        sample_ns = types[0].namespace if types else ""
+        if sample_ns.startswith("Chuvadi.Pdf."):
+            heading_root = "Chuvadi.Pdf"
+        else:
+            heading_root = "Chuvadi"
+        out.append(f"## {heading_root}.{module}")
         out.append("")
         out.append("| Type | Kind | Description |")
         out.append("|---|---|---|")

@@ -8,12 +8,6 @@ Regenerate with:
 python tools/gen_api_docs.py
 ```
 
-## Chuvadi.Pdf.
-
-| Type | Kind | Description |
-|---|---|---|
-| [Class1](/Class1.md) | class | — |
-
 ## Chuvadi.Pdf.Annotations
 
 | Type | Kind | Description |
@@ -40,6 +34,16 @@ python tools/gen_api_docs.py
 | [GraphicsState](Content/GraphicsState.md) | class | Represents the graphics and text state at a point in content stream processing. |
 | [Matrix3x3](Content/Matrix3x3.md) | struct | A 3x3 matrix used for 2D affine transformations in PDF user space. |
 | [TextFragment](Content/TextFragment.md) | class | A piece of text extracted from a PDF content stream, together with its approximate position in user space. |
+
+## Chuvadi.Cryptography
+
+| Type | Kind | Description |
+|---|---|---|
+| [Asn1Exception](Cryptography/Asn1Exception.md) | class | Raised when an ASN.1 decoder encounters malformed or non-conforming input. |
+| [Asn1Tag](Cryptography/Asn1Tag.md) | struct | Immutable description of an ASN.1 tag. |
+| [Asn1TagClass](Cryptography/Asn1TagClass.md) | enum | ASN.1 tag class. |
+| [Asn1TagLength](Cryptography/Asn1TagLength.md) | class | Stateless low-level codec for ASN.1 BER/DER tag and length prefixes. |
+| [Asn1UniversalTag](Cryptography/Asn1UniversalTag.md) | enum | Universal-class ASN.1 tag numbers as assigned by ITU-T X.680. |
 
 ## Chuvadi.Pdf.Documents
 
@@ -146,6 +150,8 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [BmpEncoder](Images/BmpEncoder.md) | class | Encodes an `ImageFrame` to Windows BMP format. |
 | [CmykConverter](Images/CmykConverter.md) | class | Converts `PixelBuffer` BGRA data to packed CMYK 8 bits per channel. |
+| [CmykImage](Images/CmykImage.md) | class | A planar CMYK 8-bit-per-channel image. |
+| [CmykTiffEncoder](Images/CmykTiffEncoder.md) | class | Encodes `CmykImage` objects to a baseline TIFF 6.0 byte stream with CMYK photometric interpretation (5). |
 | [ImageColorFormat](Images/ImageColorFormat.md) | enum | Specifies the colour format of a decoded image. |
 | [ImageException](Images/ImageException.md) | class | Thrown when an image cannot be decoded or encoded due to an invalid format, unsupported feature, or data corruption. |
 | [ImageFrame](Images/ImageFrame.md) | class | A decoded image frame held in a `PixelBuffer`. |

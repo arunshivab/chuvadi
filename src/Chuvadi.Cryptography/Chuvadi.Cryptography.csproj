@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Cryptography</AssemblyName>
+    <RootNamespace>Chuvadi.Cryptography</RootNamespace>
+    <Description>
+      Independent cryptographic primitives for Chuvadi.
+
+      This project provides Chuvadi's own hand-rolled cryptographic
+      infrastructure: ASN.1/DER encoding and decoding, X.509 certificate
+      parsing, PKCS#7/CMS SignedData, and supporting algorithms used by
+      digital signature workflows.
+
+      It deliberately does NOT use System.Security.Cryptography.Pkcs or
+      System.Security.Cryptography.X509Certificates beyond raw primitive
+      classes (SHA256, RSA, ECDsa). Every protocol-level decision is
+      made by code in this project, so Chuvadi owns its full signing
+      and verification stack.
+
+      Conceptually this project is not PDF-specific. It may in future
+      grow to support other signed-document or signed-payload workflows.
+    </Description>
+  </PropertyGroup>
+
+</Project>
