@@ -78,7 +78,7 @@ public sealed class EcdsaPublicKey : IPublicKey
                 $"SubjectPublicKeyInfo algorithm is {spki.Algorithm.Algorithm}, expected id-ecPublicKey.",
                 nameof(spki));
         }
-        if (spki.Algorithm.Parameters is null)
+        if (spki.Algorithm.ParametersAreAbsent || spki.Algorithm.ParametersAreNull)
         {
             throw new ArgumentException(
                 "EC SubjectPublicKeyInfo requires namedCurve parameters.", nameof(spki));

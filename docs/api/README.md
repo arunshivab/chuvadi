@@ -295,8 +295,13 @@ python tools/gen_api_docs.py
 | [ByteRange](Signatures/ByteRange.md) | class | The /ByteRange of a PDF signature — two disjoint regions of the file that together form the bytes the signature actually covers. |
 | [PdfDocumentSignatureExtensions](Signatures/PdfDocumentSignatureExtensions.md) | class | Signature-related extensions on `PdfDocument`. |
 | [PdfSignature](Signatures/PdfSignature.md) | class | One digital signature found in a PDF document. |
+| [PdfSignatureVerifier](Signatures/PdfSignatureVerifier.md) | class | Orchestrates verification of a single `PdfSignature`. |
+| [PdfSignatureVerifyExtensions](Signatures/PdfSignatureVerifyExtensions.md) | class | The user-visible `Verify()` entry point on `PdfSignature`. |
 | [SignatureReader](Signatures/SignatureReader.md) | class | Reads digital-signature fields out of a PDF document's AcroForm tree. |
 | [SignatureSubFilter](Signatures/SignatureSubFilter.md) | class | Constants and helpers for the /SubFilter entry of a PDF signature dictionary. |
+| [SignatureVerificationResult](Signatures/SignatureVerificationResult.md) | class | The result of verifying a PDF digital signature. |
+| [SignatureVerificationStatus](Signatures/SignatureVerificationStatus.md) | enum | The overall outcome of verifying a PDF signature. |
+| [SignatureVerifyOptions](Signatures/SignatureVerifyOptions.md) | class | Options controlling signature verification. |
 
 ## Chuvadi.Pdf.Text
 
