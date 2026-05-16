@@ -67,17 +67,27 @@ python tools/gen_api_docs.py
 | [AuthorityKeyIdentifierExtension](Cryptography/AuthorityKeyIdentifierExtension.md) | class | The Authority Key Identifier extension — identifies the public key whose holder signed this certificate. |
 | [BasicConstraintsExtension](Cryptography/BasicConstraintsExtension.md) | class | The Basic Constraints extension — identifies CA certificates and bounds the depth of the chain they may issue. |
 | [BitStringValue](Cryptography/BitStringValue.md) | class | A decoded ASN.1 BIT STRING — an octet sequence plus a count of unused trailing bits in the final octet. |
+| [CmsAttribute](Cryptography/CmsAttribute.md) | class | A generic CMS Attribute — an OID identifying the attribute type, plus a SET of one or more values whose content is defined per OID. |
+| [CmsAttributeTable](Cryptography/CmsAttributeTable.md) | class | A collection of `CmsAttribute` values, with OID lookup and the raw encoded bytes preserved for signature verification. |
+| [CmsDecoder](Cryptography/CmsDecoder.md) | class | Decodes CMS / PKCS#7 byte streams into structured Chuvadi objects. |
+| [ContentInfo](Cryptography/ContentInfo.md) | class | The outermost CMS structure — a tagged container that says "the following bytes are of contentType X." |
 | [CrlDistributionPointsExtension](Cryptography/CrlDistributionPointsExtension.md) | class | The CRL Distribution Points extension — locations from which the issuer's Certificate Revocation List may be retrieved. |
 | [DistributionPoint](Cryptography/DistributionPoint.md) | class | One distribution point inside a CRLDistributionPoints extension. |
+| [EncapsulatedContentInfo](Cryptography/EncapsulatedContentInfo.md) | class | The content being signed (attached) or referenced (detached) by a SignedData. |
 | [ExtendedKeyUsageExtension](Cryptography/ExtendedKeyUsageExtension.md) | class | The Extended Key Usage extension — additional or alternative purposes for which the certified public key may be used. |
 | [GeneralName](Cryptography/GeneralName.md) | class | One alternative naming form for a certificate subject or other entity. |
 | [GeneralNameKind](Cryptography/GeneralNameKind.md) | enum | The variant types within a GeneralName CHOICE. |
+| [IssuerAndSerialNumber](Cryptography/IssuerAndSerialNumber.md) | class | Identifies an X.509 certificate by its issuer's distinguished name and the certificate's serial number. |
 | [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
 | [KnownOids](Cryptography/KnownOids.md) | class | Named ObjectIdentifier constants for the OIDs Chuvadi cares about. |
 | [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
 | [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
+| [SignedData](Cryptography/SignedData.md) | class | A decoded CMS SignedData structure. |
+| [SignerIdentifier](Cryptography/SignerIdentifier.md) | class | Identifies which certificate in the SignedData.certificates set produced a particular SignerInfo. |
+| [SignerIdentifierKind](Cryptography/SignerIdentifierKind.md) | enum | The two variants of a SignerIdentifier. |
+| [SignerInfo](Cryptography/SignerInfo.md) | class | One signer's contribution to a SignedData structure. |
 | [SubjectAlternativeNameExtension](Cryptography/SubjectAlternativeNameExtension.md) | class | The Subject Alternative Name extension — additional naming forms for the certificate subject. |
 | [SubjectKeyIdentifierExtension](Cryptography/SubjectKeyIdentifierExtension.md) | class | The Subject Key Identifier extension — a short octet string identifying the certificate's public key, used to find issuer certificates during path building. |
 | [SubjectPublicKeyInfo](Cryptography/SubjectPublicKeyInfo.md) | class | The public key carried by an X.509 certificate, together with the algorithm identifier needed to interpret its bytes. |
