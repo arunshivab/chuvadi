@@ -77,6 +77,9 @@ python tools/gen_api_docs.py
 | [ExtendedKeyUsageExtension](Cryptography/ExtendedKeyUsageExtension.md) | class | The Extended Key Usage extension — additional or alternative purposes for which the certified public key may be used. |
 | [GeneralName](Cryptography/GeneralName.md) | class | One alternative naming form for a certificate subject or other entity. |
 | [GeneralNameKind](Cryptography/GeneralNameKind.md) | enum | The variant types within a GeneralName CHOICE. |
+| [HashAlgorithmName](Cryptography/HashAlgorithmName.md) | enum | Enumeration of the hash algorithms Chuvadi implements. |
+| [HashFactory](Cryptography/HashFactory.md) | class | Constructs hash algorithm instances by name or by OID. |
+| [IHashAlgorithm](Cryptography/IHashAlgorithm.md) | interface | A streaming cryptographic hash function. |
 | [IssuerAndSerialNumber](Cryptography/IssuerAndSerialNumber.md) | class | Identifies an X.509 certificate by its issuer's distinguished name and the certificate's serial number. |
 | [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
@@ -84,6 +87,8 @@ python tools/gen_api_docs.py
 | [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
 | [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
+| [Sha256](Cryptography/Sha256.md) | class | SHA-256 hash function per FIPS 180-4 §6.2. |
+| [Sha512](Cryptography/Sha512.md) | class | SHA-512 and SHA-384 hash functions per FIPS 180-4 §6.4 and §6.5. |
 | [SignedData](Cryptography/SignedData.md) | class | A decoded CMS SignedData structure. |
 | [SignerIdentifier](Cryptography/SignerIdentifier.md) | class | Identifies which certificate in the SignedData.certificates set produced a particular SignerInfo. |
 | [SignerIdentifierKind](Cryptography/SignerIdentifierKind.md) | enum | The two variants of a SignerIdentifier. |
