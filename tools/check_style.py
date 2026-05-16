@@ -70,6 +70,11 @@ REQUIRED_USINGS = {
     "HashSet":              "using System.Collections.Generic;",
     "IReadOnlyList":        "using System.Collections.Generic;",
     "IEnumerable":          "using System.Collections.Generic;",
+    "Stack":                "using System.Collections.Generic;",
+    "Queue":                "using System.Collections.Generic;",
+    "KeyValuePair":         "using System.Collections.Generic;",
+    "IReadOnlyDictionary":  "using System.Collections.Generic;",
+    "IReadOnlyCollection":  "using System.Collections.Generic;",
     # System namespace — expanded to catch unused 'using System;'
     "Math":                     "using System;",
     "Exception":                "using System;",
