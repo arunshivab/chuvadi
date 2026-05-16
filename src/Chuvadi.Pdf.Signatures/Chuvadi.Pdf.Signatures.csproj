@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Signatures</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Signatures</RootNamespace>
+    <Description>
+      Digital signature field reading for the Chuvadi PDF library. Locates
+      signature fields in a PDF document, parses /ByteRange and /Contents,
+      computes the signed byte ranges, and exposes the embedded CMS / PKCS#7
+      SignedData container for verification by Chuvadi.Cryptography. Foundation
+      work toward signature verification — this module reads signatures from
+      existing PDFs but does not yet verify them.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+    <ProjectReference Include="..\Chuvadi.Cryptography\Chuvadi.Cryptography.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -54,6 +54,14 @@ PdfObjectStore Objects => _reader.Objects
 
 Gets the underlying object store for direct object access.
 
+### `Reader`
+
+```csharp
+PdfReader Reader => _reader
+```
+
+Gets the underlying `PdfReader` for low-level access such as reading raw file bytes for signature byte-range extraction.
+
 ## Methods
 
 ### `Open`

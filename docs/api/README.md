@@ -274,6 +274,16 @@ python tools/gen_api_docs.py
 | [ScanlineRasterizer](Rendering/ScanlineRasterizer.md) | class | Fills vector paths into a `PixelBuffer` using a scanline edge-crossing algorithm. |
 | [StrokeExpander](Rendering/StrokeExpander.md) | class | Converts a stroked path into a filled path by expanding each segment by half the stroke width on each side. |
 
+## Chuvadi.Pdf.Signatures
+
+| Type | Kind | Description |
+|---|---|---|
+| [ByteRange](Signatures/ByteRange.md) | class | The /ByteRange of a PDF signature — two disjoint regions of the file that together form the bytes the signature actually covers. |
+| [PdfDocumentSignatureExtensions](Signatures/PdfDocumentSignatureExtensions.md) | class | Signature-related extensions on `PdfDocument`. |
+| [PdfSignature](Signatures/PdfSignature.md) | class | One digital signature found in a PDF document. |
+| [SignatureReader](Signatures/SignatureReader.md) | class | Reads digital-signature fields out of a PDF document's AcroForm tree. |
+| [SignatureSubFilter](Signatures/SignatureSubFilter.md) | class | Constants and helpers for the /SubFilter entry of a PDF signature dictionary. |
+
 ## Chuvadi.Pdf.Text
 
 | Type | Kind | Description |
