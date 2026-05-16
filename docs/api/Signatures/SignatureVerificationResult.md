@@ -32,7 +32,7 @@ A human-readable explanation of the result.
 X509Certificate? SignerCertificate
 ```
 
-The signer's certificate, when it was found inside the CMS envelope. May be null when `Status` is `SignatureVerificationStatus.SignerCertificateNotFound`.
+The signer's certificate, when located inside the CMS envelope.
 
 ### `IntegrityVerified`
 
@@ -40,7 +40,23 @@ The signer's certificate, when it was found inside the CMS envelope. May be null
 bool IntegrityVerified
 ```
 
-True when the cryptographic signature checks out and the message digest matches the bytes covered by /ByteRange.
+True iff the cryptographic signature checks out AND the signed bytes' digest matches the messageDigest signed attribute. This is the strict cryptographic answer regardless of whether the signer is to be believed.
+
+### `TrustValidated`
+
+```csharp
+bool TrustValidated
+```
+
+True iff `IntegrityVerified` is true AND the signer's certificate chain validates to a configured trust anchor per RFC 5280 §6.1. False when no trust store was supplied or path validation failed.
+
+### `ValidatedPath`
+
+```csharp
+CertificatePath? ValidatedPath
+```
+
+The certificate path that validated against the trust store, when `TrustValidated` is true.
 
 ### `IsValid`
 

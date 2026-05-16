@@ -10,15 +10,9 @@ namespace Chuvadi.Pdf.Signatures.Verification;
 public enum SignatureVerificationStatus
 {
     /// <summary>
-    /// The signature is cryptographically valid: the message digest matches the
-    /// signed bytes and the signature decrypts cleanly against the signing
-    /// certificate's public key.
+    /// The signature is cryptographically valid. If a trust store was supplied,
+    /// the signer's certificate chain also validates to a trust anchor.
     /// </summary>
-    /// <remarks>
-    /// Valid does NOT imply the signer can be trusted. That additional check —
-    /// validating the certificate chain to a trusted root — is a separate
-    /// (still-to-come) feature.
-    /// </remarks>
     Valid = 0,
 
     /// <summary>The cryptographic signature does not match.</summary>
@@ -38,4 +32,23 @@ public enum SignatureVerificationStatus
 
     /// <summary>The signature container could not be parsed.</summary>
     MalformedSignature = 6,
+
+    /// <summary>
+    /// The signature is cryptographically valid, but the signer's certificate
+    /// does not chain to any trust anchor in the supplied trust store.
+    /// </summary>
+    TrustChainBroken = 7,
+
+    /// <summary>
+    /// The signature is cryptographically valid, but a certificate in the
+    /// chain has expired or is not yet valid at the validation time.
+    /// </summary>
+    TrustChainCertificateOutOfValidity = 8,
+
+    /// <summary>
+    /// The signature is cryptographically valid, but the signer's certificate
+    /// chain failed RFC 5280 §6.1 path validation for a reason other than
+    /// validity-period violation.
+    /// </summary>
+    TrustChainInvalid = 9,
 }
