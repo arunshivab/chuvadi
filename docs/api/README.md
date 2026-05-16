@@ -8,6 +8,12 @@ Regenerate with:
 python tools/gen_api_docs.py
 ```
 
+## Chuvadi.
+
+| Type | Kind | Description |
+|---|---|---|
+| [Class1](/Class1.md) | class | — |
+
 ## Chuvadi.Pdf.Annotations
 
 | Type | Kind | Description |
@@ -150,8 +156,6 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [BmpEncoder](Images/BmpEncoder.md) | class | Encodes an `ImageFrame` to Windows BMP format. |
 | [CmykConverter](Images/CmykConverter.md) | class | Converts `PixelBuffer` BGRA data to packed CMYK 8 bits per channel. |
-| [CmykImage](Images/CmykImage.md) | class | A planar CMYK 8-bit-per-channel image. |
-| [CmykTiffEncoder](Images/CmykTiffEncoder.md) | class | Encodes `CmykImage` objects to a baseline TIFF 6.0 byte stream with CMYK photometric interpretation (5). |
 | [ImageColorFormat](Images/ImageColorFormat.md) | enum | Specifies the colour format of a decoded image. |
 | [ImageException](Images/ImageException.md) | class | Thrown when an image cannot be decoded or encoded due to an invalid format, unsupported feature, or data corruption. |
 | [ImageFrame](Images/ImageFrame.md) | class | A decoded image frame held in a `PixelBuffer`. |

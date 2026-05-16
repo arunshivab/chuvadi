@@ -54,26 +54,6 @@ byte[] RasterizeToPng(PdfPage page)
 
 Rasterizes a page and encodes the result as PNG bytes.
 
-### `RasterizeToCmykTiff`
-
-```csharp
-byte[] RasterizeToCmykTiff(PdfPage page)
-```
-
-Rasterizes a page and encodes the result as a single-page CMYK TIFF (Photometric=5, 4 samples per pixel, PackBits compression).
-
-**Remarks:** The pixel buffer is rendered in RGB and converted to CMYK using the standard subtractive formula. This is NOT a colour-managed transform; for press-accurate output, layer an ICC transform on the `CmykImage` returned by `RasterizeToCmyk`.
-
-### `RasterizeToCmyk`
-
-```csharp
-CmykImage RasterizeToCmyk(PdfPage page)
-```
-
-Rasterizes a page and returns the result as a `CmykImage`.
-
-**Remarks:** Uses the standard subtractive RGB→CMYK conversion. For press-accurate output, apply an ICC transform externally.
-
 ---
 
 _Source: [`src/Chuvadi.Pdf.Rendering/PageRasterizer.cs`](../../../src/Chuvadi.Pdf.Rendering/PageRasterizer.cs)_
