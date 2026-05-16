@@ -8,7 +8,7 @@ Regenerate with:
 python tools/gen_api_docs.py
 ```
 
-## Chuvadi.Pdf.
+## Chuvadi.
 
 | Type | Kind | Description |
 |---|---|---|
@@ -40,6 +40,30 @@ python tools/gen_api_docs.py
 | [GraphicsState](Content/GraphicsState.md) | class | Represents the graphics and text state at a point in content stream processing. |
 | [Matrix3x3](Content/Matrix3x3.md) | struct | A 3x3 matrix used for 2D affine transformations in PDF user space. |
 | [TextFragment](Content/TextFragment.md) | class | A piece of text extracted from a PDF content stream, together with its approximate position in user space. |
+
+## Chuvadi.Cryptography
+
+| Type | Kind | Description |
+|---|---|---|
+| [Asn1BitString](Cryptography/Asn1BitString.md) | class | Encode and decode ASN.1 BIT STRING values. |
+| [Asn1Boolean](Cryptography/Asn1Boolean.md) | class | Encode and decode ASN.1 BOOLEAN values. |
+| [Asn1Exception](Cryptography/Asn1Exception.md) | class | Raised when an ASN.1 decoder encounters malformed or non-conforming input. |
+| [Asn1Integer](Cryptography/Asn1Integer.md) | class | Encode and decode ASN.1 INTEGER values. |
+| [Asn1Null](Cryptography/Asn1Null.md) | class | Encode and decode ASN.1 NULL values. |
+| [Asn1ObjectIdentifier](Cryptography/Asn1ObjectIdentifier.md) | class | Encode and decode ASN.1 OBJECT IDENTIFIER values. |
+| [Asn1OctetString](Cryptography/Asn1OctetString.md) | class | Encode and decode ASN.1 OCTET STRING values. |
+| [Asn1Reader](Cryptography/Asn1Reader.md) | class | Pull-style reader for nested ASN.1 BER/DER structures. |
+| [Asn1String](Cryptography/Asn1String.md) | class | Encode and decode ASN.1 character string types. |
+| [Asn1Tag](Cryptography/Asn1Tag.md) | struct | Immutable description of an ASN.1 tag. |
+| [Asn1TagClass](Cryptography/Asn1TagClass.md) | enum | ASN.1 tag class. |
+| [Asn1TagLength](Cryptography/Asn1TagLength.md) | class | Stateless low-level codec for ASN.1 BER/DER tag and length prefixes. |
+| [Asn1Time](Cryptography/Asn1Time.md) | class | Encode and decode ASN.1 UTCTime and GeneralizedTime values. |
+| [Asn1UniversalTag](Cryptography/Asn1UniversalTag.md) | enum | Universal-class ASN.1 tag numbers as assigned by ITU-T X.680. |
+| [Asn1Writer](Cryptography/Asn1Writer.md) | class | Build-style writer for nested ASN.1 DER structures. |
+| [BitStringValue](Cryptography/BitStringValue.md) | class | A decoded ASN.1 BIT STRING — an octet sequence plus a count of unused trailing bits in the final octet. |
+| [KnownOids](Cryptography/KnownOids.md) | class | Named ObjectIdentifier constants for the OIDs Chuvadi cares about. |
+| [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
+| [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
 
 ## Chuvadi.Pdf.Documents
 
