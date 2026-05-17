@@ -31,6 +31,21 @@ python tools/gen_api_docs.py
 | [StampAnnotation](Annotations/StampAnnotation.md) | class | Rubber-stamp annotation (§12.5.6.12), e.g., "Approved", "Confidential". |
 | [TextAnnotation](Annotations/TextAnnotation.md) | class | Sticky-note text annotation (§12.5.6.4). |
 
+## Chuvadi.Pdf.Authoring
+
+| Type | Kind | Description |
+|---|---|---|
+| [BorderStyle](Authoring/BorderStyle.md) | enum | Border style for tables and rectangles. |
+| [Colors](Authoring/Colors.md) | class | Common named colors. |
+| [PageBuilder](Authoring/PageBuilder.md) | class | Per-page drawing API. |
+| [PdfDocumentBuilder](Authoring/PdfDocumentBuilder.md) | class | Top-level entry point for creating fresh PDF documents. |
+| [StandardFonts](Authoring/StandardFonts.md) | class | The PDF Standard 14 fonts. |
+| [TableBuilder](Authoring/TableBuilder.md) | class | Fluent table builder. |
+| [TableRenderResult](Authoring/TableRenderResult.md) | class | Outcome of rendering a table; may contain overflow rows. |
+| [TextAlignment](Authoring/TextAlignment.md) | enum | Text alignment within a block or table cell. |
+| [TextBlockResult](Authoring/TextBlockResult.md) | class | Result of a `PageBuilder.DrawTextBlock` call. |
+| [VerticalAlignment](Authoring/VerticalAlignment.md) | enum | Vertical alignment within a table cell. |
+
 ## Chuvadi.Pdf.Content
 
 | Type | Kind | Description |
@@ -261,6 +276,8 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [BmpEncoder](Images/BmpEncoder.md) | class | Encodes an `ImageFrame` to Windows BMP format. |
 | [CmykConverter](Images/CmykConverter.md) | class | Converts `PixelBuffer` BGRA data to packed CMYK 8 bits per channel. |
+| [CmykImage](Images/CmykImage.md) | class | A planar CMYK 8-bit-per-channel image. |
+| [CmykTiffEncoder](Images/CmykTiffEncoder.md) | class | Encodes `CmykImage` objects to a baseline TIFF 6.0 byte stream with CMYK photometric interpretation (5). |
 | [ImageColorFormat](Images/ImageColorFormat.md) | enum | Specifies the colour format of a decoded image. |
 | [ImageException](Images/ImageException.md) | class | Thrown when an image cannot be decoded or encoded due to an invalid format, unsupported feature, or data corruption. |
 | [ImageFrame](Images/ImageFrame.md) | class | A decoded image frame held in a `PixelBuffer`. |
