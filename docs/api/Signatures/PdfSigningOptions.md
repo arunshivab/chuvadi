@@ -74,6 +74,22 @@ ITsaClient? TsaClient
 
 When non-null, an RFC 3161 timestamp is fetched from this client over the SignerInfo's signature and embedded as an `id-aa-signatureTimeStampToken` unsigned attribute.
 
+### `AsyncTsaClient`
+
+```csharp
+IAsyncTsaClient? AsyncTsaClient
+```
+
+Async counterpart to `TsaClient`. When non-null and the document is signed via `PdfSigner.SignAsync`, the timestamp is fetched without blocking the calling thread.
+
+### `Appearance`
+
+```csharp
+SignatureAppearance? Appearance
+```
+
+When non-null, the signature field is also rendered as a visible widget annotation on the page indicated by `SignatureAppearance.PageIndex`.
+
 ### `LtvOptions`
 
 ```csharp

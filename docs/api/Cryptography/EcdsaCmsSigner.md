@@ -18,6 +18,14 @@ The signature algorithm OID is chosen from the hash:
 
 ## Properties
 
+### `Deterministic`
+
+```csharp
+bool Deterministic
+```
+
+True when nonces are derived per RFC 6979.
+
 ### `Certificate`
 
 ```csharp

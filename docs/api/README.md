@@ -99,7 +99,9 @@ python tools/gen_api_docs.py
 | [GeneralNameKind](Cryptography/GeneralNameKind.md) | enum | The variant types within a GeneralName CHOICE. |
 | [HashAlgorithmName](Cryptography/HashAlgorithmName.md) | enum | Enumeration of the hash algorithms Chuvadi implements. |
 | [HashFactory](Cryptography/HashFactory.md) | class | Constructs hash algorithm instances by name or by OID. |
+| [Hmac](Cryptography/Hmac.md) | class | HMAC keyed-hash message authentication code per RFC 2104. |
 | [HttpTsaClient](Cryptography/HttpTsaClient.md) | class | An `ITsaClient` that POSTs RFC 3161 requests over HTTP(S) using `HttpClient`. |
+| [IAsyncTsaClient](Cryptography/IAsyncTsaClient.md) | interface | An asynchronous TSA client. |
 | [IHashAlgorithm](Cryptography/IHashAlgorithm.md) | interface | A streaming cryptographic hash function. |
 | [IPublicKey](Cryptography/IPublicKey.md) | interface | Marker interface implemented by all Chuvadi public-key types. |
 | [ISigner](Cryptography/ISigner.md) | interface | A pluggable signing primitive used by `CmsSignedDataBuilder` to produce a CMS SignerInfo signature. |
@@ -118,8 +120,10 @@ python tools/gen_api_docs.py
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
 | [ResponderID](Cryptography/ResponderID.md) | class | Identifies the responder that signed an OCSP response. |
 | [RevokedCertificate](Cryptography/RevokedCertificate.md) | class | One revocation entry from a CRL. |
+| [Rfc6979](Cryptography/Rfc6979.md) | class | Deterministic ECDSA / DSA nonce generation per RFC 6979. |
 | [RsaPkcs1V15Signer](Cryptography/RsaPkcs1V15Signer.md) | class | An `ISigner` implementation backed by Chuvadi's hand-rolled RSASSA-PKCS1-v1_5 signing primitive (`RsaSigner`). |
 | [RsaPrivateKey](Cryptography/RsaPrivateKey.md) | class | An RSA private key — modulus n, public exponent e, and private exponent d. |
+| [RsaPssSigner](Cryptography/RsaPssSigner.md) | class | An `ISigner` backed by Chuvadi's RSASSA-PSS primitive. |
 | [RsaPublicKey](Cryptography/RsaPublicKey.md) | class | An RSA public key — modulus n and public exponent e. |
 | [RsaSigner](Cryptography/RsaSigner.md) | class | Hand-rolled RSASSA-PKCS1-v1_5 signing per RFC 8017 §8.2. |
 | [RsaVerifier](Cryptography/RsaVerifier.md) | class | Verifies RSA signatures in PKCS#1 v1.5 (RSASSA-PKCS1-v1_5) and PSS (RSASSA-PSS) formats per RFC 8017. |
@@ -336,14 +340,19 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [ByteRange](Signatures/ByteRange.md) | class | The /ByteRange of a PDF signature — two disjoint regions of the file that together form the bytes the signature actually covers. |
 | [DocumentSecurityStore](Signatures/DocumentSecurityStore.md) | class | The Document Security Store as defined in ISO 32000-2 §12.8.4.3. |
+| [LtvMaterialDiscovery](Signatures/LtvMaterialDiscovery.md) | class | Walks a certificate chain and fetches the validation material (CRLs, OCSP responses) advertised by each certificate's extensions. |
 | [LtvOptions](Signatures/LtvOptions.md) | class | Long-term validation material to embed in a PDF at sign time. |
+| [PdfCounterSigner](Signatures/PdfCounterSigner.md) | class | Adds a second (or third, ...) signature to an already-signed PDF without invalidating the existing signatures. |
 | [PdfDocumentDssExtensions](Signatures/PdfDocumentDssExtensions.md) | class | Extension methods on `PdfDocument` for accessing its Document Security Store. |
 | [PdfDocumentSignatureExtensions](Signatures/PdfDocumentSignatureExtensions.md) | class | Signature-related extensions on `PdfDocument`. |
+| [PdfDocumentTimestamper](Signatures/PdfDocumentTimestamper.md) | class | Adds a document-wide RFC 3161 timestamp (`/Type /DocTimeStamp`) to a PDF via an incremental update. |
+| [PdfLtvUpdater](Signatures/PdfLtvUpdater.md) | class | Adds (or augments) a Long-Term Validation `/DSS` dictionary on an already-signed PDF, optionally emitting `/VRI` entries keyed by SHA-1 of each signature's `/Contents`. |
 | [PdfSignature](Signatures/PdfSignature.md) | class | One digital signature found in a PDF document. |
 | [PdfSignatureVerifier](Signatures/PdfSignatureVerifier.md) | class | Orchestrates verification of a single `PdfSignature`. |
 | [PdfSignatureVerifyExtensions](Signatures/PdfSignatureVerifyExtensions.md) | class | The user-visible `Verify()` entry point on `PdfSignature`. |
 | [PdfSigner](Signatures/PdfSigner.md) | class | Adds a CMS signature to a PDF document and returns the signed bytes. |
 | [PdfSigningOptions](Signatures/PdfSigningOptions.md) | class | Options for `PdfSigner.Sign`. |
+| [SignatureAppearance](Signatures/SignatureAppearance.md) | class | Visible appearance for a signature field. |
 | [SignatureReader](Signatures/SignatureReader.md) | class | Reads digital-signature fields out of a PDF document's AcroForm tree. |
 | [SignatureSubFilter](Signatures/SignatureSubFilter.md) | class | Constants and helpers for the /SubFilter entry of a PDF signature dictionary. |
 | [SignatureVerificationResult](Signatures/SignatureVerificationResult.md) | class | The result of verifying a PDF digital signature. |

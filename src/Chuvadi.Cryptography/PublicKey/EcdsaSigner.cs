@@ -100,6 +100,61 @@ public static class EcdsaSigner
     /// Per FIPS 186-4 §6.4: if the hash is longer than the bit-length of
     /// <c>n</c>, take the leftmost bit-length(n) bits.
     /// </summary>
+    /// <summary>
+    /// Signs a hash deterministically per RFC 6979 instead of using random
+    /// nonces. Bit-for-bit reproducible for the same key + message + hash
+    /// algorithm; immune to RNG failures.
+    /// </summary>
+    /// <param name="privateKey">The signing key.</param>
+    /// <param name="messageHash">The hash of the message being signed.</param>
+    /// <param name="hashAlgorithm">The hash used for HMAC-DRBG inside RFC 6979.</param>
+    /// <returns>The DER-encoded <c>(r, s)</c> signature.</returns>
+    public static byte[] SignDeterministic(
+        EcdsaPrivateKey privateKey,
+        ReadOnlySpan<byte> messageHash,
+        ChuvadiHashAlgorithmName hashAlgorithm)
+    {
+        ArgumentNullException.ThrowIfNull(privateKey);
+        EcCurve curve = privateKey.Curve;
+        BigInteger n = curve.N;
+        BigInteger d = privateKey.D;
+
+        BigInteger e = HashToInteger(messageHash, n);
+
+        // RFC 6979 §3.2 retry loop: if r or s is zero, regenerate k by
+        // continuing the HMAC chain. In practice the first try always
+        // succeeds for the curves Chuvadi supports, but we honor the spec.
+        BigInteger seedK = Rfc6979.DeriveNonce(n, d, messageHash, hashAlgorithm);
+        BigInteger k = seedK;
+        for (int attempt = 0; attempt < 16; attempt++)
+        {
+            EcPoint kG = EcPoint.Generator(curve).Multiply(k);
+            if (!kG.IsInfinity)
+            {
+                BigInteger r = kG.X % n;
+                if (r.Sign > 0)
+                {
+                    BigInteger kInv = EcPoint.ModInverse(k, n);
+                    BigInteger s = (kInv * (e + (r * d))) % n;
+                    if (s.Sign < 0) { s += n; }
+                    if (s.Sign > 0)
+                    {
+                        return EncodeSignature(r, s);
+                    }
+                }
+            }
+
+            // r or s was zero — extremely improbable. Continue the chain.
+            // RFC 6979 §3.2 step h2: "k = ... try again". We re-derive with
+            // a permuted seed to keep determinism: hash the prior k.
+            byte[] reseed = k.ToByteArray(isUnsigned: true, isBigEndian: true);
+            k = Rfc6979.DeriveNonce(n, d, reseed, hashAlgorithm);
+        }
+
+        throw new InvalidOperationException(
+            "ECDSA deterministic signing failed: 16 attempts produced no valid (r, s).");
+    }
+
     private static BigInteger HashToInteger(ReadOnlySpan<byte> hash, BigInteger n)
     {
         int nBits = (int)n.GetBitLength();

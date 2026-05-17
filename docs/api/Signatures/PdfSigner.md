@@ -40,6 +40,25 @@ Signs a PDF document and returns the signed bytes.
 
 **Returns:** The signed PDF bytes.
 
+### `SignAsync`
+
+__static__
+
+```csharp
+static async System.Threading.Tasks.Task<byte[]> SignAsync(PdfDocument document, ISigner signer, PdfSigningOptions options, System.Threading.CancellationToken cancellationToken = default)
+```
+
+Async variant of `Sign`: when `PdfSigningOptions.AsyncTsaClient` is set, the TSA fetch is awaited rather than blocked on. All other behavior is identical.
+
+**Parameters**
+
+- `cancellationToken` — Propagated to the async TSA fetch.
+- `document` — The unsigned source document. Not modified.
+- `signer` — The signer.
+- `options` — Signing options (signature field name, signing time, reason, etc.).
+
+**Returns:** The signed PDF bytes.
+
 ---
 
 _Source: [`src/Chuvadi.Pdf.Signatures/Signing/PdfSigner.cs`](../../../src/Chuvadi.Pdf.Signatures/Signing/PdfSigner.cs)_

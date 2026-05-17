@@ -74,6 +74,27 @@ public sealed class PdfSigningOptions
     public ITsaClient? TsaClient { get; init; }
 
     /// <summary>
+    /// Async counterpart to <see cref="TsaClient"/>. When non-null and
+    /// the document is signed via <see cref="PdfSigner.SignAsync"/>, the
+    /// timestamp is fetched without blocking the calling thread.
+    /// </summary>
+    /// <remarks>
+    /// If both this and <see cref="TsaClient"/> are set, the async client
+    /// is preferred under <see cref="PdfSigner.SignAsync"/> and the sync
+    /// client is preferred under <see cref="PdfSigner.Sign"/>. Implementations
+    /// such as <see cref="HttpTsaClient"/> implement both, so callers can
+    /// supply a single instance and select the path at call-site.
+    /// </remarks>
+    public IAsyncTsaClient? AsyncTsaClient { get; init; }
+
+    /// <summary>
+    /// When non-null, the signature field is also rendered as a visible
+    /// widget annotation on the page indicated by
+    /// <see cref="SignatureAppearance.PageIndex"/>.
+    /// </summary>
+    public SignatureAppearance? Appearance { get; init; }
+
+    /// <summary>
     /// When non-null, validation material is embedded in a <c>/DSS</c>
     /// dictionary (ISO 32000-2 §12.8.4.3) so that the signature can be
     /// validated offline at any time after signing — Long-Term Validation
