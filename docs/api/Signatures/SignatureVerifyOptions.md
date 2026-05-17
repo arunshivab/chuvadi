@@ -82,6 +82,14 @@ bool AutoExtractDss
 
 When true (the default), the document's `/DSS` dictionary (ISO 32000-2 §12.8.4.3) is read and its certificates, CRLs, and OCSP responses are added to the verification material. Adobe-style PDF signatures with long-term validation (LTV) typically embed their revocation info this way rather than in CAdES unsigned attributes.
 
+### `TsaTrustStore`
+
+```csharp
+TrustStore? TsaTrustStore
+```
+
+Trust anchors for evaluating the TSA's certificate chain when a signature timestamp is present. When non-null, the verifier path-validates the TSA cert at the timestamp's `genTime` using every certificate, CRL, and OCSP response it has on hand, and reports the outcome via `SignatureVerificationResult.TimestampTrustValidated` and `SignatureVerificationResult.TimestampValidatedPath`. When null (the default), only the cryptographic verification of the timestamp is performed — its trust is not evaluated. Most callers will use a TSA-specific trust store distinct from the signing-cert trust store, since the two trust regimes are independent.
+
 ## Methods
 
 ### `new`

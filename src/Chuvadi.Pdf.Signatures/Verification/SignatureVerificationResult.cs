@@ -23,7 +23,9 @@ public sealed class SignatureVerificationResult
         CertificatePath? validatedPath = null,
         bool timestampValidated = false,
         DateTimeOffset? signatureTimestamp = null,
-        X509Certificate? timestampCertificate = null)
+        X509Certificate? timestampCertificate = null,
+        bool timestampTrustValidated = false,
+        CertificatePath? timestampValidatedPath = null)
     {
         ArgumentNullException.ThrowIfNull(message);
         Status = status;
@@ -35,6 +37,8 @@ public sealed class SignatureVerificationResult
         TimestampValidated = timestampValidated;
         SignatureTimestamp = signatureTimestamp;
         TimestampCertificate = timestampCertificate;
+        TimestampTrustValidated = timestampTrustValidated;
+        TimestampValidatedPath = timestampValidatedPath;
     }
 
     /// <summary>The overall outcome.</summary>
@@ -83,6 +87,21 @@ public sealed class SignatureVerificationResult
 
     /// <summary>The TSA's signing certificate, when a timestamp was found.</summary>
     public X509Certificate? TimestampCertificate { get; }
+
+    /// <summary>
+    /// True iff the TSA's certificate chain was successfully path-validated
+    /// against the supplied <c>TsaTrustStore</c> at the timestamp's genTime.
+    /// Always false when no <c>TsaTrustStore</c> was supplied. Independent
+    /// of <see cref="TimestampValidated"/>, which only reports the
+    /// cryptographic verification.
+    /// </summary>
+    public bool TimestampTrustValidated { get; }
+
+    /// <summary>
+    /// The validated path for the TSA's certificate, when
+    /// <see cref="TimestampTrustValidated"/> is true. Null otherwise.
+    /// </summary>
+    public CertificatePath? TimestampValidatedPath { get; }
 
     /// <summary>Convenience shorthand for <c>Status == Valid</c>.</summary>
     public bool IsValid => Status == SignatureVerificationStatus.Valid;

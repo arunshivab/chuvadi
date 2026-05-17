@@ -14,6 +14,16 @@ The DSS is a dictionary on the document Catalog (key `/DSS`) carrying long-term 
 
  This class extracts the top-level `/Certs`, `/CRLs`, and `/OCSPs` arrays and decodes each into the corresponding Chuvadi type. Streams that fail to decode are silently skipped rather than failing the whole extraction — a single malformed CRL inside a DSS shouldn't poison the rest. The optional `/VRI` sub-dictionary (per-signature validation info, also defined in §12.8.4.3) is not yet parsed and is reserved for a future session.
 
+## Properties
+
+### `Vri`
+
+```csharp
+IReadOnlyDictionary<string, VriEntry> Vri => _vri
+```
+
+Per-signature validation material keyed by upper-case SHA-1 hex of the signature's binary `/Contents` bytes (ISO 32000-2 §12.8.4.3). Empty when the DSS contains no `/VRI` sub-dictionary.
+
 ## Methods
 
 ### `new`
@@ -39,6 +49,16 @@ ReadOnlyCollection<OcspResponse> OcspResponses => new(_ocspResponses)
 ```
 
 The OCSP responses carried in the DSS `/OCSPs` array.
+
+### `TryFindForSignature`
+
+```csharp
+VriEntry? TryFindForSignature(byte[] signatureContents)
+```
+
+Looks up the VRI entry corresponding to a signature whose CMS `/Contents` bytes are `signatureContents`. Returns null when there is no matching entry.
+
+**Remarks:** The VRI lookup key is the upper-case SHA-1 hex of the raw bytes inside the signature dictionary's `/Contents` value (before any hex decoding done by the PDF parser, expressed as binary).
 
 ### `TryRead`
 
