@@ -181,6 +181,184 @@ public static class PdfWriter
         output.Write(startxrefBytes, 0, startxrefBytes.Length);
     }
 
+    /// <summary>
+    /// Appends an incremental update section to an existing PDF, returning the
+    /// resulting bytes. The original bytes are preserved verbatim, so any
+    /// existing signatures on the source document remain valid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ISO 32000-1 §7.5.6 / ISO 32000-2 §7.5.6. The update section consists of:
+    /// </para>
+    /// <list type="number">
+    ///   <item>The <paramref name="updatedObjects"/>, written in declaration
+    ///   order with their existing object numbers. New objects use IDs at or
+    ///   above the source's <c>/Size</c>; modifications reuse the original ID
+    ///   and bump the generation if appropriate.</item>
+    ///   <item>An xref table containing entries only for the objects in this
+    ///   update (the obj-0 free entry stays in the original xref section
+    ///   reached via the new trailer's <c>/Prev</c>).</item>
+    ///   <item>A trailer dictionary copying <c>/Root</c> and <c>/ID</c> from
+    ///   the original trailer, with <c>/Size</c> auto-computed and
+    ///   <c>/Prev</c> set to the original startxref offset. Any entries
+    ///   supplied in <paramref name="trailerOverlay"/> are merged on top.</item>
+    ///   <item><c>startxref</c> pointing at this update's xref offset, then
+    ///   <c>%%EOF</c>.</item>
+    /// </list>
+    /// <para>
+    /// The catalog cannot be replaced via this method (its identity is
+    /// established by <c>/Root</c> in the original trailer); to change the
+    /// catalog's contents, include a new <see cref="PdfIndirectObject"/> for
+    /// the catalog's object ID in <paramref name="updatedObjects"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="originalPdfBytes">The unmodified source PDF.</param>
+    /// <param name="updatedObjects">Objects to add or modify. Each carries its
+    /// own ID; reusing an existing ID replaces that object in the document.</param>
+    /// <param name="trailerOverlay">Optional trailer entries to add or override
+    /// in the new trailer (e.g. updating <c>/Info</c> for modification metadata).
+    /// <c>/Size</c> and <c>/Prev</c> are always controlled by the writer.</param>
+    public static byte[] WriteIncrementalUpdate(
+        byte[] originalPdfBytes,
+        IEnumerable<PdfIndirectObject> updatedObjects,
+        PdfDictionary? trailerOverlay = null)
+    {
+        ArgumentNullException.ThrowIfNull(originalPdfBytes);
+        ArgumentNullException.ThrowIfNull(updatedObjects);
+
+        // Parse the source so we know its trailer (for /Root, /ID, /Size) and the
+        // startxref offset to chain via /Prev.
+        long priorStartXref;
+        PdfDictionary priorTrailer;
+        using (MemoryStream srcStream = new(originalPdfBytes, writable: false))
+        using (PdfReader reader = PdfReader.Open(srcStream, leaveOpen: false))
+        {
+            priorTrailer = reader.Trailer;
+            priorStartXref = FindStartXrefInBytes(originalPdfBytes);
+        }
+
+        List<PdfIndirectObject> updates = new(updatedObjects);
+
+        MemoryStream output = new();
+        // Copy the original verbatim — DO NOT modify any byte.
+        output.Write(originalPdfBytes, 0, originalPdfBytes.Length);
+
+        // ISO 32000 says the new section starts on a new line. If the original
+        // ends with %%EOF and a newline, fine; otherwise add one. Detect by
+        // looking at the last byte.
+        if (originalPdfBytes.Length == 0 || originalPdfBytes[^1] != (byte)'\n')
+        {
+            output.WriteByte((byte)'\n');
+        }
+
+        // ── Write each updated object ───────────────────────────────────
+        XrefTable xref = new();
+        // Per ISO 32000-1 §7.5.6, an update section's xref contains entries only
+        // for the objects in this update. XrefTable's constructor seeds the
+        // obj-0 free entry (correct for the file's first xref, but wrong here —
+        // obj 0 lives in the original xref reached via /Prev). Remove it.
+        xref.Remove(0);
+        int maxObjectNumber = 0;
+        foreach (PdfIndirectObject obj in updates)
+        {
+            long offset = output.Position;
+            if (obj.Id.ObjectNumber > maxObjectNumber)
+            {
+                maxObjectNumber = obj.Id.ObjectNumber;
+            }
+            WriteIndirectObject(output, obj);
+            xref.Set(new XrefEntry(obj.Id.ObjectNumber, obj.Id.Generation, offset));
+        }
+
+        // ── Xref ────────────────────────────────────────────────────────
+        long xrefOffset = xref.Write(output);
+
+        // ── Trailer ─────────────────────────────────────────────────────
+        // /Size = max(prior /Size, max-id-in-update + 1)
+        int priorSize = 0;
+        if (priorTrailer.TryGetValue(PdfName.Size, out PdfPrimitive? sizePrim)
+            && sizePrim is PdfInteger sizeInt)
+        {
+            priorSize = sizeInt.Value;
+        }
+        int newSize = Math.Max(priorSize, maxObjectNumber + 1);
+
+        PdfDictionary newTrailer = new();
+        // Copy through the entries the new trailer should preserve.
+        if (priorTrailer.TryGetValue(PdfName.Root, out PdfPrimitive? root))
+        {
+            newTrailer.Set(PdfName.Root, root);
+        }
+        if (priorTrailer.TryGetValue(PdfName.Intern("Info"), out PdfPrimitive? info))
+        {
+            newTrailer.Set(PdfName.Intern("Info"), info);
+        }
+        if (priorTrailer.TryGetValue(PdfName.Intern("Encrypt"), out PdfPrimitive? encrypt))
+        {
+            newTrailer.Set(PdfName.Intern("Encrypt"), encrypt);
+        }
+        if (priorTrailer.TryGetValue(PdfName.Intern("ID"), out PdfPrimitive? id))
+        {
+            newTrailer.Set(PdfName.Intern("ID"), id);
+        }
+
+        // Apply caller's overlay.
+        if (trailerOverlay is not null)
+        {
+            foreach (KeyValuePair<PdfName, PdfPrimitive> kv in trailerOverlay)
+            {
+                newTrailer.Set(kv.Key, kv.Value);
+            }
+        }
+
+        // /Size and /Prev are writer-controlled regardless of overlay.
+        newTrailer.Set(PdfName.Size, newSize);
+        newTrailer.Set(PdfName.Intern("Prev"), (PdfPrimitive)new PdfInteger((int)priorStartXref));
+
+        byte[] trailerLine = Encoding.ASCII.GetBytes("trailer\n");
+        output.Write(trailerLine, 0, trailerLine.Length);
+        WriteValue(output, newTrailer);
+        output.WriteByte((byte)'\n');
+
+        string startxref = $"\nstartxref\n{xrefOffset}\n%%EOF\n";
+        byte[] startxrefBytes = Encoding.ASCII.GetBytes(startxref);
+        output.Write(startxrefBytes, 0, startxrefBytes.Length);
+
+        return output.ToArray();
+    }
+
+    /// <summary>
+    /// Scans the tail of a PDF byte array for the <c>startxref</c> keyword
+    /// and returns the offset that follows it. Used by
+    /// <see cref="WriteIncrementalUpdate"/>.
+    /// </summary>
+    private static long FindStartXrefInBytes(byte[] bytes)
+    {
+        const int BackwardScanLimit = 4096;
+        int scanStart = Math.Max(0, bytes.Length - BackwardScanLimit);
+        int scanLen = bytes.Length - scanStart;
+        string tail = Encoding.Latin1.GetString(bytes, scanStart, scanLen);
+        int idx = tail.LastIndexOf("startxref", StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            throw new InvalidOperationException(
+                "Could not locate 'startxref' keyword near the end of the source PDF.");
+        }
+        int pos = idx + "startxref".Length;
+        // Skip whitespace
+        while (pos < tail.Length && (tail[pos] == ' ' || tail[pos] == '\r' || tail[pos] == '\n' || tail[pos] == '\t'))
+        {
+            pos++;
+        }
+        long value = 0;
+        while (pos < tail.Length && tail[pos] >= '0' && tail[pos] <= '9')
+        {
+            value = (value * 10) + (tail[pos] - '0');
+            pos++;
+        }
+        return value;
+    }
+
     private static byte[] GetOrCreateFileId(PdfDictionary trailer)
     {
         if (trailer.TryGetValue(PdfName.Intern("ID"), out PdfPrimitive? idPrim) &&
