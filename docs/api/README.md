@@ -88,7 +88,10 @@ python tools/gen_api_docs.py
 | [DistributionPoint](Cryptography/DistributionPoint.md) | class | One distribution point inside a CRLDistributionPoints extension. |
 | [EcCurve](Cryptography/EcCurve.md) | class | A named elliptic curve over a prime field — the parameters needed to perform ECDSA verification. |
 | [EcPoint](Cryptography/EcPoint.md) | class | A point on a short Weierstrass elliptic curve in affine coordinates. |
+| [EcdsaCmsSigner](Cryptography/EcdsaCmsSigner.md) | class | An `ISigner` backed by Chuvadi's hand-rolled ECDSA primitive (`Chuvadi.Cryptography.PublicKey.EcdsaSigner`). |
+| [EcdsaPrivateKey](Cryptography/EcdsaPrivateKey.md) | class | An ECDSA private key — a scalar d in [1, n-1] on a fixed curve. |
 | [EcdsaPublicKey](Cryptography/EcdsaPublicKey.md) | class | An ECDSA public key — a point on a named curve. |
+| [EcdsaSigner](Cryptography/EcdsaSigner.md) | class | Hand-rolled ECDSA signing per FIPS 186-4 §6.4. |
 | [EcdsaVerifier](Cryptography/EcdsaVerifier.md) | class | Verifies ECDSA signatures per FIPS 186-4 §6.4. |
 | [EncapsulatedContentInfo](Cryptography/EncapsulatedContentInfo.md) | class | The content being signed (attached) or referenced (detached) by a SignedData. |
 | [ExtendedKeyUsageExtension](Cryptography/ExtendedKeyUsageExtension.md) | class | The Extended Key Usage extension — additional or alternative purposes for which the certified public key may be used. |
