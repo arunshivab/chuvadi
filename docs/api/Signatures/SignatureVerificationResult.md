@@ -58,6 +58,30 @@ CertificatePath? ValidatedPath
 
 The certificate path that validated against the trust store, when `TrustValidated` is true.
 
+### `TimestampValidated`
+
+```csharp
+bool TimestampValidated
+```
+
+True iff a signature timestamp (RFC 3161) was present in the CMS unsigned attributes, decoded cleanly, signature-verified, and its messageImprint matched the SignerInfo signature bytes.
+
+### `SignatureTimestamp`
+
+```csharp
+DateTimeOffset? SignatureTimestamp
+```
+
+When a signature timestamp was present, the genTime claimed by the TSA. Even when `TimestampValidated` is false (e.g. the TST was present but did not verify), this carries the genTime declared by the token for debugging.
+
+### `TimestampCertificate`
+
+```csharp
+X509Certificate? TimestampCertificate
+```
+
+The TSA's signing certificate, when a timestamp was found.
+
 ### `IsValid`
 
 ```csharp

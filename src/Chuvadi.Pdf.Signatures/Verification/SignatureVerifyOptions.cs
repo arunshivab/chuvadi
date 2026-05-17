@@ -60,4 +60,24 @@ public sealed class SignatureVerifyOptions
     /// responses here.
     /// </summary>
     public IReadOnlyList<OcspResponse>? ExtraOcspResponses { get; init; }
+
+    /// <summary>
+    /// When true (the default), CAdES unsigned attributes
+    /// <c>id-aa-ets-certValues</c> and <c>id-aa-ets-revocationValues</c> are
+    /// extracted from the SignerInfo's unsigned attributes and used as
+    /// additional intermediates and revocation info. Set to false to disable.
+    /// </summary>
+    public bool AutoExtractCadesValues { get; init; } = true;
+
+    /// <summary>
+    /// When true (the default), the <c>id-aa-signatureTimeStampToken</c>
+    /// unsigned attribute is located, decoded, and cryptographically verified.
+    /// If a timestamp validates and the caller did not supply an explicit
+    /// <see cref="ValidationTime"/>, the timestamp's genTime is used as the
+    /// validation time for certificate-chain evaluation. This is the
+    /// CAdES-T pattern: the timestamp records WHEN the signature existed,
+    /// so the chain is evaluated at that time even if certificates have
+    /// since expired.
+    /// </summary>
+    public bool AutoVerifySignatureTimestamp { get; init; } = true;
 }
