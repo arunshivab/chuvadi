@@ -303,7 +303,7 @@ public static class PdfSignatureVerifier
         }
 
         CertificatePathValidationResult pathResult =
-            CertificatePathValidator.Validate(paths, validationTime, allCrls);
+            CertificatePathValidator.Validate(paths, validationTime, allCrls, opts.ExtraOcspResponses);
 
         if (pathResult.IsValid)
         {
