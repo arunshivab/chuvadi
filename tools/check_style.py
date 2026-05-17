@@ -68,6 +68,8 @@ REQUIRED_USINGS = {
     "List":                 "using System.Collections.Generic;",
     "Dictionary":           "using System.Collections.Generic;",
     "HashSet":              "using System.Collections.Generic;",
+    "IList":                "using System.Collections.Generic;",
+    "ICollection":          "using System.Collections.Generic;",
     "IReadOnlyList":        "using System.Collections.Generic;",
     "IEnumerable":          "using System.Collections.Generic;",
     "Stack":                "using System.Collections.Generic;",

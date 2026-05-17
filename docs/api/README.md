@@ -66,7 +66,11 @@ python tools/gen_api_docs.py
 | [AuthorityInformationAccessExtension](Cryptography/AuthorityInformationAccessExtension.md) | class | The Authority Information Access extension — pointers to additional resources about the certificate's issuer (typically caIssuers and OCSP). |
 | [AuthorityKeyIdentifierExtension](Cryptography/AuthorityKeyIdentifierExtension.md) | class | The Authority Key Identifier extension — identifies the public key whose holder signed this certificate. |
 | [BasicConstraintsExtension](Cryptography/BasicConstraintsExtension.md) | class | The Basic Constraints extension — identifies CA certificates and bounds the depth of the chain they may issue. |
+| [BasicOcspResponse](Cryptography/BasicOcspResponse.md) | class | A parsed BasicOCSPResponse — the typical OCSP response payload. |
 | [BitStringValue](Cryptography/BitStringValue.md) | class | A decoded ASN.1 BIT STRING — an octet sequence plus a count of unused trailing bits in the final octet. |
+| [CertId](Cryptography/CertId.md) | class | Identifies a certificate inside an OCSP response. |
+| [CertStatus](Cryptography/CertStatus.md) | class | The OCSP responder's verdict on one certificate. |
+| [CertStatusKind](Cryptography/CertStatusKind.md) | enum | The three possible `CertStatus.Kind` values. |
 | [CertificateList](Cryptography/CertificateList.md) | class | A parsed X.509 Certificate Revocation List (CRL). |
 | [CertificateListSignatureVerifier](Cryptography/CertificateListSignatureVerifier.md) | class | Verifies the signature on a `CertificateList` against the issuing CA's public key. |
 | [CertificatePath](Cryptography/CertificatePath.md) | class | A certificate path: an ordered sequence from the end-entity (leaf) to a trust anchor, plus the matching anchor. |
@@ -98,9 +102,13 @@ python tools/gen_api_docs.py
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
 | [KnownOids](Cryptography/KnownOids.md) | class | Named ObjectIdentifier constants for the OIDs Chuvadi cares about. |
 | [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
+| [OcspResponse](Cryptography/OcspResponse.md) | class | A parsed OCSP response. |
+| [OcspResponseSignatureVerifier](Cryptography/OcspResponseSignatureVerifier.md) | class | Verifies the signature on a `BasicOcspResponse`. |
+| [OcspResponseStatus](Cryptography/OcspResponseStatus.md) | enum | The top-level status of an OCSP response. |
 | [OidNameLookup](Cryptography/OidNameLookup.md) | class | Maps an `ObjectIdentifier` to the friendly name from `KnownOids` for diagnostics and error messages. |
 | [PublicKeyAlgorithm](Cryptography/PublicKeyAlgorithm.md) | enum | Public-key algorithm families Chuvadi recognises. |
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
+| [ResponderID](Cryptography/ResponderID.md) | class | Identifies the responder that signed an OCSP response. |
 | [RevokedCertificate](Cryptography/RevokedCertificate.md) | class | One revocation entry from a CRL. |
 | [RsaPublicKey](Cryptography/RsaPublicKey.md) | class | An RSA public key — modulus n and public exponent e. |
 | [RsaVerifier](Cryptography/RsaVerifier.md) | class | Verifies RSA signatures in PKCS#1 v1.5 (RSASSA-PKCS1-v1_5) and PSS (RSASSA-PSS) formats per RFC 8017. |
@@ -111,6 +119,7 @@ python tools/gen_api_docs.py
 | [SignerIdentifier](Cryptography/SignerIdentifier.md) | class | Identifies which certificate in the SignedData.certificates set produced a particular SignerInfo. |
 | [SignerIdentifierKind](Cryptography/SignerIdentifierKind.md) | enum | The two variants of a SignerIdentifier. |
 | [SignerInfo](Cryptography/SignerInfo.md) | class | One signer's contribution to a SignedData structure. |
+| [SingleResponse](Cryptography/SingleResponse.md) | class | One certificate's entry within an OCSP response's `responses` field. |
 | [SubjectAlternativeNameExtension](Cryptography/SubjectAlternativeNameExtension.md) | class | The Subject Alternative Name extension — additional naming forms for the certificate subject. |
 | [SubjectKeyIdentifierExtension](Cryptography/SubjectKeyIdentifierExtension.md) | class | The Subject Key Identifier extension — a short octet string identifying the certificate's public key, used to find issuer certificates during path building. |
 | [SubjectPublicKeyInfo](Cryptography/SubjectPublicKeyInfo.md) | class | The public key carried by an X.509 certificate, together with the algorithm identifier needed to interpret its bytes. |

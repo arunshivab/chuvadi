@@ -20,7 +20,10 @@ public sealed class SignatureVerificationResult
         X509Certificate? signerCertificate,
         bool integrityVerified,
         bool trustValidated = false,
-        CertificatePath? validatedPath = null)
+        CertificatePath? validatedPath = null,
+        bool timestampValidated = false,
+        DateTimeOffset? signatureTimestamp = null,
+        X509Certificate? timestampCertificate = null)
     {
         ArgumentNullException.ThrowIfNull(message);
         Status = status;
@@ -29,6 +32,9 @@ public sealed class SignatureVerificationResult
         IntegrityVerified = integrityVerified;
         TrustValidated = trustValidated;
         ValidatedPath = validatedPath;
+        TimestampValidated = timestampValidated;
+        SignatureTimestamp = signatureTimestamp;
+        TimestampCertificate = timestampCertificate;
     }
 
     /// <summary>The overall outcome.</summary>
@@ -59,6 +65,24 @@ public sealed class SignatureVerificationResult
     /// <see cref="TrustValidated"/> is true.
     /// </summary>
     public CertificatePath? ValidatedPath { get; }
+
+    /// <summary>
+    /// True iff a signature timestamp (RFC 3161) was present in the CMS
+    /// unsigned attributes, decoded cleanly, signature-verified, and its
+    /// messageImprint matched the SignerInfo signature bytes.
+    /// </summary>
+    public bool TimestampValidated { get; }
+
+    /// <summary>
+    /// When a signature timestamp was present, the genTime claimed by the TSA.
+    /// Even when <see cref="TimestampValidated"/> is false (e.g. the TST was
+    /// present but did not verify), this carries the genTime declared by the
+    /// token for debugging.
+    /// </summary>
+    public DateTimeOffset? SignatureTimestamp { get; }
+
+    /// <summary>The TSA's signing certificate, when a timestamp was found.</summary>
+    public X509Certificate? TimestampCertificate { get; }
 
     /// <summary>Convenience shorthand for <c>Status == Valid</c>.</summary>
     public bool IsValid => Status == SignatureVerificationStatus.Valid;

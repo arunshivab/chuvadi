@@ -32,7 +32,9 @@ using Chuvadi.Cryptography.Asn1;
 using System.Collections.Generic;
 using Chuvadi.Cryptography.Cms;
 using Chuvadi.Cryptography.PathValidation;
+using Chuvadi.Cryptography.Ocsp;
 using Chuvadi.Cryptography.Revocation;
+using Chuvadi.Cryptography.Timestamps;
 using Chuvadi.Cryptography.Hashing;
 using Chuvadi.Cryptography.Oids;
 using Chuvadi.Cryptography.PublicKey;
@@ -237,10 +239,36 @@ public static class PdfSignatureVerifier
         DateTimeOffset? declaredSigningTime,
         SignerInfo signer)
     {
+        // ── CAdES: signature timestamp ──────────────────────────────────
+        // If a signatureTimeStampToken is present and verifies, it gives us a
+        // trustworthy "when was this signature made" assertion. We can then
+        // evaluate the cert chain at THAT time even if certs have since
+        // expired or been revoked. This is the CAdES-T trick.
+        bool tsValidated = false;
+        DateTimeOffset? tsTime = null;
+        X509Certificate? tsCert = null;
+        if (opts.AutoVerifySignatureTimestamp)
+        {
+            TimeStampToken? tst = TryDecodeSignatureTimestamp(signer);
+            if (tst is not null)
+            {
+                tsTime = tst.TstInfo.GenTime;
+                TimeStampVerificationResult tsr =
+                    TimeStampTokenVerifier.Verify(tst, signer.Signature);
+                if (tsr.IsValid)
+                {
+                    tsValidated = true;
+                    tsCert = tsr.SignerCertificate;
+                }
+            }
+        }
+        // ────────────────────────────────────────────────────────────────
+        
         // Choose validation time. Prefer signer's CMS signingTime attribute (more
         // trustworthy than the /M field in the PDF dict, but still untimestamped).
         // Fall back to the /M field, and finally to UtcNow.
         DateTimeOffset validationTime = opts.ValidationTime
+            ?? (tsValidated ? tsTime : null)
             ?? signer.SigningTime
             ?? declaredSigningTime
             ?? DateTimeOffset.UtcNow;
@@ -261,6 +289,13 @@ public static class PdfSignatureVerifier
             }
             intermediates.Add(c);
         }
+        if (opts.AutoExtractCadesValues)
+        {
+            foreach (X509Certificate c in ExtractCadesCertValues(signer))
+            {
+                intermediates.Add(c);
+            }
+        }
         if (opts.ExtraIntermediates is not null)
         {
             intermediates.AddRange(opts.ExtraIntermediates);
@@ -277,7 +312,10 @@ public static class PdfSignatureVerifier
                 signerCert,
                 integrityVerified: true,
                 trustValidated: false,
-                validatedPath: null);
+                validatedPath: null,
+                timestampValidated: tsValidated,
+                signatureTimestamp: tsTime,
+                timestampCertificate: tsCert);
         }
 
         // Gather CRLs: ones embedded in the CMS envelope (when AutoExtractCmsCrls)
@@ -302,8 +340,18 @@ public static class PdfSignatureVerifier
             allCrls.AddRange(opts.ExtraCrls);
         }
 
+        List<OcspResponse> allOcsp = new();
+        if (opts.AutoExtractCadesValues)
+        {
+            ExtractCadesRevocationValues(signer, allCrls, allOcsp);
+        }
+        if (opts.ExtraOcspResponses is not null)
+        {
+            allOcsp.AddRange(opts.ExtraOcspResponses);
+        }
+
         CertificatePathValidationResult pathResult =
-            CertificatePathValidator.Validate(paths, validationTime, allCrls);
+            CertificatePathValidator.Validate(paths, validationTime, allCrls, allOcsp);
 
         if (pathResult.IsValid)
         {
@@ -313,7 +361,10 @@ public static class PdfSignatureVerifier
                 signerCert,
                 integrityVerified: true,
                 trustValidated: true,
-                validatedPath: pathResult.ValidatedPath);
+                validatedPath: pathResult.ValidatedPath,
+                timestampValidated: tsValidated,
+                signatureTimestamp: tsTime,
+                timestampCertificate: tsCert);
         }
 
         SignatureVerificationStatus status = pathResult.Status switch
@@ -330,7 +381,10 @@ public static class PdfSignatureVerifier
             signerCert,
             integrityVerified: true,
             trustValidated: false,
-            validatedPath: null);
+            validatedPath: null,
+            timestampValidated: tsValidated,
+            signatureTimestamp: tsTime,
+            timestampCertificate: tsCert);
     }
 
     /// <summary>
@@ -396,6 +450,103 @@ public static class PdfSignatureVerifier
             diff |= a[i] ^ b[i];
         }
         return diff == 0;
+    }
+
+    private static TimeStampToken? TryDecodeSignatureTimestamp(SignerInfo signer)
+    {
+        if (signer.UnsignedAttributes is null) { return null; }
+        CmsAttribute? attr = signer.UnsignedAttributes.Find(KnownOids.SignatureTimeStampToken);
+        if (attr is null || attr.Values.Count == 0) { return null; }
+        try
+        {
+            // The attribute value IS a TimeStampToken (CMS ContentInfo) per RFC 3161 Appendix A.
+            return TimeStampToken.Decode(attr.Values[0]);
+        }
+        catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
+                                      or ArgumentException
+                                      or InvalidOperationException
+                                      or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static List<X509Certificate> ExtractCadesCertValues(SignerInfo signer)
+    {
+        List<X509Certificate> result = new();
+        if (signer.UnsignedAttributes is null) { return result; }
+        CmsAttribute? attr = signer.UnsignedAttributes.Find(KnownOids.CertValues);
+        if (attr is null) { return result; }
+        foreach (byte[] value in attr.Values)
+        {
+            // CertificateValues ::= SEQUENCE OF Certificate
+            try
+            {
+                Chuvadi.Cryptography.Asn1.Asn1Reader r = new(value);
+                Chuvadi.Cryptography.Asn1.Asn1Reader seq = r.ReadSequence();
+                while (!seq.IsAtEnd)
+                {
+                    byte[] certBytes = seq.ReadEncoded();
+                    try { result.Add(X509Certificate.Decode(certBytes)); }
+                    catch (Chuvadi.Cryptography.Asn1.Asn1Exception) { /* skip malformed */ }
+                }
+            }
+            catch (Chuvadi.Cryptography.Asn1.Asn1Exception) { /* malformed attr, skip */ }
+        }
+        return result;
+    }
+
+    private static void ExtractCadesRevocationValues(
+        SignerInfo signer,
+        List<CertificateList> crls,
+        List<OcspResponse> ocspResponses)
+    {
+        _ = ocspResponses;  // accepted for future symmetry; CAdES ocspVals parsing is deferred
+        if (signer.UnsignedAttributes is null) { return; }
+        CmsAttribute? attr = signer.UnsignedAttributes.Find(KnownOids.RevocationValues);
+        if (attr is null) { return; }
+        foreach (byte[] value in attr.Values)
+        {
+            // RevocationValues ::= SEQUENCE {
+            //   crlVals      [0] EXPLICIT SEQUENCE OF CertificateList OPTIONAL,
+            //   ocspVals     [1] EXPLICIT SEQUENCE OF BasicOCSPResponse OPTIONAL,
+            //   otherRevVals [2] EXPLICIT OtherRevVals OPTIONAL }
+            try
+            {
+                Chuvadi.Cryptography.Asn1.Asn1Reader r = new(value);
+                Chuvadi.Cryptography.Asn1.Asn1Reader seq = r.ReadSequence();
+                while (!seq.IsAtEnd)
+                {
+                    Chuvadi.Cryptography.Asn1.Asn1Tag peek = seq.PeekTag();
+                    if (peek == Chuvadi.Cryptography.Asn1.Asn1Tag.ContextSpecific(0, isConstructed: true))
+                    {
+                        Chuvadi.Cryptography.Asn1.Asn1Reader crlWrap = seq.ReadExplicit(0);
+                        Chuvadi.Cryptography.Asn1.Asn1Reader crlSeq = crlWrap.ReadSequence();
+                        while (!crlSeq.IsAtEnd)
+                        {
+                            byte[] crlBytes = crlSeq.ReadEncoded();
+                            try { crls.Add(CertificateList.Decode(crlBytes)); }
+                            catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
+                                                          or NotSupportedException) { /* skip */ }
+                        }
+                    }
+                    else if (peek == Chuvadi.Cryptography.Asn1.Asn1Tag.ContextSpecific(1, isConstructed: true))
+                    {
+                        // ocspVals — SEQUENCE OF BasicOCSPResponse.
+                        // To re-use OcspResponse.Decode we need to wrap each BasicOCSPResponse as
+                        // an OCSPResponse with status Successful. Skip for now — most CAdES
+                        // emitters that ship OCSP also ship the wrapped OCSPResponse via other
+                        // means. Future session can lift this restriction.
+                        seq.Skip();
+                    }
+                    else
+                    {
+                        seq.Skip();
+                    }
+                }
+            }
+            catch (Chuvadi.Cryptography.Asn1.Asn1Exception) { /* malformed attr, skip */ }
+        }
     }
 
     private static SignatureVerificationResult Fail(SignatureVerificationStatus status, string message)

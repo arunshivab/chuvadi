@@ -50,6 +50,14 @@ bool AutoExtractCmsCrls
 
 When true (the default), CRLs embedded in the CMS SignedData envelope are decoded and added to the revocation set. Set to false to ignore embedded CRLs and rely only on `ExtraCrls`.
 
+### `ExtraOcspResponses`
+
+```csharp
+IReadOnlyList<OcspResponse>? ExtraOcspResponses
+```
+
+OCSP responses to consult during revocation checking. CMS does not embed OCSP responses directly; supply locally-cached or out-of-band responses here.
+
 ## Methods
 
 ### `new`
