@@ -128,6 +128,39 @@ public sealed class PageRasterizer
         }
     }
 
+    /// <summary>
+    /// Rasterizes a page and encodes the result as a single-page CMYK TIFF
+    /// (Photometric=5, 4 samples per pixel, PackBits compression).
+    /// </summary>
+    /// <remarks>
+    /// The pixel buffer is rendered in RGB and converted to CMYK using the
+    /// standard subtractive formula. This is NOT a colour-managed transform;
+    /// for press-accurate output, layer an ICC transform on the
+    /// <see cref="CmykImage"/> returned by <see cref="RasterizeToCmyk"/>.
+    /// </remarks>
+    public byte[] RasterizeToCmykTiff(PdfPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        CmykImage cmyk = RasterizeToCmyk(page);
+        return CmykTiffEncoder.Encode(cmyk);
+    }
+
+    /// <summary>
+    /// Rasterizes a page and returns the result as a <see cref="CmykImage"/>.
+    /// </summary>
+    /// <remarks>
+    /// Uses the standard subtractive RGB→CMYK conversion. For press-accurate
+    /// output, apply an ICC transform externally.
+    /// </remarks>
+    public CmykImage RasterizeToCmyk(PdfPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        PixelBuffer buffer = Rasterize(page);
+        return CmykImage.FromBgra(buffer);
+    }
+
     // ── Content stream loading ────────────────────────────────────────────
 
     private byte[] LoadContentBytes(PdfPage page)

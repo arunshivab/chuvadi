@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>
+      Chuvadi authoring module — fluent API to produce fresh PDF documents
+      with text, tables, images, and primitives. Phase 1.3.
+    </Description>
+    <PackageId>Chuvadi.Pdf.Authoring</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Images\Chuvadi.Pdf.Images.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+  </ItemGroup>
+</Project>

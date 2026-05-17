@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Authoring\Chuvadi.Pdf.Authoring.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
+  </ItemGroup>
+</Project>
