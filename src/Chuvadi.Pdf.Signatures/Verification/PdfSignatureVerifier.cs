@@ -40,6 +40,7 @@ using Chuvadi.Cryptography.Oids;
 using Chuvadi.Cryptography.PublicKey;
 using Chuvadi.Cryptography.X509;
 using Chuvadi.Pdf.Documents;
+using Chuvadi.Pdf.Signatures.Dss;
 
 namespace Chuvadi.Pdf.Signatures.Verification;
 
@@ -229,7 +230,8 @@ public static class PdfSignatureVerifier
             signedData,
             opts,
             signature.SigningTimeFromDictionary,
-            signer);
+            signer,
+            document);
     }
 
     private static SignatureVerificationResult RunPathValidation(
@@ -237,8 +239,16 @@ public static class PdfSignatureVerifier
         SignedData signedData,
         SignatureVerifyOptions opts,
         DateTimeOffset? declaredSigningTime,
-        SignerInfo signer)
+        SignerInfo signer,
+        PdfDocument document)
     {
+        // ── PDF DSS extraction ──────────────────────────────────────────
+        // Read the document's /DSS dictionary once, up-front, so its certs /
+        // CRLs / OCSPs are available everywhere below.
+        DocumentSecurityStore? dss = opts.AutoExtractDss
+            ? document.GetDocumentSecurityStore()
+            : null;
+        // ────────────────────────────────────────────────────────────────
         // ── CAdES: signature timestamp ──────────────────────────────────
         // If a signatureTimeStampToken is present and verifies, it gives us a
         // trustworthy "when was this signature made" assertion. We can then
@@ -296,6 +306,13 @@ public static class PdfSignatureVerifier
                 intermediates.Add(c);
             }
         }
+        if (dss is not null)
+        {
+            foreach (X509Certificate c in dss.Certificates)
+            {
+                intermediates.Add(c);
+            }
+        }
         if (opts.ExtraIntermediates is not null)
         {
             intermediates.AddRange(opts.ExtraIntermediates);
@@ -339,11 +356,19 @@ public static class PdfSignatureVerifier
         {
             allCrls.AddRange(opts.ExtraCrls);
         }
+        if (dss is not null)
+        {
+            allCrls.AddRange(dss.Crls);
+        }
 
         List<OcspResponse> allOcsp = new();
         if (opts.AutoExtractCadesValues)
         {
             ExtractCadesRevocationValues(signer, allCrls, allOcsp);
+        }
+        if (dss is not null)
+        {
+            allOcsp.AddRange(dss.OcspResponses);
         }
         if (opts.ExtraOcspResponses is not null)
         {

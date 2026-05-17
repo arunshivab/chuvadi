@@ -80,4 +80,13 @@ public sealed class SignatureVerifyOptions
     /// since expired.
     /// </summary>
     public bool AutoVerifySignatureTimestamp { get; init; } = true;
+
+    /// <summary>
+    /// When true (the default), the document's <c>/DSS</c> dictionary
+    /// (ISO 32000-2 §12.8.4.3) is read and its certificates, CRLs, and OCSP
+    /// responses are added to the verification material. Adobe-style PDF
+    /// signatures with long-term validation (LTV) typically embed their
+    /// revocation info this way rather than in CAdES unsigned attributes.
+    /// </summary>
+    public bool AutoExtractDss { get; init; } = true;
 }
