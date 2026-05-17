@@ -66,6 +66,14 @@ IEnumerable<X509Certificate>? ExtraCertificates
 
 Additional certificates to include in the CMS SignedData alongside the signer's own certificate (typically the issuing CA chain).
 
+### `TsaClient`
+
+```csharp
+ITsaClient? TsaClient
+```
+
+When non-null, an RFC 3161 timestamp is fetched from this client over the SignerInfo's signature and embedded as an `id-aa-signatureTimeStampToken` unsigned attribute.
+
 ---
 
 _Source: [`src/Chuvadi.Pdf.Signatures/Signing/PdfSigningOptions.cs`](../../../src/Chuvadi.Pdf.Signatures/Signing/PdfSigningOptions.cs)_

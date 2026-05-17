@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using Chuvadi.Cryptography.Timestamps;
 using Chuvadi.Cryptography.X509;
 
 namespace Chuvadi.Pdf.Signatures.Signing;
@@ -58,4 +59,17 @@ public sealed class PdfSigningOptions
     /// CA chain).
     /// </summary>
     public IEnumerable<X509Certificate>? ExtraCertificates { get; init; }
+
+    /// <summary>
+    /// When non-null, an RFC 3161 timestamp is fetched from this client
+    /// over the SignerInfo's signature and embedded as an
+    /// <c>id-aa-signatureTimeStampToken</c> unsigned attribute.
+    /// </summary>
+    /// <remarks>
+    /// The same hash algorithm as the signer's is used for the TSA
+    /// request. A <see cref="HttpTsaClient"/> is the typical
+    /// implementation; for tests, callers can supply an in-memory
+    /// <see cref="ITsaClient"/> that returns canned responses.
+    /// </remarks>
+    public ITsaClient? TsaClient { get; init; }
 }

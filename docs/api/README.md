@@ -99,9 +99,11 @@ python tools/gen_api_docs.py
 | [GeneralNameKind](Cryptography/GeneralNameKind.md) | enum | The variant types within a GeneralName CHOICE. |
 | [HashAlgorithmName](Cryptography/HashAlgorithmName.md) | enum | Enumeration of the hash algorithms Chuvadi implements. |
 | [HashFactory](Cryptography/HashFactory.md) | class | Constructs hash algorithm instances by name or by OID. |
+| [HttpTsaClient](Cryptography/HttpTsaClient.md) | class | An `ITsaClient` that POSTs RFC 3161 requests over HTTP(S) using `HttpClient`. |
 | [IHashAlgorithm](Cryptography/IHashAlgorithm.md) | interface | A streaming cryptographic hash function. |
 | [IPublicKey](Cryptography/IPublicKey.md) | interface | Marker interface implemented by all Chuvadi public-key types. |
 | [ISigner](Cryptography/ISigner.md) | interface | A pluggable signing primitive used by `CmsSignedDataBuilder` to produce a CMS SignerInfo signature. |
+| [ITsaClient](Cryptography/ITsaClient.md) | interface | A client capable of fetching an RFC 3161 timestamp from a TSA. |
 | [IssuerAndSerialNumber](Cryptography/IssuerAndSerialNumber.md) | class | Identifies an X.509 certificate by its issuer's distinguished name and the certificate's serial number. |
 | [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
@@ -134,12 +136,16 @@ python tools/gen_api_docs.py
 | [SubjectKeyIdentifierExtension](Cryptography/SubjectKeyIdentifierExtension.md) | class | The Subject Key Identifier extension — a short octet string identifying the certificate's public key, used to find issuer certificates during path building. |
 | [SubjectPublicKeyInfo](Cryptography/SubjectPublicKeyInfo.md) | class | The public key carried by an X.509 certificate, together with the algorithm identifier needed to interpret its bytes. |
 | [TbsCertificate](Cryptography/TbsCertificate.md) | class | The "to-be-signed" body of an X.509 certificate. |
+| [TimeStampRequest](Cryptography/TimeStampRequest.md) | class | An RFC 3161 Time-Stamp Protocol request, ready to POST to a TSA. |
+| [TimeStampResponse](Cryptography/TimeStampResponse.md) | class | An RFC 3161 Time-Stamp Protocol response, as returned by a TSA. |
+| [TimeStampStatus](Cryptography/TimeStampStatus.md) | enum | Status code from a TSA response per RFC 3161 §2.4.2 (PKIStatus). |
 | [TimeStampToken](Cryptography/TimeStampToken.md) | class | An RFC 3161 TimeStampToken — a CMS SignedData wrapping a TSTInfo payload. |
 | [TimeStampTokenVerifier](Cryptography/TimeStampTokenVerifier.md) | class | Verifies an RFC 3161 TimeStampToken cryptographically and against a known message-imprint payload. |
 | [TimeStampVerificationResult](Cryptography/TimeStampVerificationResult.md) | class | The result of verifying a TimeStampToken. |
 | [TimeStampVerificationStatus](Cryptography/TimeStampVerificationStatus.md) | enum | Outcome of `TimeStampTokenVerifier`. |
 | [TrustAnchor](Cryptography/TrustAnchor.md) | class | A trust anchor — a CA the verifier trusts to vouch for certificates it issues. |
 | [TrustStore](Cryptography/TrustStore.md) | class | A collection of trust anchors, with subject-name lookup. |
+| [TsaException](Cryptography/TsaException.md) | class | Thrown when a TSA returns a non-success HTTP status or otherwise fails to produce a usable response. |
 | [TstInfo](Cryptography/TstInfo.md) | class | The structured timestamp content inside a TimeStampToken. |
 | [Validity](Cryptography/Validity.md) | class | The validity period of an X.509 certificate. |
 | [X509Certificate](Cryptography/X509Certificate.md) | class | A fully-decoded X.509 certificate. |
