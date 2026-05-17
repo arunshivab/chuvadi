@@ -377,6 +377,15 @@ python tools/gen_api_docs.py
 | [SignatureVerifyOptions](Signatures/SignatureVerifyOptions.md) | class | Options controlling signature verification. |
 | [VriEntry](Signatures/VriEntry.md) | class | Per-signature validation material from the `/DSS /VRI` sub-dictionary. |
 
+## Chuvadi.Pdf.Svg
+
+| Type | Kind | Description |
+|---|---|---|
+| [SvgExportOptions](Svg/SvgExportOptions.md) | class | Options for PDF → SVG export. |
+| [SvgExporter](Svg/SvgExporter.md) | class | Translates PDF page content streams to SVG. |
+| [SvgFontStrategy](Svg/SvgFontStrategy.md) | enum | How embedded fonts are handled. |
+| [SvgTextStrategy](Svg/SvgTextStrategy.md) | enum | How text is rendered to SVG. |
+
 ## Chuvadi.Pdf.Text
 
 | Type | Kind | Description |
