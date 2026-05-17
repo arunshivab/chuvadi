@@ -72,4 +72,19 @@ public sealed class PdfSigningOptions
     /// <see cref="ITsaClient"/> that returns canned responses.
     /// </remarks>
     public ITsaClient? TsaClient { get; init; }
+
+    /// <summary>
+    /// When non-null, validation material is embedded in a <c>/DSS</c>
+    /// dictionary (ISO 32000-2 §12.8.4.3) so that the signature can be
+    /// validated offline at any time after signing — Long-Term Validation
+    /// (LTV).
+    /// </summary>
+    /// <remarks>
+    /// The typical LTV payload is the signer's full CA chain plus a CRL
+    /// and/or OCSP response per chain link. Callers are responsible for
+    /// fetching this material before signing; Chuvadi's
+    /// <see cref="Chuvadi.Pdf.Signatures.Verification"/> facilities can
+    /// be used to discover it from the certs themselves.
+    /// </remarks>
+    public LtvOptions? LtvOptions { get; init; }
 }

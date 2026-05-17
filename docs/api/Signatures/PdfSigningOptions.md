@@ -74,6 +74,14 @@ ITsaClient? TsaClient
 
 When non-null, an RFC 3161 timestamp is fetched from this client over the SignerInfo's signature and embedded as an `id-aa-signatureTimeStampToken` unsigned attribute.
 
+### `LtvOptions`
+
+```csharp
+LtvOptions? LtvOptions
+```
+
+When non-null, validation material is embedded in a `/DSS` dictionary (ISO 32000-2 §12.8.4.3) so that the signature can be validated offline at any time after signing — Long-Term Validation (LTV).
+
 ---
 
 _Source: [`src/Chuvadi.Pdf.Signatures/Signing/PdfSigningOptions.cs`](../../../src/Chuvadi.Pdf.Signatures/Signing/PdfSigningOptions.cs)_

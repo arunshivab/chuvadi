@@ -11,6 +11,9 @@ using Chuvadi.Cryptography.Signing;
 using Chuvadi.Pdf.Documents;
 using Chuvadi.Pdf.IO;
 using Chuvadi.Pdf.Objects;
+using Chuvadi.Cryptography.Ocsp;
+using Chuvadi.Cryptography.Revocation;
+using Chuvadi.Cryptography.X509;
 using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Signatures.Signing;
@@ -51,6 +54,7 @@ public static class PdfSigner
 
     // Maximum placeholder value used during layout; recovered/patched after writing.
     private const int ByteRangePlaceholderValue = 999_999_999;
+
 
     /// <summary>
     /// Signs a PDF document and returns the signed bytes.
@@ -150,6 +154,23 @@ public static class PdfSigner
         // SigFlags 3 = SignaturesExist (bit 0) + AppendOnly (bit 1).
         acroForm.Set(PdfName.Intern("SigFlags"), (PdfPrimitive)new PdfInteger(3));
 
+        // ── Step 4b: build LTV objects (/DSS + /VRI) when requested ─────
+        // Allocate IDs from after acroFormId. We track the IDs into a helper that
+        // builds and returns the new indirect objects + the catalog's /DSS reference
+        // (or null when LTV isn't requested).
+        int nextLtvId = acroFormId.ObjectNumber + 1;
+        List<PdfIndirectObject> ltvObjects = new();
+        PdfReference? dssRef = null;
+        if (options.LtvOptions is { HasMaterial: true } ltv)
+        {
+            if (ltv.IncludeVri)
+            {
+                throw new NotSupportedException(
+                    "/VRI emission is not yet supported in single-pass signing; see LtvOptions.IncludeVri docs.");
+            }
+            dssRef = BuildLtvObjects(ltv, ref nextLtvId, ltvObjects);
+        }
+
         // ── Step 5: clone the catalog with an updated /AcroForm ─────────
         PdfDictionary newCatalog = new();
         foreach (KeyValuePair<PdfName, PdfPrimitive> kv in document.Catalog)
@@ -157,6 +178,10 @@ public static class PdfSigner
             newCatalog.Set(kv.Key, kv.Value);
         }
         newCatalog.Set(PdfName.Intern("AcroForm"), new PdfReference(acroFormId));
+        if (dssRef is not null)
+        {
+            newCatalog.Set(PdfName.Intern("DSS"), dssRef);
+        }
 
         // Replace the original catalog object in our list. The catalog ID is
         // recovered from the trailer's /Root reference.
@@ -179,6 +204,7 @@ public static class PdfSigner
         objects.Add(new PdfIndirectObject(sigDictId, sigDict));
         objects.Add(new PdfIndirectObject(sigFieldId, sigField));
         objects.Add(new PdfIndirectObject(acroFormId, acroForm));
+        objects.AddRange(ltvObjects);
 
         PdfDictionary trailer = new();
         trailer.Set(PdfName.Root, new PdfReference(catalogId));
@@ -233,6 +259,58 @@ public static class PdfSigner
 
         return pdfBytes;
     }
+
+    private static PdfReference BuildLtvObjects(
+        LtvOptions ltv, ref int nextId, List<PdfIndirectObject> objects)
+    {
+        // Allocate stream objects for every cert / CRL / OCSP, and gather
+        // their PdfReferences into per-kind arrays for the /DSS dictionary.
+        PdfArray certsArray = new();
+        if (ltv.Certificates is not null)
+        {
+            foreach (X509Certificate cert in ltv.Certificates)
+            {
+                certsArray.Add(NewStreamRef(cert.RawEncoding, ref nextId, objects));
+            }
+        }
+        PdfArray crlsArray = new();
+        if (ltv.Crls is not null)
+        {
+            foreach (CertificateList crl in ltv.Crls)
+            {
+                crlsArray.Add(NewStreamRef(crl.RawEncoding, ref nextId, objects));
+            }
+        }
+        PdfArray ocspArray = new();
+        if (ltv.OcspResponses is not null)
+        {
+            foreach (OcspResponse ocsp in ltv.OcspResponses)
+            {
+                ocspArray.Add(NewStreamRef(ocsp.RawEncoding, ref nextId, objects));
+            }
+        }
+
+        PdfDictionary dss = new();
+        dss.Set(PdfName.Type, PdfName.Intern("DSS"));
+        if (certsArray.Count > 0) { dss.Set(PdfName.Intern("Certs"), certsArray); }
+        if (crlsArray.Count > 0) { dss.Set(PdfName.Intern("CRLs"), crlsArray); }
+        if (ocspArray.Count > 0) { dss.Set(PdfName.Intern("OCSPs"), ocspArray); }
+
+        PdfObjectId dssId = new(nextId++, 0);
+        objects.Add(new PdfIndirectObject(dssId, dss));
+        return new PdfReference(dssId);
+    }
+
+    private static PdfReference NewStreamRef(
+        byte[] data, ref int nextId, List<PdfIndirectObject> objects)
+    {
+        PdfDictionary dict = new();
+        dict.Set(PdfName.Length, data.Length);
+        PdfObjectId id = new(nextId++, 0);
+        objects.Add(new PdfIndirectObject(id, new PdfStream(dict, data)));
+        return new PdfReference(id);
+    }
+
 
     private static void PatchByteRange(
         byte[] bytes,

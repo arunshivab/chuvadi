@@ -336,6 +336,7 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [ByteRange](Signatures/ByteRange.md) | class | The /ByteRange of a PDF signature — two disjoint regions of the file that together form the bytes the signature actually covers. |
 | [DocumentSecurityStore](Signatures/DocumentSecurityStore.md) | class | The Document Security Store as defined in ISO 32000-2 §12.8.4.3. |
+| [LtvOptions](Signatures/LtvOptions.md) | class | Long-term validation material to embed in a PDF at sign time. |
 | [PdfDocumentDssExtensions](Signatures/PdfDocumentDssExtensions.md) | class | Extension methods on `PdfDocument` for accessing its Document Security Store. |
 | [PdfDocumentSignatureExtensions](Signatures/PdfDocumentSignatureExtensions.md) | class | Signature-related extensions on `PdfDocument`. |
 | [PdfSignature](Signatures/PdfSignature.md) | class | One digital signature found in a PDF document. |
