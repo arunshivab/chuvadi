@@ -11,9 +11,7 @@
 
 using System;
 using System.Numerics;
-using Chuvadi.Cryptography.Asn1;
 using Chuvadi.Cryptography.Hashing;
-using Chuvadi.Cryptography.Oids;
 
 namespace Chuvadi.Cryptography.PublicKey;
 
@@ -52,7 +50,7 @@ public static class RsaVerifier
         if (em is null) { return false; }
 
         // RFC 8017 §9.2: build the expected EM
-        byte[] expected = BuildPkcs1v15Em(hashAlgorithm, messageHash, k);
+        byte[] expected = Pkcs1V15Encoding.BuildEncodedMessage(hashAlgorithm, messageHash, k);
 
         // Constant-time comparison
         return ConstantTimeEquals(em, expected);
@@ -221,53 +219,6 @@ public static class RsaVerifier
         }
         // le[bytes.Length] = 0 — forces non-negative interpretation
         return new BigInteger(le);
-    }
-
-    /// <summary>
-    /// RFC 8017 §9.2 — builds the expected EMSA-PKCS1-v1_5 encoding of <paramref name="hash"/>.
-    /// </summary>
-    /// <remarks>
-    /// EM = 0x00 || 0x01 || PS || 0x00 || T
-    /// where T = DigestInfo encoded as:
-    ///   SEQUENCE { SEQUENCE { OID hashAlgorithm, NULL }, OCTET STRING hash }
-    /// </remarks>
-    private static byte[] BuildPkcs1v15Em(HashAlgorithmName hashAlgorithm,
-        ReadOnlySpan<byte> hash, int k)
-    {
-        ObjectIdentifier hashOid = hashAlgorithm switch
-        {
-            HashAlgorithmName.Sha256 => KnownOids.Sha256,
-            HashAlgorithmName.Sha384 => KnownOids.Sha384,
-            HashAlgorithmName.Sha512 => KnownOids.Sha512,
-            _ => throw new ArgumentException($"Unsupported hash algorithm: {hashAlgorithm}", nameof(hashAlgorithm)),
-        };
-
-        Asn1Writer w = new();
-        w.PushSequence();    // DigestInfo
-        w.PushSequence();    // AlgorithmIdentifier
-        w.WriteObjectIdentifier(hashOid);
-        w.WriteNull();
-        w.PopSequence();
-        w.WriteOctetString(hash);
-        w.PopSequence();
-        byte[] t = w.ToArray();
-
-        // EM = 0x00 || 0x01 || PS || 0x00 || T
-        // PS = (k - 3 - T.Length) bytes of 0xFF; must be >= 8 per RFC 8017
-        if (k < t.Length + 11)
-        {
-            throw new ArgumentException(
-                $"RSA modulus too small for PKCS#1 v1.5 padding with this hash (need at least {t.Length + 11} bytes, have {k}).");
-        }
-
-        byte[] em = new byte[k];
-        em[0] = 0x00;
-        em[1] = 0x01;
-        int psLen = k - t.Length - 3;
-        for (int i = 0; i < psLen; i++) { em[2 + i] = 0xFF; }
-        em[2 + psLen] = 0x00;
-        Buffer.BlockCopy(t, 0, em, 2 + psLen + 1, t.Length);
-        return em;
     }
 
     /// <summary>RFC 8017 §B.2.1 — MGF1 mask generation function.</summary>

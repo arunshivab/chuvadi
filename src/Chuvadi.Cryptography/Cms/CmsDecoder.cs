@@ -24,7 +24,11 @@ public static class CmsDecoder
         ArgumentNullException.ThrowIfNull(cms);
         Asn1Reader reader = new(cms);
         ContentInfo ci = ContentInfo.Read(reader);
-        reader.ExpectEnd();
+        // Trailing bytes after a self-terminating CMS ContentInfo are tolerated —
+        // PDF signature dictionaries reserve fixed space in /Contents for the CMS
+        // and pad the unused portion with zeros. The CMS is fully defined by its
+        // outer length-prefixed SEQUENCE; anything beyond it is by definition not
+        // part of the CMS.
         return ci;
     }
 

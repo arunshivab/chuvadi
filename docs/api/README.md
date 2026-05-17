@@ -81,6 +81,7 @@ python tools/gen_api_docs.py
 | [CmsAttribute](Cryptography/CmsAttribute.md) | class | A generic CMS Attribute — an OID identifying the attribute type, plus a SET of one or more values whose content is defined per OID. |
 | [CmsAttributeTable](Cryptography/CmsAttributeTable.md) | class | A collection of `CmsAttribute` values, with OID lookup and the raw encoded bytes preserved for signature verification. |
 | [CmsDecoder](Cryptography/CmsDecoder.md) | class | Decodes CMS / PKCS#7 byte streams into structured Chuvadi objects. |
+| [CmsSignedDataBuilder](Cryptography/CmsSignedDataBuilder.md) | class | Builds a CMS SignedData (RFC 5652 §5) wrapped in a ContentInfo, ready for embedding in a PDF signature dictionary's `/Contents`. |
 | [ContentInfo](Cryptography/ContentInfo.md) | class | The outermost CMS structure — a tagged container that says "the following bytes are of contentType X." |
 | [CrlDistributionPointsExtension](Cryptography/CrlDistributionPointsExtension.md) | class | The CRL Distribution Points extension — locations from which the issuer's Certificate Revocation List may be retrieved. |
 | [CrlReason](Cryptography/CrlReason.md) | enum | The reason a certificate was revoked, as encoded in the per-entry `reasonCode` CRL extension (OID 2.5.29.21). |
@@ -97,6 +98,7 @@ python tools/gen_api_docs.py
 | [HashFactory](Cryptography/HashFactory.md) | class | Constructs hash algorithm instances by name or by OID. |
 | [IHashAlgorithm](Cryptography/IHashAlgorithm.md) | interface | A streaming cryptographic hash function. |
 | [IPublicKey](Cryptography/IPublicKey.md) | interface | Marker interface implemented by all Chuvadi public-key types. |
+| [ISigner](Cryptography/ISigner.md) | interface | A pluggable signing primitive used by `CmsSignedDataBuilder` to produce a CMS SignerInfo signature. |
 | [IssuerAndSerialNumber](Cryptography/IssuerAndSerialNumber.md) | class | Identifies an X.509 certificate by its issuer's distinguished name and the certificate's serial number. |
 | [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
@@ -111,7 +113,10 @@ python tools/gen_api_docs.py
 | [RelativeDistinguishedName](Cryptography/RelativeDistinguishedName.md) | class | A SET of one or more attributes that together form one component of a DN. |
 | [ResponderID](Cryptography/ResponderID.md) | class | Identifies the responder that signed an OCSP response. |
 | [RevokedCertificate](Cryptography/RevokedCertificate.md) | class | One revocation entry from a CRL. |
+| [RsaPkcs1V15Signer](Cryptography/RsaPkcs1V15Signer.md) | class | An `ISigner` implementation backed by Chuvadi's hand-rolled RSASSA-PKCS1-v1_5 signing primitive (`RsaSigner`). |
+| [RsaPrivateKey](Cryptography/RsaPrivateKey.md) | class | An RSA private key — modulus n, public exponent e, and private exponent d. |
 | [RsaPublicKey](Cryptography/RsaPublicKey.md) | class | An RSA public key — modulus n and public exponent e. |
+| [RsaSigner](Cryptography/RsaSigner.md) | class | Hand-rolled RSASSA-PKCS1-v1_5 signing per RFC 8017 §8.2. |
 | [RsaVerifier](Cryptography/RsaVerifier.md) | class | Verifies RSA signatures in PKCS#1 v1.5 (RSASSA-PKCS1-v1_5) and PSS (RSASSA-PSS) formats per RFC 8017. |
 | [Sha1](Cryptography/Sha1.md) | class | SHA-1 used only for lookup-key purposes mandated by external specs: RFC 6960 §4.1.1 (OCSP CertID IssuerNameHash / IssuerKeyHash) and ISO 32000-2 §12.8.4.3 (PDF DSS VRI keys). |
 | [Sha256](Cryptography/Sha256.md) | class | SHA-256 hash function per FIPS 180-4 §6.2. |
