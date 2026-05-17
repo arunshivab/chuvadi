@@ -74,6 +74,14 @@ bool AutoVerifySignatureTimestamp
 
 When true (the default), the `id-aa-signatureTimeStampToken` unsigned attribute is located, decoded, and cryptographically verified. If a timestamp validates and the caller did not supply an explicit `ValidationTime`, the timestamp's genTime is used as the validation time for certificate-chain evaluation. This is the CAdES-T pattern: the timestamp records WHEN the signature existed, so the chain is evaluated at that time even if certificates have since expired.
 
+### `AutoExtractDss`
+
+```csharp
+bool AutoExtractDss
+```
+
+When true (the default), the document's `/DSS` dictionary (ISO 32000-2 §12.8.4.3) is read and its certificates, CRLs, and OCSP responses are added to the verification material. Adobe-style PDF signatures with long-term validation (LTV) typically embed their revocation info this way rather than in CAdES unsigned attributes.
+
 ## Methods
 
 ### `new`

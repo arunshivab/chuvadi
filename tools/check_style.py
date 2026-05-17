@@ -56,6 +56,7 @@ REQUIRED_USINGS = {
     "StreamReader":         "using System.IO;",
     "StreamWriter":         "using System.IO;",
     "TextWriter":           "using System.IO;",
+    "InvalidDataException": "using System.IO;",
     "BinaryReader":         "using System.IO;",
     "BinaryWriter":         "using System.IO;",
     "FileStream":           "using System.IO;",
