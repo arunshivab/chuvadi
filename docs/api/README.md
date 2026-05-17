@@ -101,6 +101,7 @@ python tools/gen_api_docs.py
 | [KeyUsageExtension](Cryptography/KeyUsageExtension.md) | class | The Key Usage extension — restricts the cryptographic operations the certified key may participate in. |
 | [KeyUsageFlags](Cryptography/KeyUsageFlags.md) | enum | — |
 | [KnownOids](Cryptography/KnownOids.md) | class | Named ObjectIdentifier constants for the OIDs Chuvadi cares about. |
+| [MessageImprint](Cryptography/MessageImprint.md) | class | The cryptographic commitment that a timestamp token covers. |
 | [ObjectIdentifier](Cryptography/ObjectIdentifier.md) | class | An ASN.1 OBJECT IDENTIFIER — an ordered sequence of non-negative arcs. |
 | [OcspResponse](Cryptography/OcspResponse.md) | class | A parsed OCSP response. |
 | [OcspResponseSignatureVerifier](Cryptography/OcspResponseSignatureVerifier.md) | class | Verifies the signature on a `BasicOcspResponse`. |
@@ -124,8 +125,13 @@ python tools/gen_api_docs.py
 | [SubjectKeyIdentifierExtension](Cryptography/SubjectKeyIdentifierExtension.md) | class | The Subject Key Identifier extension — a short octet string identifying the certificate's public key, used to find issuer certificates during path building. |
 | [SubjectPublicKeyInfo](Cryptography/SubjectPublicKeyInfo.md) | class | The public key carried by an X.509 certificate, together with the algorithm identifier needed to interpret its bytes. |
 | [TbsCertificate](Cryptography/TbsCertificate.md) | class | The "to-be-signed" body of an X.509 certificate. |
+| [TimeStampToken](Cryptography/TimeStampToken.md) | class | An RFC 3161 TimeStampToken — a CMS SignedData wrapping a TSTInfo payload. |
+| [TimeStampTokenVerifier](Cryptography/TimeStampTokenVerifier.md) | class | Verifies an RFC 3161 TimeStampToken cryptographically and against a known message-imprint payload. |
+| [TimeStampVerificationResult](Cryptography/TimeStampVerificationResult.md) | class | The result of verifying a TimeStampToken. |
+| [TimeStampVerificationStatus](Cryptography/TimeStampVerificationStatus.md) | enum | Outcome of `TimeStampTokenVerifier`. |
 | [TrustAnchor](Cryptography/TrustAnchor.md) | class | A trust anchor — a CA the verifier trusts to vouch for certificates it issues. |
 | [TrustStore](Cryptography/TrustStore.md) | class | A collection of trust anchors, with subject-name lookup. |
+| [TstInfo](Cryptography/TstInfo.md) | class | The structured timestamp content inside a TimeStampToken. |
 | [Validity](Cryptography/Validity.md) | class | The validity period of an X.509 certificate. |
 | [X509Certificate](Cryptography/X509Certificate.md) | class | A fully-decoded X.509 certificate. |
 | [X509Extension](Cryptography/X509Extension.md) | class | A single X.509 v3 extension — an OID, a criticality flag, and an opaque OCTET STRING value whose contents are defined per OID. |

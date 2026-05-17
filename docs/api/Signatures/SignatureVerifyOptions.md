@@ -58,6 +58,22 @@ IReadOnlyList<OcspResponse>? ExtraOcspResponses
 
 OCSP responses to consult during revocation checking. CMS does not embed OCSP responses directly; supply locally-cached or out-of-band responses here.
 
+### `AutoExtractCadesValues`
+
+```csharp
+bool AutoExtractCadesValues
+```
+
+When true (the default), CAdES unsigned attributes `id-aa-ets-certValues` and `id-aa-ets-revocationValues` are extracted from the SignerInfo's unsigned attributes and used as additional intermediates and revocation info. Set to false to disable.
+
+### `AutoVerifySignatureTimestamp`
+
+```csharp
+bool AutoVerifySignatureTimestamp
+```
+
+When true (the default), the `id-aa-signatureTimeStampToken` unsigned attribute is located, decoded, and cryptographically verified. If a timestamp validates and the caller did not supply an explicit `ValidationTime`, the timestamp's genTime is used as the validation time for certificate-chain evaluation. This is the CAdES-T pattern: the timestamp records WHEN the signature existed, so the chain is evaluated at that time even if certificates have since expired.
+
 ## Methods
 
 ### `new`
