@@ -82,6 +82,22 @@ X509Certificate? TimestampCertificate
 
 The TSA's signing certificate, when a timestamp was found.
 
+### `TimestampTrustValidated`
+
+```csharp
+bool TimestampTrustValidated
+```
+
+True iff the TSA's certificate chain was successfully path-validated against the supplied `TsaTrustStore` at the timestamp's genTime. Always false when no `TsaTrustStore` was supplied. Independent of `TimestampValidated`, which only reports the cryptographic verification.
+
+### `TimestampValidatedPath`
+
+```csharp
+CertificatePath? TimestampValidatedPath
+```
+
+The validated path for the TSA's certificate, when `TimestampTrustValidated` is true. Null otherwise.
+
 ### `IsValid`
 
 ```csharp

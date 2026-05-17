@@ -13,7 +13,15 @@ using System;
 
 namespace Chuvadi.Cryptography.PathValidation;
 
-internal static class Sha1
+/// <summary>
+/// SHA-1 used only for lookup-key purposes mandated by external specs:
+/// RFC 6960 §4.1.1 (OCSP CertID IssuerNameHash / IssuerKeyHash) and
+/// ISO 32000-2 §12.8.4.3 (PDF DSS VRI keys). SHA-1 is otherwise deprecated
+/// in Chuvadi and refused by <c>HashFactory</c>; this class exists because
+/// those specs require SHA-1 specifically for non-security-critical lookups
+/// (the surrounding signatures are still verified with strong algorithms).
+/// </summary>
+public static class Sha1
 {
     public static byte[] Compute(byte[] data)
     {

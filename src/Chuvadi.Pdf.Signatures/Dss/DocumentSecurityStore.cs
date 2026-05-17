@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using Chuvadi.Cryptography.Ocsp;
+using Chuvadi.Cryptography.PathValidation;
 using Chuvadi.Cryptography.Revocation;
 using Chuvadi.Cryptography.X509;
 using Chuvadi.Pdf.Filters;
@@ -44,22 +45,35 @@ public sealed class DocumentSecurityStore
     private readonly X509Certificate[] _certificates;
     private readonly CertificateList[] _crls;
     private readonly OcspResponse[] _ocspResponses;
+    private readonly Dictionary<string, VriEntry> _vri;
 
     /// <summary>Initialises a new DSS snapshot.</summary>
     public DocumentSecurityStore(
         IList<X509Certificate> certificates,
         IList<CertificateList> crls,
         IList<OcspResponse> ocspResponses)
+        : this(certificates, crls, ocspResponses, new Dictionary<string, VriEntry>())
+    {
+    }
+
+    /// <summary>Initialises a new DSS snapshot including a VRI sub-dictionary.</summary>
+    public DocumentSecurityStore(
+        IList<X509Certificate> certificates,
+        IList<CertificateList> crls,
+        IList<OcspResponse> ocspResponses,
+        IDictionary<string, VriEntry> vri)
     {
         ArgumentNullException.ThrowIfNull(certificates);
         ArgumentNullException.ThrowIfNull(crls);
         ArgumentNullException.ThrowIfNull(ocspResponses);
+        ArgumentNullException.ThrowIfNull(vri);
         _certificates = new X509Certificate[certificates.Count];
         certificates.CopyTo(_certificates, 0);
         _crls = new CertificateList[crls.Count];
         crls.CopyTo(_crls, 0);
         _ocspResponses = new OcspResponse[ocspResponses.Count];
         ocspResponses.CopyTo(_ocspResponses, 0);
+        _vri = new Dictionary<string, VriEntry>(vri, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>The certificates carried in the DSS <c>/Certs</c> array.</summary>
@@ -71,9 +85,38 @@ public sealed class DocumentSecurityStore
     /// <summary>The OCSP responses carried in the DSS <c>/OCSPs</c> array.</summary>
     public ReadOnlyCollection<OcspResponse> OcspResponses => new(_ocspResponses);
 
-    /// <summary>True iff the DSS is empty (no certs, CRLs, or OCSPs).</summary>
+    /// <summary>
+    /// Per-signature validation material keyed by upper-case SHA-1 hex of the
+    /// signature's binary <c>/Contents</c> bytes (ISO 32000-2 §12.8.4.3).
+    /// Empty when the DSS contains no <c>/VRI</c> sub-dictionary.
+    /// </summary>
+    public IReadOnlyDictionary<string, VriEntry> Vri => _vri;
+
+    /// <summary>
+    /// Looks up the VRI entry corresponding to a signature whose CMS
+    /// <c>/Contents</c> bytes are <paramref name="signatureContents"/>.
+    /// Returns null when there is no matching entry.
+    /// </summary>
+    /// <remarks>
+    /// The VRI lookup key is the upper-case SHA-1 hex of the raw bytes
+    /// inside the signature dictionary's <c>/Contents</c> value (before
+    /// any hex decoding done by the PDF parser, expressed as binary).
+    /// </remarks>
+    public VriEntry? TryFindForSignature(byte[] signatureContents)
+    {
+        ArgumentNullException.ThrowIfNull(signatureContents);
+        if (_vri.Count == 0) { return null; }
+        byte[] digest = Sha1.Compute(signatureContents);
+        string key = Convert.ToHexString(digest);  // already upper-case
+        return _vri.TryGetValue(key, out VriEntry? entry) ? entry : null;
+    }
+
+    /// <summary>True iff the DSS is empty (no certs, CRLs, OCSPs, or VRI entries).</summary>
     public bool IsEmpty =>
-        _certificates.Length == 0 && _crls.Length == 0 && _ocspResponses.Length == 0;
+        _certificates.Length == 0
+        && _crls.Length == 0
+        && _ocspResponses.Length == 0
+        && _vri.Count == 0;
 
     /// <summary>
     /// Reads the <c>/DSS</c> dictionary from <paramref name="catalog"/> and
@@ -116,7 +159,58 @@ public sealed class DocumentSecurityStore
                                           or ArgumentException) { /* skip */ }
         }
 
-        return new DocumentSecurityStore(certs, crls, ocsps);
+        Dictionary<string, VriEntry> vri = ReadVri(dss, objects, pipeline);
+
+        return new DocumentSecurityStore(certs, crls, ocsps, vri);
+    }
+
+    private static Dictionary<string, VriEntry> ReadVri(
+        PdfDictionary dss, PdfObjectStore objects, FilterPipeline pipeline)
+    {
+        Dictionary<string, VriEntry> result = new(StringComparer.OrdinalIgnoreCase);
+        PdfDictionary? vriDict = objects.ResolveDictionaryEntry<PdfDictionary>(dss, PdfName.Intern("VRI"));
+        if (vriDict is null) { return result; }
+
+        foreach (KeyValuePair<PdfName, PdfPrimitive> kv in vriDict)
+        {
+            string key = kv.Key.Value;
+            if (key.Length == 0) { continue; }
+
+            PdfDictionary? entryDict = objects.ResolveAs<PdfDictionary>(kv.Value);
+            if (entryDict is null) { continue; }
+
+            // VRI entries use singular keys (Cert / CRL / OCSP), not plurals.
+            List<X509Certificate> certs = new();
+            foreach (byte[] der in EnumerateStreamArray(entryDict, "Cert", objects, pipeline))
+            {
+                try { certs.Add(X509Certificate.Decode(der)); }
+                catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
+                                              or ArgumentException) { /* skip malformed */ }
+            }
+
+            List<CertificateList> crls = new();
+            foreach (byte[] der in EnumerateStreamArray(entryDict, "CRL", objects, pipeline))
+            {
+                try { crls.Add(CertificateList.Decode(der)); }
+                catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
+                                              or NotSupportedException
+                                              or ArgumentException) { /* skip */ }
+            }
+
+            List<OcspResponse> ocsps = new();
+            foreach (byte[] der in EnumerateStreamArray(entryDict, "OCSP", objects, pipeline))
+            {
+                try { ocsps.Add(OcspResponse.Decode(der)); }
+                catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
+                                              or ArgumentException) { /* skip */ }
+            }
+
+            // Normalise the lookup key to upper-case hex so callers can match
+            // it from a SHA-1 digest with Convert.ToHexString without worrying
+            // about which case was used in the source PDF.
+            result[key.ToUpperInvariant()] = new VriEntry(certs, crls, ocsps);
+        }
+        return result;
     }
 
     /// <summary>

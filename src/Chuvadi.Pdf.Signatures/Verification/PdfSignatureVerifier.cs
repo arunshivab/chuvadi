@@ -231,7 +231,8 @@ public static class PdfSignatureVerifier
             opts,
             signature.SigningTimeFromDictionary,
             signer,
-            document);
+            document,
+            signature);
     }
 
     private static SignatureVerificationResult RunPathValidation(
@@ -240,14 +241,17 @@ public static class PdfSignatureVerifier
         SignatureVerifyOptions opts,
         DateTimeOffset? declaredSigningTime,
         SignerInfo signer,
-        PdfDocument document)
+        PdfDocument document,
+        PdfSignature signature)
     {
-        // ── PDF DSS extraction ──────────────────────────────────────────
+        // ── PDF DSS + VRI extraction ────────────────────────────────────
         // Read the document's /DSS dictionary once, up-front, so its certs /
-        // CRLs / OCSPs are available everywhere below.
+        // CRLs / OCSPs are available everywhere below. Then look up the
+        // per-signature /VRI entry for THIS signature.
         DocumentSecurityStore? dss = opts.AutoExtractDss
             ? document.GetDocumentSecurityStore()
             : null;
+        VriEntry? vri = dss?.TryFindForSignature(signature.Contents);
         // ────────────────────────────────────────────────────────────────
         // ── CAdES: signature timestamp ──────────────────────────────────
         // If a signatureTimeStampToken is present and verifies, it gives us a
@@ -257,14 +261,15 @@ public static class PdfSignatureVerifier
         bool tsValidated = false;
         DateTimeOffset? tsTime = null;
         X509Certificate? tsCert = null;
+        TimeStampToken? signatureTst = null;
         if (opts.AutoVerifySignatureTimestamp)
         {
-            TimeStampToken? tst = TryDecodeSignatureTimestamp(signer);
-            if (tst is not null)
+            signatureTst = TryDecodeSignatureTimestamp(signer);
+            if (signatureTst is not null)
             {
-                tsTime = tst.TstInfo.GenTime;
+                tsTime = signatureTst.TstInfo.GenTime;
                 TimeStampVerificationResult tsr =
-                    TimeStampTokenVerifier.Verify(tst, signer.Signature);
+                    TimeStampTokenVerifier.Verify(signatureTst, signer.Signature);
                 if (tsr.IsValid)
                 {
                     tsValidated = true;
@@ -313,6 +318,13 @@ public static class PdfSignatureVerifier
                 intermediates.Add(c);
             }
         }
+        if (vri is not null)
+        {
+            foreach (X509Certificate c in vri.Certificates)
+            {
+                intermediates.Add(c);
+            }
+        }
         if (opts.ExtraIntermediates is not null)
         {
             intermediates.AddRange(opts.ExtraIntermediates);
@@ -332,7 +344,9 @@ public static class PdfSignatureVerifier
                 validatedPath: null,
                 timestampValidated: tsValidated,
                 signatureTimestamp: tsTime,
-                timestampCertificate: tsCert);
+                timestampCertificate: tsCert,
+                timestampTrustValidated: false,
+                timestampValidatedPath: null);
         }
 
         // Gather CRLs: ones embedded in the CMS envelope (when AutoExtractCmsCrls)
@@ -360,6 +374,10 @@ public static class PdfSignatureVerifier
         {
             allCrls.AddRange(dss.Crls);
         }
+        if (vri is not null)
+        {
+            allCrls.AddRange(vri.Crls);
+        }
 
         List<OcspResponse> allOcsp = new();
         if (opts.AutoExtractCadesValues)
@@ -370,10 +388,51 @@ public static class PdfSignatureVerifier
         {
             allOcsp.AddRange(dss.OcspResponses);
         }
+        if (vri is not null)
+        {
+            allOcsp.AddRange(vri.OcspResponses);
+        }
         if (opts.ExtraOcspResponses is not null)
         {
             allOcsp.AddRange(opts.ExtraOcspResponses);
         }
+
+        // ── TSA chain validation ────────────────────────────────────────
+        // If the caller supplied a TSA trust store and we verified a timestamp,
+        // path-validate the TSA's cert at the timestamp's genTime using all the
+        // revocation material we've gathered. The TSA-side intermediates are
+        // the certs embedded in the TST itself plus anything in the DSS / VRI /
+        // caller's ExtraIntermediates. We do NOT mix TSA validation into the
+        // signer's path — they are independent trust regimes.
+        bool tsTrustValidated = false;
+        CertificatePath? tsPath = null;
+        if (opts.TsaTrustStore is not null && tsValidated && tsCert is not null && signatureTst is not null)
+        {
+            List<X509Certificate> tsaIntermediates = new();
+            foreach (X509Certificate c in signatureTst.SignedData.Certificates)
+            {
+                // Skip the TSA's leaf cert itself; it's the subject, not an intermediate.
+                if (CertsEqual(c, tsCert)) { continue; }
+                tsaIntermediates.Add(c);
+            }
+            if (dss is not null) { tsaIntermediates.AddRange(dss.Certificates); }
+            if (vri is not null) { tsaIntermediates.AddRange(vri.Certificates); }
+            if (opts.ExtraIntermediates is not null) { tsaIntermediates.AddRange(opts.ExtraIntermediates); }
+
+            IReadOnlyList<CertificatePath> tsaPaths = CertificatePathBuilder.BuildPaths(
+                tsCert, tsaIntermediates, opts.TsaTrustStore);
+            if (tsaPaths.Count > 0)
+            {
+                CertificatePathValidationResult tsaResult = CertificatePathValidator.Validate(
+                    tsaPaths, tsTime ?? DateTimeOffset.UtcNow, allCrls, allOcsp);
+                if (tsaResult.IsValid)
+                {
+                    tsTrustValidated = true;
+                    tsPath = tsaResult.ValidatedPath;
+                }
+            }
+        }
+        // ────────────────────────────────────────────────────────────────
 
         CertificatePathValidationResult pathResult =
             CertificatePathValidator.Validate(paths, validationTime, allCrls, allOcsp);
@@ -389,7 +448,9 @@ public static class PdfSignatureVerifier
                 validatedPath: pathResult.ValidatedPath,
                 timestampValidated: tsValidated,
                 signatureTimestamp: tsTime,
-                timestampCertificate: tsCert);
+                timestampCertificate: tsCert,
+                timestampTrustValidated: tsTrustValidated,
+                timestampValidatedPath: tsPath);
         }
 
         SignatureVerificationStatus status = pathResult.Status switch
@@ -409,7 +470,9 @@ public static class PdfSignatureVerifier
             validatedPath: null,
             timestampValidated: tsValidated,
             signatureTimestamp: tsTime,
-            timestampCertificate: tsCert);
+            timestampCertificate: tsCert,
+            timestampTrustValidated: tsTrustValidated,
+            timestampValidatedPath: tsPath);
     }
 
     /// <summary>
@@ -464,6 +527,16 @@ public static class PdfSignatureVerifier
         throw new NotSupportedException(
             $"Public-key algorithm {alg} in signer certificate is not supported. " +
             "Chuvadi supports RSA (rsaEncryption) and ECDSA (id-ecPublicKey).");
+    }
+
+    private static bool CertsEqual(X509Certificate a, X509Certificate b)
+    {
+        if (a.RawEncoding.Length != b.RawEncoding.Length) { return false; }
+        for (int i = 0; i < a.RawEncoding.Length; i++)
+        {
+            if (a.RawEncoding[i] != b.RawEncoding[i]) { return false; }
+        }
+        return true;
     }
 
     private static bool ConstantTimeEquals(byte[] a, byte[] b)

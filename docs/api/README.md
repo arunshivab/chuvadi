@@ -113,6 +113,7 @@ python tools/gen_api_docs.py
 | [RevokedCertificate](Cryptography/RevokedCertificate.md) | class | One revocation entry from a CRL. |
 | [RsaPublicKey](Cryptography/RsaPublicKey.md) | class | An RSA public key — modulus n and public exponent e. |
 | [RsaVerifier](Cryptography/RsaVerifier.md) | class | Verifies RSA signatures in PKCS#1 v1.5 (RSASSA-PKCS1-v1_5) and PSS (RSASSA-PSS) formats per RFC 8017. |
+| [Sha1](Cryptography/Sha1.md) | class | SHA-1 used only for lookup-key purposes mandated by external specs: RFC 6960 §4.1.1 (OCSP CertID IssuerNameHash / IssuerKeyHash) and ISO 32000-2 §12.8.4.3 (PDF DSS VRI keys). |
 | [Sha256](Cryptography/Sha256.md) | class | SHA-256 hash function per FIPS 180-4 §6.2. |
 | [Sha512](Cryptography/Sha512.md) | class | SHA-512 and SHA-384 hash functions per FIPS 180-4 §6.4 and §6.5. |
 | [SignatureVerifier](Cryptography/SignatureVerifier.md) | class | Top-level signature-verification dispatcher. |
@@ -330,6 +331,7 @@ python tools/gen_api_docs.py
 | [SignatureVerificationResult](Signatures/SignatureVerificationResult.md) | class | The result of verifying a PDF digital signature. |
 | [SignatureVerificationStatus](Signatures/SignatureVerificationStatus.md) | enum | The overall outcome of verifying a PDF signature. |
 | [SignatureVerifyOptions](Signatures/SignatureVerifyOptions.md) | class | Options controlling signature verification. |
+| [VriEntry](Signatures/VriEntry.md) | class | Per-signature validation material from the `/DSS /VRI` sub-dictionary. |
 
 ## Chuvadi.Pdf.Text
 
