@@ -288,6 +288,7 @@ python tools/gen_api_docs.py
 | [PdfInteger](Primitives/PdfInteger.md) | class | Represents a PDF integer object. |
 | [PdfName](Primitives/PdfName.md) | class | Represents a PDF name object (e.g. `/Type`, `/Page`). |
 | [PdfNull](Primitives/PdfNull.md) | class | Represents the PDF null object. |
+| [PdfPaddedInteger](Primitives/PdfPaddedInteger.md) | class | A PDF integer that serialises to exactly `PaddedWidth` ASCII characters, left-padded with leading zeros. |
 | [PdfPrimitive](Primitives/PdfPrimitive.md) | class | Abstract base class for all PDF primitive object types. |
 | [PdfPrimitiveType](Primitives/PdfPrimitiveType.md) | enum | Identifies the concrete type of a `PdfPrimitive`. |
 | [PdfReal](Primitives/PdfReal.md) | class | Represents a PDF real (floating-point) object. |
@@ -331,6 +332,8 @@ python tools/gen_api_docs.py
 | [PdfSignature](Signatures/PdfSignature.md) | class | One digital signature found in a PDF document. |
 | [PdfSignatureVerifier](Signatures/PdfSignatureVerifier.md) | class | Orchestrates verification of a single `PdfSignature`. |
 | [PdfSignatureVerifyExtensions](Signatures/PdfSignatureVerifyExtensions.md) | class | The user-visible `Verify()` entry point on `PdfSignature`. |
+| [PdfSigner](Signatures/PdfSigner.md) | class | Adds a CMS signature to a PDF document and returns the signed bytes. |
+| [PdfSigningOptions](Signatures/PdfSigningOptions.md) | class | Options for `PdfSigner.Sign`. |
 | [SignatureReader](Signatures/SignatureReader.md) | class | Reads digital-signature fields out of a PDF document's AcroForm tree. |
 | [SignatureSubFilter](Signatures/SignatureSubFilter.md) | class | Constants and helpers for the /SubFilter entry of a PDF signature dictionary. |
 | [SignatureVerificationResult](Signatures/SignatureVerificationResult.md) | class | The result of verifying a PDF digital signature. |

@@ -227,6 +227,13 @@ public static class PdfWriter
                 WriteAscii(output, b.Value ? "true" : "false");
                 break;
 
+            case PdfPaddedInteger pi:
+                // Width-preserving padded form, used by signature emitters that
+                // need fixed-width /ByteRange slots so subsequent byte positions
+                // don't shift when the placeholder is patched.
+                WriteAscii(output, pi.ToString());
+                break;
+
             case PdfInteger i:
                 WriteAscii(output, i.Value.ToString(CultureInfo.InvariantCulture));
                 break;
