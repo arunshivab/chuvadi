@@ -4,6 +4,8 @@
 // PHASE: Phase 1.2.3 — TSA fetching
 
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -29,7 +31,7 @@ namespace Chuvadi.Cryptography.Timestamps;
 /// timeouts, proxies, authentication, and so on.
 /// </para>
 /// </remarks>
-public sealed class HttpTsaClient : ITsaClient
+public sealed class HttpTsaClient : ITsaClient, IAsyncTsaClient
 {
     private static readonly MediaTypeHeaderValue QueryContentType =
         new("application/timestamp-query");
@@ -80,6 +82,31 @@ public sealed class HttpTsaClient : ITsaClient
         using MemoryStream ms = new();
         s.CopyTo(ms);
         return TimeStampResponse.Decode(ms.ToArray());
+    }
+
+    /// <inheritdoc />
+    public async Task<TimeStampResponse> FetchAsync(
+        TimeStampRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        byte[] body = request.Encode();
+        using HttpRequestMessage httpReq = new(HttpMethod.Post, _tsaUri);
+        ByteArrayContent content = new(body);
+        content.Headers.ContentType = QueryContentType;
+        httpReq.Content = content;
+
+        using HttpResponseMessage httpResp = await _httpClient.SendAsync(httpReq, cancellationToken)
+            .ConfigureAwait(false);
+        if (!httpResp.IsSuccessStatusCode)
+        {
+            throw new TsaException(
+                $"TSA returned HTTP {(int)httpResp.StatusCode} ({httpResp.ReasonPhrase}).");
+        }
+
+        byte[] respBytes = await httpResp.Content.ReadAsByteArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return TimeStampResponse.Decode(respBytes);
     }
 }
 

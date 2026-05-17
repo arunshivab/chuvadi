@@ -55,13 +55,15 @@ public static class CmsSignedDataBuilder
     /// <param name="signingTime">Optional signing time; included as a signed attribute when set.</param>
     /// <param name="extraCertificates">Additional certs to embed in the SignedData (typically the signer's CA chain). The signer's own cert is always included.</param>
     /// <param name="unsignedAttributes">Optional pre-encoded SEQUENCE-DER unsigned attributes (RFC 5652 §5.3); each entry is a complete <c>SEQUENCE { attrType OID, attrValues SET OF AttributeValue }</c>. Use <see cref="BuildSignatureTimeStampAttribute"/> for the RFC 3161 signature timestamp attribute.</param>
+    /// <param name="extraSignedAttributes">Optional pre-encoded signed attributes to add to the SignedAttributes set (in addition to the canonical content-type / message-digest / signing-time entries). Used to opt into CAdES profiles via <see cref="BuildSigningCertificateV2Attribute"/>.</param>
     /// <returns>DER bytes of the CMS ContentInfo wrapping the SignedData. These bytes are what goes into a PDF signature dictionary's <c>/Contents</c>.</returns>
     public static byte[] BuildDetached(
         byte[] dataToSign,
         ISigner signer,
         DateTimeOffset? signingTime = null,
         IEnumerable<X509Certificate>? extraCertificates = null,
-        IReadOnlyList<byte[]>? unsignedAttributes = null)
+        IReadOnlyList<byte[]>? unsignedAttributes = null,
+        IReadOnlyList<byte[]>? extraSignedAttributes = null)
     {
         ArgumentNullException.ThrowIfNull(dataToSign);
         ArgumentNullException.ThrowIfNull(signer);
@@ -84,6 +86,10 @@ public static class CmsSignedDataBuilder
         if (signingTime is DateTimeOffset st)
         {
             attrs.Add(BuildSigningTimeAttribute(st));
+        }
+        if (extraSignedAttributes is not null)
+        {
+            foreach (byte[] a in extraSignedAttributes) { attrs.Add(a); }
         }
         attrs.Sort(CompareDerBytes);
 
@@ -269,6 +275,56 @@ public static class CmsSignedDataBuilder
     }
 
     /// <summary>
+    /// Async variant of <see cref="BuildDetachedWithTimestamp"/>: uses an
+    /// <see cref="Chuvadi.Cryptography.Timestamps.IAsyncTsaClient"/> so the
+    /// TSA fetch does not block.
+    /// </summary>
+    public static async System.Threading.Tasks.Task<byte[]> BuildDetachedWithTimestampAsync(
+        byte[] dataToSign,
+        ISigner signer,
+        Chuvadi.Cryptography.Timestamps.IAsyncTsaClient tsaClient,
+        DateTimeOffset? signingTime = null,
+        IEnumerable<X509Certificate>? extraCertificates = null,
+        IReadOnlyList<byte[]>? additionalUnsignedAttributes = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataToSign);
+        ArgumentNullException.ThrowIfNull(signer);
+        ArgumentNullException.ThrowIfNull(tsaClient);
+
+        byte[] firstCms = BuildDetached(dataToSign, signer, signingTime, extraCertificates);
+        SignedData firstSd = CmsDecoder.DecodeSignedData(firstCms);
+        if (firstSd.SignerInfos.Count != 1)
+        {
+            throw new InvalidOperationException(
+                "Expected exactly one SignerInfo in the freshly-built CMS.");
+        }
+        byte[] sigToStamp = firstSd.SignerInfos[0].Signature;
+
+        Chuvadi.Cryptography.Timestamps.TimeStampRequest req =
+            Chuvadi.Cryptography.Timestamps.TimeStampRequest.ForData(
+                sigToStamp, signer.HashAlgorithm, certReq: true);
+        Chuvadi.Cryptography.Timestamps.TimeStampResponse resp =
+            await tsaClient.FetchAsync(req, cancellationToken).ConfigureAwait(false);
+        if (!resp.IsGranted || resp.TimeStampToken is null)
+        {
+            string detail = resp.StatusStrings.Count > 0
+                ? string.Join("; ", resp.StatusStrings)
+                : "no status string supplied";
+            throw new Chuvadi.Cryptography.Timestamps.TsaException(
+                $"TSA refused to grant a timestamp (status {resp.Status}: {detail}).");
+        }
+
+        byte[] tstAttribute = BuildSignatureTimeStampAttribute(resp.TimeStampToken.RawEncoding);
+        List<byte[]> ua = new() { tstAttribute };
+        if (additionalUnsignedAttributes is not null)
+        {
+            ua.AddRange(additionalUnsignedAttributes);
+        }
+        return InsertUnsignedAttributes(firstCms, ua);
+    }
+
+    /// <summary>
     /// Surgically inserts a SET of unsigned attributes into the single
     /// SignerInfo of a CMS SignedData, without re-signing. Used by
     /// <see cref="BuildDetachedWithTimestamp"/>.
@@ -436,6 +492,77 @@ public static class CmsSignedDataBuilder
         w.PopSequence();
         return w.ToArray();
     }
+
+    /// <summary>
+    /// Builds the <c>id-aa-signingCertificateV2</c> signed attribute (RFC 5035)
+    /// for the supplied certificate, hashed with <paramref name="hashAlgorithm"/>.
+    /// Pass the result via <c>extraSignedAttributes</c> on
+    /// <see cref="BuildDetached"/> to opt into the CAdES-BES profile.
+    /// </summary>
+    /// <remarks>
+    /// The attribute binds the signer's certificate identity into the signed
+    /// data so substitution attacks against the SignerInfo's
+    /// IssuerAndSerialNumber become detectable.
+    /// </remarks>
+    /// <param name="certificate">The signer's certificate.</param>
+    /// <param name="hashAlgorithm">Hash algorithm used to compute the certificate digest. SHA-256 is the spec default; other values are emitted explicitly.</param>
+    public static byte[] BuildSigningCertificateV2Attribute(
+        X509Certificate certificate,
+        Chuvadi.Cryptography.Hashing.HashAlgorithmName hashAlgorithm)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        // ESSCertIDv2 ::= SEQUENCE {
+        //   hashAlgorithm  AlgorithmIdentifier DEFAULT { id-sha256 },
+        //   certHash       OCTET STRING,
+        //   issuerSerial   IssuerSerial OPTIONAL
+        // }
+        Chuvadi.Cryptography.Hashing.IHashAlgorithm hasher
+            = Chuvadi.Cryptography.Hashing.HashFactory.Create(hashAlgorithm);
+        hasher.Update(certificate.RawEncoding);
+        byte[] certHash = new byte[hasher.DigestSize];
+        hasher.Finish(certHash);
+
+        Asn1Writer w = new();
+        w.PushSequence();
+        w.WriteObjectIdentifier(KnownOids.SigningCertificateV2);
+        w.PushSet();
+        {
+            // SigningCertificateV2 ::= SEQUENCE { certs SEQUENCE OF ESSCertIDv2 }
+            w.PushSequence();
+            w.PushSequence();
+            {
+                // ESSCertIDv2
+                w.PushSequence();
+                {
+                    // hashAlgorithm — emit only if non-default (DEFAULT is SHA-256).
+                    if (hashAlgorithm != Chuvadi.Cryptography.Hashing.HashAlgorithmName.Sha256)
+                    {
+                        w.PushSequence();
+                        w.WriteObjectIdentifier(HashOidFor(hashAlgorithm));
+                        w.WriteNull();
+                        w.PopSequence();
+                    }
+                    w.WriteOctetString(certHash);
+                }
+                w.PopSequence();
+            }
+            w.PopSequence();
+            w.PopSequence();
+        }
+        w.PopSet();
+        w.PopSequence();
+        return w.ToArray();
+    }
+
+    private static ObjectIdentifier HashOidFor(Chuvadi.Cryptography.Hashing.HashAlgorithmName h) => h switch
+    {
+        Chuvadi.Cryptography.Hashing.HashAlgorithmName.Sha256 => KnownOids.Sha256,
+        Chuvadi.Cryptography.Hashing.HashAlgorithmName.Sha384 => KnownOids.Sha384,
+        Chuvadi.Cryptography.Hashing.HashAlgorithmName.Sha512 => KnownOids.Sha512,
+        _ => throw new ArgumentOutOfRangeException(nameof(h), h, "Unsupported hash for signingCertificateV2."),
+    };
+
 
     private static void WriteIssuerAndSerialNumber(Asn1Writer w, X509Certificate cert)
     {

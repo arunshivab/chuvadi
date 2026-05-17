@@ -41,14 +41,33 @@ public sealed class EcdsaCmsSigner : ISigner
         EcdsaPrivateKey privateKey,
         X509Certificate certificate,
         HashAlgorithmName hashAlgorithm)
+        : this(privateKey, certificate, hashAlgorithm, deterministic: false)
+    {
+    }
+
+    /// <summary>
+    /// Same as the three-argument constructor but lets the caller opt into
+    /// RFC 6979 deterministic nonces. When <paramref name="deterministic"/>
+    /// is true, signatures are bit-for-bit reproducible from the same
+    /// inputs and immune to RNG failures.
+    /// </summary>
+    public EcdsaCmsSigner(
+        EcdsaPrivateKey privateKey,
+        X509Certificate certificate,
+        HashAlgorithmName hashAlgorithm,
+        bool deterministic)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(certificate);
         _privateKey = privateKey;
         Certificate = certificate;
         HashAlgorithm = hashAlgorithm;
+        Deterministic = deterministic;
         SignatureAlgorithm = new AlgorithmIdentifier(SignatureOidFor(hashAlgorithm), null);
     }
+
+    /// <summary>True when nonces are derived per RFC 6979.</summary>
+    public bool Deterministic { get; }
 
     /// <inheritdoc />
     public X509Certificate Certificate { get; }
@@ -63,6 +82,15 @@ public sealed class EcdsaCmsSigner : ISigner
     public byte[] Sign(byte[] dataToSign)
     {
         ArgumentNullException.ThrowIfNull(dataToSign);
+        if (Deterministic)
+        {
+            // Hash explicitly then call the deterministic primitive.
+            IHashAlgorithm h = HashFactory.Create(HashAlgorithm);
+            h.Update(dataToSign);
+            byte[] digest = new byte[h.DigestSize];
+            h.Finish(digest);
+            return EcdsaPrimitive.SignDeterministic(_privateKey, digest, HashAlgorithm);
+        }
         return EcdsaPrimitive.Sign(_privateKey, HashAlgorithm, dataToSign, hashIsAlreadyDigest: false);
     }
 

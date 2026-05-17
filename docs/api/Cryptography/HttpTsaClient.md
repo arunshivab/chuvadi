@@ -5,7 +5,7 @@
 An `ITsaClient` that POSTs RFC 3161 requests over HTTP(S) using `HttpClient`.
 
 ```csharp
-public sealed class HttpTsaClient : ITsaClient
+public sealed class HttpTsaClient : ITsaClient, IAsyncTsaClient
 ```
 
 ## Remarks
