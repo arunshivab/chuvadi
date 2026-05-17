@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using Chuvadi.Cryptography.PathValidation;
+using Chuvadi.Cryptography.Ocsp;
 using Chuvadi.Cryptography.Revocation;
 using Chuvadi.Cryptography.X509;
 
@@ -52,4 +53,11 @@ public sealed class SignatureVerifyOptions
     /// embedded CRLs and rely only on <see cref="ExtraCrls"/>.
     /// </summary>
     public bool AutoExtractCmsCrls { get; init; } = true;
+
+    /// <summary>
+    /// OCSP responses to consult during revocation checking. CMS does not
+    /// embed OCSP responses directly; supply locally-cached or out-of-band
+    /// responses here.
+    /// </summary>
+    public IReadOnlyList<OcspResponse>? ExtraOcspResponses { get; init; }
 }

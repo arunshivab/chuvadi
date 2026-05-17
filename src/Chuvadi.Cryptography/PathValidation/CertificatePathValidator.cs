@@ -29,6 +29,7 @@ using Chuvadi.Cryptography.Asn1;
 using Chuvadi.Cryptography.Hashing;
 using Chuvadi.Cryptography.Oids;
 using Chuvadi.Cryptography.PublicKey;
+using Chuvadi.Cryptography.Ocsp;
 using Chuvadi.Cryptography.Revocation;
 using Chuvadi.Cryptography.X509;
 
@@ -77,6 +78,21 @@ public static class CertificatePathValidator
         IReadOnlyList<CertificatePath> paths,
         DateTimeOffset validationTime,
         IReadOnlyList<CertificateList>? crls)
+        => Validate(paths, validationTime, crls, ocspResponses: null);
+
+    /// <summary>
+    /// Validates each candidate path against the trust store and the supplied
+    /// CRLs and OCSP responses, returning the first one that passes.
+    /// </summary>
+    /// <param name="paths">Candidate paths.</param>
+    /// <param name="validationTime">The instant at which to check validity periods.</param>
+    /// <param name="crls">CRLs to consult, or null.</param>
+    /// <param name="ocspResponses">OCSP responses to consult, or null.</param>
+    public static CertificatePathValidationResult Validate(
+        IReadOnlyList<CertificatePath> paths,
+        DateTimeOffset validationTime,
+        IReadOnlyList<CertificateList>? crls,
+        IReadOnlyList<OcspResponse>? ocspResponses)
     {
         ArgumentNullException.ThrowIfNull(paths);
         if (paths.Count == 0)
@@ -90,7 +106,7 @@ public static class CertificatePathValidator
         CertificatePathValidationResult? lastFailure = null;
         foreach (CertificatePath path in paths)
         {
-            CertificatePathValidationResult result = ValidatePath(path, validationTime, crls);
+            CertificatePathValidationResult result = ValidatePath(path, validationTime, crls, ocspResponses);
             if (result.IsValid) { return result; }
             lastFailure = result;
         }
@@ -108,6 +124,14 @@ public static class CertificatePathValidator
         CertificatePath path,
         DateTimeOffset validationTime,
         IReadOnlyList<CertificateList>? crls)
+        => ValidatePath(path, validationTime, crls, ocspResponses: null);
+
+    /// <summary>Validates a single path with optional CRL and OCSP revocation checking.</summary>
+    public static CertificatePathValidationResult ValidatePath(
+        CertificatePath path,
+        DateTimeOffset validationTime,
+        IReadOnlyList<CertificateList>? crls,
+        IReadOnlyList<OcspResponse>? ocspResponses)
     {
         ArgumentNullException.ThrowIfNull(path);
 
@@ -147,12 +171,30 @@ public static class CertificatePathValidator
                     $"Issuer DN of '{cert.Subject}' does not match expected '{currentIssuerName}'.");
             }
 
-            // 6.3 — revocation check against any supplied CRL whose issuer matches.
+            // 6.3 — revocation check: try CRLs first, then OCSP. Both are opportunistic
+            // (soft-fail) — a cert without applicable revocation info is accepted.
             if (crls is not null && crls.Count > 0)
             {
                 CertificatePathValidationResult? revFail =
                     CheckRevocation(cert, currentIssuerName, currentIssuerSpki, crls, validationTime);
                 if (revFail is not null) { return revFail; }
+            }
+            if (ocspResponses is not null && ocspResponses.Count > 0)
+            {
+                // The OCSP responder must be the cert's issuer or a delegated responder.
+                // We need the issuer's full certificate to verify response signatures.
+                // The issuer is the next cert "above" in the path, or the trust anchor's
+                // certificate. The validator already advances currentIssuerSpki down the
+                // chain, so we need to remember the issuer cert too.
+                X509Certificate? issuerCert = (i == path.Certificates.Count - 1)
+                    ? path.Anchor.Certificate
+                    : path.Certificates[i + 1];
+                if (issuerCert is not null)
+                {
+                    CertificatePathValidationResult? ocspFail = CheckOcspRevocation(
+                        cert, issuerCert, ocspResponses, validationTime);
+                    if (ocspFail is not null) { return ocspFail; }
+                }
             }
 
             // 6.1.4(n) — unrecognised critical extensions reject
@@ -391,6 +433,99 @@ public static class CertificatePathValidator
                 $"Certificate '{cert.Subject}' was revoked at {entry.RevocationDate:u} (reason: {entry.Reason}).");
         }
         return null;
+    }
+
+    private static CertificatePathValidationResult? CheckOcspRevocation(
+        X509Certificate cert,
+        X509Certificate issuerCert,
+        IReadOnlyList<OcspResponse> ocspResponses,
+        DateTimeOffset validationTime)
+    {
+        foreach (OcspResponse resp in ocspResponses)
+        {
+            if (resp.Status != OcspResponseStatus.Successful || resp.BasicResponse is null) { continue; }
+            BasicOcspResponse basic = resp.BasicResponse;
+
+            // Verify response signature; on failure, skip this response.
+            X509Certificate? responderCert =
+                OcspResponseSignatureVerifier.VerifyAndIdentifyResponder(basic, issuerCert);
+            if (responderCert is null) { continue; }
+
+            foreach (SingleResponse sr in basic.Responses)
+            {
+                if (!CertIdMatches(sr.CertId, cert, issuerCert)) { continue; }
+
+                // SingleResponse must be in force at the validation time.
+                if (validationTime < sr.ThisUpdate) { continue; }
+                if (sr.NextUpdate is DateTimeOffset next && validationTime > next) { continue; }
+
+                if (sr.Status.IsRevoked)
+                {
+                    DateTimeOffset? revoked = sr.Status.RevocationTime;
+                    // Honour retroactive semantics: a revocation dated AFTER the validation
+                    // time doesn't apply.
+                    if (revoked is DateTimeOffset r && r > validationTime) { continue; }
+
+                    return Fail(CertificatePathValidationStatus.CertificateRevoked,
+                        $"Certificate '{cert.Subject}' was revoked per OCSP at {revoked:u} (reason: {sr.Status.RevocationReason}).");
+                }
+                // Good or Unknown: nothing to report (soft-fail for Unknown).
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static bool CertIdMatches(CertId certId, X509Certificate cert, X509Certificate issuer)
+    {
+        if (certId.SerialNumber != cert.Tbs.SerialNumber) { return false; }
+
+        // Reconstruct the hashes using the certID's hash algorithm and compare.
+        HashAlgorithmName? hash = HashFromOid(certId.HashAlgorithm.Algorithm);
+        if (hash is null)
+        {
+            // SHA-1 is mandated by RFC 6960 but Chuvadi's HashFactory refuses it.
+            // For matching purposes we compute SHA-1 inline if needed.
+            if (certId.HashAlgorithm.Algorithm.Equals(KnownOids.Sha1))
+            {
+                byte[] nameHash = Sha1.Compute(issuer.Subject.RawEncoding);
+                byte[] keyHash = Sha1.Compute(issuer.Tbs.SubjectPublicKeyInfo.SubjectPublicKey.Bytes);
+                return ByteArraysEqual(nameHash, certId.IssuerNameHash)
+                    && ByteArraysEqual(keyHash, certId.IssuerKeyHash);
+            }
+            return false;
+        }
+
+        IHashAlgorithm h1 = HashFactory.Create(hash.Value);
+        h1.Update(issuer.Subject.RawEncoding);
+        byte[] computedNameHash = new byte[h1.DigestSize];
+        h1.Finish(computedNameHash);
+
+        IHashAlgorithm h2 = HashFactory.Create(hash.Value);
+        h2.Update(issuer.Tbs.SubjectPublicKeyInfo.SubjectPublicKey.Bytes);
+        byte[] computedKeyHash = new byte[h2.DigestSize];
+        h2.Finish(computedKeyHash);
+
+        return ByteArraysEqual(computedNameHash, certId.IssuerNameHash)
+            && ByteArraysEqual(computedKeyHash, certId.IssuerKeyHash);
+    }
+
+    private static HashAlgorithmName? HashFromOid(ObjectIdentifier oid)
+    {
+        if (oid.Equals(KnownOids.Sha256)) { return HashAlgorithmName.Sha256; }
+        if (oid.Equals(KnownOids.Sha384)) { return HashAlgorithmName.Sha384; }
+        if (oid.Equals(KnownOids.Sha512)) { return HashAlgorithmName.Sha512; }
+        return null;
+    }
+
+    private static bool ByteArraysEqual(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) { return false; }
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i]) { return false; }
+        }
+        return true;
     }
 
     private static CertificatePathValidationResult Fail(
