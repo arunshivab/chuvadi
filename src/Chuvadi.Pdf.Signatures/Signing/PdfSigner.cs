@@ -216,8 +216,11 @@ public static class PdfSigner
         Buffer.BlockCopy(pdfBytes, 0, toSign, 0, firstLen);
         Buffer.BlockCopy(pdfBytes, secondStart, toSign, firstLen, secondLen);
 
-        byte[] cms = CmsSignedDataBuilder.BuildDetached(
-            toSign, signer, signingTime, options.ExtraCertificates);
+        byte[] cms = options.TsaClient is null
+            ? CmsSignedDataBuilder.BuildDetached(
+                toSign, signer, signingTime, options.ExtraCertificates)
+            : CmsSignedDataBuilder.BuildDetachedWithTimestamp(
+                toSign, signer, options.TsaClient, signingTime, options.ExtraCertificates);
         if (cms.Length > options.ContentsPlaceholderSize)
         {
             throw new InvalidOperationException(
