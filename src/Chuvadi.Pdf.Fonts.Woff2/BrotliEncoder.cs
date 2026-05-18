@@ -49,6 +49,11 @@ public static class BrotliEncoder
             return output.ToArray();
         }
 
+        // Try the compressed path. To decide whether to use it, encode BOTH the compressed
+        // and the stored variant speculatively and pick whichever is smaller. This avoids
+        // size regressions vs stage 1 when compressed overhead exceeds savings.
+        byte[]? compressed = TryCompressed(data);
+
         int offset = 0;
         while (offset < data.Length)
         {
@@ -59,7 +64,19 @@ public static class BrotliEncoder
 
         WriteTrailingEmpty(bw);
         bw.Flush();
-        return output.ToArray();
+        byte[] stored = output.ToArray();
+
+        return compressed is not null && compressed.Length < stored.Length ? compressed : stored;
+    }
+
+    private static byte[]? TryCompressed(byte[] data)
+    {
+        using MemoryStream scratch = new();
+        BrotliBitWriter bw = new(scratch);
+        WriteStreamHeader(bw);
+        if (!BrotliCompressedEmitter.TryEmit(bw, data, isLast: true)) { return null; }
+        bw.Flush();
+        return scratch.ToArray();
     }
 
     private static void WriteStreamHeader(BrotliBitWriter bw)
