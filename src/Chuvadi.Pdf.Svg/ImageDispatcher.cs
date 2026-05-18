@@ -32,8 +32,7 @@ internal static class ImageDispatcher
         {
             return;
         }
-        PdfStream? imgStream = doc.Objects.Resolve(imgRef) as PdfStream;
-        if (imgStream is null) { return; }
+        if (doc.Objects.Resolve(imgRef) is not PdfStream imgStream) { return; }
 
         if (!imgStream.Dictionary.TryGetValue(PdfName.Intern("Subtype"), out PdfPrimitive? subtype)
             || subtype is not PdfName subtypeName)
