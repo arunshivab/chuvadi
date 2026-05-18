@@ -20,9 +20,9 @@ if (args.Length < 3)
     return 1;
 }
 
-string inputPath  = args[0];
+string inputPath = args[0];
 string outputPath = args[1];
-string secret     = args[2];
+string secret = args[2];
 
 using FileStream input = File.OpenRead(inputPath);
 using PdfDocument document = PdfDocument.Open(input, leaveOpen: false);

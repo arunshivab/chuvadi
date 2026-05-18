@@ -278,7 +278,7 @@ public static class PdfSignatureVerifier
             }
         }
         // ────────────────────────────────────────────────────────────────
-        
+
         // Choose validation time. Prefer signer's CMS signingTime attribute (more
         // trustworthy than the /M field in the PDF dict, but still untimestamped).
         // Fall back to the /M field, and finally to UtcNow.
@@ -625,7 +625,8 @@ public static class PdfSignatureVerifier
                             byte[] crlBytes = crlSeq.ReadEncoded();
                             try { crls.Add(CertificateList.Decode(crlBytes)); }
                             catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
-                                                          or NotSupportedException) { /* skip */ }
+                                                          or NotSupportedException)
+                            { /* skip */ }
                         }
                     }
                     else if (peek == Chuvadi.Cryptography.Asn1.Asn1Tag.ContextSpecific(1, isConstructed: true))

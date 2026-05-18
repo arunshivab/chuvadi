@@ -414,15 +414,15 @@ public static class AnnotationWriter
 
     private static string SubtypeName(AnnotationType t) => t switch
     {
-        AnnotationType.Text      => "Text",
-        AnnotationType.Link      => "Link",
-        AnnotationType.FreeText  => "FreeText",
+        AnnotationType.Text => "Text",
+        AnnotationType.Link => "Link",
+        AnnotationType.FreeText => "FreeText",
         AnnotationType.Highlight => "Highlight",
         AnnotationType.Underline => "Underline",
-        AnnotationType.Squiggly  => "Squiggly",
+        AnnotationType.Squiggly => "Squiggly",
         AnnotationType.StrikeOut => "StrikeOut",
-        AnnotationType.Stamp     => "Stamp",
-        AnnotationType.Ink       => "Ink",
+        AnnotationType.Stamp => "Stamp",
+        AnnotationType.Ink => "Ink",
         _ => throw new AnnotationException($"Cannot write Unknown annotation type."),
     };
 }

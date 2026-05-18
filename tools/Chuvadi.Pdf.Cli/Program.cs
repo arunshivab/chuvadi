@@ -122,22 +122,22 @@ public static class CommandRegistry
     {
         return verb switch
         {
-            "info"           => new Commands.InfoCommand(),
-            "render"         => new Commands.RenderCommand(),
-            "watermark"      => new Commands.WatermarkCommand(),
-            "redact"         => new Commands.RedactCommand(),
-            "form-fill"      => new Commands.FormFillCommand(),
-            "extract-text"   => new Commands.ExtractTextCommand(),
-            "outlines"       => new Commands.OutlinesCommand(),
-            "merge"          => new Commands.MergeCommand(),
-            "split"          => new Commands.SplitCommand(),
-            "delete"         => new Commands.DeleteCommand(),
-            "rotate"         => new Commands.RotateCommand(),
-            "tokenize"       => new Commands.TokenizeCommand(),
-            "dump-objects"   => new Commands.DumpObjectsCommand(),
-            "parse-content"  => new Commands.ParseContentCommand(),
-            "decode-stream"  => new Commands.DecodeStreamCommand(),
-            "inspect-xref"   => new Commands.InspectXrefCommand(),
+            "info" => new Commands.InfoCommand(),
+            "render" => new Commands.RenderCommand(),
+            "watermark" => new Commands.WatermarkCommand(),
+            "redact" => new Commands.RedactCommand(),
+            "form-fill" => new Commands.FormFillCommand(),
+            "extract-text" => new Commands.ExtractTextCommand(),
+            "outlines" => new Commands.OutlinesCommand(),
+            "merge" => new Commands.MergeCommand(),
+            "split" => new Commands.SplitCommand(),
+            "delete" => new Commands.DeleteCommand(),
+            "rotate" => new Commands.RotateCommand(),
+            "tokenize" => new Commands.TokenizeCommand(),
+            "dump-objects" => new Commands.DumpObjectsCommand(),
+            "parse-content" => new Commands.ParseContentCommand(),
+            "decode-stream" => new Commands.DecodeStreamCommand(),
+            "inspect-xref" => new Commands.InspectXrefCommand(),
             "validate-fonts" => new Commands.ValidateFontsCommand(),
             _ => null,
         };
@@ -182,7 +182,7 @@ public static class ArgParser
 
                 if (eq > 0)
                 {
-                    key   = a.Substring(2, eq - 2);
+                    key = a.Substring(2, eq - 2);
                     value = a.Substring(eq + 1);
                 }
                 else
@@ -236,8 +236,8 @@ public sealed class ParsedArgs
         IReadOnlySet<string> flags)
     {
         Positional = positional;
-        Options    = options;
-        Flags      = flags;
+        Options = options;
+        Flags = flags;
     }
 
     /// <summary>Positional (non-option) arguments in order.</summary>

@@ -61,7 +61,7 @@ public sealed class RenderOptions
             throw new ArgumentOutOfRangeException(nameof(pageHeightPt), "Page height must be positive.");
         }
 
-        int w = Math.Max(1, (int)Math.Round(pageWidthPt  * Dpi / 72.0));
+        int w = Math.Max(1, (int)Math.Round(pageWidthPt * Dpi / 72.0));
         int h = Math.Max(1, (int)Math.Round(pageHeightPt * Dpi / 72.0));
         return (w, h);
     }

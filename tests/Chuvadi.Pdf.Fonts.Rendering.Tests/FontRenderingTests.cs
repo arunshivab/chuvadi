@@ -299,14 +299,14 @@ public sealed class TrueTypeLoaderTests
         {
             int pos = dirStart + i * 16;
             byte[] tagBytes = System.Text.Encoding.ASCII.GetBytes(tags[i]);
-            data[pos]     = tagBytes[0];
+            data[pos] = tagBytes[0];
             data[pos + 1] = tagBytes[1];
             data[pos + 2] = tagBytes[2];
             data[pos + 3] = tagBytes[3];
             // checkSum = 0 (not validated)
             byte[] off = U32((uint)offsets[i]);
             byte[] len = U32((uint)lengths[i]);
-            data[pos + 8]  = off[0]; data[pos + 9]  = off[1];
+            data[pos + 8] = off[0]; data[pos + 9] = off[1];
             data[pos + 10] = off[2]; data[pos + 11] = off[3];
             data[pos + 12] = len[0]; data[pos + 13] = len[1];
             data[pos + 14] = len[2]; data[pos + 15] = len[3];

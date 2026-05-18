@@ -198,11 +198,11 @@ public static class FormReader
 
         return ftName.Value switch
         {
-            "Tx"  => FormFieldType.Text,
+            "Tx" => FormFieldType.Text,
             "Btn" => FormFieldType.Button,
-            "Ch"  => FormFieldType.Choice,
+            "Ch" => FormFieldType.Choice,
             "Sig" => FormFieldType.Signature,
-            _     => FormFieldType.Unknown,
+            _ => FormFieldType.Unknown,
         };
     }
 

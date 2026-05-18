@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Color</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Color</RootNamespace>
+    <Description>
+      ICC profile parsing and color-space conversion. Reads ICC v2/v4
+      profiles, extracts A2B/B2A tag-based LUTs and matrix/TRC paths,
+      and transforms CMYK/RGB/Gray to sRGB. Pure C# BCL only.
+    </Description>
+    <PackageId>Chuvadi.Pdf.Color</PackageId>
+  </PropertyGroup>
+</Project>

@@ -172,7 +172,7 @@ public sealed class ScanlineRasterizer
         for (int i = 0; i + 1 < crossings.Count; i += 2)
         {
             int xStart = Math.Max(0, (int)Math.Ceiling(crossings[i].X));
-            int xEnd   = Math.Min(buffer.Width - 1, (int)Math.Floor(crossings[i + 1].X));
+            int xEnd = Math.Min(buffer.Width - 1, (int)Math.Floor(crossings[i + 1].X));
 
             for (int x = xStart; x <= xEnd; x++)
             {
@@ -195,7 +195,7 @@ public sealed class ScanlineRasterizer
             if (inside)
             {
                 int xStart = Math.Max(0, prevX);
-                int xEnd   = Math.Min(buffer.Width - 1, (int)Math.Floor(crossing.X));
+                int xEnd = Math.Min(buffer.Width - 1, (int)Math.Floor(crossing.X));
 
                 for (int x = xStart; x <= xEnd; x++)
                 {

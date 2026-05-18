@@ -8,12 +8,6 @@ Regenerate with:
 python tools/gen_api_docs.py
 ```
 
-## Chuvadi.
-
-| Type | Kind | Description |
-|---|---|---|
-| [Class1](/Class1.md) | class | — |
-
 ## Chuvadi.Pdf.Annotations
 
 | Type | Kind | Description |
@@ -45,6 +39,15 @@ python tools/gen_api_docs.py
 | [TextAlignment](Authoring/TextAlignment.md) | enum | Text alignment within a block or table cell. |
 | [TextBlockResult](Authoring/TextBlockResult.md) | class | Result of a `PageBuilder.DrawTextBlock` call. |
 | [VerticalAlignment](Authoring/VerticalAlignment.md) | enum | Vertical alignment within a table cell. |
+
+## Chuvadi.Pdf.Color
+
+| Type | Kind | Description |
+|---|---|---|
+| [ColorConversion](Color/ColorConversion.md) | class | Static color-conversion helpers. |
+| [IccColorSpace](Color/IccColorSpace.md) | enum | The source color space declared by an ICC profile. |
+| [IccException](Color/IccException.md) | class | Thrown when an ICC profile is malformed or unsupported. |
+| [IccProfile](Color/IccProfile.md) | class | Parsed ICC color profile. |
 
 ## Chuvadi.Pdf.Content
 
@@ -178,6 +181,7 @@ python tools/gen_api_docs.py
 | [OptionalContentGroup](Documents/OptionalContentGroup.md) | class | An Optional Content Group (OCG) — a named, toggleable layer in a PDF. |
 | [OptionalContentReader](Documents/OptionalContentReader.md) | class | Reads optional content groups (layers) from a PDF document. |
 | [PdfDocument](Documents/PdfDocument.md) | class | Represents an opened PDF document. |
+| [PdfDocumentAsync](Documents/PdfDocumentAsync.md) | class | Async-capable entry points for `PdfDocument`. |
 | [PdfDocumentException](Documents/PdfDocumentException.md) | class | Thrown when the PDF document model encounters an invalid or unsupported structure, such as a malformed page tree or a missing required entry. |
 | [PdfPage](Documents/PdfPage.md) | class | Represents a single page in a PDF document. |
 | [PdfPageCollection](Documents/PdfPageCollection.md) | class | Provides lazy, random-access to the pages of a PDF document. |
@@ -217,7 +221,9 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [BrotliStoredEncoder](Fonts/BrotliStoredEncoder.md) | class | Emits Brotli-compatible bitstreams for WOFF2 packaging. |
 | [CMapParser](Fonts/CMapParser.md) | class | Parses a PDF ToUnicode CMap stream and builds a character code to Unicode string mapping. |
+| [CffLoader](Fonts/CffLoader.md) | class | Loads a Compact Font Format (CFF) / Type 1C font program and produces glyph outlines. |
 | [FontException](Fonts/FontException.md) | class | Thrown when a font dictionary cannot be parsed or a character code cannot be mapped to a Unicode codepoint. |
 | [FontRenderer](Fonts/FontRenderer.md) | class | High-level API for extracting glyph outlines from a TrueType or OpenType font. |
 | [FontRenderingException](Fonts/FontRenderingException.md) | class | Thrown when a font file cannot be parsed or a glyph outline cannot be extracted due to an invalid or unsupported font structure. |
@@ -225,7 +231,9 @@ python tools/gen_api_docs.py
 | [GlyphOutline](Fonts/GlyphOutline.md) | class | The outline of a single glyph as a `Path` of contours, together with its `GlyphMetrics`. |
 | [PdfFont](Fonts/PdfFont.md) | class | Represents a PDF font and provides character code to Unicode mapping for text extraction purposes. |
 | [PdfFontEncoding](Fonts/PdfFontEncoding.md) | class | Maps 1-byte character codes (0-255) to Unicode codepoints for simple fonts. |
+| [Standard14Outlines](Fonts/Standard14Outlines.md) | class | Provides glyph outlines for the PDF Standard 14 fonts from an embedded resource, so they work even on hosts that lack the fonts (Blazor WASM, headless servers). |
 | [TrueTypeLoader](Fonts/TrueTypeLoader.md) | class | Loads a TrueType or OpenType font from raw bytes and provides access to glyph outlines and metrics. |
+| [Woff2Packer](Fonts/Woff2Packer.md) | class | Packs a TrueType / OpenType font into the WOFF2 container format. |
 
 ## Chuvadi.Pdf.Forms
 
@@ -243,6 +251,7 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [Class1](Graphics/Class1.md) | class | — |
 | [ColorF](Graphics/ColorF.md) | struct | An immutable colour value, with support for DeviceGray, DeviceRGB, and DeviceCMYK colour spaces. |
 | [ColorSpace](Graphics/ColorSpace.md) | enum | The colour space of a `ColorF` value. |
 | [FillRule](Graphics/FillRule.md) | enum | Determines how the interior of a path is defined when the path self-intersects or has nested sub-paths. |
@@ -282,6 +291,7 @@ python tools/gen_api_docs.py
 | [ImageException](Images/ImageException.md) | class | Thrown when an image cannot be decoded or encoded due to an invalid format, unsupported feature, or data corruption. |
 | [ImageFrame](Images/ImageFrame.md) | class | A decoded image frame held in a `PixelBuffer`. |
 | [JpegDecoder](Images/JpegDecoder.md) | class | Decodes a baseline sequential DCT JPEG (SOF0) into an `ImageFrame`. |
+| [JpegEncoder](Images/JpegEncoder.md) | class | Pure-C# baseline DCT JPEG encoder. |
 | [PngDecoder](Images/PngDecoder.md) | class | Decodes a PNG image into an `ImageFrame`. |
 | [PngEncoder](Images/PngEncoder.md) | class | Encodes an `ImageFrame` to PNG format. |
 | [TiffDecoder](Images/TiffDecoder.md) | class | Decodes TIFF images per TIFF 6.0 baseline. |
@@ -345,11 +355,40 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [BlendModeOp](Rendering/BlendModeOp.md) | class | Pushes or pops a blend mode. |
+| [ClipOp](Rendering/ClipOp.md) | class | Pushes a clipping region. |
+| [DisplayListBuilder](Rendering/DisplayListBuilder.md) | class | Builds a `PageDisplayList` by walking a page's content stream and translating each PDF operator to a `RenderOp`. |
+| [DocumentSearch](Rendering/DocumentSearch.md) | class | Searches the text of a `PdfDocument` by page, streaming matches asynchronously. |
+| [FillRule](Rendering/FillRule.md) | enum | Fill rule for a path or clip region. |
+| [ImageFormat](Rendering/ImageFormat.md) | enum | Raster format of image pixel data. |
+| [ImageOp](Rendering/ImageOp.md) | class | Renders a raster image. |
+| [LineCap](Rendering/LineCap.md) | enum | Line cap style (PDF §8.4.3.3). |
+| [LineJoin](Rendering/LineJoin.md) | enum | Line join style (PDF §8.4.3.4). |
+| [OpacityOp](Rendering/OpacityOp.md) | class | Pushes or pops an opacity group. |
+| [PageDisplayList](Rendering/PageDisplayList.md) | class | A page's content as a neutral, ordered sequence of `RenderOp`s. |
 | [PageRasterizer](Rendering/PageRasterizer.md) | class | Rasterizes a PDF page to a `PixelBuffer`. |
+| [PaintMode](Rendering/PaintMode.md) | enum | Whether a path is filled, stroked, or both. |
+| [PathCommand](Rendering/PathCommand.md) | enum | Type of a path command. |
+| [PathGeometry](Rendering/PathGeometry.md) | class | An ordered sequence of path segments. |
+| [PathOp](Rendering/PathOp.md) | class | Renders a path with fill and/or stroke. |
+| [PdfBlendMode](Rendering/PdfBlendMode.md) | enum | PDF blend modes (§11.3.5). |
+| [PdfColorSpace](Rendering/PdfColorSpace.md) | enum | The source color space of a `PdfColor`. |
+| [PdfPageExtensions](Rendering/PdfPageExtensions.md) | class | Extensions on `PdfDocument` and `PdfPage` for the display-list and text-run APIs. |
+| [RenderOp](Rendering/RenderOp.md) | class | Abstract base for all display-list operations. |
+| [RenderOpKind](Rendering/RenderOpKind.md) | enum | Tag identifying the concrete `RenderOp` subtype. |
 | [RenderOptions](Rendering/RenderOptions.md) | class | Options that control how a PDF page is rasterized. |
 | [RenderingException](Rendering/RenderingException.md) | class | Thrown when a PDF page cannot be rasterized due to an unsupported feature, invalid data, or internal rasterizer error. |
 | [ScanlineRasterizer](Rendering/ScanlineRasterizer.md) | class | Fills vector paths into a `PixelBuffer` using a scanline edge-crossing algorithm. |
+| [SearchMatch](Rendering/SearchMatch.md) | class | A search match against the logical text of a page. |
+| [SearchOptions](Rendering/SearchOptions.md) | class | Options controlling a search. |
 | [StrokeExpander](Rendering/StrokeExpander.md) | class | Converts a stroked path into a filled path by expanding each segment by half the stroke width on each side. |
+| [TextDirection](Rendering/TextDirection.md) | enum | Reading direction of a `TextRun`. |
+| [TextOp](Rendering/TextOp.md) | class | Renders a positioned glyph run. |
+| [TextRenderingMode](Rendering/TextRenderingMode.md) | enum | Rendering mode for a `TextOp` (PDF §9.3.6). |
+| [TextRun](Rendering/TextRun.md) | class | A contiguous run of text on a page, with glyph-level positions for selection-overlay use cases. |
+| [TextRunExtractor](Rendering/TextRunExtractor.md) | class | Walks a `PageDisplayList` and produces a sequence of `TextRun`s in reading order. |
+| [TransformOp](Rendering/TransformOp.md) | class | Pushes or pops a graphics-state transformation matrix. |
+| [WpfRenderer](Rendering/WpfRenderer.md) | class | Renders a `PageDisplayList` into a WPF `DrawingVisual`. |
 
 ## Chuvadi.Pdf.Signatures
 
@@ -382,8 +421,9 @@ python tools/gen_api_docs.py
 | Type | Kind | Description |
 |---|---|---|
 | [SvgExportOptions](Svg/SvgExportOptions.md) | class | Options for PDF → SVG export. |
-| [SvgExporter](Svg/SvgExporter.md) | class | Translates PDF page content streams to SVG. |
+| [SvgExporter](Svg/SvgExporter.md) | class | — |
 | [SvgFontStrategy](Svg/SvgFontStrategy.md) | enum | How embedded fonts are handled. |
+| [SvgRenderer](Svg/SvgRenderer.md) | class | Renders a `PageDisplayList` to SVG. |
 | [SvgTextStrategy](Svg/SvgTextStrategy.md) | enum | How text is rendered to SVG. |
 
 ## Chuvadi.Pdf.Text

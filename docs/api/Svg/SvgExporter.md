@@ -2,17 +2,9 @@
 
 **Class** in `Chuvadi.Pdf.Svg` (Svg)
 
-Translates PDF page content streams to SVG.
-
 ```csharp
 public static class SvgExporter
 ```
-
-## Remarks
-
-Mirrors the structure of `Chuvadi.Pdf.Rendering.PageRasterizer`: walks the content stream's operator tokens, maintaining a graphics state stack, but emits SVG elements via `SvgWriter` rather than rasterizing to a pixel buffer.  
-
- Coordinate system: SVG uses top-left origin (Y down); PDF uses bottom-left (Y up). The export wraps page content in a single `&lt;g transform="matrix(1 0 0 -1 0 H)"&gt;` outer group so PDF-native coordinates flow through directly. Text elements receive a local counter-flip so glyphs read upright.
 
 ## Methods
 

@@ -19,11 +19,11 @@ string verb = args[0];
 
 switch (verb)
 {
-    case "merge":     return Merge(args);
-    case "split":     return Split(args);
-    case "delete":    return Delete(args);
-    case "rotate":    return Rotate(args);
-    default:          Usage(); return 1;
+    case "merge": return Merge(args);
+    case "split": return Split(args);
+    case "delete": return Delete(args);
+    case "rotate": return Rotate(args);
+    default: Usage(); return 1;
 }
 
 static void Usage()
@@ -108,10 +108,10 @@ static int Rotate(string[] args)
 {
     if (args.Length < 5) { Usage(); return 1; }
 
-    string inputPath  = args[1];
+    string inputPath = args[1];
     string outputPath = args[2];
-    int pageIndex     = int.Parse(args[3]);
-    int degrees       = int.Parse(args[4]);
+    int pageIndex = int.Parse(args[3]);
+    int degrees = int.Parse(args[4]);
 
     using FileStream input = File.OpenRead(inputPath);
     using PdfDocument document = PdfDocument.Open(input, leaveOpen: false);

@@ -17,7 +17,7 @@ if (args.Length < 2)
     return 1;
 }
 
-string inputPath  = args[0];
+string inputPath = args[0];
 string outputPath = args[1];
 
 using FileStream input = File.OpenRead(inputPath);

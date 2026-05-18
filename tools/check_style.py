@@ -277,7 +277,7 @@ REQUIRED_REFERENCES = {
 # Chuvadi namespace. When a file is in that Chuvadi namespace or imports it,
 # the bare name refers to the project-local type and System.* is not required.
 CONFLICT_OVERRIDES = {
-    "Path":       ["Chuvadi.Pdf.Graphics"],
+    "Path":       ["Chuvadi.Pdf.Graphics", "Chuvadi.Pdf.Rendering.DisplayList"],
     "Stream":     ["Chuvadi.Pdf.Primitives"],
     "Dictionary": ["Chuvadi.Pdf.Primitives"],
     "Type":       ["Chuvadi.Pdf.Primitives"],

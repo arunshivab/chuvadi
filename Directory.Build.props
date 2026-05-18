@@ -67,4 +67,11 @@
     <InformationalVersion>0.1.0-dev</InformationalVersion>
   </PropertyGroup>
 
+
+  <!-- Include icon.png and README.md from repo root in every NuGet package -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
 </Project>

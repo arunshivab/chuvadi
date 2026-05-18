@@ -107,12 +107,12 @@ public static class PngDecoder
                     throw new ImageException("PNG IHDR chunk too short.");
                 }
 
-                width     = (int)ReadUInt32BeFrom(chunkData, 0);
-                height    = (int)ReadUInt32BeFrom(chunkData, 4);
-                bitDepth  = chunkData[8];
+                width = (int)ReadUInt32BeFrom(chunkData, 0);
+                height = (int)ReadUInt32BeFrom(chunkData, 4);
+                bitDepth = chunkData[8];
                 colorType = chunkData[9];
                 interlace = chunkData[12];
-                hasIhdr   = true;
+                hasIhdr = true;
             }
             else if (type == "PLTE")
             {
@@ -335,7 +335,7 @@ public static class PngDecoder
                     break;
 
                 case 2: // RGB
-                    r = SampleAt(row, x * 3,     1, bitDepth);
+                    r = SampleAt(row, x * 3, 1, bitDepth);
                     g = SampleAt(row, x * 3 + 1, 1, bitDepth);
                     b = SampleAt(row, x * 3 + 2, 1, bitDepth);
                     a = 255;
@@ -344,7 +344,7 @@ public static class PngDecoder
                 case 3: // Indexed
                     int idx = SampleAt(row, x, 1, bitDepth);
                     int pi = idx * 3;
-                    r = palette != null && pi + 2 < palette.Length ? palette[pi]     : (byte)0;
+                    r = palette != null && pi + 2 < palette.Length ? palette[pi] : (byte)0;
                     g = palette != null && pi + 2 < palette.Length ? palette[pi + 1] : (byte)0;
                     b = palette != null && pi + 2 < palette.Length ? palette[pi + 2] : (byte)0;
                     a = transparency != null && idx < transparency.Length

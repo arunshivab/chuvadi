@@ -35,13 +35,13 @@ public static class JpegDecoder
 {
     // ── JPEG marker constants (ISO 10918-1 §B.1.1.3) ─────────────────────
     private const byte MarkerPrefix = 0xFF;
-    private const byte MarkerSOI  = 0xD8; // Start of image
-    private const byte MarkerEOI  = 0xD9; // End of image
+    private const byte MarkerSOI = 0xD8; // Start of image
+    private const byte MarkerEOI = 0xD9; // End of image
     private const byte MarkerSOF0 = 0xC0; // Baseline DCT frame
-    private const byte MarkerDHT  = 0xC4; // Define Huffman table
-    private const byte MarkerDQT  = 0xDB; // Define quantisation table
-    private const byte MarkerSOS  = 0xDA; // Start of scan
-    private const byte MarkerDRI  = 0xDD; // Define restart interval
+    private const byte MarkerDHT = 0xC4; // Define Huffman table
+    private const byte MarkerDQT = 0xDB; // Define quantisation table
+    private const byte MarkerSOS = 0xDA; // Start of scan
+    private const byte MarkerDRI = 0xDD; // Define restart interval
 
     /// <summary>Decodes a JPEG from a byte array.</summary>
     public static ImageFrame Decode(byte[] data)
@@ -192,7 +192,7 @@ public static class JpegDecoder
             }
 
             _height = ReadUInt16Be();
-            _width  = ReadUInt16Be();
+            _width = ReadUInt16Be();
             _numComponents = ReadByte();
 
             _components = new ComponentInfo[_numComponents];
@@ -206,8 +206,8 @@ public static class JpegDecoder
                 {
                     Id = id,
                     HorizontalSampling = (sampling >> 4) & 0xF,
-                    VerticalSampling   = sampling & 0xF,
-                    QuantTableId       = qtId,
+                    VerticalSampling = sampling & 0xF,
+                    QuantTableId = qtId,
                 };
             }
         }
@@ -223,7 +223,7 @@ public static class JpegDecoder
                 bytesRead++;
 
                 int tableClass = (tcTn >> 4) & 0xF; // 0=DC, 1=AC
-                int tableId    = tcTn & 0xF;
+                int tableId = tcTn & 0xF;
 
                 if (tableClass > 1 || tableId > 3)
                 {
@@ -261,7 +261,7 @@ public static class JpegDecoder
                 bytesRead++;
 
                 int precision = (pqTq >> 4) & 0xF; // 0=8-bit, 1=16-bit
-                int tableId   = pqTq & 0xF;
+                int tableId = pqTq & 0xF;
 
                 if (tableId > 3)
                 {
@@ -338,14 +338,14 @@ public static class JpegDecoder
             int mcuPixelW = maxH * 8;
             int mcuPixelH = maxV * 8;
 
-            _mcuWidth  = (_width  + mcuPixelW - 1) / mcuPixelW;
+            _mcuWidth = (_width + mcuPixelW - 1) / mcuPixelW;
             _mcuHeight = (_height + mcuPixelH - 1) / mcuPixelH;
 
             // Allocate output planes (one byte per pixel, full resolution)
             int planeW = _mcuWidth * mcuPixelW;
             int planeH = _mcuHeight * mcuPixelH;
 
-            _yPlane  = new byte[planeW * planeH];
+            _yPlane = new byte[planeW * planeH];
             _cbPlane = _numComponents > 1 ? new byte[planeW * planeH] : null;
             _crPlane = _numComponents > 1 ? new byte[planeW * planeH] : null;
 
@@ -456,7 +456,7 @@ public static class JpegDecoder
                 }
 
                 int runLen = (acSymbol >> 4) & 0xF;
-                int acLen  = acSymbol & 0xF;
+                int acLen = acSymbol & 0xF;
 
                 k += runLen;
 
@@ -490,7 +490,7 @@ public static class JpegDecoder
             for (int row = 0; row < 8; row++)
             {
                 int off = row * 8;
-                double v0 = input[off]     * AanScales[0];
+                double v0 = input[off] * AanScales[0];
                 double v1 = input[off + 1] * AanScales[1];
                 double v2 = input[off + 2] * AanScales[2];
                 double v3 = input[off + 3] * AanScales[3];
@@ -522,7 +522,7 @@ public static class JpegDecoder
                 double n2 = (m1 - m3) * 1.414213562 - n0;
                 double n3 = n2 + n1 * 2.0;
 
-                work[off]     = t4 + n0;
+                work[off] = t4 + n0;
                 work[off + 7] = t4 - n0;
                 work[off + 1] = t6 + n3;
                 work[off + 6] = t6 - n3;
@@ -535,8 +535,8 @@ public static class JpegDecoder
             // Column IDCT
             for (int col = 0; col < 8; col++)
             {
-                double v0 = work[col]      * AanScales[0];
-                double v1 = work[col +  8] * AanScales[1];
+                double v0 = work[col] * AanScales[0];
+                double v1 = work[col + 8] * AanScales[1];
                 double v2 = work[col + 16] * AanScales[2];
                 double v3 = work[col + 24] * AanScales[3];
                 double v4 = work[col + 32] * AanScales[4];
@@ -568,9 +568,9 @@ public static class JpegDecoder
                 double n3 = n2 + n1 * 2.0;
 
                 double scale = 1.0 / 8.0;
-                output[col]      = Clamp(t4 + n0, scale);
+                output[col] = Clamp(t4 + n0, scale);
                 output[col + 56] = Clamp(t4 - n0, scale);
-                output[col +  8] = Clamp(t6 + n3, scale);
+                output[col + 8] = Clamp(t6 + n3, scale);
                 output[col + 48] = Clamp(t6 - n3, scale);
                 output[col + 16] = Clamp(t7 + n2, scale);
                 output[col + 40] = Clamp(t7 - n2, scale);
@@ -654,9 +654,9 @@ public static class JpegDecoder
                     else
                     {
                         // YCbCr → RGB conversion (ISO 10918-1 §A.3.3)
-                        double yv  = idx < _yPlane.Length  ? _yPlane[idx]  : 128;
-                        double cb  = idx < _cbPlane.Length ? _cbPlane[idx] : 128;
-                        double cr  = idx < _crPlane.Length ? _crPlane[idx] : 128;
+                        double yv = idx < _yPlane.Length ? _yPlane[idx] : 128;
+                        double cb = idx < _cbPlane.Length ? _cbPlane[idx] : 128;
+                        double cr = idx < _crPlane.Length ? _crPlane[idx] : 128;
 
                         int r = (int)(yv + 1.402 * (cr - 128));
                         int g = (int)(yv - 0.34414 * (cb - 128) - 0.71414 * (cr - 128));
@@ -665,8 +665,8 @@ public static class JpegDecoder
                         buffer.SetPixelBgra(
                             x, y,
                             (byte)(bv < 0 ? 0 : bv > 255 ? 255 : bv),
-                            (byte)(g  < 0 ? 0 : g  > 255 ? 255 : g),
-                            (byte)(r  < 0 ? 0 : r  > 255 ? 255 : r),
+                            (byte)(g < 0 ? 0 : g > 255 ? 255 : g),
+                            (byte)(r < 0 ? 0 : r > 255 ? 255 : r),
                             255);
                     }
                 }
@@ -764,11 +764,11 @@ public static class JpegDecoder
 
         internal HuffmanTable(byte[] counts, byte[] symbols)
         {
-            _symbols  = symbols;
-            _codes    = new int[16];
+            _symbols = symbols;
+            _codes = new int[16];
             _maxCodes = new int[17];
             _minCodes = new int[16];
-            _valPtrs  = new int[16];
+            _valPtrs = new int[16];
 
             // Generate codes from counts (ISO 10918-1 §C.2)
             int code = 0;
@@ -777,7 +777,7 @@ public static class JpegDecoder
             for (int len = 0; len < 16; len++)
             {
                 _minCodes[len] = code;
-                _codes[len]    = counts[len];
+                _codes[len] = counts[len];
 
                 for (int k = 0; k < counts[len]; k++, si++)
                 {
@@ -785,7 +785,7 @@ public static class JpegDecoder
                 }
 
                 _maxCodes[len] = code;
-                _valPtrs[len]  = si - counts[len];
+                _valPtrs[len] = si - counts[len];
                 code <<= 1;
             }
 

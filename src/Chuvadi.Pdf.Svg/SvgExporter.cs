@@ -30,7 +30,14 @@ namespace Chuvadi.Pdf.Svg;
 /// coordinates flow through directly. Text elements receive a local
 /// counter-flip so glyphs read upright.
 /// </para>
+/// <para>
+/// As of Phase 2.1, this class is obsolete; new code should use
+/// <see cref="SvgRenderer"/>, which renders a neutral
+/// <see cref="Chuvadi.Pdf.Rendering.DisplayList.PageDisplayList"/> and
+/// shares its pipeline with other output adapters.
+/// </para>
 /// </remarks>
+[System.Obsolete("Use SvgRenderer instead. SvgExporter walks the PDF content stream directly; SvgRenderer consumes the neutral PageDisplayList built by DisplayListBuilder, allowing the same intermediate representation to feed other output adapters (WPF, etc.).", error: false)]
 public static class SvgExporter
 {
     /// <summary>Exports a page to an SVG string.</summary>

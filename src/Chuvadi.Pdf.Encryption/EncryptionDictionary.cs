@@ -100,7 +100,7 @@ public sealed class EncryptionDictionary
             (2, _) => EncryptionAlgorithm.Rc4_128,
             (4, _) => DetectV4Cfm(dict),
             (5, _) => EncryptionAlgorithm.Aes_256,
-            _      => EncryptionAlgorithm.None,
+            _ => EncryptionAlgorithm.None,
         };
 
         if (e.Algorithm == EncryptionAlgorithm.None)
@@ -134,9 +134,9 @@ public sealed class EncryptionDictionary
 
         return cfm.Value switch
         {
-            "V2"     => EncryptionAlgorithm.Rc4_128,
-            "AESV2"  => EncryptionAlgorithm.Aes_128,
-            _        => EncryptionAlgorithm.None,
+            "V2" => EncryptionAlgorithm.Rc4_128,
+            "AESV2" => EncryptionAlgorithm.Aes_128,
+            _ => EncryptionAlgorithm.None,
         };
     }
 

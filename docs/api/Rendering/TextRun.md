@@ -1,0 +1,56 @@
+# TextRun
+
+**Class** in `Chuvadi.Pdf.Rendering.DisplayList` (Rendering)
+
+A contiguous run of text on a page, with glyph-level positions for selection-overlay use cases.
+
+```csharp
+public sealed class TextRun
+```
+
+## Properties
+
+### `Unicode`
+
+```csharp
+string Unicode
+```
+
+The logical character sequence (concatenation of glyph Unicodes).
+
+### `BoundingBox`
+
+```csharp
+Rect BoundingBox
+```
+
+Bounding box of the run in PDF user-space coords.
+
+### `Glyphs`
+
+```csharp
+IReadOnlyList<GlyphPosition> Glyphs
+```
+
+Per-glyph positions.
+
+### `Direction`
+
+```csharp
+TextDirection Direction
+```
+
+Reading direction.
+
+### `ReadingOrderIndex`
+
+```csharp
+int ReadingOrderIndex
+```
+
+Monotonic 0-based reading-order index within the page.
+
+---
+
+_Source: [`src/Chuvadi.Pdf.Rendering.DisplayList/TextRun.cs`](../../../src/Chuvadi.Pdf.Rendering.DisplayList/TextRun.cs)_
+_Generated from XML doc comments. Do not edit; regenerate with `python tools/gen_api_docs.py`._

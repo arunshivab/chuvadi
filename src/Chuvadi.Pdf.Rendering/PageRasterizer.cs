@@ -56,10 +56,10 @@ public sealed class PageRasterizer
     /// <param name="options">Rendering options. Uses <see cref="RenderOptions.Default"/> when null.</param>
     public PageRasterizer(PdfObjectStore objects, RenderOptions? options = null)
     {
-        _objects  = objects ?? throw new ArgumentNullException(nameof(objects));
-        _options  = options ?? RenderOptions.Default;
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
+        _options = options ?? RenderOptions.Default;
         _scanline = new ScanlineRasterizer();
-        _stroke   = new StrokeExpander();
+        _stroke = new StrokeExpander();
         _pipeline = FilterRegistry.CreateDefaultPipeline();
         _fontCache = new Dictionary<string, FontRenderer>();
     }
@@ -315,28 +315,32 @@ public sealed class PageRasterizer
             case "q": state.Push(); break;
             case "Q": state.Pop(); break;
             case "cm": ApplyCm(operands, state); break;
-            case "w":  if (operands.Count > 0) { state.LineWidth = ParseDouble(operands[0]); } break;
-            case "J":  if (operands.Count > 0) { state.LineCap   = (LineCap)ParseInt(operands[0]); } break;
-            case "j":  if (operands.Count > 0) { state.LineJoin  = (LineJoin)ParseInt(operands[0]); } break;
-            case "M":  if (operands.Count > 0) { state.MiterLimit = ParseDouble(operands[0]); } break;
+            case "w": if (operands.Count > 0) { state.LineWidth = ParseDouble(operands[0]); } break;
+            case "J": if (operands.Count > 0) { state.LineCap = (LineCap)ParseInt(operands[0]); } break;
+            case "j": if (operands.Count > 0) { state.LineJoin = (LineJoin)ParseInt(operands[0]); } break;
+            case "M": if (operands.Count > 0) { state.MiterLimit = ParseDouble(operands[0]); } break;
 
             // ── Colour operators ───────────────────────────────────────────
-            case "g":  state.FillColor   = ColorF.FromGray((float)ParseDouble(operands, 0)); break;
-            case "G":  state.StrokeColor = ColorF.FromGray((float)ParseDouble(operands, 0)); break;
-            case "rg": state.FillColor   = ColorF.FromRgb(
+            case "g": state.FillColor = ColorF.FromGray((float)ParseDouble(operands, 0)); break;
+            case "G": state.StrokeColor = ColorF.FromGray((float)ParseDouble(operands, 0)); break;
+            case "rg":
+                state.FillColor = ColorF.FromRgb(
                                                (float)ParseDouble(operands, 0),
                                                (float)ParseDouble(operands, 1),
                                                (float)ParseDouble(operands, 2)); break;
-            case "RG": state.StrokeColor = ColorF.FromRgb(
+            case "RG":
+                state.StrokeColor = ColorF.FromRgb(
                                                (float)ParseDouble(operands, 0),
                                                (float)ParseDouble(operands, 1),
                                                (float)ParseDouble(operands, 2)); break;
-            case "k":  state.FillColor   = ColorF.FromCmyk(
+            case "k":
+                state.FillColor = ColorF.FromCmyk(
                                                (float)ParseDouble(operands, 0),
                                                (float)ParseDouble(operands, 1),
                                                (float)ParseDouble(operands, 2),
                                                (float)ParseDouble(operands, 3)); break;
-            case "K":  state.StrokeColor = ColorF.FromCmyk(
+            case "K":
+                state.StrokeColor = ColorF.FromCmyk(
                                                (float)ParseDouble(operands, 0),
                                                (float)ParseDouble(operands, 1),
                                                (float)ParseDouble(operands, 2),
@@ -347,25 +351,25 @@ public sealed class PageRasterizer
             case "SCN": ApplyScColor(operands, state, stroke: true); break;
 
             // ── GraphicsPath construction ──────────────────────────────────────────
-            case "m":  if (operands.Count >= 2) { state.CurrentPath.MoveTo(ParseDouble(operands[0]), ParseDouble(operands[1])); } break;
-            case "l":  if (operands.Count >= 2) { state.CurrentPath.LineTo(ParseDouble(operands[0]), ParseDouble(operands[1])); } break;
-            case "c":  if (operands.Count >= 6) { state.CurrentPath.CubicBezierTo(ParsePoint(operands, 0), ParsePoint(operands, 2), ParsePoint(operands, 4)); } break;
-            case "v":  if (operands.Count >= 4) { ApplyV(operands, state); } break;
-            case "y":  if (operands.Count >= 4) { ApplyY(operands, state); } break;
-            case "h":  state.CurrentPath.ClosePath(); break;
+            case "m": if (operands.Count >= 2) { state.CurrentPath.MoveTo(ParseDouble(operands[0]), ParseDouble(operands[1])); } break;
+            case "l": if (operands.Count >= 2) { state.CurrentPath.LineTo(ParseDouble(operands[0]), ParseDouble(operands[1])); } break;
+            case "c": if (operands.Count >= 6) { state.CurrentPath.CubicBezierTo(ParsePoint(operands, 0), ParsePoint(operands, 2), ParsePoint(operands, 4)); } break;
+            case "v": if (operands.Count >= 4) { ApplyV(operands, state); } break;
+            case "y": if (operands.Count >= 4) { ApplyY(operands, state); } break;
+            case "h": state.CurrentPath.ClosePath(); break;
             case "re": if (operands.Count >= 4) { ApplyRe(operands, state); } break;
 
             // ── GraphicsPath painting ──────────────────────────────────────────────
             case "f":
-            case "F":  PaintFill(state, buffer, FillRule.NonZeroWinding); state.ClearPath(); break;
-            case "f*": PaintFill(state, buffer, FillRule.EvenOdd);        state.ClearPath(); break;
-            case "S":  PaintStroke(state, buffer); state.ClearPath(); break;
-            case "s":  state.CurrentPath.ClosePath(); PaintStroke(state, buffer); state.ClearPath(); break;
-            case "B":  PaintFill(state, buffer, FillRule.NonZeroWinding); PaintStroke(state, buffer); state.ClearPath(); break;
-            case "B*": PaintFill(state, buffer, FillRule.EvenOdd);        PaintStroke(state, buffer); state.ClearPath(); break;
-            case "b":  state.CurrentPath.ClosePath(); PaintFill(state, buffer, FillRule.NonZeroWinding); PaintStroke(state, buffer); state.ClearPath(); break;
-            case "b*": state.CurrentPath.ClosePath(); PaintFill(state, buffer, FillRule.EvenOdd);        PaintStroke(state, buffer); state.ClearPath(); break;
-            case "n":  state.ClearPath(); break;
+            case "F": PaintFill(state, buffer, FillRule.NonZeroWinding); state.ClearPath(); break;
+            case "f*": PaintFill(state, buffer, FillRule.EvenOdd); state.ClearPath(); break;
+            case "S": PaintStroke(state, buffer); state.ClearPath(); break;
+            case "s": state.CurrentPath.ClosePath(); PaintStroke(state, buffer); state.ClearPath(); break;
+            case "B": PaintFill(state, buffer, FillRule.NonZeroWinding); PaintStroke(state, buffer); state.ClearPath(); break;
+            case "B*": PaintFill(state, buffer, FillRule.EvenOdd); PaintStroke(state, buffer); state.ClearPath(); break;
+            case "b": state.CurrentPath.ClosePath(); PaintFill(state, buffer, FillRule.NonZeroWinding); PaintStroke(state, buffer); state.ClearPath(); break;
+            case "b*": state.CurrentPath.ClosePath(); PaintFill(state, buffer, FillRule.EvenOdd); PaintStroke(state, buffer); state.ClearPath(); break;
+            case "n": state.ClearPath(); break;
             case "W":
             case "W*": state.ClearPath(); break; // Clipping not implemented in Phase 2
 
@@ -379,7 +383,7 @@ public sealed class PageRasterizer
             case "T*": state.MoveToNextLine(); break;
             case "Tj": if (operands.Count > 0) { PaintText(ExtractString(operands[0]), state, buffer); } break;
             case "TJ": PaintTJ(operands, state, buffer); break;
-            case "'":  state.MoveToNextLine(); if (operands.Count > 0) { PaintText(ExtractString(operands[0]), state, buffer); } break;
+            case "'": state.MoveToNextLine(); if (operands.Count > 0) { PaintText(ExtractString(operands[0]), state, buffer); } break;
             case "\"": if (operands.Count >= 3) { ApplyWordCharSpacing(operands, state); state.MoveToNextLine(); PaintText(ExtractString(operands[2]), state, buffer); } break;
 
             // ── XObjects ───────────────────────────────────────────────────
@@ -487,11 +491,11 @@ public sealed class PageRasterizer
 
         StrokeStyle style = new StrokeStyle
         {
-            Width     = state.LineWidth * _options.Scale,
-            Cap       = state.LineCap,
-            Join      = state.LineJoin,
+            Width = state.LineWidth * _options.Scale,
+            Cap = state.LineCap,
+            Join = state.LineJoin,
             MiterLimit = state.MiterLimit,
-            Color     = state.StrokeColor,
+            Color = state.StrokeColor,
         };
 
         List<List<PointF>> filled = _stroke.Expand(subPaths, style);
@@ -837,7 +841,7 @@ public sealed class PageRasterizer
     {
         int dstX0 = Math.Max(0, (int)Math.Round(x));
         int dstY0 = Math.Max(0, (int)Math.Round(y));
-        int dstX1 = Math.Min(buffer.Width  - 1, (int)Math.Round(x + w));
+        int dstX1 = Math.Min(buffer.Width - 1, (int)Math.Round(x + w));
         int dstY1 = Math.Min(buffer.Height - 1, (int)Math.Round(y + h));
 
         for (int py = dstY0; py <= dstY1; py++)
@@ -848,7 +852,7 @@ public sealed class PageRasterizer
                 double srcFracY = (py - y) / h;
                 int srcX = (int)(srcFracX * frame.Width);
                 int srcY = (int)(srcFracY * frame.Height);
-                srcX = Math.Max(0, Math.Min(frame.Width  - 1, srcX));
+                srcX = Math.Max(0, Math.Min(frame.Width - 1, srcX));
                 srcY = Math.Max(0, Math.Min(frame.Height - 1, srcY));
 
                 (byte sb, byte sg, byte sr, byte sa) = frame.Pixels.GetPixelBgra(srcX, srcY);
@@ -1052,54 +1056,54 @@ internal sealed class RenderState
 
     internal RenderState(double pageHeight, double scale, int pixelHeight)
     {
-        PageHeight  = pageHeight;
-        Scale       = scale;
+        PageHeight = pageHeight;
+        Scale = scale;
         PixelHeight = pixelHeight;
         _stack = new Stack<RenderStateSnapshot>();
         CurrentPath = new GraphicsPath();
         Ctm = Transform.Identity;
         TextMatrix = Transform.Identity;
-        FillColor   = ColorF.Black;
+        FillColor = ColorF.Black;
         StrokeColor = ColorF.Black;
-        LineWidth   = 1.0;
-        LineCap     = LineCap.Butt;
-        LineJoin    = LineJoin.Miter;
-        MiterLimit  = 10.0;
-        FontSize    = 12.0;
-        FontName    = string.Empty;
-        Leading     = 0;
+        LineWidth = 1.0;
+        LineCap = LineCap.Butt;
+        LineJoin = LineJoin.Miter;
+        MiterLimit = 10.0;
+        FontSize = 12.0;
+        FontName = string.Empty;
+        Leading = 0;
         CharSpacing = 0;
         WordSpacing = 0;
     }
 
-    internal double PageHeight  { get; }
-    internal double Scale       { get; }
-    internal int    PixelHeight { get; }
+    internal double PageHeight { get; }
+    internal double Scale { get; }
+    internal int PixelHeight { get; }
 
     // Graphics state
-    internal Transform Ctm        { get; set; }
-    internal ColorF FillColor     { get; set; }
-    internal ColorF StrokeColor   { get; set; }
-    internal double LineWidth     { get; set; }
-    internal LineCap LineCap      { get; set; }
-    internal LineJoin LineJoin    { get; set; }
-    internal double MiterLimit    { get; set; }
+    internal Transform Ctm { get; set; }
+    internal ColorF FillColor { get; set; }
+    internal ColorF StrokeColor { get; set; }
+    internal double LineWidth { get; set; }
+    internal LineCap LineCap { get; set; }
+    internal LineJoin LineJoin { get; set; }
+    internal double MiterLimit { get; set; }
 
     // Current path
     internal GraphicsPath CurrentPath { get; private set; }
 
     // Text state
-    internal bool InText           { get; set; }
-    internal Transform TextMatrix  { get; set; }
-    internal double TextX          { get; set; }
-    internal double TextY          { get; set; }
-    internal double TextLineX      { get; set; }
-    internal double TextLineY      { get; set; }
-    internal double FontSize       { get; set; }
-    internal string FontName       { get; set; }
-    internal double Leading        { get; set; }
-    internal double CharSpacing    { get; set; }
-    internal double WordSpacing    { get; set; }
+    internal bool InText { get; set; }
+    internal Transform TextMatrix { get; set; }
+    internal double TextX { get; set; }
+    internal double TextY { get; set; }
+    internal double TextLineX { get; set; }
+    internal double TextLineY { get; set; }
+    internal double FontSize { get; set; }
+    internal string FontName { get; set; }
+    internal double Leading { get; set; }
+    internal double CharSpacing { get; set; }
+    internal double WordSpacing { get; set; }
     internal PdfDictionary? FontResourceKey { get; set; }
 
     internal void Push()
@@ -1116,13 +1120,13 @@ internal sealed class RenderState
         }
 
         RenderStateSnapshot snap = _stack.Pop();
-        Ctm         = snap.Ctm;
-        FillColor   = snap.FillColor;
+        Ctm = snap.Ctm;
+        FillColor = snap.FillColor;
         StrokeColor = snap.StrokeColor;
-        LineWidth   = snap.LineWidth;
-        LineCap     = snap.LineCap;
-        LineJoin    = snap.LineJoin;
-        MiterLimit  = snap.MiterLimit;
+        LineWidth = snap.LineWidth;
+        LineCap = snap.LineCap;
+        LineJoin = snap.LineJoin;
+        MiterLimit = snap.MiterLimit;
     }
 
     internal void ClearPath()
@@ -1132,11 +1136,11 @@ internal sealed class RenderState
 
     internal void ResetTextState()
     {
-        TextMatrix  = Transform.Identity;
-        TextX       = 0;
-        TextY       = 0;
-        TextLineX   = 0;
-        TextLineY   = 0;
+        TextMatrix = Transform.Identity;
+        TextX = 0;
+        TextY = 0;
+        TextLineX = 0;
+        TextLineY = 0;
         CharSpacing = 0;
         WordSpacing = 0;
     }
@@ -1155,20 +1159,20 @@ internal readonly struct RenderStateSnapshot
         Transform ctm, ColorF fill, ColorF stroke,
         double lineWidth, LineCap cap, LineJoin join, double miter)
     {
-        Ctm         = ctm;
-        FillColor   = fill;
+        Ctm = ctm;
+        FillColor = fill;
         StrokeColor = stroke;
-        LineWidth   = lineWidth;
-        LineCap     = cap;
-        LineJoin    = join;
-        MiterLimit  = miter;
+        LineWidth = lineWidth;
+        LineCap = cap;
+        LineJoin = join;
+        MiterLimit = miter;
     }
 
-    internal Transform Ctm        { get; }
-    internal ColorF FillColor     { get; }
-    internal ColorF StrokeColor   { get; }
-    internal double LineWidth     { get; }
-    internal LineCap LineCap      { get; }
-    internal LineJoin LineJoin    { get; }
-    internal double MiterLimit    { get; }
+    internal Transform Ctm { get; }
+    internal ColorF FillColor { get; }
+    internal ColorF StrokeColor { get; }
+    internal double LineWidth { get; }
+    internal LineCap LineCap { get; }
+    internal LineJoin LineJoin { get; }
+    internal double MiterLimit { get; }
 }

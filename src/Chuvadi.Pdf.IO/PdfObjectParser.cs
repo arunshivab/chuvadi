@@ -317,13 +317,13 @@ internal sealed class PdfObjectParser
                 i++;
                 byte escaped = raw[i];
 
-                if (escaped == 110)       { decoded.Add(10);  }  // n -> LF
-                else if (escaped == 114)  { decoded.Add(13);  }  // r -> CR
-                else if (escaped == 116)  { decoded.Add(9);   }  // t -> TAB
-                else if (escaped == 40)   { decoded.Add(40);  }  // ( -> (
-                else if (escaped == 41)   { decoded.Add(41);  }  // ) -> )
-                else if (escaped == 92)   { decoded.Add(92);  }  // \ -> \
-                else                      { decoded.Add(escaped); }
+                if (escaped == 110) { decoded.Add(10); }  // n -> LF
+                else if (escaped == 114) { decoded.Add(13); }  // r -> CR
+                else if (escaped == 116) { decoded.Add(9); }  // t -> TAB
+                else if (escaped == 40) { decoded.Add(40); }  // ( -> (
+                else if (escaped == 41) { decoded.Add(41); }  // ) -> )
+                else if (escaped == 92) { decoded.Add(92); }  // \ -> \
+                else { decoded.Add(escaped); }
             }
             else
             {
@@ -386,8 +386,8 @@ internal sealed class PdfObjectParser
 
     private static int HexNibble(byte b)
     {
-        if (b >= 48 && b <= 57)  { return b - 48; }       // '0'-'9'
-        if (b >= 65 && b <= 70)  { return b - 55; }       // 'A'-'F'
+        if (b >= 48 && b <= 57) { return b - 48; }       // '0'-'9'
+        if (b >= 65 && b <= 70) { return b - 55; }       // 'A'-'F'
         if (b >= 97 && b <= 102) { return b - 87; }       // 'a'-'f'
         return -1;
     }

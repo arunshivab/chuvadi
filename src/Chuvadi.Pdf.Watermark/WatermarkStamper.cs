@@ -158,7 +158,7 @@ public static class WatermarkStamper
         double pageW, double pageH, TextWatermarkOptions options)
     {
         // Estimate text width: Helvetica metrics average ~0.5 × fontSize per char
-        double textWidth  = options.Text.Length * options.FontSize * 0.5;
+        double textWidth = options.Text.Length * options.FontSize * 0.5;
         double textHeight = options.FontSize;
 
         // Centre of page
@@ -262,10 +262,10 @@ public static class WatermarkStamper
 
         foreach (char c in text)
         {
-            if (c == '(')       { sb.Append(@"\("); }
-            else if (c == ')')  { sb.Append(@"\)"); }
+            if (c == '(') { sb.Append(@"\("); }
+            else if (c == ')') { sb.Append(@"\)"); }
             else if (c == '\\') { sb.Append(@"\\"); }
-            else                { sb.Append(c); }
+            else { sb.Append(c); }
         }
 
         return sb.ToString();
@@ -604,17 +604,17 @@ internal sealed class WatermarkDocument
             PdfObjectId streamId, float opacity, string gsName,
             PdfObjectId? imageId, string? xObjectName)
         {
-            StreamId    = streamId;
-            Opacity     = opacity;
-            GsName      = gsName;
-            ImageId     = imageId;
+            StreamId = streamId;
+            Opacity = opacity;
+            GsName = gsName;
+            ImageId = imageId;
             XObjectName = xObjectName;
         }
 
-        internal PdfObjectId  StreamId    { get; }
-        internal float        Opacity     { get; }
-        internal string       GsName      { get; }
-        internal PdfObjectId? ImageId     { get; }
-        internal string?      XObjectName { get; }
+        internal PdfObjectId StreamId { get; }
+        internal float Opacity { get; }
+        internal string GsName { get; }
+        internal PdfObjectId? ImageId { get; }
+        internal string? XObjectName { get; }
     }
 }

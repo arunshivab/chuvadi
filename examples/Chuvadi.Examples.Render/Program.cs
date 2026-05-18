@@ -18,7 +18,7 @@ if (args.Length < 2)
 
 string inputPath = args[0];
 string outputDir = args[1];
-double dpi       = args.Length >= 3 ? double.Parse(args[2]) : 96.0;
+double dpi = args.Length >= 3 ? double.Parse(args[2]) : 96.0;
 
 Directory.CreateDirectory(outputDir);
 
