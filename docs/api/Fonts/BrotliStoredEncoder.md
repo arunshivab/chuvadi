@@ -10,9 +10,9 @@ public static class BrotliStoredEncoder
 
 ## Remarks
 
-Uses `System.IO.Compression.BrotliStream` under the hood with `CompressionLevel.NoCompression` to emit valid Brotli streams of stored blocks. This is pure-BCL (no external dependencies) and produces byte streams accepted by every conforming Brotli decoder.  
+Since Phase 2.2 this is a thin shim over `BrotliEncoder`, the pure-C# clean-room Brotli implementation. The shim is preserved so that callers from Phase 2.1 continue to work without source changes.  
 
- Phase 2.2 will replace this with a hand-rolled compressor that does actual LZ77 matching and Huffman coding for better compression ratios. The API is stable so swapping the implementation is non-breaking.
+ Behaviour: emits valid Brotli output using uncompressed (stored) meta-blocks. Output bytes are byte-identical to `BrotliEncoder.Encode`.
 
 ## Methods
 
@@ -21,7 +21,7 @@ Uses `System.IO.Compression.BrotliStream` under the hood with `CompressionLevel.
 __static__
 
 ```csharp
-static byte[] Encode(byte[] data)
+static byte[] Encode(byte[] data) => BrotliEncoder.Encode(data)
 ```
 
 Encodes `data` as a valid Brotli stream.
