@@ -12,6 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\Standard14.bin" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
   </ItemGroup>
 

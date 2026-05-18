@@ -35,8 +35,8 @@ public static class TiffDecoder
 {
     /// <summary>Magic numbers for the two TIFF byte orders.</summary>
     private const ushort LittleEndianMarker = 0x4949; // "II"
-    private const ushort BigEndianMarker    = 0x4D4D; // "MM"
-    private const ushort TiffMagic          = 42;
+    private const ushort BigEndianMarker = 0x4D4D; // "MM"
+    private const ushort TiffMagic = 42;
 
     /// <summary>Decodes all pages from a TIFF byte stream.</summary>
     /// <param name="data">The TIFF file bytes.</param>
@@ -145,9 +145,9 @@ public static class TiffDecoder
         return type switch
         {
             1 or 2 or 7 => r.ReadU8(pos),    // BYTE / ASCII / UNDEFINED
-            3           => r.ReadU16(pos),   // SHORT
-            4           => r.ReadU32(pos),   // LONG
-            _           => throw new TiffException($"Cannot read tag value of TIFF type {type} as uint."),
+            3 => r.ReadU16(pos),   // SHORT
+            4 => r.ReadU32(pos),   // LONG
+            _ => throw new TiffException($"Cannot read tag value of TIFF type {type} as uint."),
         };
     }
 
@@ -156,10 +156,10 @@ public static class TiffDecoder
         return type switch
         {
             1 or 2 or 7 => 1,    // BYTE, ASCII, UNDEFINED
-            3           => 2,    // SHORT
+            3 => 2,    // SHORT
             4 or 9 or 11 => 4,   // LONG, SLONG, FLOAT
             5 or 10 or 12 => 8,  // RATIONAL, SRATIONAL, DOUBLE
-            _           => 1,
+            _ => 1,
         };
     }
 
@@ -167,7 +167,7 @@ public static class TiffDecoder
 
     private static ImageFrame DecodeFrame(TiffReader r, Dictionary<ushort, IfdEntry> entries)
     {
-        int width  = (int)GetTagOrDefault(r, entries, 256, 0);  // ImageWidth
+        int width = (int)GetTagOrDefault(r, entries, 256, 0);  // ImageWidth
         int height = (int)GetTagOrDefault(r, entries, 257, 0);  // ImageLength
 
         if (width <= 0 || height <= 0)
@@ -188,7 +188,7 @@ public static class TiffDecoder
         }
 
         IfdEntry stripOffsets = entries[273];   // StripOffsets — required
-        IfdEntry stripBytes   = entries[279];   // StripByteCounts — required
+        IfdEntry stripBytes = entries[279];   // StripByteCounts — required
 
         int stripsPerImage = (height + rowsPerStrip - 1) / rowsPerStrip;
         byte[] uncompressed = new byte[CalcRowBytes(width, samplesPerPixel, bitsPerSample) * height];
@@ -204,10 +204,10 @@ public static class TiffDecoder
 
             byte[] decoded = compression switch
             {
-                1     => stripBytesArr,
-                5     => LzwDecompress(stripBytesArr),
+                1 => stripBytesArr,
+                5 => LzwDecompress(stripBytesArr),
                 32773 => PackBitsDecompress(stripBytesArr),
-                _     => throw new TiffException($"Unsupported compression: {compression}."),
+                _ => throw new TiffException($"Unsupported compression: {compression}."),
             };
 
             Array.Copy(decoded, 0, uncompressed, destOffset, Math.Min(decoded.Length, uncompressed.Length - destOffset));
@@ -266,7 +266,7 @@ public static class TiffDecoder
                 else if (spp >= 3 && photometric == 2)
                 {
                     // RGB
-                    int r0 = ReadSample(raw, rowStart, x * spp,     bps);
+                    int r0 = ReadSample(raw, rowStart, x * spp, bps);
                     int g0 = ReadSample(raw, rowStart, x * spp + 1, bps);
                     int b0 = ReadSample(raw, rowStart, x * spp + 2, bps);
                     int max = (1 << bps) - 1;
@@ -279,7 +279,7 @@ public static class TiffDecoder
                     // CMYK (separated). Store as BGRA with B=C, G=M, R=Y, A=K so
                     // the encoder round-trips losslessly. Callers that expect RGB
                     // should run CmykConverter first.
-                    int c0 = ReadSample(raw, rowStart, x * spp,     bps);
+                    int c0 = ReadSample(raw, rowStart, x * spp, bps);
                     int m0 = ReadSample(raw, rowStart, x * spp + 1, bps);
                     int y0 = ReadSample(raw, rowStart, x * spp + 2, bps);
                     int k0 = ReadSample(raw, rowStart, x * spp + 3, bps);
@@ -394,9 +394,9 @@ public static class TiffDecoder
         // TIFF 6.0 §13 LZW — Note: TIFF LZW uses early-change (codeBits increments
         // one code earlier than the GIF variant) and big-endian bit packing.
         const int ClearCode = 256;
-        const int EndCode   = 257;
-        const int MinBits   = 9;
-        const int MaxBits   = 12;
+        const int EndCode = 257;
+        const int MinBits = 9;
+        const int MaxBits = 12;
 
         List<byte> output = new List<byte>(input.Length * 4);
         List<byte[]> table = new List<byte[]>(4096);

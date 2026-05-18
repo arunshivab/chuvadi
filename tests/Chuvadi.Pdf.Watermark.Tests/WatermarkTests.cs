@@ -269,7 +269,7 @@ public sealed class WatermarkStamperTests
     private static MemoryStream BuildMultiPagePdf(int pageCount)
     {
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
 
         PdfArray kids = new PdfArray([]);
         List<PdfIndirectObject> objects = new List<PdfIndirectObject>();

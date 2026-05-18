@@ -1,6 +1,6 @@
 # Class1
 
-**Class** in `` ()
+**Class** in `Chuvadi.Pdf.Graphics` (Graphics)
 
 ```csharp
 public class Class1

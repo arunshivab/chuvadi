@@ -103,13 +103,13 @@ public static class PdfLtvUpdater
         // Allocate stream objects for each cert / CRL / OCSP.
         List<PdfIndirectObject> newObjects = new();
         PdfArray certArr = NewStreamArray(allCerts, c => c.RawEncoding, ref nextId, newObjects);
-        PdfArray crlArr  = NewStreamArray(allCrls,  c => c.RawEncoding, ref nextId, newObjects);
+        PdfArray crlArr = NewStreamArray(allCrls, c => c.RawEncoding, ref nextId, newObjects);
         PdfArray ocspArr = NewStreamArray(allOcsps, o => o.RawEncoding, ref nextId, newObjects);
 
         PdfDictionary dssDict = new();
         dssDict.Set(PdfName.Type, PdfName.Intern("DSS"));
         if (certArr.Count > 0) { dssDict.Set(PdfName.Intern("Certs"), certArr); }
-        if (crlArr.Count > 0)  { dssDict.Set(PdfName.Intern("CRLs"),  crlArr); }
+        if (crlArr.Count > 0) { dssDict.Set(PdfName.Intern("CRLs"), crlArr); }
         if (ocspArr.Count > 0) { dssDict.Set(PdfName.Intern("OCSPs"), ocspArr); }
 
         // Per-signature /VRI entries.
@@ -125,7 +125,7 @@ public static class PdfLtvUpdater
 
                 PdfDictionary vriEntry = new();
                 if (certArr.Count > 0) { vriEntry.Set(PdfName.Intern("Cert"), CloneArray(certArr)); }
-                if (crlArr.Count > 0)  { vriEntry.Set(PdfName.Intern("CRL"),  CloneArray(crlArr)); }
+                if (crlArr.Count > 0) { vriEntry.Set(PdfName.Intern("CRL"), CloneArray(crlArr)); }
                 if (ocspArr.Count > 0) { vriEntry.Set(PdfName.Intern("OCSP"), CloneArray(ocspArr)); }
 
                 PdfObjectId vriEntryId = new(nextId++, 0);

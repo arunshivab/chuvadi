@@ -84,7 +84,7 @@ public static class BmpEncoder
             {
                 int srcOff = x * 4;
                 int dstOff = x * bytesPerPixel;
-                rowBuffer[dstOff]     = srcRow[srcOff];     // B
+                rowBuffer[dstOff] = srcRow[srcOff];     // B
                 rowBuffer[dstOff + 1] = srcRow[srcOff + 1]; // G
                 rowBuffer[dstOff + 2] = srcRow[srcOff + 2]; // R
 

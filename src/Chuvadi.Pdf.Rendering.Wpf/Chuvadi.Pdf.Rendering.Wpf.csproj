@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Rendering.Wpf</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Rendering.Wpf</RootNamespace>
+    <Description>
+      WPF rendering adapter for Chuvadi. Consumes PageDisplayList and emits
+      DrawingVisual content via DrawingContext. Windows-only (uses WPF
+      assemblies); the project is compiled only when targeting net10.0-windows.
+    </Description>
+    <PackageId>Chuvadi.Pdf.Rendering.Wpf</PackageId>
+    <UseWPF>true</UseWPF>
+    <TargetFrameworks>net10.0-windows</TargetFrameworks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Rendering.DisplayList\Chuvadi.Pdf.Rendering.DisplayList.csproj" />
+  </ItemGroup>
+</Project>

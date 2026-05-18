@@ -248,9 +248,9 @@ public sealed class RedactorTests
         byte[] contentBytes = Encoding.Latin1.GetBytes(contentStream);
 
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
-        PdfObjectId pageId    = new PdfObjectId(3, 0);
-        PdfObjectId streamId  = new PdfObjectId(4, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
+        PdfObjectId pageId = new PdfObjectId(3, 0);
+        PdfObjectId streamId = new PdfObjectId(4, 0);
 
         PdfDictionary streamDict = new PdfDictionary();
         streamDict.Set(PdfName.Length, contentBytes.Length);
@@ -295,7 +295,7 @@ public sealed class RedactorTests
         byte[] contentBytes = Encoding.Latin1.GetBytes(contentSnippet);
 
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
         PdfArray kids = new PdfArray([]);
         List<PdfIndirectObject> objects = new List<PdfIndirectObject>();
 
@@ -303,7 +303,7 @@ public sealed class RedactorTests
 
         for (int i = 0; i < pageCount; i++)
         {
-            PdfObjectId pageId   = new PdfObjectId(nextId++, 0);
+            PdfObjectId pageId = new PdfObjectId(nextId++, 0);
             PdfObjectId streamId = new PdfObjectId(nextId++, 0);
 
             PdfDictionary streamDict = new PdfDictionary();

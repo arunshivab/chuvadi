@@ -77,7 +77,7 @@ public sealed class StrokeExpander
         bool isClosed = points[0].X == points[n - 1].X &&
                         points[0].Y == points[n - 1].Y;
 
-        List<PointF> left  = new List<PointF>(n * 2);
+        List<PointF> left = new List<PointF>(n * 2);
         List<PointF> right = new List<PointF>(n * 2);
 
         for (int i = 0; i < n - 1; i++)
@@ -143,7 +143,7 @@ public sealed class StrokeExpander
 
         // Perpendicular unit vector (left side of direction of travel)
         double nx = -dy / len;
-        double ny =  dx / len;
+        double ny = dx / len;
 
         PointF l0 = new PointF(p0.X + nx * halfWidth, p0.Y + ny * halfWidth);
         PointF l1 = new PointF(p1.X + nx * halfWidth, p1.Y + ny * halfWidth);
@@ -174,13 +174,13 @@ public sealed class StrokeExpander
 
             if (start)
             {
-                left[0]  = new PointF(left[0].X  - ex, left[0].Y  - ey);
+                left[0] = new PointF(left[0].X - ex, left[0].Y - ey);
                 right[0] = new PointF(right[0].X - ex, right[0].Y - ey);
             }
             else
             {
                 int last = left.Count - 1;
-                left[last]  = new PointF(left[last].X  + ex, left[last].Y  + ey);
+                left[last] = new PointF(left[last].X + ex, left[last].Y + ey);
                 right[last] = new PointF(right[last].X + ex, right[last].Y + ey);
             }
         }

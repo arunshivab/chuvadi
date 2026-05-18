@@ -137,12 +137,12 @@ public sealed class WatermarkCommand : ICommand
             return 2;
         }
 
-        string inputPath  = p.Positional[0];
+        string inputPath = p.Positional[0];
         string outputPath = p.Get("output") ?? throw new ArgumentException("--output is required");
-        string text       = p.Get("text") ?? throw new ArgumentException("--text is required");
-        double size       = double.Parse(p.Get("size", "48")!, CultureInfo.InvariantCulture);
-        float  opacity    = float.Parse(p.Get("opacity", "0.3")!, CultureInfo.InvariantCulture);
-        double rotation   = double.Parse(p.Get("rotation", "45")!, CultureInfo.InvariantCulture);
+        string text = p.Get("text") ?? throw new ArgumentException("--text is required");
+        double size = double.Parse(p.Get("size", "48")!, CultureInfo.InvariantCulture);
+        float opacity = float.Parse(p.Get("opacity", "0.3")!, CultureInfo.InvariantCulture);
+        double rotation = double.Parse(p.Get("rotation", "45")!, CultureInfo.InvariantCulture);
 
         using (FileStream fs = File.OpenRead(inputPath))
         using (PdfDocument doc = PdfDocument.Open(fs, leaveOpen: false))
@@ -150,8 +150,8 @@ public sealed class WatermarkCommand : ICommand
         {
             TextWatermarkOptions opts = new TextWatermarkOptions(text)
             {
-                FontSize        = size,
-                Opacity         = opacity,
+                FontSize = size,
+                Opacity = opacity,
                 RotationDegrees = rotation,
             };
             WatermarkStamper.ApplyText(outFs, doc, opts);
@@ -182,7 +182,7 @@ public sealed class RedactCommand : ICommand
             return 2;
         }
 
-        string inputPath  = p.Positional[0];
+        string inputPath = p.Positional[0];
         string outputPath = p.Get("output") ?? throw new ArgumentException("--output is required");
         IReadOnlyList<string> rectSpecs = p.GetAll("rect");
 
@@ -204,11 +204,11 @@ public sealed class RedactCommand : ICommand
                 return 2;
             }
 
-            int    pg = int.Parse(parts[0], CultureInfo.InvariantCulture);
-            double x  = double.Parse(parts[1], CultureInfo.InvariantCulture);
-            double y  = double.Parse(parts[2], CultureInfo.InvariantCulture);
-            double w  = double.Parse(parts[3], CultureInfo.InvariantCulture);
-            double h  = double.Parse(parts[4], CultureInfo.InvariantCulture);
+            int pg = int.Parse(parts[0], CultureInfo.InvariantCulture);
+            double x = double.Parse(parts[1], CultureInfo.InvariantCulture);
+            double y = double.Parse(parts[2], CultureInfo.InvariantCulture);
+            double w = double.Parse(parts[3], CultureInfo.InvariantCulture);
+            double h = double.Parse(parts[4], CultureInfo.InvariantCulture);
             rects.Add(new RedactionRect(pg, new RectangleF(x, y, w, h)));
         }
 
@@ -245,7 +245,7 @@ public sealed class FormFillCommand : ICommand
             return 2;
         }
 
-        string inputPath  = p.Positional[0];
+        string inputPath = p.Positional[0];
         string outputPath = p.Get("output") ?? throw new ArgumentException("--output is required");
 
         Dictionary<string, string> values = new Dictionary<string, string>();
@@ -302,7 +302,7 @@ public sealed class ExtractTextCommand : ICommand
         ExtractionStrategy strategy = strategyName switch
         {
             "operator" => ExtractionStrategy.Operator,
-            "layout"   => ExtractionStrategy.Layout,
+            "layout" => ExtractionStrategy.Layout,
             _ => throw new ArgumentException($"unknown strategy '{strategyName}' (use 'operator' or 'layout')"),
         };
 
@@ -421,7 +421,7 @@ public sealed class MergeCommand : ICommand
         string outputPath = p.Get("output") ?? throw new ArgumentException("--output is required");
 
         List<PdfDocument> docs = new List<PdfDocument>();
-        List<FileStream>  fileStreams = new List<FileStream>();
+        List<FileStream> fileStreams = new List<FileStream>();
 
         try
         {
@@ -524,9 +524,9 @@ public sealed class DeleteCommand : ICommand
             return 2;
         }
 
-        string inputPath  = p.Positional[0];
+        string inputPath = p.Positional[0];
         string outputPath = p.Get("output") ?? throw new ArgumentException("--output is required");
-        string pages      = p.Get("pages") ?? throw new ArgumentException("--pages is required");
+        string pages = p.Get("pages") ?? throw new ArgumentException("--pages is required");
 
         List<int> indices = new List<int>();
 
@@ -567,10 +567,10 @@ public sealed class RotateCommand : ICommand
             return 2;
         }
 
-        string inputPath  = p.Positional[0];
+        string inputPath = p.Positional[0];
         string outputPath = p.Get("output") ?? throw new ArgumentException("--output is required");
-        int degrees       = int.Parse(p.Get("degrees", "90")!, CultureInfo.InvariantCulture);
-        string? pageOpt   = p.Get("page");
+        int degrees = int.Parse(p.Get("degrees", "90")!, CultureInfo.InvariantCulture);
+        string? pageOpt = p.Get("page");
 
         List<int>? pageIndices = null;
 

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <IsPackable>false</IsPackable>
+    <Description>
+      WebAssembly smoke test. Opens a tiny in-memory PDF, builds a display
+      list, renders to SVG. Fails the build if any Chuvadi assembly pulls
+      in OS-coupled APIs that don't work in the browser sandbox.
+    </Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Authoring\Chuvadi.Pdf.Authoring.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Svg\Chuvadi.Pdf.Svg.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Rendering.DisplayList\Chuvadi.Pdf.Rendering.DisplayList.csproj" />
+  </ItemGroup>
+</Project>

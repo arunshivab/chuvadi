@@ -146,7 +146,7 @@ public static class Redactor
 
             // Build new page object: /Contents = [redactedStreamRef, overlayStreamRef]
             PdfObjectId redactedId = new PdfObjectId(nextObjectNum++, 0);
-            PdfObjectId overlayId  = new PdfObjectId(nextObjectNum++, 0);
+            PdfObjectId overlayId = new PdfObjectId(nextObjectNum++, 0);
 
             PdfDictionary redactedDict = new PdfDictionary();
             redactedDict.Set(PdfName.Length, redacted.Length);
@@ -206,7 +206,7 @@ public static class Redactor
 
     private static byte[] RewriteContent(byte[] content, List<RectangleF> rects)
     {
-        using (MemoryStream input  = new MemoryStream(content))
+        using (MemoryStream input = new MemoryStream(content))
         using (MemoryStream output = new MemoryStream())
         using (PdfTokenizer tok = new PdfTokenizer(input))
         {
@@ -500,14 +500,14 @@ public static class Redactor
         // Approximate text bounding box in user space:
         //   width  ≈ length × fontSize × 0.6 (Helvetica baseline)
         //   height ≈ fontSize
-        double width  = text.Length * state.FontSize * 0.6;
+        double width = text.Length * state.FontSize * 0.6;
         double height = state.FontSize;
 
         // Origin: TextX/TextY in text space; transform by CTM (text matrix is already
         // applied via TextX/TextY tracking for simple cases)
         Transform combined = state.TextMatrix.Multiply(state.Ctm);
         PointF originDev = combined.TransformPoint(new PointF(state.TextX, state.TextY));
-        PointF endDev    = combined.TransformPoint(
+        PointF endDev = combined.TransformPoint(
             new PointF(state.TextX + width, state.TextY + height));
 
         RectangleF textBox = RectangleF.FromCorners(
@@ -869,14 +869,14 @@ internal sealed class RedactState
         FontSize = 12.0;
     }
 
-    internal Transform Ctm        { get; set; }
+    internal Transform Ctm { get; set; }
     internal Transform TextMatrix { get; set; }
-    internal double TextX         { get; set; }
-    internal double TextY         { get; set; }
-    internal double TextLineX     { get; set; }
-    internal double TextLineY     { get; set; }
-    internal double FontSize      { get; set; }
-    internal double Leading       { get; set; }
+    internal double TextX { get; set; }
+    internal double TextY { get; set; }
+    internal double TextLineX { get; set; }
+    internal double TextLineY { get; set; }
+    internal double FontSize { get; set; }
+    internal double Leading { get; set; }
 
     internal void PushGraphicsState()
     {

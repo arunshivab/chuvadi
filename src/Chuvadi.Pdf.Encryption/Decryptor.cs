@@ -47,11 +47,11 @@ public sealed class Decryptor
 
         return _algorithm switch
         {
-            EncryptionAlgorithm.None     => data,
-            EncryptionAlgorithm.Rc4_40   => DecryptRc4PerObject(data, objectNumber, generation),
-            EncryptionAlgorithm.Rc4_128  => DecryptRc4PerObject(data, objectNumber, generation),
-            EncryptionAlgorithm.Aes_128  => DecryptAes128PerObject(data, objectNumber, generation),
-            EncryptionAlgorithm.Aes_256  => AesCrypto.Decrypt(_fileKey, data),
+            EncryptionAlgorithm.None => data,
+            EncryptionAlgorithm.Rc4_40 => DecryptRc4PerObject(data, objectNumber, generation),
+            EncryptionAlgorithm.Rc4_128 => DecryptRc4PerObject(data, objectNumber, generation),
+            EncryptionAlgorithm.Aes_128 => DecryptAes128PerObject(data, objectNumber, generation),
+            EncryptionAlgorithm.Aes_256 => AesCrypto.Decrypt(_fileKey, data),
             _ => throw new EncryptionException($"Cannot decrypt: unsupported algorithm {_algorithm}."),
         };
     }

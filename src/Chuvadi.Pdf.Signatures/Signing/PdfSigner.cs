@@ -785,7 +785,7 @@ public static class PdfSigner
         const string HexDigits = "0123456789ABCDEF";
         for (int i = 0; i < data.Length; i++)
         {
-            bytes[offset + i * 2]     = (byte)HexDigits[data[i] >> 4];
+            bytes[offset + i * 2] = (byte)HexDigits[data[i] >> 4];
             bytes[offset + i * 2 + 1] = (byte)HexDigits[data[i] & 0x0F];
         }
         // Trailing bytes in the placeholder remain '0' (the placeholder was zeroed).

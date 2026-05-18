@@ -16,18 +16,18 @@ if (args.Length < 3)
     return 1;
 }
 
-string inputPath  = args[0];
+string inputPath = args[0];
 string outputPath = args[1];
-string text       = args[2];
+string text = args[2];
 
 using FileStream input = File.OpenRead(inputPath);
 using PdfDocument document = PdfDocument.Open(input, leaveOpen: false);
 
 TextWatermarkOptions opts = new(text)
 {
-    FontSize        = 72.0,
-    Color           = ColorF.FromGray(0.5f),
-    Opacity         = 0.25f,
+    FontSize = 72.0,
+    Color = ColorF.FromGray(0.5f),
+    Opacity = 0.25f,
     RotationDegrees = 45.0,
 };
 

@@ -248,8 +248,8 @@ internal static class Builder
     internal static MemoryStream BuildPlainPdfImpl()
     {
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
-        PdfObjectId pageId    = new PdfObjectId(3, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
+        PdfObjectId pageId = new PdfObjectId(3, 0);
 
         PdfDictionary pageDict = new PdfDictionary();
         pageDict.Set(PdfName.Type, PdfName.Page);
@@ -285,10 +285,10 @@ internal static class Builder
     internal static MemoryStream BuildFormPdfImpl(string fieldName, string fieldType, string? value)
     {
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
-        PdfObjectId pageId    = new PdfObjectId(3, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
+        PdfObjectId pageId = new PdfObjectId(3, 0);
         PdfObjectId acroFormId = new PdfObjectId(4, 0);
-        PdfObjectId fieldId   = new PdfObjectId(5, 0);
+        PdfObjectId fieldId = new PdfObjectId(5, 0);
 
         PdfDictionary pageDict = new PdfDictionary();
         pageDict.Set(PdfName.Type, PdfName.Page);

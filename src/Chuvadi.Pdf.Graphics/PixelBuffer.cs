@@ -76,7 +76,7 @@ public sealed class PixelBuffer
 
         int offset = (y * Width + x) * 4;
         ColorF rgb = color.ToRgb();
-        _pixels[offset]     = (byte)(rgb.B * 255f + 0.5f);
+        _pixels[offset] = (byte)(rgb.B * 255f + 0.5f);
         _pixels[offset + 1] = (byte)(rgb.G * 255f + 0.5f);
         _pixels[offset + 2] = (byte)(rgb.R * 255f + 0.5f);
         _pixels[offset + 3] = (byte)(rgb.Alpha * 255f + 0.5f);
@@ -94,7 +94,7 @@ public sealed class PixelBuffer
         }
 
         int offset = (y * Width + x) * 4;
-        _pixels[offset]     = b;
+        _pixels[offset] = b;
         _pixels[offset + 1] = g;
         _pixels[offset + 2] = r;
         _pixels[offset + 3] = a;
@@ -154,9 +154,9 @@ public sealed class PixelBuffer
 
         float outR = (rgb.R * srcA + (_pixels[offset + 2] / 255f) * dstA * (1f - srcA)) * invOutA;
         float outG = (rgb.G * srcA + (_pixels[offset + 1] / 255f) * dstA * (1f - srcA)) * invOutA;
-        float outB = (rgb.B * srcA + (_pixels[offset]     / 255f) * dstA * (1f - srcA)) * invOutA;
+        float outB = (rgb.B * srcA + (_pixels[offset] / 255f) * dstA * (1f - srcA)) * invOutA;
 
-        _pixels[offset]     = (byte)(outB * 255f + 0.5f);
+        _pixels[offset] = (byte)(outB * 255f + 0.5f);
         _pixels[offset + 1] = (byte)(outG * 255f + 0.5f);
         _pixels[offset + 2] = (byte)(outR * 255f + 0.5f);
         _pixels[offset + 3] = (byte)(outA * 255f + 0.5f);
@@ -173,7 +173,7 @@ public sealed class PixelBuffer
 
         for (int i = 0; i < _pixels.Length; i += 4)
         {
-            _pixels[i]     = b;
+            _pixels[i] = b;
             _pixels[i + 1] = g;
             _pixels[i + 2] = r;
             _pixels[i + 3] = a;

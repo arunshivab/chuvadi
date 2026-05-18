@@ -335,9 +335,9 @@ public sealed class PageRasterizerTests
     {
         byte[] contentBytes = System.Text.Encoding.Latin1.GetBytes(content);
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
-        PdfObjectId pageId    = new PdfObjectId(3, 0);
-        PdfObjectId streamId  = new PdfObjectId(4, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
+        PdfObjectId pageId = new PdfObjectId(3, 0);
+        PdfObjectId streamId = new PdfObjectId(4, 0);
 
         // Content stream
         PdfDictionary streamDict = new PdfDictionary();

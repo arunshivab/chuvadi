@@ -1,4 +1,4 @@
-﻿namespace Chuvadi.Pdf.Graphics;
+namespace Chuvadi.Pdf.Graphics;
 
 public class Class1
 {

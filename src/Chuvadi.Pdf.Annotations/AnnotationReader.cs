@@ -120,16 +120,16 @@ public static class AnnotationReader
 
         return subName.Value switch
         {
-            "Text"      => ReadText(pageIndex, rect, contents, color, author, opacity, dict),
-            "Link"      => ReadLink(pageIndex, rect, contents, dict, store, document),
-            "FreeText"  => ReadFreeText(pageIndex, rect, contents, color, author, opacity, dict),
+            "Text" => ReadText(pageIndex, rect, contents, color, author, opacity, dict),
+            "Link" => ReadLink(pageIndex, rect, contents, dict, store, document),
+            "FreeText" => ReadFreeText(pageIndex, rect, contents, color, author, opacity, dict),
             "Highlight" => ReadMarkup(AnnotationType.Highlight, pageIndex, rect, contents, color, author, opacity, dict),
             "Underline" => ReadMarkup(AnnotationType.Underline, pageIndex, rect, contents, color, author, opacity, dict),
-            "Squiggly"  => ReadMarkup(AnnotationType.Squiggly,  pageIndex, rect, contents, color, author, opacity, dict),
+            "Squiggly" => ReadMarkup(AnnotationType.Squiggly, pageIndex, rect, contents, color, author, opacity, dict),
             "StrikeOut" => ReadMarkup(AnnotationType.StrikeOut, pageIndex, rect, contents, color, author, opacity, dict),
-            "Stamp"     => ReadStamp(pageIndex, rect, contents, color, author, opacity, dict),
-            "Ink"       => ReadInk(pageIndex, rect, contents, color, author, opacity, dict),
-            _           => new GenericAnnotation(pageIndex, rect, subName.Value, contents, color, author, opacity),
+            "Stamp" => ReadStamp(pageIndex, rect, contents, color, author, opacity, dict),
+            "Ink" => ReadInk(pageIndex, rect, contents, color, author, opacity, dict),
+            _ => new GenericAnnotation(pageIndex, rect, subName.Value, contents, color, author, opacity),
         };
     }
 
@@ -314,8 +314,8 @@ public static class AnnotationReader
         return p switch
         {
             PdfString s => Encoding.Latin1.GetString(s.Bytes),
-            PdfName n   => n.Value,
-            _           => null,
+            PdfName n => n.Value,
+            _ => null,
         };
     }
 
@@ -361,8 +361,8 @@ public static class AnnotationReader
         return p switch
         {
             PdfInteger i => i.Value,
-            PdfReal r    => r.Value,
-            _            => 0,
+            PdfReal r => r.Value,
+            _ => 0,
         };
     }
 

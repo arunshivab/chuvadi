@@ -28,7 +28,7 @@ public static class PngEncoder
     private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
 
     // PNG filter types (PNG spec §6.2)
-    private const byte FilterSub  = 1;
+    private const byte FilterSub = 1;
 
     /// <summary>
     /// Encodes an <see cref="ImageFrame"/> to PNG and writes it to
@@ -64,8 +64,8 @@ public static class PngEncoder
         byte[] ihdrData = new byte[13];
         WriteUInt32Be(ihdrData, 0, (uint)width);
         WriteUInt32Be(ihdrData, 4, (uint)height);
-        ihdrData[8]  = 8;         // bit depth
-        ihdrData[9]  = colorType;
+        ihdrData[8] = 8;         // bit depth
+        ihdrData[9] = colorType;
         ihdrData[10] = 0;         // compression: deflate
         ihdrData[11] = 0;         // filter: adaptive
         ihdrData[12] = 0;         // interlace: none
@@ -103,14 +103,14 @@ public static class PngEncoder
 
                 if (includeAlpha)
                 {
-                    rowData[dstIdx]     = srcRow[srcIdx + 2]; // R
+                    rowData[dstIdx] = srcRow[srcIdx + 2]; // R
                     rowData[dstIdx + 1] = srcRow[srcIdx + 1]; // G
                     rowData[dstIdx + 2] = srcRow[srcIdx];     // B
                     rowData[dstIdx + 3] = srcRow[srcIdx + 3]; // A
                 }
                 else
                 {
-                    rowData[dstIdx]     = srcRow[srcIdx + 2]; // R
+                    rowData[dstIdx] = srcRow[srcIdx + 2]; // R
                     rowData[dstIdx + 1] = srcRow[srcIdx + 1]; // G
                     rowData[dstIdx + 2] = srcRow[srcIdx];     // B
                 }
@@ -159,7 +159,7 @@ public static class PngEncoder
         Array.Copy(deflated, 0, zlib, 2, deflated.Length);
 
         int adlerOffset = 2 + deflated.Length;
-        zlib[adlerOffset]     = (byte)((checksum >> 24) & 0xFF);
+        zlib[adlerOffset] = (byte)((checksum >> 24) & 0xFF);
         zlib[adlerOffset + 1] = (byte)((checksum >> 16) & 0xFF);
         zlib[adlerOffset + 2] = (byte)((checksum >> 8) & 0xFF);
         zlib[adlerOffset + 3] = (byte)(checksum & 0xFF);
@@ -199,7 +199,7 @@ public static class PngEncoder
 
     private static void WriteUInt32Be(byte[] buf, int offset, uint value)
     {
-        buf[offset]     = (byte)((value >> 24) & 0xFF);
+        buf[offset] = (byte)((value >> 24) & 0xFF);
         buf[offset + 1] = (byte)((value >> 16) & 0xFF);
         buf[offset + 2] = (byte)((value >> 8) & 0xFF);
         buf[offset + 3] = (byte)(value & 0xFF);

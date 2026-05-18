@@ -291,8 +291,8 @@ internal static class TestBuilder
     internal static MemoryStream BuildPlainPdf()
     {
         PdfObjectId catalogId = new(1, 0);
-        PdfObjectId pagesId   = new(2, 0);
-        PdfObjectId pageId    = new(3, 0);
+        PdfObjectId pagesId = new(2, 0);
+        PdfObjectId pageId = new(3, 0);
 
         PdfDictionary pageDict = new();
         pageDict.Set(PdfName.Type, PdfName.Page);
@@ -328,9 +328,9 @@ internal static class TestBuilder
     internal static MemoryStream BuildPdfWithTextAnnot(string contents)
     {
         PdfObjectId catalogId = new(1, 0);
-        PdfObjectId pagesId   = new(2, 0);
-        PdfObjectId pageId    = new(3, 0);
-        PdfObjectId annotId   = new(4, 0);
+        PdfObjectId pagesId = new(2, 0);
+        PdfObjectId pageId = new(3, 0);
+        PdfObjectId annotId = new(4, 0);
 
         PdfDictionary annotDict = new();
         annotDict.Set(PdfName.Type, PdfName.Intern("Annot"));

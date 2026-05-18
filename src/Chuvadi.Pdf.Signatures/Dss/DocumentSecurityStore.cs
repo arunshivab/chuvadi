@@ -139,7 +139,8 @@ public sealed class DocumentSecurityStore
         {
             try { certs.Add(X509Certificate.Decode(der)); }
             catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
-                                          or ArgumentException) { /* skip malformed */ }
+                                          or ArgumentException)
+            { /* skip malformed */ }
         }
 
         List<CertificateList> crls = new();
@@ -148,7 +149,8 @@ public sealed class DocumentSecurityStore
             try { crls.Add(CertificateList.Decode(der)); }
             catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
                                           or NotSupportedException
-                                          or ArgumentException) { /* skip */ }
+                                          or ArgumentException)
+            { /* skip */ }
         }
 
         List<OcspResponse> ocsps = new();
@@ -156,7 +158,8 @@ public sealed class DocumentSecurityStore
         {
             try { ocsps.Add(OcspResponse.Decode(der)); }
             catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
-                                          or ArgumentException) { /* skip */ }
+                                          or ArgumentException)
+            { /* skip */ }
         }
 
         Dictionary<string, VriEntry> vri = ReadVri(dss, objects, pipeline);
@@ -185,7 +188,8 @@ public sealed class DocumentSecurityStore
             {
                 try { certs.Add(X509Certificate.Decode(der)); }
                 catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
-                                              or ArgumentException) { /* skip malformed */ }
+                                              or ArgumentException)
+                { /* skip malformed */ }
             }
 
             List<CertificateList> crls = new();
@@ -194,7 +198,8 @@ public sealed class DocumentSecurityStore
                 try { crls.Add(CertificateList.Decode(der)); }
                 catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
                                               or NotSupportedException
-                                              or ArgumentException) { /* skip */ }
+                                              or ArgumentException)
+                { /* skip */ }
             }
 
             List<OcspResponse> ocsps = new();
@@ -202,7 +207,8 @@ public sealed class DocumentSecurityStore
             {
                 try { ocsps.Add(OcspResponse.Decode(der)); }
                 catch (Exception ex) when (ex is Chuvadi.Cryptography.Asn1.Asn1Exception
-                                              or ArgumentException) { /* skip */ }
+                                              or ArgumentException)
+                { /* skip */ }
             }
 
             // Normalise the lookup key to upper-case hex so callers can match
@@ -265,7 +271,8 @@ public sealed class DocumentSecurityStore
         }
         catch (Exception ex) when (ex is FilterException
                                       or InvalidDataException
-                                      or ArgumentException) { return null; }
+                                      or ArgumentException)
+        { return null; }
     }
 
     /// <summary>

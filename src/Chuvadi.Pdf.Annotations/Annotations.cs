@@ -32,13 +32,13 @@ public abstract class PdfAnnotation
             throw new ArgumentOutOfRangeException(nameof(pageIndex));
         }
 
-        Type      = type;
+        Type = type;
         PageIndex = pageIndex;
-        Rect      = rect;
-        Contents  = contents;
-        Color     = color;
-        Author    = author;
-        Opacity   = opacity;
+        Rect = rect;
+        Contents = contents;
+        Color = color;
+        Author = author;
+        Opacity = opacity;
     }
 
     /// <summary>Gets the annotation subtype.</summary>
@@ -84,7 +84,7 @@ public sealed class TextAnnotation : PdfAnnotation
         : base(AnnotationType.Text, pageIndex, rect, contents, color, author, opacity)
     {
         IconName = iconName ?? throw new ArgumentNullException(nameof(iconName));
-        IsOpen   = isOpen;
+        IsOpen = isOpen;
     }
 
     /// <summary>
@@ -201,7 +201,7 @@ public sealed class MarkupAnnotation : PdfAnnotation
     private static AnnotationType ValidateMarkupType(AnnotationType t)
     {
         if (t != AnnotationType.Highlight && t != AnnotationType.Underline &&
-            t != AnnotationType.Squiggly  && t != AnnotationType.StrikeOut)
+            t != AnnotationType.Squiggly && t != AnnotationType.StrikeOut)
         {
             throw new ArgumentException(
                 $"Markup annotation type must be Highlight, Underline, Squiggly, or StrikeOut; got {t}.",

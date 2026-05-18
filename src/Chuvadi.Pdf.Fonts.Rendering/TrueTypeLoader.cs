@@ -273,20 +273,20 @@ public sealed class TrueTypeLoader
         int segCountX2 = ReadUInt16(offset + 6);
         int segCount = segCountX2 / 2;
 
-        uint endCodesOffset   = offset + 14;
+        uint endCodesOffset = offset + 14;
         uint startCodesOffset = endCodesOffset + (uint)(segCount * 2) + 2;
-        uint deltaOffset      = startCodesOffset + (uint)(segCount * 2);
-        uint rangeOffset      = deltaOffset + (uint)(segCount * 2);
+        uint deltaOffset = startCodesOffset + (uint)(segCount * 2);
+        uint rangeOffset = deltaOffset + (uint)(segCount * 2);
         uint glyphIdArrayBase = rangeOffset + (uint)(segCount * 2);
 
         _cmapF4 = new Dictionary<int, int>(segCount * 32);
 
         for (int seg = 0; seg < segCount; seg++)
         {
-            int endCode   = ReadUInt16(endCodesOffset   + (uint)(seg * 2));
+            int endCode = ReadUInt16(endCodesOffset + (uint)(seg * 2));
             int startCode = ReadUInt16(startCodesOffset + (uint)(seg * 2));
-            int delta     = ReadInt16(deltaOffset        + (uint)(seg * 2));
-            int rangeOff  = ReadUInt16(rangeOffset       + (uint)(seg * 2));
+            int delta = ReadInt16(deltaOffset + (uint)(seg * 2));
+            int rangeOff = ReadUInt16(rangeOffset + (uint)(seg * 2));
 
             if (startCode == 0xFFFF)
             {
@@ -338,12 +338,12 @@ public sealed class TrueTypeLoader
         if (_longLoca)
         {
             locaEntry = ReadUInt32(_locaOffset + (uint)(glyphId * 4));
-            locaNext  = ReadUInt32(_locaOffset + (uint)((glyphId + 1) * 4));
+            locaNext = ReadUInt32(_locaOffset + (uint)((glyphId + 1) * 4));
         }
         else
         {
             locaEntry = (uint)(ReadUInt16(_locaOffset + (uint)(glyphId * 2)) * 2);
-            locaNext  = (uint)(ReadUInt16(_locaOffset + (uint)((glyphId + 1) * 2)) * 2);
+            locaNext = (uint)(ReadUInt16(_locaOffset + (uint)((glyphId + 1) * 2)) * 2);
         }
 
         if (locaEntry == locaNext)
@@ -457,8 +457,8 @@ public sealed class TrueTypeLoader
     {
         int[] coords = new int[numPoints];
         int current = 0;
-        int shortBit  = isX ? 0x02 : 0x04; // bit 1 (x-Short) or bit 2 (y-Short)
-        int sameBit   = isX ? 0x10 : 0x20; // bit 4 (x-Same)  or bit 5 (y-Same)
+        int shortBit = isX ? 0x02 : 0x04; // bit 1 (x-Short) or bit 2 (y-Short)
+        int sameBit = isX ? 0x10 : 0x20; // bit 4 (x-Same)  or bit 5 (y-Same)
 
         for (int i = 0; i < numPoints; i++)
         {
@@ -637,11 +637,11 @@ public sealed class TrueTypeLoader
             pos += 4;
 
             bool argsAreWords = (componentFlags & 0x0001) != 0;
-            bool argsAreXY    = (componentFlags & 0x0002) != 0;
+            bool argsAreXY = (componentFlags & 0x0002) != 0;
             bool moreComponents = (componentFlags & 0x0020) != 0;
-            bool hasScale     = (componentFlags & 0x0008) != 0;
-            bool hasXYScale   = (componentFlags & 0x0040) != 0;
-            bool has2x2       = (componentFlags & 0x0080) != 0;
+            bool hasScale = (componentFlags & 0x0008) != 0;
+            bool hasXYScale = (componentFlags & 0x0040) != 0;
+            bool has2x2 = (componentFlags & 0x0080) != 0;
 
             double dx = 0;
             double dy = 0;
