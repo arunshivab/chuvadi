@@ -221,7 +221,6 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
-| [BrotliEncoder](Fonts/BrotliEncoder.md) | class | Pure-C# Brotli encoder. |
 | [BrotliStoredEncoder](Fonts/BrotliStoredEncoder.md) | class | Emits Brotli-compatible bitstreams for WOFF2 packaging. |
 | [CMapParser](Fonts/CMapParser.md) | class | Parses a PDF ToUnicode CMap stream and builds a character code to Unicode string mapping. |
 | [CffLoader](Fonts/CffLoader.md) | class | Loads a Compact Font Format (CFF) / Type 1C font program and produces glyph outlines. |
