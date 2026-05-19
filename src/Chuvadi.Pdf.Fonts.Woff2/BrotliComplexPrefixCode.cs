@@ -132,8 +132,17 @@ internal static class BrotliComplexPrefixCode
         int end = lengths.Length;
         while (end > 0 && lengths[end - 1] == 0) { end--; }
 
+        // Per RFC §3.5: consecutive 17 (or 16) codes trigger the "modify" rule, where the
+        // second one MODIFIES the previous count via the formula instead of appending more.
+        // To avoid accidentally invoking the modify rule, we never emit two 17s in a row, and
+        // never two 16s in a row. We break runs with a non-modifying symbol when needed.
+        //
+        // For long zero runs (>10), we emit (17, extra=7) for chunks of 10, separated by a
+        // single literal (0, 0, 0) entry (which encodes "this symbol has length 0"). Similarly
+        // for long same-value runs (>6), we emit (16, extra=3) chunks separated by the literal
+        // length symbol.
+
         int i = 0;
-        int prevNonZero = -1;     // value of last non-zero length emitted (for 16-repeat)
         while (i < end)
         {
             int v = lengths[i];
@@ -142,49 +151,57 @@ internal static class BrotliComplexPrefixCode
                 int runEnd = i;
                 while (runEnd < end && lengths[runEnd] == 0) { runEnd++; }
                 int runLen = runEnd - i;
+                // Emit zeros in chunks. Each (17, extra) chunk encodes 3..10 zeros. Between
+                // chunks, we insert ONE literal-0 to avoid the 17-after-17 modify rule.
+                bool justEmittedSeventeen = false;
                 while (runLen > 0)
                 {
-                    if (runLen >= 3)
+                    if (runLen >= 3 && !justEmittedSeventeen)
                     {
                         int chunk = Math.Min(runLen, 10);
                         result.Add((17, chunk - 3, 3));
                         runLen -= chunk;
+                        justEmittedSeventeen = true;
                     }
                     else
                     {
                         result.Add((0, 0, 0));
                         runLen--;
+                        justEmittedSeventeen = false;
                     }
                 }
                 i = runEnd;
             }
             else
             {
-                // Always emit this value at least once as a literal length symbol.
+                // Emit this value at least once as a literal length symbol.
                 result.Add((v, 0, 0));
-                prevNonZero = v;
                 i++;
                 // Look for a run of the same value following.
                 int sameRun = 0;
                 while (i < end && lengths[i] == v) { sameRun++; i++; }
+                // Emit same-value runs in chunks of (16, extra) for 3..6 repeats. Between
+                // chunks, insert a literal value to avoid the 16-after-16 modify rule.
+                bool justEmittedSixteen = false;
                 while (sameRun > 0)
                 {
-                    if (sameRun >= 3)
+                    if (sameRun >= 3 && !justEmittedSixteen)
                     {
                         int chunk = Math.Min(sameRun, 6);
                         result.Add((16, chunk - 3, 2));
                         sameRun -= chunk;
+                        justEmittedSixteen = true;
                     }
                     else
                     {
-                        // Run too short for symbol 16; emit raw length symbol.
+                        // Run too short for symbol 16, or we just emitted a 16: emit raw length.
                         result.Add((v, 0, 0));
                         sameRun--;
+                        justEmittedSixteen = false;
                     }
                 }
             }
         }
-        _ = prevNonZero;       // unused; kept for clarity
         return result;
     }
 }

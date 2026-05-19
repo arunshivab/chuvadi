@@ -126,7 +126,7 @@ internal static class BrotliHuffman
         int n = lengths.Length;
         int[] codes = new int[n];
 
-        var ordered = Enumerable.Range(0, n)
+        int[] ordered = Enumerable.Range(0, n)
             .Where(i => lengths[i] > 0)
             .OrderBy(i => lengths[i])
             .ThenBy(i => i)

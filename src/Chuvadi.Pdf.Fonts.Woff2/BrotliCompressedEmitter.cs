@@ -4,8 +4,6 @@
 // PHASE: Phase 2.2 stage 2
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Chuvadi.Pdf.Fonts.Woff2;
 
@@ -47,10 +45,10 @@ internal static class BrotliCompressedEmitter
         if (data.Length == 0) { return false; }
         if (data.Length > (1 << 24)) { return false; }   // we use MNIBBLES=6 max
 
-        // Collect distinct literals. Simple prefix code supports ≤4 symbols.
-        HashSet<int> literals = new();
-        foreach (byte b in data) { literals.Add(b); }
-        if (literals.Count > 4) { return false; }
+        // Compute per-byte frequencies. With stage 3's complex prefix code support,
+        // we can handle any alphabet size (no longer capped at 4 distinct symbols).
+        int[] literalFreq = new int[256];
+        foreach (byte b in data) { literalFreq[b]++; }
 
         // Choose the insert length code that covers data.Length, then the IC symbol with
         // implicit distance (cell 0..63 row).
@@ -71,10 +69,14 @@ internal static class BrotliCompressedEmitter
         // emitted but never used.
         (int distCode, int distExtraBits, int distExtraValue) = BrotliCodeTables.DistanceToCode(1);
 
-        // Build the three simple prefix codes.
-        BrotliSimplePrefixCode literalCode = new(literals.Select(x => (int)x));
-        BrotliSimplePrefixCode icCode = new(new[] { icSymbol });
-        BrotliSimplePrefixCode distanceCode = new(new[] { distCode });
+        // Build the three prefix codes (auto-selecting simple ≤4-symbol or complex form).
+        int[] icFreq = new int[704];
+        icFreq[icSymbol] = 1;
+        int[] distFreq = new int[64];
+        distFreq[distCode] = 1;
+        BrotliPrefixCode literalCode = new(literalFreq, 15);
+        BrotliPrefixCode icCode = new(icFreq, 15);
+        BrotliPrefixCode distanceCode = new(distFreq, 15);
 
         // ── Meta-block header (RFC §9.2) ────────────────────────────────────────────────
         bw.WriteBits(isLast ? 1UL : 0UL, 1);              // ISLAST
