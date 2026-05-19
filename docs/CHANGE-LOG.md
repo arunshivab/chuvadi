@@ -441,3 +441,78 @@ Modules that follow this pattern:
 **Test totals at tag:** ~564 tests across 19 test projects, 0 failures.
 
 ---
+
+## A18 — Brotli LZ77 Multi-Command Emission
+
+**Date:** 2026-05-19
+**Scope:** `Chuvadi.Pdf.Fonts.Woff2` — `BrotliCompressedEmitter` and `BrotliEncoder`
+**Rationale:** Stage 3's single-command emission produced ~50% compression ratios
+even on highly-repetitive data because no LZ77 back-references were used. The LZ77
+matcher in `BrotliCommandStream` was complete but unused.
+
+This entry wires `BrotliCommandStream.Encode()` output directly into
+`BrotliCompressedEmitter.Emit()`. Per-meta-block input cap raised from 64 KiB to
+16 MiB (MNIBBLES=6); larger inputs split across multiple meta-blocks with only the
+last carrying `ISLAST=1`.
+
+The emitter is now infallible for non-empty inputs. `TryEmit` (returning `bool`)
+is replaced by `Emit` (returning `void`). The encoder still speculatively produces
+both compressed and stored variants and picks whichever is smaller, so tiny inputs
+where Huffman declaration overhead exceeds savings still fall back to stored framing.
+
+**Compression results on sandbox** (against `System.IO.Compression.BrotliStream`
+Optimal):
+
+| Input             | Pre-PR (v1.8.0) | Post-PR (v1.9.0) | .NET Optimal |
+|-------------------|-----------------|------------------|--------------|
+| Lorem ipsum 1KB   | 52.9%           | 6.2%             | 5.3%         |
+| English text 5KB  | 100.1%          | 1.8%             | 1.1%         |
+| Repetitive 1KB    | 26.4%           | 2.1%             | 1.5%         |
+| Moderate 1KB      | 57.1%           | 3.9%             | 2.7%         |
+
+Within ~1% of `.NET Optimal` on real data. Remaining gap is RFC §7 (literal
+context modeling) and §8 (static dictionary), planned for v1.11.0.
+
+**Trade-off:** the speculative dual-emission costs ~2x encode time on inputs
+where compression wins. For latency-sensitive callers this could be optimised
+later by adding a heuristic to skip the stored path when input is obviously
+compressible (e.g. low entropy estimate, or output already > 0.95 × input
+mid-emission). Kept simple for now since correctness is the v1.9.0 goal.
+
+**Files affected:** `src/Chuvadi.Pdf.Fonts.Woff2/BrotliCompressedEmitter.cs`,
+`src/Chuvadi.Pdf.Fonts.Woff2/BrotliEncoder.cs`,
+`tests/Chuvadi.Pdf.Fonts.Woff2.Tests/BrotliLz77Tests.cs`,
+`benchmarks/Chuvadi.Benchmarks/**`.
+
+---
+
+## A19 — Benchmark Harness Introduced
+
+**Date:** 2026-05-19
+**Scope:** New `benchmarks/Chuvadi.Benchmarks` project
+**Rationale:** Phase 2.2 stage 4 needs measurable compression numbers to know
+whether the LZ77 wiring achieves the design goal. More broadly, the project is
+at ~640 tests across 22 modules; performance regressions are starting to be a
+real risk without a benchmark guardrail.
+
+Project uses BenchmarkDotNet 0.14.0 (already in `Directory.Packages.props` from
+an earlier scaffold). Three benchmark classes:
+
+- **`BrotliRatioBench`** — output size vs `BrotliStream` Optimal/Fastest across
+  6 input scenarios (Lorem ipsum, English prose, repetitive, moderate, SFNT-like
+  binary, random incompressible).
+- **`BrotliThroughputBench`** — encode time on a subset of the same scenarios.
+- **`ParserOpenBench`** — `PdfDocument.Open` time on synthetic single-page and
+  20-page PDFs generated via `PdfDocumentBuilder` so the benchmark is
+  self-contained.
+
+Solution layout: `benchmarks/` parallel to `src/`, `tests/`, and `examples/`.
+`IsPackable=false` and `ServerGarbageCollection=true` set on the csproj.
+
+Not wired into CI on every PR (BenchmarkDotNet's harness is slow). Future
+follow-up: a scheduled weekly CI job that diffs against a stored baseline and
+opens an issue on regression.
+
+**Files affected:** `benchmarks/Chuvadi.Benchmarks/**`, solution file.
+
+---

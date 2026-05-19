@@ -41,13 +41,13 @@ public sealed class PdfDocumentBuilder
     public static PdfDocumentBuilder Create() => new();
 
     /// <summary>Sets the document's /Title metadata.</summary>
-    public PdfDocumentBuilder SetTitle(string title)   { _title = title;   return this; }
+    public PdfDocumentBuilder SetTitle(string title) { _title = title; return this; }
 
     /// <summary>Sets the document's /Author metadata.</summary>
     public PdfDocumentBuilder SetAuthor(string author) { _author = author; return this; }
 
     /// <summary>Sets the document's /Subject metadata.</summary>
-    public PdfDocumentBuilder SetSubject(string sub)   { _subject = sub;   return this; }
+    public PdfDocumentBuilder SetSubject(string sub) { _subject = sub; return this; }
 
     /// <summary>
     /// Registers a page header callback. The callback receives the page,
@@ -110,7 +110,7 @@ public sealed class PdfDocumentBuilder
         int nextId = 1;
 
         PdfObjectId catalogId = new(nextId++, 0);
-        PdfObjectId pagesId   = new(nextId++, 0);
+        PdfObjectId pagesId = new(nextId++, 0);
 
         // Per-page IDs first; we need them for the /Kids array.
         PdfObjectId[] pageIds = new PdfObjectId[_pages.Count];
@@ -154,8 +154,8 @@ public sealed class PdfDocumentBuilder
 
             // Resources
             PdfDictionary resources = new();
-            if (p.Fonts.Count > 0)   { resources.Set(PdfName.Intern("Font"), fontDict); }
-            if (p.Images.Count > 0)  { resources.Set(PdfName.Intern("XObject"), xobjectDict); }
+            if (p.Fonts.Count > 0) { resources.Set(PdfName.Intern("Font"), fontDict); }
+            if (p.Images.Count > 0) { resources.Set(PdfName.Intern("XObject"), xobjectDict); }
             // Always declare ProcSet for older readers.
             PdfArray procSet = new();
             procSet.Add(PdfName.Intern("PDF"));
@@ -233,8 +233,8 @@ public sealed class PdfDocumentBuilder
         {
             PdfObjectId infoId = new(nextId++, 0);
             PdfDictionary info = new();
-            if (_title is not null)   { info.Set(PdfName.Intern("Title"),   new PdfString(_title));   }
-            if (_author is not null)  { info.Set(PdfName.Intern("Author"),  new PdfString(_author));  }
+            if (_title is not null) { info.Set(PdfName.Intern("Title"), new PdfString(_title)); }
+            if (_author is not null) { info.Set(PdfName.Intern("Author"), new PdfString(_author)); }
             if (_subject is not null) { info.Set(PdfName.Intern("Subject"), new PdfString(_subject)); }
             objects.Add(new PdfIndirectObject(infoId, info));
             trailer.Set(PdfName.Intern("Info"), new PdfReference(infoId));

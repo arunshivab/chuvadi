@@ -113,8 +113,8 @@ internal sealed class ContentStreamWriter
             switch (ch)
             {
                 case '\\': sb.Append("\\\\"); break;
-                case '(':  sb.Append("\\("); break;
-                case ')':  sb.Append("\\)"); break;
+                case '(': sb.Append("\\("); break;
+                case ')': sb.Append("\\)"); break;
                 case '\r': sb.Append("\\r"); break;
                 case '\n': sb.Append("\\n"); break;
                 case '\t': sb.Append("\\t"); break;
