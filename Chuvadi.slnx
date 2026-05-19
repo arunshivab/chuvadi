@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Chuvadi.Benchmarks/Chuvadi.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/examples/">
     <Project Path="examples/Chuvadi.Examples.Annotations/Chuvadi.Examples.Annotations.csproj" />
     <Project Path="examples/Chuvadi.Examples.FormFill/Chuvadi.Examples.FormFill.csproj" />
