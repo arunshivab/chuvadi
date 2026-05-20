@@ -27,6 +27,15 @@ namespace Chuvadi.Pdf.Documents;
 /// </remarks>
 public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
 {
+    /// <summary>
+    /// Maximum depth of recursion through the page tree. PDF 32000-1 does
+    /// not mandate a maximum, but real-world documents use depth 1–5; even
+    /// large balanced trees stay well under this limit. Any document that
+    /// exceeds it is either malformed (cyclic /Kids reference) or pathological
+    /// (deliberately deep to exhaust the stack). Either way we reject it.
+    /// </summary>
+    private const int MaxPageTreeDepth = 1024;
+
     private readonly PdfDictionary _pagesRoot;
     private readonly IPdfObjectResolver _resolver;
     private readonly PdfPage?[] _cache;
@@ -62,7 +71,7 @@ public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
 
             if (_cache[index] is null)
             {
-                _cache[index] = FindPage(_pagesRoot, index, 0);
+                _cache[index] = FindPage(_pagesRoot, index, 0, 0);
             }
 
             return _cache[index]!;
@@ -87,10 +96,20 @@ public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
     /// Recursively finds the page at document index (<paramref name="targetIndex"/>)
     /// within the subtree rooted at <paramref name="node"/>.
     /// <paramref name="offset"/> is the number of pages before this subtree.
+    /// <paramref name="depth"/> is the recursion depth from the page-tree root;
+    /// guarded by <see cref="MaxPageTreeDepth"/> to defend against cyclic or
+    /// pathologically-deep page trees in malformed input.
     /// PDF 32000-1:2008 §7.7.3 — Page tree nodes.
     /// </summary>
-    private PdfPage FindPage(PdfDictionary node, int targetIndex, int offset)
+    private PdfPage FindPage(PdfDictionary node, int targetIndex, int offset, int depth)
     {
+        if (depth > MaxPageTreeDepth)
+        {
+            throw new PdfDocumentException(
+                $"Page tree depth exceeds maximum ({MaxPageTreeDepth}); " +
+                "document may contain a cyclic /Kids reference.");
+        }
+
         PdfArray kids = node.GetArray(PdfName.Kids) ??
             throw new PdfDocumentException(
                 "Page tree node is missing the required /Kids array.");
@@ -125,7 +144,7 @@ public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
 
                 if (targetIndex < localOffset + subtreeCount)
                 {
-                    return FindPage(kidDict, targetIndex, localOffset);
+                    return FindPage(kidDict, targetIndex, localOffset, depth + 1);
                 }
 
                 localOffset += subtreeCount;

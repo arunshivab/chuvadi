@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Chuvadi.Pdf.Fuzz</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Fuzz</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Fuzz harness: exception messages and stack traces are user-facing output,
+         not API documentation, so suppress missing-XML-doc warnings. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Server GC for steadier throughput across long fuzz runs. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Content\Chuvadi.Pdf.Content.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Fonts.Rendering\Chuvadi.Pdf.Fonts.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Authoring\Chuvadi.Pdf.Authoring.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ship corpus seeds with the build so the fuzzer can load them at runtime. -->
+    <Content Include="corpus\**\*.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

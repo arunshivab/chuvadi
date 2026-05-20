@@ -1,0 +1,73 @@
+name: fuzz
+
+on:
+  schedule:
+    # Sundays at 02:00 UTC. Runs all three targets for 15 minutes each.
+    # Total runtime ~50 min (build + 3 × 15 min + artifact upload).
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: 'Per-target duration in seconds'
+        required: false
+        default: '900'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pdf-open, content-stream, truetype]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore tests/Chuvadi.Pdf.Fuzz/Chuvadi.Pdf.Fuzz.csproj
+
+      - name: Build
+        run: dotnet build tests/Chuvadi.Pdf.Fuzz/Chuvadi.Pdf.Fuzz.csproj -c Release --no-restore
+
+      - name: Regenerate corpus
+        run: dotnet run -c Release --project tests/Chuvadi.Pdf.Fuzz --no-build -- --regenerate-corpus
+
+      - name: Fuzz ${{ matrix.target }}
+        id: fuzz
+        run: |
+          DURATION="${{ github.event.inputs.duration_seconds || 900 }}"
+          set +e
+          dotnet run -c Release --project tests/Chuvadi.Pdf.Fuzz --no-build -- \
+            "${{ matrix.target }}" --duration "$DURATION"
+          EXIT=$?
+          echo "exit=$EXIT" >> "$GITHUB_OUTPUT"
+          # 0 = clean, 77 = crashes found, anything else = harness error
+          if [ $EXIT -eq 77 ]; then
+            echo "::warning ::Fuzzer found crashes for target ${{ matrix.target }}. See uploaded artifact."
+            exit 1
+          fi
+          exit $EXIT
+
+      - name: Upload crashes
+        if: always() && hashFiles('crashes/**/*.bin') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}-${{ github.run_id }}
+          path: crashes/
+          retention-days: 30
+          if-no-files-found: ignore
