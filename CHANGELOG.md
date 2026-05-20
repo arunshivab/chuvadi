@@ -5,6 +5,10 @@ All notable changes to Chuvadi will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+This file records release-by-release notes. Architectural decisions and
+rationale live in `docs/CHANGE-LOG.md` (an append-only decision log,
+numbered A01..ANN).
+
 ---
 
 ## [1.10.0] - 2026-05-20
@@ -84,13 +88,172 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [1.7.0] - 2026-05-16
 
 ### Added
-- Initial solution structure
-- Project scaffolding for all Phase 1 modules
-- CI/CD pipelines (GitHub Actions)
-- Apache 2.0 license
+- **Phase 1.1.4** — Digital signature verification (`Chuvadi.Pdf.Signatures`)
+  - PKCS#7 / CMS detached signature parsing (PDF 32000-1 §12.8.3.3)
+  - Certificate chain extraction and signing-time recovery
+  - Byte-range verification against the signed bytes of the document
+  - Verification-only in this release; signing remains on the backlog
+
+---
+
+## [1.6.0] - 2026-05-15
+
+### Added
+- **Phase 1.1.6** — Linearization / Fast Web View (ISO 32000-1 Annex F)
+  - Reader detects linearization and exposes the `/Linearized` parameter
+    dictionary through `PdfDocument.IsLinearized` / `PdfDocument.Linearization`
+  - Writer produces linearized PDFs with primary hint stream via
+    `PdfWriter.WriteLinearized(...)`
+  - `BitWriter` / `BitReader` and `PageHintTable` infrastructure for
+    sub-byte hint encoding
+
+### Notes
+- Spec-conformant output. Real-world viewer compatibility (Acrobat,
+  Foxit, browser PDF viewers) is not yet verified end-to-end and is
+  tracked in the backlog
+
+---
+
+## [1.5.0] - 2026-05-15
+
+### Added
+- **Phase 1.1.3** — Form XObject and image redaction. `Redactor` now
+  traces the `Do` operator with full CTM intersection so any Form XObject
+  or image overlapping a redaction rect is dropped from the rewritten
+  content stream
+- **Phase 1.1.7** — Optional content (layers) reader. `OptionalContentReader`
+  + `OptionalContentGroup` expose `/OCProperties`, `/OCGs`, default
+  configuration name, and resolved visibility (`/ON`, `/OFF`, `BaseState`)
+- **Phase 1.1.8** — CMYK render output. `PageRasterizer` and `TiffEncoder`
+  support CMYK pixel buffers (TIFF photometric=5)
+
+### Fixed
+- `Redactor` was silently corrupting name operands (`Tf`, `cs`, `gs`, `Do`)
+  in the rewritten content stream. Regression test added
+
+---
+
+## [1.4.0] - 2026-05-13
+
+### Added
+- **Encryption fully wired into the public API:**
+  - `PdfDocument.Open(stream, password)` for opening encrypted documents
+  - `PdfWriter.Write(..., EncryptionOptions)` for writing encrypted documents
+  - `EncryptionOptions` factory methods for AES-128 and AES-256 with owner
+    and user passwords
+  - `EncryptionVisitor` traverses the object graph and encrypts strings and
+    streams in place during write
+  - `EncryptionDictionaryBuilder` implements PDF Algorithms 3/5 (R=4,
+    standard security handler) and ISO 32000-2 Algorithms 8/9 (R=6,
+    AES-256)
+- 5 integration tests including byte-level plaintext-absence verification
+  on round-tripped encrypted documents
+
+### Changed
+- AES-128 and AES-256 are now supported for both read AND write paths
+  (v1.3.0 shipped read-only)
+
+---
+
+## [1.3.0] - 2026-05-12
+
+### Added
+- **Phase 1.1.2** — Pattern-based redaction (`Chuvadi.Pdf.Redaction`)
+  - `PatternRule` and `PatternMatcher` for regex-based content matching
+  - `CommonPatterns` library covering SSN, email, phone, ICD-10, NHS
+    number, and other common PHI identifiers
+- **Phase 1.1.9** — TIFF baseline 6.0 read and write
+  (`Chuvadi.Pdf.Images.TiffDecoder` / `TiffEncoder`)
+  - Uncompressed, PackBits, and LZW compression
+  - Multi-page TIFFs via chained IFDs
+- **Phase 1.1.5** — Standard security handler encryption (read path)
+  (`Chuvadi.Pdf.Encryption`, `Chuvadi.Cryptography`)
+  - RC4-40 and RC4-128 decryption
+  - AES-128 decryption
+  - Password-based key derivation per Algorithm 2
+
+### Notes
+- 604 tests across 19 test projects at tag time
+- Write path for encryption arrived in v1.4.0
+
+---
+
+## [1.2.0] - 2026-05-12
+
+### Added
+- 8 runnable example projects under `examples/` (TextExtraction,
+  Watermark, Redaction, Render, FormFill, Outlines, PageOps,
+  Annotations)
+- Getting Started guide (`docs/getting-started.md`)
+- **Auto-generated Markdown API reference** (`docs/api/`, 117 pages)
+  produced by `tools/gen_api_docs.py` parsing XML doc comments from
+  every public type across all `src/` modules
+
+### Changed
+- CI adds a `docs-up-to-date` job that re-runs `gen_api_docs.py` and
+  fails the PR if the resulting Markdown diverges from what's committed
+- Style check (`tools/check_style.py`) expanded to scan `examples/`
+  alongside `src/` and `tests/`
+
+---
+
+## [1.1.0] - 2026-05-11
+
+### Added
+- **Phase 1.1.1** — `Chuvadi.Pdf.Annotations` module (read and write
+  per PDF 32000-1 §12.5)
+  - `AnnotationReader` and `AnnotationWriter` covering Text, FreeText,
+    Link, Stamp, Ink, Markup, and Generic annotation types
+- GitHub Actions CI matrix: style check + build/test on Ubuntu,
+  Windows, and macOS
+- Style checker (`tools/check_style.py`) with line-by-line string
+  stripping, `CONFLICT_OVERRIDES`, and `bin/` / `obj/` exclusion
+
+### Fixed
+- `Chuvadi.Pdf.Text.csproj` was missing several `ProjectReference`
+  entries; added
+- 10 `var`-in-`src` violations rewritten with explicit types to satisfy
+  the IDE0008 rule that the new style checker now enforces
+
+---
+
+## [1.0.0] - 2026-05-11
+
+### Added
+- Initial public release. Closes Phase 2 (rendering, watermarking,
+  redaction, forms, CLI). 17 modules, ~564 tests, 0 failures
+- **Read pipeline:** PDF 1.4–2.0 ingestion (classic and stream xref,
+  including hybrid); all standard non-encryption filters (Flate,
+  ASCIIHex, ASCII85, RunLength, LZW); Type1 standard 14 fonts, TrueType,
+  and CFF/Type1C inspection; full content stream tokenizer and parser
+- **Text extraction:** operator-walking, layout-aware, and glyph-level
+  fallback strategies (the glyph extractor handles non-Latin scripts via
+  TrueType outline extraction)
+- **Rendering:** zero-dependency scanline rasterizer producing PNG and
+  BMP output; standard PDF fonts (Helvetica, Times, Courier) plus
+  embedded TrueType; adaptive Bezier flattening; both fill rules;
+  butt/square stroke caps
+- **Document operations:** merge, split, delete pages, rotate, extract
+  page ranges; text watermarks with rotation, opacity, and per-page
+  targeting; image watermarks via PNG XObject embedding
+- **PHI-safe redaction:** rectangle-based content-stream rewriting with
+  byte-level removal (the redacted text is absent from the output PDF
+  at both operator and indirect-object levels). Conservative TJ array
+  drop. Tests grep the output bytes to verify removal
+- **AcroForms:** read the field tree (fully-qualified names, types,
+  current values, object IDs); fill values, set button `/AS`, mark
+  `/NeedAppearances=true`
+- **Outlines (bookmarks):** read the full tree with children and
+  resolve destinations to page indices
+- **CLI** (`chuvadi`): 11 user verbs (info, render, watermark, redact,
+  form-fill, extract-text, outlines, merge, split, delete, rotate) plus
+  6 debug verbs (tokenize, dump-objects, parse-content, decode-stream,
+  inspect-xref, validate-fonts)
+- Project scaffolding for all 17 Phase 1 modules, Apache 2.0 license,
+  initial CI/CD pipelines
 
 ---
 
