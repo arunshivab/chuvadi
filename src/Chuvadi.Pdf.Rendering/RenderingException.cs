@@ -4,6 +4,7 @@
 // Exception raised when a page cannot be rasterized.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Rendering;
 
@@ -11,7 +12,7 @@ namespace Chuvadi.Pdf.Rendering;
 /// Thrown when a PDF page cannot be rasterized due to an unsupported
 /// feature, invalid data, or internal rasterizer error.
 /// </summary>
-public sealed class RenderingException : Exception
+public sealed class RenderingException : PdfException
 {
     /// <summary>Initialises a new <see cref="RenderingException"/> with no message.</summary>
     public RenderingException()

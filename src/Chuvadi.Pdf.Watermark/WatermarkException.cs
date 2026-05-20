@@ -3,11 +3,12 @@
 // PHASE: Phase 2 — Chuvadi.Pdf.Watermark
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Watermark;
 
 /// <summary>Thrown when a watermark cannot be applied.</summary>
-public sealed class WatermarkException : Exception
+public sealed class WatermarkException : PdfException
 {
     /// <summary>Initialises a new <see cref="WatermarkException"/> with no message.</summary>
     public WatermarkException()

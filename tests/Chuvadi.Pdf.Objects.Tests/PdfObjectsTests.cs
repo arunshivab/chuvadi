@@ -306,7 +306,7 @@ public sealed class XrefStreamTableTests
         dict.Set(PdfName.Size, 1);
 
         Action act = () => XrefStreamTable.Parse(dict, [0x01, 0x00, 0x00, 0x00, 0x0F, 0x00, 0x00]);
-        act.Should().Throw<PdfObjectException>();
+        act.Should().Throw<PdfParseException>();
     }
 }
 
@@ -446,29 +446,8 @@ public sealed class PdfObjectStoreTests
     }
 }
 
-// ── PdfObjectException ────────────────────────────────────────────────────
-
-public sealed class PdfObjectExceptionTests
-{
-    [Fact]
-    public void DefaultConstructor_HasMessage()
-    {
-        PdfObjectException ex = new PdfObjectException();
-        ex.Message.Should().NotBeEmpty();
-    }
-
-    [Fact]
-    public void MessageConstructor_PreservesMessage()
-    {
-        PdfObjectException ex = new PdfObjectException("test error");
-        ex.Message.Should().Be("test error");
-    }
-
-    [Fact]
-    public void InnerExceptionConstructor_PreservesInner()
-    {
-        InvalidOperationException inner = new InvalidOperationException("inner");
-        PdfObjectException ex = new PdfObjectException("outer", inner);
-        ex.InnerException.Should().BeSameAs(inner);
-    }
-}
+// Note: PdfParseException constructor tests live in
+// tests/Chuvadi.Pdf.IO.Tests/PdfIOTests.cs (PdfWriterTests class).
+// They moved with the type from Chuvadi.Pdf.Objects (v1.x PdfObjectException)
+// to Chuvadi.Pdf.Primitives (v2.0.0 PdfParseException). One canonical
+// location instead of duplicating the same constructor coverage twice.

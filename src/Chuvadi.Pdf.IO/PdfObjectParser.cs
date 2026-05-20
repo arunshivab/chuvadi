@@ -150,7 +150,7 @@ internal sealed class PdfObjectParser
 
         if (numToken.Type != PdfTokenType.Integer)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Expected object number integer, got {numToken.Type} at offset {numToken.ByteOffset}.");
         }
 
@@ -158,7 +158,7 @@ internal sealed class PdfObjectParser
 
         if (genToken.Type != PdfTokenType.Integer)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Expected generation number integer, got {genToken.Type} at offset {genToken.ByteOffset}.");
         }
 
@@ -166,7 +166,7 @@ internal sealed class PdfObjectParser
 
         if (objToken.Type != PdfTokenType.ObjectStart)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Expected 'obj', got {objToken.Type} at offset {objToken.ByteOffset}.");
         }
 
@@ -214,7 +214,7 @@ internal sealed class PdfObjectParser
     }
 
     /// <summary>
-    /// Parses an Int32 from a token's raw text, throwing <see cref="PdfReaderException"/>
+    /// Parses an Int32 from a token's raw text, throwing <see cref="PdfParseException"/>
     /// with diagnostic detail on overflow or malformed input. Prevents framework
     /// exceptions (<see cref="OverflowException"/>, <see cref="FormatException"/>)
     /// from leaking out of the parser, so callers see only the documented
@@ -227,7 +227,7 @@ internal sealed class PdfObjectParser
             string snippet = token.RawText.Length <= 32
                 ? token.RawText
                 : token.RawText.Substring(0, 32) + "...";
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Invalid {what} '{snippet}' at offset {token.ByteOffset}: " +
                 "must be a valid 32-bit signed integer.");
         }
@@ -250,12 +250,12 @@ internal sealed class PdfObjectParser
 
             if (key.Type == PdfTokenType.EndOfStream)
             {
-                throw new PdfReaderException("Unexpected end of stream inside dictionary.");
+                throw new PdfParseException("Unexpected end of stream inside dictionary.");
             }
 
             if (key.Type != PdfTokenType.Name)
             {
-                throw new PdfReaderException(
+                throw new PdfParseException(
                     $"Dictionary key must be a name, got {key.Type} at offset {key.ByteOffset}.");
             }
 
@@ -303,7 +303,7 @@ internal sealed class PdfObjectParser
 
             if (next.Type == PdfTokenType.EndOfStream)
             {
-                throw new PdfReaderException("Unexpected end of stream inside array.");
+                throw new PdfParseException("Unexpected end of stream inside array.");
             }
 
             items.Add(ReadValue());
@@ -414,7 +414,7 @@ internal sealed class PdfObjectParser
     {
         if (!dict.TryGetValue(PdfName.Length, out PdfPrimitive? lengthValue))
         {
-            throw new PdfReaderException("Stream dictionary missing /Length entry.");
+            throw new PdfParseException("Stream dictionary missing /Length entry.");
         }
 
         if (lengthValue is PdfInteger directLength)
@@ -441,7 +441,7 @@ internal sealed class PdfObjectParser
 
                 if (n == 0)
                 {
-                    throw new PdfReaderException(
+                    throw new PdfParseException(
                         $"Stream truncated: expected {length} bytes, got {read}.");
                 }
 
@@ -506,7 +506,7 @@ internal sealed class PdfObjectParser
                 }
             }
 
-            throw new PdfReaderException("Stream endstream marker not found.");
+            throw new PdfParseException("Stream endstream marker not found.");
         }
     }
 

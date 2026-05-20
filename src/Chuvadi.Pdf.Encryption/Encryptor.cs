@@ -10,6 +10,7 @@
 
 using System;
 using System.Security.Cryptography;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Encryption;
 
@@ -27,7 +28,7 @@ public sealed class Encryptor
         if (algorithm != EncryptionAlgorithm.Aes_128 &&
             algorithm != EncryptionAlgorithm.Aes_256)
         {
-            throw new EncryptionException(
+            throw new PdfEncryptionException(
                 $"Encryption for writing is only supported for AES-128 and AES-256; got {algorithm}.");
         }
 
@@ -47,7 +48,7 @@ public sealed class Encryptor
         {
             EncryptionAlgorithm.Aes_128 => EncryptAes128PerObject(data, objectNumber, generation),
             EncryptionAlgorithm.Aes_256 => AesCrypto.Encrypt(_fileKey, data),
-            _ => throw new EncryptionException($"Cannot encrypt: unsupported algorithm {_algorithm}."),
+            _ => throw new PdfEncryptionException($"Cannot encrypt: unsupported algorithm {_algorithm}."),
         };
     }
 

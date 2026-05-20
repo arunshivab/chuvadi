@@ -68,7 +68,7 @@ public sealed class XrefStreamTable
     /// The decompressed stream content (after filter removal).
     /// </param>
     /// <returns>A populated <see cref="XrefStreamTable"/>.</returns>
-    /// <exception cref="PdfObjectException">
+    /// <exception cref="PdfParseException">
     /// Thrown when the stream is malformed.
     /// </exception>
     public static XrefStreamTable Parse(PdfDictionary dictionary, byte[] decodedBytes)
@@ -88,7 +88,7 @@ public sealed class XrefStreamTable
 
         if (wArray is null || wArray.Count != 3)
         {
-            throw new PdfObjectException(
+            throw new PdfParseException(
                 "XRef stream dictionary missing or invalid /W array.");
         }
 
@@ -99,7 +99,7 @@ public sealed class XrefStreamTable
 
         if (entrySize == 0)
         {
-            throw new PdfObjectException("XRef stream /W array sums to zero.");
+            throw new PdfParseException("XRef stream /W array sums to zero.");
         }
 
         // Read /Index array (subsection ranges). Default: [0 Size].
@@ -117,7 +117,7 @@ public sealed class XrefStreamTable
             {
                 if (pos + entrySize > decodedBytes.Length)
                 {
-                    throw new PdfObjectException(
+                    throw new PdfParseException(
                         $"XRef stream truncated at object {first + i}.");
                 }
 
@@ -208,7 +208,7 @@ public sealed class XrefStreamTable
 
         if (indexArray.Count % 2 != 0)
         {
-            throw new PdfObjectException(
+            throw new PdfParseException(
                 $"XRef stream /Index array must have an even number of elements, got {indexArray.Count}.");
         }
 

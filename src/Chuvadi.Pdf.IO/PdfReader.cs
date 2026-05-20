@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Chuvadi.Pdf.Filters;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Encryption;
@@ -41,10 +43,20 @@ public sealed class PdfReader : IDisposable
         Objects = objects;
     }
 
-    // ── Factory ───────────────────────────────────────────────────────────
+    // ── Factory: synchronous ──────────────────────────────────────────────
 
     /// <summary>Opens a PDF file from the given readable, seekable stream.</summary>
-    /// <exception cref="PdfReaderException">
+    /// <remarks>
+    /// Performs synchronous blocking I/O against <paramref name="stream"/>. The
+    /// reader holds a reference to the stream for the lifetime of the document
+    /// and reads objects lazily on demand. Memory-efficient for large files
+    /// because only xref tables and accessed objects are materialised.
+    ///
+    /// Not supported on WebAssembly (browser blocks on synchronous I/O against
+    /// network resources). Use <see cref="OpenAsync(Stream, CancellationToken)"/>
+    /// for cross-platform code.
+    /// </remarks>
+    /// <exception cref="PdfParseException">
     /// Thrown when the file is encrypted. Use the password overload to open
     /// encrypted PDFs.
     /// </exception>
@@ -57,15 +69,119 @@ public sealed class PdfReader : IDisposable
     /// Opens a PDF file with the given password. For unencrypted PDFs the
     /// password is ignored.
     /// </summary>
+    /// <remarks>
+    /// Synchronous blocking I/O. Not supported on WebAssembly; use
+    /// <see cref="OpenAsync(Stream, string, CancellationToken)"/> for
+    /// cross-platform code.
+    /// </remarks>
     /// <param name="stream">Readable, seekable stream containing the PDF.</param>
     /// <param name="password">User or owner password. Empty string for default.</param>
     /// <param name="leaveOpen">Whether to leave the stream open on dispose.</param>
-    /// <exception cref="PdfReaderException">Thrown when the password is incorrect.</exception>
+    /// <exception cref="PdfParseException">Thrown when the password is incorrect.</exception>
     public static PdfReader Open(Stream stream, string password, bool leaveOpen = false)
     {
         ArgumentNullException.ThrowIfNull(password);
         return OpenInternal(stream, password, leaveOpen);
     }
+
+    // ── Factory: asynchronous (WASM-friendly) ─────────────────────────────
+
+    /// <summary>
+    /// Asynchronously opens a PDF file from the given readable stream.
+    /// </summary>
+    /// <remarks>
+    /// The input stream is fully buffered into memory before parsing begins,
+    /// making this method WebAssembly-compatible and tolerant of non-seekable
+    /// streams (HTTP responses, decompression streams, pipes). The cost is a
+    /// full-file buffer in RAM for the lifetime of the document; for large
+    /// PDFs on a desktop runtime, the synchronous <see cref="Open(Stream, bool)"/>
+    /// overload is more memory-efficient.
+    ///
+    /// Cancellation is checked before and after the buffer fill. Once parsing
+    /// begins it runs to completion on the buffered bytes.
+    ///
+    /// The reader owns the internal memory buffer; the caller retains
+    /// responsibility for disposing <paramref name="stream"/>.
+    /// </remarks>
+    /// <param name="stream">A readable stream containing the PDF. Need not be seekable.</param>
+    /// <param name="cancellationToken">A token that cancels the buffer fill.</param>
+    public static Task<PdfReader> OpenAsync(
+        Stream stream,
+        CancellationToken cancellationToken = default)
+    {
+        return OpenAsyncInternal(stream, password: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously opens an encrypted PDF file with the given password.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="OpenAsync(Stream, CancellationToken)"/> for the buffering
+    /// and cancellation semantics. For unencrypted PDFs the password is ignored.
+    /// </remarks>
+    /// <param name="stream">A readable stream containing the PDF. Need not be seekable.</param>
+    /// <param name="password">User or owner password. Empty string for default.</param>
+    /// <param name="cancellationToken">A token that cancels the buffer fill.</param>
+    /// <exception cref="PdfParseException">Thrown when the password is incorrect.</exception>
+    public static Task<PdfReader> OpenAsync(
+        Stream stream,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        return OpenAsyncInternal(stream, password, cancellationToken);
+    }
+
+    private static async Task<PdfReader> OpenAsyncInternal(
+        Stream stream,
+        string? password,
+        CancellationToken cancellationToken)
+    {
+        if (stream is null)
+        {
+            throw new ArgumentNullException(nameof(stream));
+        }
+
+        if (!stream.CanRead)
+        {
+            throw new ArgumentException(
+                "Stream must be readable.", nameof(stream));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Buffer the entire stream into memory. The resulting MemoryStream is
+        // seekable, satisfying OpenInternal's precondition without imposing
+        // seekability on the caller's input stream.
+        MemoryStream buffer = new MemoryStream();
+        try
+        {
+            await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            buffer.Dispose();
+            throw;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        buffer.Position = 0;
+
+        // The reader takes ownership of the internal buffer (leaveOpen: false).
+        // The caller's input stream is not owned and not disposed by us.
+        try
+        {
+            return OpenInternal(buffer, password, leaveOpen: false);
+        }
+        catch
+        {
+            buffer.Dispose();
+            throw;
+        }
+    }
+
+    // ── Internal open ─────────────────────────────────────────────────────
 
     private static PdfReader OpenInternal(Stream stream, string? password, bool leaveOpen)
     {
@@ -150,7 +266,7 @@ public sealed class PdfReader : IDisposable
 
             if (indirect?.Value is not PdfDictionary d)
             {
-                throw new PdfReaderException(
+                throw new PdfParseException(
                     "Document /Encrypt entry could not be resolved to a dictionary.");
             }
 
@@ -162,7 +278,7 @@ public sealed class PdfReader : IDisposable
         }
         else
         {
-            throw new PdfReaderException("Document /Encrypt entry has an invalid type.");
+            throw new PdfParseException("Document /Encrypt entry has an invalid type.");
         }
 
         byte[] firstFileId = Array.Empty<byte>();
@@ -174,7 +290,7 @@ public sealed class PdfReader : IDisposable
         }
 
         Decryptor decryptor = PdfEncryption.TryOpen(encryptDict, firstFileId, password ?? string.Empty)
-            ?? throw new PdfReaderException(
+            ?? throw new PdfParseException(
                 "PDF is encrypted; provide the correct user or owner password.");
 
         bool encryptMetadata = true;
@@ -348,7 +464,7 @@ public sealed class PdfReader : IDisposable
 
         if (startxrefIdx < 0)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 "Could not locate 'startxref' keyword in the last 1024 bytes of the file.");
         }
 
@@ -371,7 +487,7 @@ public sealed class PdfReader : IDisposable
         if (!long.TryParse(offsetText, NumberStyles.None, CultureInfo.InvariantCulture,
             out long xrefOffset))
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Invalid startxref offset value: '{offsetText}'.");
         }
 
@@ -439,7 +555,7 @@ public sealed class PdfReader : IDisposable
 
         if (trailerPos < 0)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Could not find 'trailer' keyword in xref section at offset {offset}.");
         }
 
@@ -450,7 +566,7 @@ public sealed class PdfReader : IDisposable
 
         if (trailerValue is not PdfDictionary trailerDict)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Trailer must be a dictionary, got {trailerValue.GetType().Name}.");
         }
 
@@ -508,7 +624,7 @@ public sealed class PdfReader : IDisposable
 
         if (obj.Value is not PdfStream xrefStream)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Expected cross-reference stream at offset {offset}, " +
                 $"got {obj.Value.GetType().Name}.");
         }
@@ -574,9 +690,9 @@ public sealed class PdfReader : IDisposable
             parser.Seek(offset);
             return parser.ReadIndirectObject();
         }
-        catch (Exception ex) when (ex is not PdfReaderException)
+        catch (Exception ex) when (ex is not PdfParseException)
         {
-            throw new PdfReaderException(
+            throw new PdfParseException(
                 $"Error reading object {id} at offset {offset}.", ex);
         }
     }

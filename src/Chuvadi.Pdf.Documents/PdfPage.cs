@@ -109,7 +109,7 @@ public sealed class PdfPage
     private PdfRectangle GetInheritedBox(PdfName key)
     {
         PdfArray box = GetInheritedArray(key) ??
-            throw new PdfDocumentException(
+            throw new PdfCorruptionException(
                 $"Required page entry /{key.Value} not found on page {PageNumber} or any ancestor.");
 
         return RectangleFromArray(box);

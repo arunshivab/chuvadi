@@ -5,6 +5,7 @@
 using System;
 using System.Linq;
 using System.Text;
+using Chuvadi.Pdf.Primitives;
 using FluentAssertions;
 using Xunit;
 
@@ -75,7 +76,7 @@ public sealed class AesCryptoTests
         byte[] cipher = AesCrypto.Encrypt(key1, Encoding.UTF8.GetBytes("hello"));
 
         Action act = () => AesCrypto.Decrypt(key2, cipher);
-        act.Should().Throw<EncryptionException>();
+        act.Should().Throw<PdfEncryptionException>();
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public sealed class AesCryptoTests
     {
         byte[] key = new byte[16];
         Action act = () => AesCrypto.Decrypt(key, new byte[8]);
-        act.Should().Throw<EncryptionException>();
+        act.Should().Throw<PdfEncryptionException>();
     }
 }
 
@@ -126,7 +127,7 @@ public sealed class DecryptorEncryptorTests
     public void Encryptor_Rc4_Refused()
     {
         Action act = () => new Encryptor(new byte[16], EncryptionAlgorithm.Rc4_128);
-        act.Should().Throw<EncryptionException>()
+        act.Should().Throw<PdfEncryptionException>()
            .WithMessage("*only supported for AES*");
     }
 
@@ -134,31 +135,31 @@ public sealed class DecryptorEncryptorTests
     public void Encryptor_None_Refused()
     {
         Action act = () => new Encryptor(new byte[16], EncryptionAlgorithm.None);
-        act.Should().Throw<EncryptionException>();
+        act.Should().Throw<PdfEncryptionException>();
     }
 }
 
 // ── Exception type ────────────────────────────────────────────────────────
 
-public sealed class EncryptionExceptionTests
+public sealed class PdfEncryptionExceptionTests
 {
     [Fact]
     public void Default_HasMessage()
     {
-        new EncryptionException().Message.Should().NotBeEmpty();
+        new PdfEncryptionException().Message.Should().NotBeEmpty();
     }
 
     [Fact]
     public void Message_Preserved()
     {
-        new EncryptionException("oops").Message.Should().Be("oops");
+        new PdfEncryptionException("oops").Message.Should().Be("oops");
     }
 
     [Fact]
     public void InnerException_Preserved()
     {
         Exception inner = new InvalidOperationException();
-        new EncryptionException("wrap", inner).InnerException.Should().BeSameAs(inner);
+        new PdfEncryptionException("wrap", inner).InnerException.Should().BeSameAs(inner);
     }
 }
 

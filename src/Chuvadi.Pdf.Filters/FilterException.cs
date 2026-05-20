@@ -5,6 +5,7 @@
 // Exception raised when a stream filter encounters malformed or invalid data.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Filters;
 
@@ -15,7 +16,7 @@ namespace Chuvadi.Pdf.Filters;
 /// Covers malformed compressed data, invalid encoding sequences,
 /// checksum failures, and truncated streams.
 /// </remarks>
-public sealed class FilterException : Exception
+public sealed class FilterException : PdfException
 {
     /// <summary>Initialises a new <see cref="FilterException"/> with no message.</summary>
     public FilterException()

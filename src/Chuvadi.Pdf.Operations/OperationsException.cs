@@ -5,6 +5,7 @@
 // Exception raised when a page operation cannot be completed.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Operations;
 
@@ -12,7 +13,7 @@ namespace Chuvadi.Pdf.Operations;
 /// Thrown when a PDF page operation (merge, split, delete, rotate, reorder)
 /// cannot be completed due to an invalid argument or document structure.
 /// </summary>
-public sealed class OperationsException : Exception
+public sealed class OperationsException : PdfException
 {
     /// <summary>Initialises a new <see cref="OperationsException"/> with no message.</summary>
     public OperationsException()

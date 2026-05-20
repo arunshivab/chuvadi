@@ -39,7 +39,7 @@ public static class PdfEncryption
         }
 
         EncryptionDictionary meta = EncryptionDictionary.Parse(encryptDict)
-            ?? throw new EncryptionException(
+            ?? throw new PdfEncryptionException(
                 "Unsupported /Encrypt dictionary (not a standard security handler).");
 
         byte[]? fileKey;
@@ -84,7 +84,7 @@ public static class PdfEncryption
         }
         else
         {
-            throw new EncryptionException($"Unsupported encryption revision /R = {meta.R}.");
+            throw new PdfEncryptionException($"Unsupported encryption revision /R = {meta.R}.");
         }
 
         return new Decryptor(fileKey, meta.Algorithm);

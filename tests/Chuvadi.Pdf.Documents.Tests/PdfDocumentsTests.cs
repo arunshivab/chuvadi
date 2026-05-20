@@ -6,6 +6,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Chuvadi.Pdf.IO;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
@@ -96,27 +98,27 @@ public sealed class PdfDocumentTests
         return ms;
     }
 
-    // ── PdfDocumentException ──────────────────────────────────────────────
+    // ── PdfCorruptionException ──────────────────────────────────────────────
 
     [Fact]
-    public void PdfDocumentException_DefaultConstructor_HasMessage()
+    public void PdfCorruptionException_DefaultConstructor_HasMessage()
     {
-        PdfDocumentException ex = new PdfDocumentException();
+        PdfCorruptionException ex = new PdfCorruptionException();
         ex.Message.Should().NotBeEmpty();
     }
 
     [Fact]
-    public void PdfDocumentException_MessagePreserved()
+    public void PdfCorruptionException_MessagePreserved()
     {
-        PdfDocumentException ex = new PdfDocumentException("test error");
+        PdfCorruptionException ex = new PdfCorruptionException("test error");
         ex.Message.Should().Be("test error");
     }
 
     [Fact]
-    public void PdfDocumentException_InnerExceptionPreserved()
+    public void PdfCorruptionException_InnerExceptionPreserved()
     {
         InvalidOperationException inner = new InvalidOperationException("inner");
-        PdfDocumentException ex = new PdfDocumentException("outer", inner);
+        PdfCorruptionException ex = new PdfCorruptionException("outer", inner);
         ex.InnerException.Should().BeSameAs(inner);
     }
 
@@ -148,6 +150,42 @@ public sealed class PdfDocumentTests
                 doc.Should().NotBeNull();
             }
         }
+    }
+
+    // ── PdfDocument.OpenAsync ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task OpenAsync_ValidMinimalPdf_Succeeds()
+    {
+        // Round-trip via the async path: the document's pages and trailer
+        // should be the same as what the sync Open produces.
+        using MemoryStream ms = BuildPdfWithPages(2);
+        ms.Seek(0, SeekOrigin.Begin);
+
+        using PdfDocument doc = await PdfDocument.OpenAsync(ms);
+
+        doc.PageCount.Should().Be(2);
+        doc.Catalog.Type.Should().Be(PdfName.Catalog);
+    }
+
+    [Fact]
+    public async Task OpenAsync_NullStream_Throws()
+    {
+        Func<Task> act = async () => await PdfDocument.OpenAsync((Stream)null!);
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task OpenAsync_CancelledToken_Throws()
+    {
+        using MemoryStream ms = BuildMinimalPdf();
+        ms.Seek(0, SeekOrigin.Begin);
+
+        using CancellationTokenSource cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Func<Task> act = async () => await PdfDocument.OpenAsync(ms, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     // ── PdfDocument.Catalog and Trailer ───────────────────────────────────
@@ -233,7 +271,7 @@ public sealed class PdfDocumentTests
         // The /Pages node lists itself as one of its own /Kids — a malformed
         // input that previously caused unbounded recursion in FindPage and
         // a StackOverflowException at process level. Now caught by the depth
-        // guard and rejected as PdfDocumentException.
+        // guard and rejected as PdfCorruptionException.
         using (MemoryStream ms = BuildPdfWithCyclicPageTree())
         {
             ms.Seek(0, SeekOrigin.Begin);
@@ -241,7 +279,7 @@ public sealed class PdfDocumentTests
             using (PdfDocument doc = PdfDocument.Open(ms, leaveOpen: true))
             {
                 Action act = () => { PdfPage _ = doc.Pages[0]; };
-                act.Should().Throw<PdfDocumentException>()
+                act.Should().Throw<PdfCorruptionException>()
                     .WithMessage("*Page tree depth*");
             }
         }
@@ -260,7 +298,7 @@ public sealed class PdfDocumentTests
             using (PdfDocument doc = PdfDocument.Open(ms, leaveOpen: true))
             {
                 Action act = () => { PdfPage _ = doc.Pages[0]; };
-                act.Should().Throw<PdfDocumentException>()
+                act.Should().Throw<PdfCorruptionException>()
                     .WithMessage("*Page tree depth*");
             }
         }
