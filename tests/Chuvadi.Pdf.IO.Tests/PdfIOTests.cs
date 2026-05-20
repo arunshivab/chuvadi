@@ -6,6 +6,7 @@
 using System;
 using System.IO;
 using System.Text;
+using Chuvadi.Pdf.Documents;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
 using FluentAssertions;
@@ -221,6 +222,57 @@ public sealed class PdfWriterTests
             Action act = () => PdfReader.Open(ms, leaveOpen: true);
             act.Should().Throw<PdfReaderException>();
         }
+    }
+
+    // ── PdfReader — malformed input handling ──────────────────────────────
+
+    [Fact]
+    public void Open_OversizedIntegerInDictionary_ThrowsPdfReaderException()
+    {
+        // Build a structurally valid minimal PDF where the pages dict has a
+        // /Count value that exceeds Int32.MaxValue. Previously caused an
+        // unhandled OverflowException from int.Parse in PdfObjectParser;
+        // now caught and re-thrown as PdfReaderException. Surfaced by the
+        // pdf-open fuzz target.
+        byte[] pdf = BuildPdfWithOversizedInteger();
+
+        Action act = () =>
+        {
+            using MemoryStream ms = new MemoryStream(pdf);
+            using PdfDocument doc = PdfDocument.Open(ms, leaveOpen: false);
+            // Force eager parse of the pages dict if Open is lazy.
+            _ = doc.PageCount;
+        };
+
+        act.Should().Throw<PdfReaderException>();
+    }
+
+    private static byte[] BuildPdfWithOversizedInteger()
+    {
+        // Hand-built minimal PDF, xref-consistent, with the pages dict's
+        // /Count set to 9999999999 (exceeds Int32.MaxValue = 2147483647).
+        // Byte offsets are computed against the literal layout below; do
+        // not edit individual lines without recomputing the xref entries
+        // and the startxref offset.
+        string pdf =
+            "%PDF-1.4\n" +                                       //  9 bytes (0-8)
+            "1 0 obj\n" +                                        //  8 bytes (9-16)
+            "<< /Type /Catalog /Pages 2 0 R >>\n" +              // 34 bytes (17-50)
+            "endobj\n" +                                         //  7 bytes (51-57)
+            "2 0 obj\n" +                                        //  8 bytes (58-65)
+            "<< /Type /Pages /Kids [] /Count 9999999999 >>\n" +  // 46 bytes (66-111)
+            "endobj\n" +                                         //  7 bytes (112-118)
+            "xref\n" +                                           //  5 bytes (119-123)
+            "0 3\n" +                                            //  4 bytes (124-127)
+            "0000000000 65535 f \n" +                            // 20 bytes (128-147)
+            "0000000009 00000 n \n" +                            // 20 bytes (148-167)
+            "0000000058 00000 n \n" +                            // 20 bytes (168-187)
+            "trailer\n" +                                        //  8 bytes (188-195)
+            "<< /Root 1 0 R /Size 3 >>\n" +                      // 26 bytes (196-221)
+            "startxref\n" +                                      // 10 bytes (222-231)
+            "119\n" +                                            //  4 bytes (232-235)
+            "%%EOF";                                             //  5 bytes (236-240)
+        return Encoding.Latin1.GetBytes(pdf);
     }
 
     // ── Round-trip: integer value preserved ───────────────────────────────

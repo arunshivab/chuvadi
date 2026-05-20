@@ -170,10 +170,8 @@ internal sealed class PdfObjectParser
                 $"Expected 'obj', got {objToken.Type} at offset {objToken.ByteOffset}.");
         }
 
-        int objectNumber = int.Parse(
-            numToken.RawText, NumberStyles.None, CultureInfo.InvariantCulture);
-        int generation = int.Parse(
-            genToken.RawText, NumberStyles.None, CultureInfo.InvariantCulture);
+        int objectNumber = ParseInt32(numToken, NumberStyles.None, "object number");
+        int generation = ParseInt32(genToken, NumberStyles.None, "generation number");
 
         PdfPrimitive value = ReadValue();
 
@@ -196,8 +194,7 @@ internal sealed class PdfObjectParser
 
         if (next.Type != PdfTokenType.Integer)
         {
-            int v = int.Parse(
-                intToken.RawText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+            int v = ParseInt32(intToken, NumberStyles.AllowLeadingSign, "integer");
             return new PdfInteger(v);
         }
 
@@ -207,16 +204,35 @@ internal sealed class PdfObjectParser
         {
             NextToken(); // consume gen number
             NextToken(); // consume R
-            int objNum = int.Parse(
-                intToken.RawText, NumberStyles.None, CultureInfo.InvariantCulture);
-            int gen = int.Parse(
-                next.RawText, NumberStyles.None, CultureInfo.InvariantCulture);
+            int objNum = ParseInt32(intToken, NumberStyles.None, "reference object number");
+            int gen = ParseInt32(next, NumberStyles.None, "reference generation number");
             return new PdfReference(new PdfObjectId(objNum, gen));
         }
 
-        int value = int.Parse(
-            intToken.RawText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        int value = ParseInt32(intToken, NumberStyles.AllowLeadingSign, "integer");
         return new PdfInteger(value);
+    }
+
+    /// <summary>
+    /// Parses an Int32 from a token's raw text, throwing <see cref="PdfReaderException"/>
+    /// with diagnostic detail on overflow or malformed input. Prevents framework
+    /// exceptions (<see cref="OverflowException"/>, <see cref="FormatException"/>)
+    /// from leaking out of the parser, so callers see only the documented
+    /// PDF-typed exception set even on malformed input.
+    /// </summary>
+    private static int ParseInt32(PdfToken token, NumberStyles style, string what)
+    {
+        if (!int.TryParse(token.RawText, style, CultureInfo.InvariantCulture, out int value))
+        {
+            string snippet = token.RawText.Length <= 32
+                ? token.RawText
+                : token.RawText.Substring(0, 32) + "...";
+            throw new PdfReaderException(
+                $"Invalid {what} '{snippet}' at offset {token.ByteOffset}: " +
+                "must be a valid 32-bit signed integer.");
+        }
+
+        return value;
     }
 
     private PdfPrimitive ReadDictionaryOrStream()

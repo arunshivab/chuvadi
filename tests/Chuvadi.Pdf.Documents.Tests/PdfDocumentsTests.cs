@@ -225,6 +225,115 @@ public sealed class PdfDocumentTests
         }
     }
 
+    // ── Page tree depth guard (regression: fuzzer-found stack overflow) ───
+
+    [Fact]
+    public void Pages_CyclicKidsReference_ThrowsInsteadOfStackOverflow()
+    {
+        // The /Pages node lists itself as one of its own /Kids — a malformed
+        // input that previously caused unbounded recursion in FindPage and
+        // a StackOverflowException at process level. Now caught by the depth
+        // guard and rejected as PdfDocumentException.
+        using (MemoryStream ms = BuildPdfWithCyclicPageTree())
+        {
+            ms.Seek(0, SeekOrigin.Begin);
+
+            using (PdfDocument doc = PdfDocument.Open(ms, leaveOpen: true))
+            {
+                Action act = () => { PdfPage _ = doc.Pages[0]; };
+                act.Should().Throw<PdfDocumentException>()
+                    .WithMessage("*Page tree depth*");
+            }
+        }
+    }
+
+    [Fact]
+    public void Pages_DeepPageTree_ThrowsInsteadOfStackOverflow()
+    {
+        // A non-cyclic but pathologically deep page tree — a chain of /Pages
+        // nodes each containing exactly one /Pages kid, repeated far beyond
+        // any legitimate depth. Same defense, same outcome.
+        using (MemoryStream ms = BuildPdfWithDeepPageTree(depth: 2000))
+        {
+            ms.Seek(0, SeekOrigin.Begin);
+
+            using (PdfDocument doc = PdfDocument.Open(ms, leaveOpen: true))
+            {
+                Action act = () => { PdfPage _ = doc.Pages[0]; };
+                act.Should().Throw<PdfDocumentException>()
+                    .WithMessage("*Page tree depth*");
+            }
+        }
+    }
+
+    private static MemoryStream BuildPdfWithCyclicPageTree()
+    {
+        PdfObjectId catalogId = new PdfObjectId(1, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
+
+        // /Pages node whose /Kids contains a reference back to itself.
+        // /Count = 1 ensures FindPage's "targetIndex < localOffset + subtreeCount"
+        // branch is taken so recursion actually fires.
+        PdfArray kidsArray = new PdfArray([new PdfReference(pagesId)]);
+        PdfDictionary pagesDict = new PdfDictionary();
+        pagesDict.Set(PdfName.Type, PdfName.Pages);
+        pagesDict.Set(PdfName.Kids, kidsArray);
+        pagesDict.Set(PdfName.Count, 1);
+
+        PdfDictionary catalogDict = new PdfDictionary();
+        catalogDict.Set(PdfName.Type, PdfName.Catalog);
+        catalogDict.Set(PdfName.Pages, new PdfReference(pagesId));
+
+        PdfIndirectObject[] objects =
+        [
+            new PdfIndirectObject(catalogId, catalogDict),
+            new PdfIndirectObject(pagesId, pagesDict),
+        ];
+
+        PdfDictionary trailer = new PdfDictionary();
+        trailer.Set(PdfName.Root, new PdfReference(catalogId));
+
+        MemoryStream ms = new MemoryStream();
+        PdfWriter.Write(ms, objects, trailer);
+        return ms;
+    }
+
+    private static MemoryStream BuildPdfWithDeepPageTree(int depth)
+    {
+        // Builds a linear chain: catalog → /Pages(1) → /Pages(2) → ... → /Pages(depth)
+        // with no leaf /Page node. Each intermediate /Pages claims Count=1 so
+        // FindPage descends. The traversal will hit the depth limit before
+        // reaching the (non-existent) leaf.
+        PdfObjectId catalogId = new PdfObjectId(1, 0);
+        PdfObjectId rootPagesId = new PdfObjectId(2, 0);
+
+        List<PdfIndirectObject> objects = new List<PdfIndirectObject>();
+
+        PdfDictionary catalogDict = new PdfDictionary();
+        catalogDict.Set(PdfName.Type, PdfName.Catalog);
+        catalogDict.Set(PdfName.Pages, new PdfReference(rootPagesId));
+        objects.Add(new PdfIndirectObject(catalogId, catalogDict));
+
+        for (int i = 0; i < depth; i++)
+        {
+            PdfObjectId thisId = new PdfObjectId(2 + i, 0);
+            PdfObjectId nextId = new PdfObjectId(3 + i, 0);
+
+            PdfDictionary node = new PdfDictionary();
+            node.Set(PdfName.Type, PdfName.Pages);
+            node.Set(PdfName.Kids, new PdfArray([new PdfReference(nextId)]));
+            node.Set(PdfName.Count, 1);
+            objects.Add(new PdfIndirectObject(thisId, node));
+        }
+
+        PdfDictionary trailer = new PdfDictionary();
+        trailer.Set(PdfName.Root, new PdfReference(catalogId));
+
+        MemoryStream ms = new MemoryStream();
+        PdfWriter.Write(ms, objects, trailer);
+        return ms;
+    }
+
     // ── PdfPage ───────────────────────────────────────────────────────────
 
     [Fact]

@@ -7,6 +7,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.10.0] - 2026-05-20
+
+### Added
+- **Parser fuzz harness** (`tests/Chuvadi.Pdf.Fuzz/`) — hand-rolled mutation
+  fuzzer with three targets: `pdf-open` (full document open), `content-stream`
+  (content stream parsing), `truetype` (font loading). No NuGet dependencies.
+  Mutations include splice, bit-flip, byte replace/insert/delete, boundary-value
+  injection, range duplication, and random truncation. Crash inputs are saved
+  to `crashes/<target>/<sha256>.bin` with full stack traces in matching `.txt`
+  files for triage. See `tests/Chuvadi.Pdf.Fuzz/README.md`
+- GitHub Actions workflow `.github/workflows/fuzz.yml` for scheduled fuzz runs
+- `tests/Chuvadi.Pdf.Fuzz/FOLLOW-UPS.md` documenting findings deferred to
+  PR 2.1 (truetype IndexOutOfRangeException bounds, PdfName.Intern
+  ArgumentException tightening)
+
+### Fixed
+- `PdfPageCollection.FindPage` no longer recurses without bound on malformed
+  page trees. Cyclic `/Kids` references and pathologically deep `/Pages`
+  chains now throw `PdfDocumentException` with a clear message instead of
+  killing the process with a `StackOverflowException`. Surfaced by the
+  `pdf-open` fuzz target. Depth limit: 1024 (real PDFs use depth 1–5)
+- `PdfObjectParser` no longer leaks `OverflowException` or `FormatException`
+  from `int.Parse` on malformed integer tokens. All six parse sites now go
+  through a guarded `ParseInt32` helper that throws `PdfReaderException` with
+  the offending token's text snippet and byte offset. Surfaced by the
+  `pdf-open` fuzz target after ~5.7M iterations
+
+---
+
 ## [1.9.0] - 2026-05-19
 
 ### Added

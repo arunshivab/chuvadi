@@ -72,3 +72,9 @@ Downloads/
 # Local scratch
 scratch/
 tmp/
+
+# -- Fuzzer runtime output -------------------------------------------------
+crashes/
+
+# -- BenchmarkDotNet output ------------------------------------------------
+benchmarks/**/BenchmarkDotNet.Artifacts/
