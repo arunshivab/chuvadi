@@ -5,6 +5,7 @@
 // Exception raised when an image cannot be decoded or encoded.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Images;
 
@@ -12,7 +13,7 @@ namespace Chuvadi.Pdf.Images;
 /// Thrown when an image cannot be decoded or encoded due to an invalid
 /// format, unsupported feature, or data corruption.
 /// </summary>
-public sealed class ImageException : Exception
+public sealed class ImageException : PdfException
 {
     /// <summary>Initialises a new <see cref="ImageException"/> with no message.</summary>
     public ImageException()

@@ -5,6 +5,7 @@
 // Exception raised when font parsing or character mapping fails.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Fonts;
 
@@ -12,7 +13,7 @@ namespace Chuvadi.Pdf.Fonts;
 /// Thrown when a font dictionary cannot be parsed or a character code
 /// cannot be mapped to a Unicode codepoint.
 /// </summary>
-public sealed class FontException : Exception
+public sealed class FontException : PdfException
 {
     /// <summary>Initialises a new <see cref="FontException"/> with no message.</summary>
     public FontException()

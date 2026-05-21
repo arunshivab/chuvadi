@@ -5,7 +5,7 @@
 Thrown when an annotation operation fails.
 
 ```csharp
-public sealed class AnnotationException : Exception
+public sealed class AnnotationException : PdfException
 ```
 
 ## Constructors

@@ -6,6 +6,8 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Chuvadi.Pdf.Documents;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
@@ -46,27 +48,27 @@ public sealed class PdfWriterTests
         return ms;
     }
 
-    // ── PdfReaderException ────────────────────────────────────────────────
+    // ── PdfParseException ─────────────────────────────────────────────────
 
     [Fact]
-    public void PdfReaderException_DefaultConstructor_HasMessage()
+    public void PdfParseException_DefaultConstructor_HasMessage()
     {
-        PdfReaderException ex = new PdfReaderException();
+        PdfParseException ex = new PdfParseException();
         ex.Message.Should().NotBeEmpty();
     }
 
     [Fact]
-    public void PdfReaderException_Message_Preserved()
+    public void PdfParseException_Message_Preserved()
     {
-        PdfReaderException ex = new PdfReaderException("test error");
+        PdfParseException ex = new PdfParseException("test error");
         ex.Message.Should().Be("test error");
     }
 
     [Fact]
-    public void PdfReaderException_InnerException_Preserved()
+    public void PdfParseException_InnerException_Preserved()
     {
         InvalidOperationException inner = new InvalidOperationException("inner");
-        PdfReaderException ex = new PdfReaderException("outer", inner);
+        PdfParseException ex = new PdfParseException("outer", inner);
         ex.InnerException.Should().BeSameAs(inner);
     }
 
@@ -220,19 +222,58 @@ public sealed class PdfWriterTests
         using (MemoryStream ms = new MemoryStream())
         {
             Action act = () => PdfReader.Open(ms, leaveOpen: true);
-            act.Should().Throw<PdfReaderException>();
+            act.Should().Throw<PdfParseException>();
         }
+    }
+
+    // ── PdfReader.OpenAsync ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task Reader_OpenAsync_ValidStream_ReadsTrailer()
+    {
+        // OpenAsync round-trip: buffer the PDF bytes, parse, verify trailer
+        // contents match what Open() produces.
+        using MemoryStream ms = BuildMinimalPdf();
+        ms.Seek(0, SeekOrigin.Begin);
+
+        using PdfReader reader = await PdfReader.OpenAsync(ms);
+
+        reader.Trailer.Should().NotBeNull();
+        reader.Trailer.ContainsKey(PdfName.Root).Should().BeTrue();
+        reader.Trailer.ContainsKey(PdfName.Size).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reader_OpenAsync_NullStream_Throws()
+    {
+        Func<Task> act = async () => await PdfReader.OpenAsync(null!);
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task Reader_OpenAsync_CancelledToken_Throws()
+    {
+        // A token cancelled before invocation should surface as
+        // OperationCanceledException without parsing any bytes.
+        using MemoryStream ms = BuildMinimalPdf();
+        ms.Seek(0, SeekOrigin.Begin);
+
+        using CancellationTokenSource cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Func<Task> act = async () => await PdfReader.OpenAsync(ms, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     // ── PdfReader — malformed input handling ──────────────────────────────
 
     [Fact]
-    public void Open_OversizedIntegerInDictionary_ThrowsPdfReaderException()
+    public void Open_OversizedIntegerInDictionary_ThrowsPdfParseException()
     {
         // Build a structurally valid minimal PDF where the pages dict has a
         // /Count value that exceeds Int32.MaxValue. Previously caused an
         // unhandled OverflowException from int.Parse in PdfObjectParser;
-        // now caught and re-thrown as PdfReaderException. Surfaced by the
+        // now caught and re-thrown as PdfParseException. Surfaced by the
         // pdf-open fuzz target.
         byte[] pdf = BuildPdfWithOversizedInteger();
 
@@ -244,7 +285,7 @@ public sealed class PdfWriterTests
             _ = doc.PageCount;
         };
 
-        act.Should().Throw<PdfReaderException>();
+        act.Should().Throw<PdfParseException>();
     }
 
     private static byte[] BuildPdfWithOversizedInteger()

@@ -426,7 +426,7 @@ public sealed class PdfTokenizerTests
     {
         using var t = FromString("(unclosed");
         Action act = () => t.Read();
-        act.Should().Throw<PdfTokenizerException>();
+        act.Should().Throw<PdfParseException>();
     }
 
     // ── Hex strings ───────────────────────────────────────────────────────
@@ -454,7 +454,7 @@ public sealed class PdfTokenizerTests
     {
         using var t = FromString("<48656C");
         Action act = () => t.Read();
-        act.Should().Throw<PdfTokenizerException>();
+        act.Should().Throw<PdfParseException>();
     }
 
     // ── Pushback ──────────────────────────────────────────────────────────

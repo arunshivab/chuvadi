@@ -5,7 +5,7 @@
 Thrown when a font file cannot be parsed or a glyph outline cannot be extracted due to an invalid or unsupported font structure.
 
 ```csharp
-public sealed class FontRenderingException : Exception
+public sealed class FontRenderingException : PdfException
 ```
 
 ## Constructors

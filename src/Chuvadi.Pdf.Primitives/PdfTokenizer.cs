@@ -117,7 +117,7 @@ public sealed class PdfTokenizer : IDisposable
     /// Reads and returns the next token from the stream.
     /// Returns <see cref="PdfToken.EndOfStream"/> when there are no more tokens.
     /// </summary>
-    /// <exception cref="PdfTokenizerException">
+    /// <exception cref="PdfParseException">
     /// Thrown when the stream contains bytes that cannot form a valid token.
     /// </exception>
     public PdfToken Read()
@@ -323,7 +323,7 @@ public sealed class PdfTokenizer : IDisposable
 
             if (b == -1)
             {
-                throw new PdfTokenizerException(
+                throw new PdfParseException(
                     "Unexpected end of stream inside literal string.",
                     tokenStart);
             }
@@ -385,7 +385,7 @@ public sealed class PdfTokenizer : IDisposable
 
             if (b == -1)
             {
-                throw new PdfTokenizerException(
+                throw new PdfParseException(
                     "Unexpected end of stream inside hex string.",
                     tokenStart);
             }
@@ -540,7 +540,7 @@ public sealed class PdfTokenizer : IDisposable
 
             if (_tokenBytes.Count > MaxTokenBytes)
             {
-                throw new PdfTokenizerException(
+                throw new PdfParseException(
                     $"Token exceeds maximum size of {MaxTokenBytes} bytes.",
                     tokenStart);
             }

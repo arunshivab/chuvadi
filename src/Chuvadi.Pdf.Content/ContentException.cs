@@ -5,13 +5,14 @@
 // Exception raised when a content stream cannot be parsed.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Content;
 
 /// <summary>
 /// Thrown when a PDF content stream contains invalid or unsupported operators.
 /// </summary>
-public sealed class ContentException : Exception
+public sealed class ContentException : PdfException
 {
     /// <summary>Initialises a new <see cref="ContentException"/> with no message.</summary>
     public ContentException()

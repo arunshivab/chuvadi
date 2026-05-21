@@ -36,7 +36,9 @@ __static__
 static PdfReader Open(Stream stream, bool leaveOpen = false)
 ```
 
-Opens a PDF file from the given readable, seekable stream. <exception cref="PdfReaderException"> Thrown when the file is encrypted. Use the password overload to open encrypted PDFs. </exception>
+Opens a PDF file from the given readable, seekable stream.
+
+**Remarks:** Performs synchronous blocking I/O against `stream`. The reader holds a reference to the stream for the lifetime of the document and reads objects lazily on demand. Memory-efficient for large files because only xref tables and accessed objects are materialised. Not supported on WebAssembly (browser blocks on synchronous I/O against network resources). Use `OpenAsync(Stream, CancellationToken)` for cross-platform code. <exception cref="PdfParseException"> Thrown when the file is encrypted. Use the password overload to open encrypted PDFs. </exception>
 
 ### `Open`
 
@@ -52,7 +54,9 @@ Opens a PDF file with the given password. For unencrypted PDFs the password is i
 
 - `stream` — Readable, seekable stream containing the PDF.
 - `password` — User or owner password. Empty string for default.
-- `leaveOpen` — Whether to leave the stream open on dispose. <exception cref="PdfReaderException">Thrown when the password is incorrect.</exception>
+- `leaveOpen` — Whether to leave the stream open on dispose. <exception cref="PdfParseException">Thrown when the password is incorrect.</exception>
+
+**Remarks:** Synchronous blocking I/O. Not supported on WebAssembly; use `OpenAsync(Stream, string, CancellationToken)` for cross-platform code.
 
 ### `ReadFileBytes`
 

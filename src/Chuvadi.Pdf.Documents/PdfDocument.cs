@@ -7,6 +7,8 @@
 
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Chuvadi.Pdf.IO;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
@@ -21,8 +23,11 @@ namespace Chuvadi.Pdf.Documents;
 /// the document-level object model: pages, metadata, and the document catalog.
 ///
 /// Open a document with <see cref="Open(Stream, bool)"/> or
-/// <see cref="Open(string)"/>. Dispose the document when finished —
-/// it owns the underlying reader and stream.
+/// <see cref="Open(string)"/> on desktop runtimes, or
+/// <see cref="OpenAsync(Stream, CancellationToken)"/> /
+/// <see cref="OpenAsync(string, CancellationToken)"/> on WebAssembly or
+/// any caller that needs to integrate with asynchronous I/O. Dispose the
+/// document when finished — it owns the underlying reader and stream.
 ///
 /// PDF 32000-1:2008 §7.7.2 — Document Catalog.
 /// PDF 32000-1:2008 §14.3.3 — Document information dictionary.
@@ -39,11 +44,15 @@ public sealed class PdfDocument : IDisposable
         _disposed = false;
     }
 
-    // ── Factory ───────────────────────────────────────────────────────────
+    // ── Factory: synchronous ──────────────────────────────────────────────
 
     /// <summary>
     /// Opens a PDF document from the given stream.
     /// </summary>
+    /// <remarks>
+    /// Synchronous blocking I/O. Not supported on WebAssembly; use
+    /// <see cref="OpenAsync(Stream, CancellationToken)"/> for cross-platform code.
+    /// </remarks>
     /// <param name="stream">A readable, seekable PDF stream.</param>
     /// <param name="leaveOpen">
     /// True to leave the stream open when this document is disposed.
@@ -62,6 +71,11 @@ public sealed class PdfDocument : IDisposable
     /// <summary>
     /// Opens an encrypted PDF using the given user or owner password.
     /// </summary>
+    /// <remarks>
+    /// Synchronous blocking I/O. Not supported on WebAssembly; use
+    /// <see cref="OpenAsync(Stream, string, CancellationToken)"/> for
+    /// cross-platform code.
+    /// </remarks>
     /// <param name="stream">Readable, seekable PDF stream.</param>
     /// <param name="password">User or owner password. Empty string for default.</param>
     /// <param name="leaveOpen">Whether to leave the underlying stream open on dispose.</param>
@@ -75,6 +89,11 @@ public sealed class PdfDocument : IDisposable
     }
 
     /// <summary>Opens an encrypted PDF from a file path using the given password.</summary>
+    /// <remarks>
+    /// Synchronous blocking I/O against the file system. Use
+    /// <see cref="OpenAsync(string, string, CancellationToken)"/> for
+    /// cross-platform code.
+    /// </remarks>
     public static PdfDocument Open(string path, string password)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -93,6 +112,10 @@ public sealed class PdfDocument : IDisposable
     /// <summary>
     /// Opens a PDF document from a file path.
     /// </summary>
+    /// <remarks>
+    /// Synchronous blocking I/O against the file system. Use
+    /// <see cref="OpenAsync(string, CancellationToken)"/> for cross-platform code.
+    /// </remarks>
     /// <param name="path">The path to the PDF file.</param>
     public static PdfDocument Open(string path)
     {
@@ -109,6 +132,105 @@ public sealed class PdfDocument : IDisposable
 
         PdfReader reader = PdfReader.Open(stream, leaveOpen: false);
         return new PdfDocument(reader);
+    }
+
+    // ── Factory: asynchronous (WASM-friendly) ─────────────────────────────
+
+    /// <summary>
+    /// Asynchronously opens a PDF document from the given stream.
+    /// </summary>
+    /// <remarks>
+    /// The input stream is fully buffered into memory before parsing begins,
+    /// making this method WebAssembly-compatible and tolerant of non-seekable
+    /// streams. The document owns the internal buffer; the caller retains
+    /// responsibility for disposing <paramref name="stream"/>.
+    /// </remarks>
+    /// <param name="stream">A readable PDF stream. Need not be seekable.</param>
+    /// <param name="cancellationToken">A token that cancels the buffer fill.</param>
+    public static async Task<PdfDocument> OpenAsync(
+        Stream stream,
+        CancellationToken cancellationToken = default)
+    {
+        PdfReader reader = await PdfReader.OpenAsync(stream, cancellationToken)
+            .ConfigureAwait(false);
+        return new PdfDocument(reader);
+    }
+
+    /// <summary>
+    /// Asynchronously opens an encrypted PDF document with the given password.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="OpenAsync(Stream, CancellationToken)"/> for the buffering
+    /// and cancellation semantics. For unencrypted PDFs the password is ignored.
+    /// </remarks>
+    /// <param name="stream">A readable PDF stream. Need not be seekable.</param>
+    /// <param name="password">User or owner password. Empty string for default.</param>
+    /// <param name="cancellationToken">A token that cancels the buffer fill.</param>
+    public static async Task<PdfDocument> OpenAsync(
+        Stream stream,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+
+        PdfReader reader = await PdfReader.OpenAsync(stream, password, cancellationToken)
+            .ConfigureAwait(false);
+        return new PdfDocument(reader);
+    }
+
+    /// <summary>
+    /// Asynchronously opens a PDF document from a file path.
+    /// </summary>
+    /// <remarks>
+    /// Opens the file with <see cref="FileStream"/> configured for async I/O,
+    /// buffers it fully into memory, then parses. The file handle is released
+    /// before this method returns.
+    /// </remarks>
+    /// <param name="path">The path to the PDF file.</param>
+    /// <param name="cancellationToken">A token that cancels the buffer fill.</param>
+    public static async Task<PdfDocument> OpenAsync(
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        using FileStream stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            useAsync: true);
+
+        return await OpenAsync(stream, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Asynchronously opens an encrypted PDF document from a file path.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="OpenAsync(string, CancellationToken)"/> for I/O semantics.
+    /// </remarks>
+    /// <param name="path">The path to the PDF file.</param>
+    /// <param name="password">User or owner password. Empty string for default.</param>
+    /// <param name="cancellationToken">A token that cancels the buffer fill.</param>
+    public static async Task<PdfDocument> OpenAsync(
+        string path,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(password);
+
+        using FileStream stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            useAsync: true);
+
+        return await OpenAsync(stream, password, cancellationToken).ConfigureAwait(false);
     }
 
     // ── Pages ─────────────────────────────────────────────────────────────
@@ -169,7 +291,7 @@ public sealed class PdfDocument : IDisposable
         get
         {
             return _reader.Catalog ??
-                throw new PdfDocumentException(
+                throw new PdfCorruptionException(
                     "The PDF file does not have a valid document Catalog. " +
                     "The trailer /Root entry is missing or does not point to a dictionary.");
         }
@@ -246,7 +368,7 @@ public sealed class PdfDocument : IDisposable
 
         if (!catalog.TryGetValue(PdfName.Pages, out PdfPrimitive? pagesRef))
         {
-            throw new PdfDocumentException(
+            throw new PdfCorruptionException(
                 "Document Catalog is missing the required /Pages entry.");
         }
 
@@ -254,7 +376,7 @@ public sealed class PdfDocument : IDisposable
 
         if (resolved is not PdfDictionary pagesDict)
         {
-            throw new PdfDocumentException(
+            throw new PdfCorruptionException(
                 "The /Pages entry in the Catalog does not resolve to a dictionary.");
         }
 

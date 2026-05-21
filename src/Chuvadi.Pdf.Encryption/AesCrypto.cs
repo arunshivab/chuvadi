@@ -11,6 +11,7 @@
 
 using System;
 using System.Security.Cryptography;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Encryption;
 
@@ -32,7 +33,7 @@ public static class AesCrypto
     {
         if (ivAndCipher.Length < 16)
         {
-            throw new EncryptionException("AES payload too short to contain an IV.");
+            throw new PdfEncryptionException("AES payload too short to contain an IV.");
         }
 
         using Aes aes = Aes.Create();
@@ -52,7 +53,7 @@ public static class AesCrypto
         }
         catch (CryptographicException ex)
         {
-            throw new EncryptionException("AES decryption failed (wrong key or corrupted data).", ex);
+            throw new PdfEncryptionException("AES decryption failed (wrong key or corrupted data).", ex);
         }
     }
 

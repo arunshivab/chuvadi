@@ -5,6 +5,7 @@
 // Exception raised when a font cannot be loaded or a glyph cannot be extracted.
 
 using System;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Fonts.Rendering;
 
@@ -12,7 +13,7 @@ namespace Chuvadi.Pdf.Fonts.Rendering;
 /// Thrown when a font file cannot be parsed or a glyph outline
 /// cannot be extracted due to an invalid or unsupported font structure.
 /// </summary>
-public sealed class FontRenderingException : Exception
+public sealed class FontRenderingException : PdfException
 {
     /// <summary>Initialises a new <see cref="FontRenderingException"/> with no message.</summary>
     public FontRenderingException()

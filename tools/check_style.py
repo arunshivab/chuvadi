@@ -32,7 +32,13 @@ REQUIRED_USINGS = {
     "PdfTokenType":     "using Chuvadi.Pdf.Primitives;",
     "PdfToken":         "using Chuvadi.Pdf.Primitives;",
     "PdfTokenizer":     "using Chuvadi.Pdf.Primitives;",
-    "PdfTokenizerException": "using Chuvadi.Pdf.Primitives;",
+    # v2 R1 D1 — exception hierarchy moved to Chuvadi.Pdf.Primitives
+    "PdfException":           "using Chuvadi.Pdf.Primitives;",
+    "PdfParseException":      "using Chuvadi.Pdf.Primitives;",
+    "PdfCorruptionException": "using Chuvadi.Pdf.Primitives;",
+    "PdfEncryptionException": "using Chuvadi.Pdf.Primitives;",
+    "PdfPermissionException": "using Chuvadi.Pdf.Primitives;",
+    "PdfPermissions":         "using Chuvadi.Pdf.Primitives;",
     # Chuvadi.Pdf.Filters types
     "IStreamFilter":    "using Chuvadi.Pdf.Filters;",
     "FilterException":  "using Chuvadi.Pdf.Filters;",
@@ -44,7 +50,6 @@ REQUIRED_USINGS = {
     "PdfIndirectObject":    "using Chuvadi.Pdf.Objects;",
     "IPdfObjectResolver":   "using Chuvadi.Pdf.Objects;",
     "PdfObjectStore":       "using Chuvadi.Pdf.Objects;",
-    "PdfObjectException":   "using Chuvadi.Pdf.Objects;",
     "XrefEntry":            "using Chuvadi.Pdf.Objects;",
     "XrefEntryType":        "using Chuvadi.Pdf.Objects;",
     "XrefTable":            "using Chuvadi.Pdf.Objects;",
@@ -112,6 +117,8 @@ REQUIRED_USINGS = {
     "Predicate":                "using System;",
     "EventHandler":             "using System;",
     "Attribute":                "using System;",
+    "Flags":                    "using System;",
+    "FlagsAttribute":           "using System;",
     "Type":                     "using System;",
     "StringComparison":         "using System;",
     "StringSplitOptions":       "using System;",
@@ -416,4 +423,3 @@ def check_file(path):
     issues = _original_check_file(path)
     issues.extend(check_syntax(path))
     return issues
-

@@ -5,7 +5,7 @@
 Thrown when a TIFF operation fails.
 
 ```csharp
-public sealed class TiffException : Exception
+public sealed class TiffException : PdfException
 ```
 
 ## Constructors

@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <AssemblyName>Chuvadi.Pdf.Fonts.Rendering</AssemblyName>
     <RootNamespace>Chuvadi.Pdf.Fonts.Rendering</RootNamespace>
@@ -10,13 +9,13 @@
       Path objects from Chuvadi.Pdf.Graphics. Zero external dependencies.
     </Description>
   </PropertyGroup>
-
   <ItemGroup>
     <EmbeddedResource Include="Resources\Standard14.bin" />
   </ItemGroup>
-
   <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Pdf.Fonts\Chuvadi.Pdf.Fonts.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Graphics\Chuvadi.Pdf.Graphics.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
   </ItemGroup>
-
 </Project>

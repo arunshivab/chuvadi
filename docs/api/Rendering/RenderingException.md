@@ -5,7 +5,7 @@
 Thrown when a PDF page cannot be rasterized due to an unsupported feature, invalid data, or internal rasterizer error.
 
 ```csharp
-public sealed class RenderingException : Exception
+public sealed class RenderingException : PdfException
 ```
 
 ## Constructors

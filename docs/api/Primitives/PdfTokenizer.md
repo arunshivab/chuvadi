@@ -45,7 +45,7 @@ Gets the current byte offset in the underlying stream. This is the position of t
 PdfToken Read()
 ```
 
-Reads and returns the next token from the stream. Returns `PdfToken.EndOfStream` when there are no more tokens. <exception cref="PdfTokenizerException"> Thrown when the stream contains bytes that cannot form a valid token. </exception>
+Reads and returns the next token from the stream. Returns `PdfToken.EndOfStream` when there are no more tokens. <exception cref="PdfParseException"> Thrown when the stream contains bytes that cannot form a valid token. </exception>
 
 ### `Unread`
 

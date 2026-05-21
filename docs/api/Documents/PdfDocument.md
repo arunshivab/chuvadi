@@ -10,7 +10,7 @@ public sealed class PdfDocument : IDisposable
 
 ## Remarks
 
-`PdfDocument` wraps a `PdfReader` and exposes the document-level object model: pages, metadata, and the document catalog. Open a document with `Open(Stream, bool)` or `Open(string)`. Dispose the document when finished — it owns the underlying reader and stream. PDF 32000-1:2008 §7.7.2 — Document Catalog. PDF 32000-1:2008 §14.3.3 — Document information dictionary.
+`PdfDocument` wraps a `PdfReader` and exposes the document-level object model: pages, metadata, and the document catalog. Open a document with `Open(Stream, bool)` or `Open(string)` on desktop runtimes, or `OpenAsync(Stream, CancellationToken)` / `OpenAsync(string, CancellationToken)` on WebAssembly or any caller that needs to integrate with asynchronous I/O. Dispose the document when finished — it owns the underlying reader and stream. PDF 32000-1:2008 §7.7.2 — Document Catalog. PDF 32000-1:2008 §14.3.3 — Document information dictionary.
 
 ## Properties
 
@@ -79,6 +79,8 @@ Opens a PDF document from the given stream.
 - `stream` — A readable, seekable PDF stream.
 - `leaveOpen` — True to leave the stream open when this document is disposed.
 
+**Remarks:** Synchronous blocking I/O. Not supported on WebAssembly; use `OpenAsync(Stream, CancellationToken)` for cross-platform code.
+
 ### `Open`
 
 __static__
@@ -95,6 +97,8 @@ Opens an encrypted PDF using the given user or owner password.
 - `password` — User or owner password. Empty string for default.
 - `leaveOpen` — Whether to leave the underlying stream open on dispose.
 
+**Remarks:** Synchronous blocking I/O. Not supported on WebAssembly; use `OpenAsync(Stream, string, CancellationToken)` for cross-platform code.
+
 ### `Open`
 
 __static__
@@ -104,6 +108,8 @@ static PdfDocument Open(string path, string password)
 ```
 
 Opens an encrypted PDF from a file path using the given password.
+
+**Remarks:** Synchronous blocking I/O against the file system. Use `OpenAsync(string, string, CancellationToken)` for cross-platform code.
 
 ### `Open`
 
@@ -118,6 +124,8 @@ Opens a PDF document from a file path.
 **Parameters**
 
 - `path` — The path to the PDF file.
+
+**Remarks:** Synchronous blocking I/O against the file system. Use `OpenAsync(string, CancellationToken)` for cross-platform code.
 
 ### `GetInfoString`
 

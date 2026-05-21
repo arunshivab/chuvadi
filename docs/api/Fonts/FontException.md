@@ -5,7 +5,7 @@
 Thrown when a font dictionary cannot be parsed or a character code cannot be mapped to a Unicode codepoint.
 
 ```csharp
-public sealed class FontException : Exception
+public sealed class FontException : PdfException
 ```
 
 ## Constructors

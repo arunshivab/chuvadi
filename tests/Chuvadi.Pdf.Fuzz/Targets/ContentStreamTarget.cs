@@ -27,15 +27,15 @@ internal sealed class ContentStreamTarget : IFuzzTarget
     public IReadOnlyList<Type> ExpectedExceptionTypes { get; } = new[]
     {
         typeof(ContentException),
-        // The content-stream tokenizer throws PdfTokenizerException directly on
+        // The content-stream tokenizer throws PdfParseException directly on
         // malformed tokens (unterminated strings, bad hex escapes, etc.).
-        typeof(PdfTokenizerException),
+        typeof(PdfParseException),
         // ContentStreamParser calls into PdfName.FromRawBytes (for Name tokens)
         // and PdfName.Intern (for the Tf font-name operand), both of which throw
         // ArgumentException when given an empty name. This is documented parser
         // rejection — the input was malformed — but the thrown exception type
         // is too broad. See FOLLOW-UPS.md for the PR 2.1 cleanup that tightens
-        // the throw sites to PdfTokenizerException so this entry can be removed.
+        // the throw sites to PdfParseException so this entry can be removed.
         typeof(ArgumentException),
         typeof(System.IO.EndOfStreamException),
         typeof(FormatException),

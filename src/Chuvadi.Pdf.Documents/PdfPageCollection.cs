@@ -105,13 +105,13 @@ public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
     {
         if (depth > MaxPageTreeDepth)
         {
-            throw new PdfDocumentException(
+            throw new PdfCorruptionException(
                 $"Page tree depth exceeds maximum ({MaxPageTreeDepth}); " +
                 "document may contain a cyclic /Kids reference.");
         }
 
         PdfArray kids = node.GetArray(PdfName.Kids) ??
-            throw new PdfDocumentException(
+            throw new PdfCorruptionException(
                 "Page tree node is missing the required /Kids array.");
 
         int localOffset = offset;
@@ -123,7 +123,7 @@ public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
 
             if (kid is not PdfDictionary kidDict)
             {
-                throw new PdfDocumentException(
+                throw new PdfCorruptionException(
                     $"Page tree /Kids[{i}] is not a dictionary.");
             }
 
@@ -156,7 +156,7 @@ public sealed class PdfPageCollection : IReadOnlyList<PdfPage>
             }
         }
 
-        throw new PdfDocumentException(
+        throw new PdfCorruptionException(
             $"Page index {targetIndex} not found in page tree (offset={offset}).");
     }
 }

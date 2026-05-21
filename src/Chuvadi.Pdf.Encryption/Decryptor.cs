@@ -10,6 +10,7 @@
 
 using System;
 using System.Security.Cryptography;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Encryption;
 
@@ -52,7 +53,7 @@ public sealed class Decryptor
             EncryptionAlgorithm.Rc4_128 => DecryptRc4PerObject(data, objectNumber, generation),
             EncryptionAlgorithm.Aes_128 => DecryptAes128PerObject(data, objectNumber, generation),
             EncryptionAlgorithm.Aes_256 => AesCrypto.Decrypt(_fileKey, data),
-            _ => throw new EncryptionException($"Cannot decrypt: unsupported algorithm {_algorithm}."),
+            _ => throw new PdfEncryptionException($"Cannot decrypt: unsupported algorithm {_algorithm}."),
         };
     }
 

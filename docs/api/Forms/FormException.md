@@ -5,7 +5,7 @@
 Thrown when an AcroForm or outline operation fails.
 
 ```csharp
-public sealed class FormException : Exception
+public sealed class FormException : PdfException
 ```
 
 ## Constructors

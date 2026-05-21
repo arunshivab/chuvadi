@@ -5,7 +5,7 @@
 Thrown when an image cannot be decoded or encoded due to an invalid format, unsupported feature, or data corruption.
 
 ```csharp
-public sealed class ImageException : Exception
+public sealed class ImageException : PdfException
 ```
 
 ## Constructors

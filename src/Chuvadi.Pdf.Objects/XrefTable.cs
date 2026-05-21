@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Chuvadi.Pdf.Primitives;
 
 namespace Chuvadi.Pdf.Objects;
 
@@ -173,7 +174,7 @@ public sealed class XrefTable
     /// <returns>
     /// A populated <see cref="XrefTable"/>.
     /// </returns>
-    /// <exception cref="PdfObjectException">
+    /// <exception cref="PdfParseException">
     /// Thrown when the xref table is malformed.
     /// </exception>
     public static XrefTable Parse(Stream input)
@@ -214,19 +215,19 @@ public sealed class XrefTable
 
                 if (parts.Length != 2)
                 {
-                    throw new PdfObjectException(
+                    throw new PdfParseException(
                         $"Invalid xref subsection header: '{line}'");
                 }
 
                 if (!int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out int firstObject))
                 {
-                    throw new PdfObjectException(
+                    throw new PdfParseException(
                         $"Invalid xref subsection first object: '{parts[0]}'");
                 }
 
                 if (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out int count))
                 {
-                    throw new PdfObjectException(
+                    throw new PdfParseException(
                         $"Invalid xref subsection count: '{parts[1]}'");
                 }
 
@@ -236,7 +237,7 @@ public sealed class XrefTable
 
                     if (entryLine is null || entryLine.Length < 18)
                     {
-                        throw new PdfObjectException(
+                        throw new PdfParseException(
                             $"Truncated xref entry for object {firstObject + i}.");
                     }
 
@@ -299,13 +300,13 @@ public sealed class XrefTable
         // The line may have various line endings; we just need the first 18+ chars.
         if (!long.TryParse(line[..10].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long offset))
         {
-            throw new PdfObjectException(
+            throw new PdfParseException(
                 $"Invalid xref offset in entry for object {objectNumber}: '{line}'");
         }
 
         if (!int.TryParse(line[11..16].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int generation))
         {
-            throw new PdfObjectException(
+            throw new PdfParseException(
                 $"Invalid xref generation in entry for object {objectNumber}: '{line}'");
         }
 
@@ -321,7 +322,7 @@ public sealed class XrefTable
             return XrefEntry.Free(objectNumber, generation, (int)offset);
         }
 
-        throw new PdfObjectException(
+        throw new PdfParseException(
             $"Invalid xref entry type '{type}' for object {objectNumber}.");
     }
 
