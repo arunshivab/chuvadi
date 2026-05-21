@@ -10,14 +10,14 @@ public sealed class PageRasterizer
 
 ## Remarks
 
-`PageRasterizer` is the top-level public API for page rendering. It wires together all layers: 
+`PageRasterizer` is the top-level public API for page rendering. Since v2.0.0, the pipeline is two-stage:  
  
-- Decodes the page's content streams through their filter chains. 
-- Tokenizes and interprets PDF graphics operators. 
-- Fills paths using `ScanlineRasterizer`. 
-- Strokes paths using `StrokeExpander`. 
-- Renders text glyphs via `FontRenderer`. 
-- Composites image XObjects from the page's Resources.  PDF operators supported: path construction (m l c v y h re), path painting (f F f* S s B B* b b* n), graphics state (q Q cm w J j M g G rg RG k K cs CS sc SC), text (BT ET Tf Td TD Tm T* Tj TJ ' ''), XObjects (Do). Unsupported operators are silently skipped. PDF 32000-1:2008 §8 — Graphics model.
+-  `DisplayListBuilder` interprets the page's content stream and produces an immutable `PageDisplayList`. CTM and text matrices are baked into each op's geometry; the list is renderer-neutral.  
+-  `PageRasterizer` walks the display list and paints each op into a `PixelBuffer`. The painter handles scale and Y-flip only; it does not interpret PDF operators.   
+
+ Clipping is recorded by the display list but not yet honoured by this rasterizer (deferred to v2.1). The pre-v2 PageRasterizer also ignored clipping, so this is a preserved behaviour. The forthcoming SVG renderer in PR R2 will honour clipping natively via &lt;clipPath&gt;.  
+
+ PDF 32000-1:2008 §8 — Graphics model.
 
 ## Constructors
 
@@ -28,7 +28,7 @@ Initialises a `PageRasterizer` for a document's object store.
 **Parameters**
 
 - `objects` — The document's object store.
-- `options` — Rendering options. Uses `RenderOptions.Default` when null.
+- `options` — Rendering options. Uses `RenderOptions.Default` when null. <exception cref="ArgumentNullException"> Thrown when `objects` is null. </exception>
 
 ## Methods
 
@@ -44,7 +44,7 @@ Rasterizes a PDF page to a `PixelBuffer`.
 
 - `page` — The page to rasterize.
 
-**Returns:** A `PixelBuffer` in BGRA format containing the rendered page.
+**Returns:** A pixel buffer in BGRA format containing the rendered page. <exception cref="ArgumentNullException"> Thrown when `page` is null. </exception>
 
 ### `RasterizeToPng`
 
