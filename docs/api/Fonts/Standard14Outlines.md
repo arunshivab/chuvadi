@@ -10,7 +10,7 @@ public static class Standard14Outlines
 
 ## Remarks
 
-The bundle is generated at build time by `tools/build_standard14_bundle.py` from Liberation Sans/Serif/Mono and URW StandardSymbolsPS/D050000L (commercially-redistributable, Apache-2.0-compatible licenses). If the developer hasn't run the build tool with the source TTFs in place, the bundle ships as a header-only placeholder and outline lookups return empty paths — width-only operation still works via `Chuvadi.Pdf.Rendering.DisplayList.Standard14Widths`.
+The bundle is generated at build time by `tools/build_standard14_bundle.py` from Liberation Sans/Serif/Mono and URW StandardSymbolsPS/D050000L (commercially-redistributable, Apache-2.0-compatible licenses). If the developer hasn't run the build tool with the source TTFs in place, the bundle ships as a header-only placeholder and outline lookups return empty paths — width-only operation still works via `Standard14Widths`.
 
 ## Properties
 

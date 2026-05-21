@@ -5,7 +5,7 @@
 Thrown when a redaction operation fails.
 
 ```csharp
-public sealed class RedactionException : Exception
+public sealed class RedactionException : PdfException
 ```
 
 ## Constructors

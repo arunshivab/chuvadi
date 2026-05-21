@@ -110,7 +110,7 @@ static XrefTable Parse(Stream input)
 
 Parses a classic xref table from `input`. The stream must be positioned immediately after the 'xref' keyword.
 
-**Returns:** A populated `XrefTable`. <exception cref="PdfObjectException"> Thrown when the xref table is malformed. </exception>
+**Returns:** A populated `XrefTable`. <exception cref="PdfParseException"> Thrown when the xref table is malformed. </exception>
 
 ---
 

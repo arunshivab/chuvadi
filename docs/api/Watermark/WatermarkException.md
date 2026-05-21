@@ -5,7 +5,7 @@
 Thrown when a watermark cannot be applied.
 
 ```csharp
-public sealed class WatermarkException : Exception
+public sealed class WatermarkException : PdfException
 ```
 
 ## Constructors

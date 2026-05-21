@@ -5,7 +5,7 @@
 Thrown when a PDF content stream contains invalid or unsupported operators.
 
 ```csharp
-public sealed class ContentException : Exception
+public sealed class ContentException : PdfException
 ```
 
 ## Constructors

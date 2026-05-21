@@ -5,7 +5,7 @@
 Thrown when a PDF stream filter encounters data it cannot decode or encode.
 
 ```csharp
-public sealed class FilterException : Exception
+public sealed class FilterException : PdfException
 ```
 
 ## Remarks

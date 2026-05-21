@@ -5,7 +5,7 @@
 Thrown when a PDF page operation (merge, split, delete, rotate, reorder) cannot be completed due to an invalid argument or document structure.
 
 ```csharp
-public sealed class OperationsException : Exception
+public sealed class OperationsException : PdfException
 ```
 
 ## Constructors

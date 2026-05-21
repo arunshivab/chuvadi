@@ -70,7 +70,7 @@ Parses a cross-reference stream from its decoded byte content and stream diction
 - `dictionary` — The xref stream dictionary.
 - `decodedBytes` — The decompressed stream content (after filter removal).
 
-**Returns:** A populated `XrefStreamTable`. <exception cref="PdfObjectException"> Thrown when the stream is malformed. </exception>
+**Returns:** A populated `XrefStreamTable`. <exception cref="PdfParseException"> Thrown when the stream is malformed. </exception>
 
 ### `Encode`
 

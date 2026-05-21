@@ -182,7 +182,6 @@ python tools/gen_api_docs.py
 | [OptionalContentReader](Documents/OptionalContentReader.md) | class | Reads optional content groups (layers) from a PDF document. |
 | [PdfDocument](Documents/PdfDocument.md) | class | Represents an opened PDF document. |
 | [PdfDocumentAsync](Documents/PdfDocumentAsync.md) | class | Async-capable entry points for `PdfDocument`. |
-| [PdfDocumentException](Documents/PdfDocumentException.md) | class | Thrown when the PDF document model encounters an invalid or unsupported structure, such as a malformed page tree or a missing required entry. |
 | [PdfPage](Documents/PdfPage.md) | class | Represents a single page in a PDF document. |
 | [PdfPageCollection](Documents/PdfPageCollection.md) | class | Provides lazy, random-access to the pages of a PDF document. |
 | [PdfRectangle](Documents/PdfRectangle.md) | struct | An immutable rectangle in PDF user space (points, 1/72 inch). |
@@ -195,7 +194,6 @@ python tools/gen_api_docs.py
 | [Decryptor](Encryption/Decryptor.md) | class | Decrypts individual strings and streams in an encrypted PDF. |
 | [EncryptionAlgorithm](Encryption/EncryptionAlgorithm.md) | enum | Identifies which encryption algorithm a PDF uses. |
 | [EncryptionDictionary](Encryption/EncryptionDictionary.md) | class | Parsed view of a PDF's /Encrypt trailer entry. |
-| [EncryptionException](Encryption/EncryptionException.md) | class | Thrown when a PDF encryption or decryption operation fails. |
 | [Encryptor](Encryption/Encryptor.md) | class | Encrypts individual strings and streams for writing an encrypted PDF. |
 | [PdfEncryption](Encryption/PdfEncryption.md) | class | Top-level helper for decrypting an encrypted PDF. |
 | [Rc4](Encryption/Rc4.md) | class | RC4 stream cipher. |
@@ -232,7 +230,9 @@ python tools/gen_api_docs.py
 | [GlyphOutline](Fonts/GlyphOutline.md) | class | The outline of a single glyph as a `Path` of contours, together with its `GlyphMetrics`. |
 | [PdfFont](Fonts/PdfFont.md) | class | Represents a PDF font and provides character code to Unicode mapping for text extraction purposes. |
 | [PdfFontEncoding](Fonts/PdfFontEncoding.md) | class | Maps 1-byte character codes (0-255) to Unicode codepoints for simple fonts. |
+| [RenderableFont](Fonts/RenderableFont.md) | class | A PDF font that supports both text decoding (character codes to Unicode) and glyph rendering (character codes to vector outlines + metrics). |
 | [Standard14Outlines](Fonts/Standard14Outlines.md) | class | Provides glyph outlines for the PDF Standard 14 fonts from an embedded resource, so they work even on hosts that lack the fonts (Blazor WASM, headless servers). |
+| [Standard14Widths](Fonts/Standard14Widths.md) | class | Provides advance-width metrics for the PDF Standard 14 fonts in 1/1000-em font design units. |
 | [TrueTypeLoader](Fonts/TrueTypeLoader.md) | class | Loads a TrueType or OpenType font from raw bytes and provides access to glyph outlines and metrics. |
 | [Woff2Packer](Fonts/Woff2Packer.md) | class | Packs a TrueType / OpenType font into the WOFF2 container format. |
 
@@ -277,7 +277,6 @@ python tools/gen_api_docs.py
 | [LinearizationInfo](IO/LinearizationInfo.md) | class | Parsed view of a PDF's linearization parameter dictionary. |
 | [LinearizationReader](IO/LinearizationReader.md) | class | Detects linearization and parses the parameter dictionary. |
 | [PdfReader](IO/PdfReader.md) | class | Opens an existing PDF file and provides access to its object graph. |
-| [PdfReaderException](IO/PdfReaderException.md) | class | Thrown when `PdfReader` encounters a PDF file structure it cannot parse or recover from. |
 | [PdfWriter](IO/PdfWriter.md) | class | Writes a complete PDF file to an output stream. |
 
 ## Chuvadi.Pdf.Images
@@ -305,7 +304,6 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [IPdfObjectResolver](Objects/IPdfObjectResolver.md) | interface | Resolves PDF indirect object references to their primitive values. |
 | [PdfIndirectObject](Objects/PdfIndirectObject.md) | class | Represents an indirect object — a `PdfPrimitive` paired with the `PdfObjectId` that identifies it in the PDF file. |
-| [PdfObjectException](Objects/PdfObjectException.md) | class | Thrown when the PDF object model encounters an invalid structure, such as a malformed xref table or an unresolvable object reference. |
 | [PdfObjectStore](Objects/PdfObjectStore.md) | class | In-memory store for PDF indirect objects, with lazy indirect reference resolution. |
 | [XrefEntry](Objects/XrefEntry.md) | struct | Represents one entry in a PDF cross-reference table or stream. |
 | [XrefEntryType](Objects/XrefEntryType.md) | enum | Identifies the type of a `XrefEntry`. |
@@ -325,11 +323,17 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [PdfArray](Primitives/PdfArray.md) | class | Represents a PDF array object — an ordered sequence of primitives. |
 | [PdfBoolean](Primitives/PdfBoolean.md) | class | Represents a PDF boolean value (`true` or `false`). |
+| [PdfCorruptionException](Primitives/PdfCorruptionException.md) | class | Thrown when a PDF parses cleanly at the byte level but is semantically inconsistent: cyclic `/Kids` page tree references, missing required catalog entries, unresolvable indirect references, pages claiming a count that does not match their actual children, and other structural integrity failures. |
 | [PdfDictionary](Primitives/PdfDictionary.md) | class | Represents a PDF dictionary object — a map from `PdfName` keys to `PdfPrimitive` values. |
+| [PdfEncryptionException](Primitives/PdfEncryptionException.md) | class | Thrown when an encryption or decryption operation fails: wrong password, unsupported security handler revision, malformed encryption dictionary, missing required encryption metadata, or a cryptographic primitive that could not produce the expected output. |
+| [PdfException](Primitives/PdfException.md) | class | Abstract base class for every exception raised by the Chuvadi library. |
 | [PdfInteger](Primitives/PdfInteger.md) | class | Represents a PDF integer object. |
 | [PdfName](Primitives/PdfName.md) | class | Represents a PDF name object (e.g. `/Type`, `/Page`). |
 | [PdfNull](Primitives/PdfNull.md) | class | Represents the PDF null object. |
 | [PdfPaddedInteger](Primitives/PdfPaddedInteger.md) | class | A PDF integer that serialises to exactly `PaddedWidth` ASCII characters, left-padded with leading zeros. |
+| [PdfParseException](Primitives/PdfParseException.md) | class | Thrown when the bytes of a PDF cannot be parsed because they violate the PDF syntax: malformed tokens, structural errors in dictionaries or arrays, invalid integer or real literals, missing required keywords. |
+| [PdfPermissionException](Primitives/PdfPermissionException.md) | class | Thrown when an operation is blocked because the document's permission flags forbid it: extracting text from a copy-restricted document, modifying a write-protected document, assembling a no-assembly document. |
+| [PdfPermissions](Primitives/PdfPermissions.md) | enum | — |
 | [PdfPrimitive](Primitives/PdfPrimitive.md) | class | Abstract base class for all PDF primitive object types. |
 | [PdfPrimitiveType](Primitives/PdfPrimitiveType.md) | enum | Identifies the concrete type of a `PdfPrimitive`. |
 | [PdfReal](Primitives/PdfReal.md) | class | Represents a PDF real (floating-point) object. |
@@ -339,7 +343,6 @@ python tools/gen_api_docs.py
 | [PdfToken](Primitives/PdfToken.md) | struct | A lightweight token produced by `PdfTokenizer`. |
 | [PdfTokenType](Primitives/PdfTokenType.md) | enum | Identifies the type of a token produced by `PdfTokenizer`. |
 | [PdfTokenizer](Primitives/PdfTokenizer.md) | class | A forward-only, byte-level tokenizer for PDF streams. |
-| [PdfTokenizerException](Primitives/PdfTokenizerException.md) | class | Thrown when the `PdfTokenizer` encounters bytes that cannot form a valid PDF token. |
 
 ## Chuvadi.Pdf.Redaction
 
@@ -358,14 +361,20 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [BlendModeOp](Rendering/BlendModeOp.md) | class | Pushes or pops a blend mode. |
 | [ClipOp](Rendering/ClipOp.md) | class | Pushes a clipping region. |
+| [ClipPath](Rendering/ClipPath.md) | struct | A clipping path applied to a single render operation. |
 | [DisplayListBuilder](Rendering/DisplayListBuilder.md) | class | Builds a `PageDisplayList` by walking a page's content stream and translating each PDF operator to a `RenderOp`. |
 | [DocumentSearch](Rendering/DocumentSearch.md) | class | Searches the text of a `PdfDocument` by page, streaming matches asynchronously. |
+| [DrawGlyphOp](Rendering/DrawGlyphOp.md) | class | Paints a single glyph outline. |
+| [DrawImageOp](Rendering/DrawImageOp.md) | class | Paints a decoded image at the position specified by a transformation matrix. |
+| [FillPathOp](Rendering/FillPathOp.md) | class | Fills a path with a flat colour, applying the configured fill rule. |
 | [FillRule](Rendering/FillRule.md) | enum | Fill rule for a path or clip region. |
 | [ImageFormat](Rendering/ImageFormat.md) | enum | Raster format of image pixel data. |
 | [ImageOp](Rendering/ImageOp.md) | class | Renders a raster image. |
 | [LineCap](Rendering/LineCap.md) | enum | Line cap style (PDF §8.4.3.3). |
 | [LineJoin](Rendering/LineJoin.md) | enum | Line join style (PDF §8.4.3.4). |
+| [NestedDisplayListOp](Rendering/NestedDisplayListOp.md) | class | Paints another `PageDisplayList` with a composing transform. |
 | [OpacityOp](Rendering/OpacityOp.md) | class | Pushes or pops an opacity group. |
+| [PageDisplayList](Rendering/PageDisplayList.md) | class | An immutable, renderer-neutral representation of a PDF page's drawable content. |
 | [PageDisplayList](Rendering/PageDisplayList.md) | class | A page's content as a neutral, ordered sequence of `RenderOp`s. |
 | [PageRasterizer](Rendering/PageRasterizer.md) | class | Rasterizes a PDF page to a `PixelBuffer`. |
 | [PaintMode](Rendering/PaintMode.md) | enum | Whether a path is filled, stroked, or both. |
@@ -375,6 +384,7 @@ python tools/gen_api_docs.py
 | [PdfBlendMode](Rendering/PdfBlendMode.md) | enum | PDF blend modes (§11.3.5). |
 | [PdfColorSpace](Rendering/PdfColorSpace.md) | enum | The source color space of a `PdfColor`. |
 | [PdfPageExtensions](Rendering/PdfPageExtensions.md) | class | Extensions on `PdfDocument` and `PdfPage` for the display-list and text-run APIs. |
+| [RenderOp](Rendering/RenderOp.md) | class | Abstract base for all operations in a `PageDisplayList`. |
 | [RenderOp](Rendering/RenderOp.md) | class | Abstract base for all display-list operations. |
 | [RenderOpKind](Rendering/RenderOpKind.md) | enum | Tag identifying the concrete `RenderOp` subtype. |
 | [RenderOptions](Rendering/RenderOptions.md) | class | Options that control how a PDF page is rasterized. |
@@ -383,6 +393,7 @@ python tools/gen_api_docs.py
 | [SearchMatch](Rendering/SearchMatch.md) | class | A search match against the logical text of a page. |
 | [SearchOptions](Rendering/SearchOptions.md) | class | Options controlling a search. |
 | [StrokeExpander](Rendering/StrokeExpander.md) | class | Converts a stroked path into a filled path by expanding each segment by half the stroke width on each side. |
+| [StrokePathOp](Rendering/StrokePathOp.md) | class | Strokes a path with the supplied `StrokeStyle`. |
 | [TextDirection](Rendering/TextDirection.md) | enum | Reading direction of a `TextRun`. |
 | [TextOp](Rendering/TextOp.md) | class | Renders a positioned glyph run. |
 | [TextRenderingMode](Rendering/TextRenderingMode.md) | enum | Rendering mode for a `TextOp` (PDF §9.3.6). |
