@@ -25,7 +25,7 @@ namespace Chuvadi.Pdf.Fonts.Rendering;
 /// developer hasn't run the build tool with the source TTFs in place, the
 /// bundle ships as a header-only placeholder and outline lookups return
 /// empty paths — width-only operation still works via
-/// <c>Chuvadi.Pdf.Rendering.DisplayList.Standard14Widths</c>.
+/// <see cref="Standard14Widths"/>.
 /// </para>
 /// </remarks>
 public static class Standard14Outlines
