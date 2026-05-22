@@ -11,6 +11,56 @@ numbered A01..ANN).
 
 ---
 
+## [2.1.0] - 2026-05-22
+
+### Added
+- **`Chuvadi.Pdf.Reader` module** — a high-level facade over the
+  library, designed for interactive PDF reader applications (Blazor
+  WebAssembly, WPF, etc.) that want a small, mockable surface area
+  instead of wiring the lower-level modules (Documents, Rendering,
+  Svg, Text) directly
+  - `IPdfReader` interface with six async methods: `OpenAsync`
+    (stream + optional password), `RenderPageSvgAsync` (page-sized
+    SVG with selectable text layer at native PDF coordinates),
+    `RenderThumbnailAsync` (lower-precision SVG for thumbnail strips),
+    `GetOutlinesAsync` (bookmark tree), `SearchAsync` (streaming
+    `IAsyncEnumerable<SearchMatch>` across pages), and
+    `GetTextRunsAsync` (per-page text-run geometry for selection
+    layers)
+  - `ChuvadiPdfReader` concrete implementation backed by the
+    underlying library — `PdfDocument.OpenAsync`,
+    `SvgRenderer.RenderPage`, `OutlineReader.GetOutlines`,
+    `PdfDocument.SearchAsync`, `PdfDocument.GetTextRuns`. All public
+    method parameters are validated with `ArgumentNullException` and
+    `ArgumentOutOfRangeException`. Stateless and thread-safe; suitable
+    for singleton registration in DI
+  - Caches two `SvgRenderer` instances internally — one tuned for
+    full-page rendering (`Precision = 4`, web-font embedding,
+    selectable text), one for thumbnails (`Precision = 2`, CSS
+    fallback fonts, selectable text). Visual sizing is the caller's
+    responsibility per design: SVG is resolution-independent and
+    browsers scale it losslessly via CSS
+
+### Tests
+- New `Chuvadi.Pdf.Reader.Tests` project with tests for every
+  `IPdfReader` method covering: null-argument validation,
+  out-of-range page indices, cancellation propagation, plain and
+  encrypted-PDF open flows, render-output sanity (well-formed SVG),
+  outline traversal on a document with no outline, search on a
+  document with no text, and text-run extraction on an empty page
+
+### Notes
+- The module re-uses existing library types directly: `PdfDocument`,
+  `OutlineItem` (in `Chuvadi.Pdf.Forms`), `SearchMatch`/`SearchOptions`/
+  `TextRun` (in `Chuvadi.Pdf.Rendering.DisplayList`). Reader-app
+  consumers add the corresponding `using` directives rather than
+  going through a re-export layer — the types live where they
+  logically belong, the facade just exposes them through a single
+  small interface
+- No breaking changes. Existing API surface is unchanged
+
+---
+
 ## [2.0.2] - 2026-05-22
 
 ### Fixed
