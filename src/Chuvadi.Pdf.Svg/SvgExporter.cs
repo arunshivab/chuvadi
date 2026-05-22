@@ -353,10 +353,23 @@ public static class SvgExporter
                     break;
 
                 // ── Text — handled in TextDispatcher (added next batch) ──
-                case "BT": case "ET":
-                case "Tf": case "Td": case "TD": case "Tm": case "T*":
-                case "Tj": case "TJ": case "'": case "\"":
-                case "Tc": case "Tw": case "Tz": case "TL": case "Tr": case "Ts":
+                case "BT":
+                case "ET":
+                case "Tf":
+                case "Td":
+                case "TD":
+                case "Tm":
+                case "T*":
+                case "Tj":
+                case "TJ":
+                case "'":
+                case "\"":
+                case "Tc":
+                case "Tw":
+                case "Tz":
+                case "TL":
+                case "Tr":
+                case "Ts":
                     TextDispatcher.Dispatch(op, operands, s, w, resources, _doc, _opts,
                         _fontFamilyByKey, _emittedFontFaces);
                     break;
@@ -371,10 +384,19 @@ public static class SvgExporter
                     break;
 
                 // ── Ignored / pass-through ───────────────────────────────
-                case "BMC": case "BDC": case "EMC":
-                case "gs": case "i":
-                case "CS": case "cs": case "sc": case "SC": case "scn": case "SCN":
-                case "ri": case "sh":
+                case "BMC":
+                case "BDC":
+                case "EMC":
+                case "gs":
+                case "i":
+                case "CS":
+                case "cs":
+                case "sc":
+                case "SC":
+                case "scn":
+                case "SCN":
+                case "ri":
+                case "sh":
                     // Pattern/shading/special colorspaces: noop in v1.
                     break;
 

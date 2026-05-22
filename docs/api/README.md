@@ -353,6 +353,13 @@ python tools/gen_api_docs.py
 | [PdfTokenType](Primitives/PdfTokenType.md) | enum | Identifies the type of a token produced by `PdfTokenizer`. |
 | [PdfTokenizer](Primitives/PdfTokenizer.md) | class | A forward-only, byte-level tokenizer for PDF streams. |
 
+## Chuvadi.Pdf.Reader
+
+| Type | Kind | Description |
+|---|---|---|
+| [ChuvadiPdfReader](Reader/ChuvadiPdfReader.md) | class | Production implementation of `IPdfReader` backed by the Chuvadi PDF library. |
+| [IPdfReader](Reader/IPdfReader.md) | interface | High-level facade over the Chuvadi library for interactive PDF readers. |
+
 ## Chuvadi.Pdf.Redaction
 
 | Type | Kind | Description |

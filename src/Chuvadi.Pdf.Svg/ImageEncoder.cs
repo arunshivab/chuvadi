@@ -28,7 +28,7 @@ internal static class ImageEncoder
         int channels = op.ColorSpace switch
         {
             PdfColorSpace.DeviceGray => 1,
-            PdfColorSpace.DeviceRgb  => 3,
+            PdfColorSpace.DeviceRgb => 3,
             PdfColorSpace.DeviceCmyk => 4,
             _ => 3,
         };
@@ -48,11 +48,11 @@ internal static class ImageEncoder
         int n = width * height;
         for (int i = 0; i < n; i++)
         {
-            double c = cmyk[i * 4]     / 255.0;
+            double c = cmyk[i * 4] / 255.0;
             double m = cmyk[i * 4 + 1] / 255.0;
             double y = cmyk[i * 4 + 2] / 255.0;
             double k = cmyk[i * 4 + 3] / 255.0;
-            rgb[i * 3]     = (byte)((1 - c) * (1 - k) * 255);
+            rgb[i * 3] = (byte)((1 - c) * (1 - k) * 255);
             rgb[i * 3 + 1] = (byte)((1 - m) * (1 - k) * 255);
             rgb[i * 3 + 2] = (byte)((1 - y) * (1 - k) * 255);
         }
@@ -98,7 +98,7 @@ internal static class ImageEncoder
 
     private static void WriteInt32BigEndian(byte[] buf, int offset, int value)
     {
-        buf[offset]     = (byte)(value >> 24);
+        buf[offset] = (byte)(value >> 24);
         buf[offset + 1] = (byte)(value >> 16);
         buf[offset + 2] = (byte)(value >> 8);
         buf[offset + 3] = (byte)value;
