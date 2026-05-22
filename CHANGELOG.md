@@ -11,6 +11,58 @@ numbered A01..ANN).
 
 ---
 
+## [2.0.1] - 2026-05-22
+
+### Added
+- **Document metadata properties** on `PdfDocument` for the date and
+  trapping fields declared by PDF 32000-1 §14.3.3 — `CreationDate` and
+  `ModDate` returning `DateTimeOffset?` parsed per §7.9.4 (UTC, offset,
+  and date-only forms all supported; malformed inputs return null);
+  `Trapped` returning `string?` and leniently accepting both `/Name`
+  and `/String` forms (some producers write either); `XmpMetadata`
+  returning the raw bytes of the Catalog's `/Metadata` stream
+- **Encryption introspection** on `PdfDocument` via the new
+  `Encryption` property returning `EncryptionInfo?` — null when the
+  document is unencrypted, otherwise exposing `Algorithm`, `KeyLength`,
+  `Revision`, `Version`, `Permissions`, `EncryptMetadata`, and eight
+  permission decoders (`AllowPrint`, `AllowModify`, `AllowCopy`,
+  `AllowAnnotate`, `AllowFillForms`, `AllowAccessibilityExtract`,
+  `AllowAssemble`, `AllowPrintHighQuality`) per Table 22
+- **Shape annotations — read and write** (PDF 32000-1 §12.5.6.7–9)
+  - Five new public sealed classes derived from `PdfAnnotation`:
+    `SquareAnnotation`, `CircleAnnotation`, `LineAnnotation`,
+    `PolygonAnnotation`, `PolyLineAnnotation`
+  - New shared `BorderStyle` class plus `BorderStyleType` enum
+    (`Solid`/`Dashed`/`Beveled`/`Inset`/`Underline`) for the PDF
+    `/BS` border-style dictionary
+  - New `LineEnding` enum with all ten spec values
+    (`None`/`Square`/`Circle`/`Diamond`/`OpenArrow`/`ClosedArrow`/
+    `Butt`/`ROpenArrow`/`RClosedArrow`/`Slash`) for `/LE` on
+    `LineAnnotation` and `PolyLineAnnotation`
+  - `AnnotationType` enum extended with `Square`, `Circle`, `Line`,
+    `Polygon`, `PolyLine`
+  - `AnnotationReader` extended with five new subtype parsers plus
+    helpers for `/BS`, `/LE`, and `/Vertices`; `ReadColor` refactored
+    to take a key parameter so `/IC` (interior color) reuses the
+    same code path as `/C` (border color)
+  - `AnnotationWriter` extended with five new dictionary builders
+    plus serializers for `BorderStyle`, line endings, line points,
+    and vertices
+
+### Tests
+- 19 new tests under `tests/Chuvadi.Pdf.Documents.Tests` covering
+  metadata properties (date parsing across UTC/offset/date-only/malformed
+  inputs, name-vs-string Trapped variants, XMP round-trip,
+  Encryption-null-when-unencrypted) and the `EncryptionInfo`
+  permission decoders (per-bit theory, default deny, default allow)
+- 17 new tests under `tests/Chuvadi.Pdf.Annotations.Tests` covering
+  `BorderStyle` validation, shape model constructors, and full
+  round-trip via `AnnotationWriter.Add` → `AnnotationReader.GetAnnotations`
+  for all five shape subtypes
+- Library total: 952 tests passing on the v2.0.1 commit
+
+---
+
 ## [1.10.0] - 2026-05-20
 
 ### Added
