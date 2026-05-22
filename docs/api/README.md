@@ -16,12 +16,20 @@ python tools/gen_api_docs.py
 | [AnnotationReader](Annotations/AnnotationReader.md) | class | Reads annotations from a PDF document. |
 | [AnnotationType](Annotations/AnnotationType.md) | enum | PDF annotation subtype. |
 | [AnnotationWriter](Annotations/AnnotationWriter.md) | class | Adds new annotations to a PDF document and writes the result. |
+| [BorderStyle](Annotations/BorderStyle.md) | class | Border style for an annotation, describing width, style, and (for dashed borders) dash pattern. |
+| [BorderStyleType](Annotations/BorderStyleType.md) | enum | PDF border-style kind. |
+| [CircleAnnotation](Annotations/CircleAnnotation.md) | class | Circle (ellipse outline) annotation. |
 | [FreeTextAnnotation](Annotations/FreeTextAnnotation.md) | class | Free-text annotation drawn directly on the page (§12.5.6.6). |
 | [GenericAnnotation](Annotations/GenericAnnotation.md) | class | Catch-all annotation for subtypes not specifically modelled. |
 | [InkAnnotation](Annotations/InkAnnotation.md) | class | Free-hand ink annotation (§12.5.6.13). |
+| [LineAnnotation](Annotations/LineAnnotation.md) | class | Line annotation. |
+| [LineEnding](Annotations/LineEnding.md) | enum | Line ending style for Line and PolyLine annotations. |
 | [LinkAnnotation](Annotations/LinkAnnotation.md) | class | Hyperlink annotation (§12.5.6.5). |
 | [MarkupAnnotation](Annotations/MarkupAnnotation.md) | class | Text-markup annotation (§12.5.6.10): Highlight, Underline, Squiggly, or StrikeOut. |
 | [PdfAnnotation](Annotations/PdfAnnotation.md) | class | Base class for all modelled annotations. |
+| [PolyLineAnnotation](Annotations/PolyLineAnnotation.md) | class | PolyLine annotation: an open shape connecting `Vertices`. |
+| [PolygonAnnotation](Annotations/PolygonAnnotation.md) | class | Polygon annotation: a closed shape connecting `Vertices`. |
+| [SquareAnnotation](Annotations/SquareAnnotation.md) | class | Square (rectangle outline) annotation. |
 | [StampAnnotation](Annotations/StampAnnotation.md) | class | Rubber-stamp annotation (§12.5.6.12), e.g., "Approved", "Confidential". |
 | [TextAnnotation](Annotations/TextAnnotation.md) | class | Sticky-note text annotation (§12.5.6.4). |
 

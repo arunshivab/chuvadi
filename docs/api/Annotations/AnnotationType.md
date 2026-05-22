@@ -22,6 +22,11 @@ public enum AnnotationType
 | `StrikeOut` | Strike-out markup annotation (§12.5.6.10). |
 | `Stamp` | Rubber-stamp annotation, e.g., "Approved" (§12.5.6.12). |
 | `Ink` | Free-hand ink annotation (§12.5.6.13). |
+| `Square` | Square (rectangle outline) shape annotation (§12.5.6.8). |
+| `Circle` | Circle (ellipse outline) shape annotation (§12.5.6.8). |
+| `Line` | Line shape annotation (§12.5.6.7). |
+| `Polygon` | Polygon (closed shape) annotation (§12.5.6.9). |
+| `PolyLine` | PolyLine (open shape) annotation (§12.5.6.9). |
 
 ---
 
