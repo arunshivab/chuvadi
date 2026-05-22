@@ -16,12 +16,14 @@
         - PdfAnnotationCollection: typed annotation access (read; write in Phase 2)
         - PdfFormFields: AcroForm field enumeration (read; fill in Phase 2)
         - PdfResourceInventory: enumerate fonts, images, color spaces
+        - EncryptionInfo: read-side encryption introspection
     </Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\Chuvadi.Pdf.Encryption\Chuvadi.Pdf.Encryption.csproj" />
     <ProjectReference Include="..\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
   </ItemGroup>
 

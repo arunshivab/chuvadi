@@ -175,6 +175,46 @@ string? Producer => GetInfoString(PdfName.Intern("Producer"))
 
 Gets the name of the PDF producer application.
 
+### `TryParseDate`
+
+```csharp
+DateTimeOffset? CreationDate => TryParseDate(GetInfoString(PdfName.Intern("CreationDate")))
+```
+
+Gets the date and time the document was created, or null when not set or unparsable. PDF 32000-1:2008 §14.3.3, Table 317 — CreationDate.
+
+**Remarks:** The /CreationDate entry is a PDF date string per §7.9.4 of the form `D:YYYYMMDDHHmmSSOHH'mm'`. Missing trailing fields default to zero; a missing timezone offset is treated as UTC.
+
+### `TryParseDate`
+
+```csharp
+DateTimeOffset? ModDate => TryParseDate(GetInfoString(PdfName.Intern("ModDate")))
+```
+
+Gets the date and time the document was last modified, or null when not set or unparsable. PDF 32000-1:2008 §14.3.3, Table 317 — ModDate.
+
+**Remarks:** Same format and parsing semantics as `CreationDate`.
+
+### `GetInfoName`
+
+```csharp
+string? Trapped => GetInfoName(PdfName.Intern("Trapped"))
+```
+
+Gets the /Trapped entry indicating whether the document has been modified to include trapping information.
+
+**Remarks:** Returns the name as a string (typically `"True"`, `"False"`, or `"Unknown"`) or null when absent. Some producers erroneously store this entry as a PDF string instead of a PDF name; both forms are accepted.
+
+### `GetXmpMetadata`
+
+```csharp
+byte[]? XmpMetadata => GetXmpMetadata()
+```
+
+Gets the XMP metadata stream bytes, or null when the document has no /Metadata entry in its Catalog. PDF 32000-1:2008 §14.3.2 — Metadata streams.
+
+**Remarks:** Returns the raw stream bytes as they appear in the file. The XMP specification recommends that metadata streams be uncompressed for searchability; if a producer has chosen to apply a filter, the returned bytes will be in their filtered form. Callers needing the decoded form can read `Catalog`'s /Metadata entry directly and apply the appropriate filter.
+
 ### `Dispose`
 
 ```csharp

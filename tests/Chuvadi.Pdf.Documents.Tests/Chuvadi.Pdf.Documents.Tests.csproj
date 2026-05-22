@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Objects\Chuvadi.Pdf.Objects.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Encryption\Chuvadi.Pdf.Encryption.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.IO\Chuvadi.Pdf.IO.csproj" />
   </ItemGroup>
 

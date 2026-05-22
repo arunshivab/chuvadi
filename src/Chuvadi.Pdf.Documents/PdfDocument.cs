@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPEC:  PDF 32000-1:2008 §7.7.2 — Document Catalog
 //        PDF 32000-1:2008 §14.3.3 — Document information dictionary
+//        PDF 32000-1:2008 §7.9.4 — Date strings
+//        PDF 32000-1:2008 §7.6 — Encryption
 // PHASE: Phase 1 — Chuvadi.Pdf.Documents
 // High-level document model over a PdfReader.
 
 using System;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Chuvadi.Pdf.Encryption;
 using Chuvadi.Pdf.IO;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
@@ -280,6 +284,52 @@ public sealed class PdfDocument : IDisposable
     /// <summary>Gets the name of the PDF producer application.</summary>
     public string? Producer => GetInfoString(PdfName.Intern("Producer"));
 
+    /// <summary>
+    /// Gets the date and time the document was created, or null when not
+    /// set or unparsable. PDF 32000-1:2008 §14.3.3, Table 317 — CreationDate.
+    /// </summary>
+    /// <remarks>
+    /// The /CreationDate entry is a PDF date string per §7.9.4 of the form
+    /// <c>D:YYYYMMDDHHmmSSOHH'mm'</c>. Missing trailing fields default to zero;
+    /// a missing timezone offset is treated as UTC.
+    /// </remarks>
+    public DateTimeOffset? CreationDate => TryParseDate(GetInfoString(PdfName.Intern("CreationDate")));
+
+    /// <summary>
+    /// Gets the date and time the document was last modified, or null when
+    /// not set or unparsable. PDF 32000-1:2008 §14.3.3, Table 317 — ModDate.
+    /// </summary>
+    /// <remarks>
+    /// Same format and parsing semantics as <see cref="CreationDate"/>.
+    /// </remarks>
+    public DateTimeOffset? ModDate => TryParseDate(GetInfoString(PdfName.Intern("ModDate")));
+
+    /// <summary>
+    /// Gets the /Trapped entry indicating whether the document has been
+    /// modified to include trapping information.
+    /// </summary>
+    /// <remarks>
+    /// Returns the name as a string (typically <c>"True"</c>, <c>"False"</c>,
+    /// or <c>"Unknown"</c>) or null when absent. Some producers erroneously
+    /// store this entry as a PDF string instead of a PDF name; both forms
+    /// are accepted.
+    /// </remarks>
+    public string? Trapped => GetInfoName(PdfName.Intern("Trapped"));
+
+    /// <summary>
+    /// Gets the XMP metadata stream bytes, or null when the document has no
+    /// /Metadata entry in its Catalog. PDF 32000-1:2008 §14.3.2 — Metadata streams.
+    /// </summary>
+    /// <remarks>
+    /// Returns the raw stream bytes as they appear in the file. The XMP
+    /// specification recommends that metadata streams be uncompressed for
+    /// searchability; if a producer has chosen to apply a filter, the
+    /// returned bytes will be in their filtered form. Callers needing the
+    /// decoded form can read <see cref="Catalog"/>'s /Metadata entry directly
+    /// and apply the appropriate filter.
+    /// </remarks>
+    public byte[]? XmpMetadata => GetXmpMetadata();
+
     // ── Document catalog ──────────────────────────────────────────────────
 
     /// <summary>
@@ -336,6 +386,51 @@ public sealed class PdfDocument : IDisposable
     /// Gets the raw document information dictionary, or null when absent.
     /// </summary>
     public PdfDictionary? Info => _reader.Info;
+
+    /// <summary>
+    /// Gets the encryption properties of this document, or null when the
+    /// document is not encrypted. PDF 32000-1:2008 §7.6 — Encryption.
+    /// </summary>
+    /// <remarks>
+    /// Parses the trailer's /Encrypt entry into a strongly-typed view. The
+    /// document has been successfully opened, so when this returns non-null,
+    /// the encryption was understood and decryption is in effect for all
+    /// subsequent object access. Returns null when no /Encrypt entry is
+    /// present (the document is not encrypted) or when the security handler
+    /// is recognised by the reader but not exposed via this typed view.
+    /// </remarks>
+    public EncryptionInfo? Encryption
+    {
+        get
+        {
+            if (!_reader.Trailer.TryGetValue(PdfName.Intern("Encrypt"), out PdfPrimitive? encryptPrim))
+            {
+                return null;
+            }
+
+            PdfDictionary? encryptDict = _reader.Objects.ResolveAs<PdfDictionary>(encryptPrim);
+
+            if (encryptDict is null)
+            {
+                return null;
+            }
+
+            EncryptionDictionary? parsed = EncryptionDictionary.Parse(encryptDict);
+
+            if (parsed is null)
+            {
+                return null;
+            }
+
+            return new EncryptionInfo(
+                algorithm: parsed.Algorithm,
+                keyLength: parsed.KeyBytes,
+                revision: parsed.R,
+                version: parsed.V,
+                permissions: parsed.Permissions,
+                encryptMetadata: parsed.EncryptMetadata);
+        }
+    }
 
     /// <summary>
     /// Gets the underlying object store for direct object access.
@@ -400,5 +495,130 @@ public sealed class PdfDocument : IDisposable
         }
 
         return value.ToTextString();
+    }
+
+    private string? GetInfoName(PdfName key)
+    {
+        PdfDictionary? info = _reader.Info;
+
+        if (info is null)
+        {
+            return null;
+        }
+
+        if (!info.TryGetValue(key, out PdfPrimitive? value))
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            PdfName n => n.Value,
+            PdfString s => s.ToTextString(),
+            _ => null,
+        };
+    }
+
+    private byte[]? GetXmpMetadata()
+    {
+        PdfDictionary? catalog = _reader.Catalog;
+
+        if (catalog is null)
+        {
+            return null;
+        }
+
+        if (!catalog.TryGetValue(PdfName.Intern("Metadata"), out PdfPrimitive? metaRef))
+        {
+            return null;
+        }
+
+        PdfStream? stream = _reader.Objects.ResolveAs<PdfStream>(metaRef);
+
+        if (stream is null)
+        {
+            return null;
+        }
+
+        return stream.RawBytes;
+    }
+
+    /// <summary>
+    /// Parses a PDF date string per §7.9.4 into a <see cref="DateTimeOffset"/>.
+    /// Returns null when the input is missing or unparsable.
+    /// </summary>
+    private static DateTimeOffset? TryParseDate(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
+
+        string s = raw;
+
+        if (s.StartsWith("D:", StringComparison.Ordinal))
+        {
+            s = s.Substring(2);
+        }
+
+        if (s.Length < 4)
+        {
+            return null;
+        }
+
+        try
+        {
+            int year = int.Parse(s.AsSpan(0, 4), CultureInfo.InvariantCulture);
+            int month = s.Length >= 6 ? int.Parse(s.AsSpan(4, 2), CultureInfo.InvariantCulture) : 1;
+            int day = s.Length >= 8 ? int.Parse(s.AsSpan(6, 2), CultureInfo.InvariantCulture) : 1;
+            int hour = s.Length >= 10 ? int.Parse(s.AsSpan(8, 2), CultureInfo.InvariantCulture) : 0;
+            int minute = s.Length >= 12 ? int.Parse(s.AsSpan(10, 2), CultureInfo.InvariantCulture) : 0;
+            int second = s.Length >= 14 ? int.Parse(s.AsSpan(12, 2), CultureInfo.InvariantCulture) : 0;
+
+            TimeSpan offset = TimeSpan.Zero;
+            int pos = 14;
+
+            if (pos < s.Length)
+            {
+                char sign = s[pos];
+
+                if (sign == 'Z')
+                {
+                    offset = TimeSpan.Zero;
+                }
+                else if ((sign == '+' || sign == '-') && pos + 3 <= s.Length)
+                {
+                    int sgn = sign == '+' ? 1 : -1;
+                    int oh = int.Parse(s.AsSpan(pos + 1, 2), CultureInfo.InvariantCulture);
+                    int om = 0;
+                    int oPos = pos + 3;
+
+                    if (oPos < s.Length && s[oPos] == '\'')
+                    {
+                        oPos++;
+                    }
+
+                    if (oPos + 2 <= s.Length)
+                    {
+                        if (!int.TryParse(s.AsSpan(oPos, 2), NumberStyles.Integer, CultureInfo.InvariantCulture, out om))
+                        {
+                            om = 0;
+                        }
+                    }
+
+                    offset = new TimeSpan(sgn * oh, sgn * om, 0);
+                }
+            }
+
+            return new DateTimeOffset(year, month, day, hour, minute, second, offset);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 }
