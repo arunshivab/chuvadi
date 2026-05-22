@@ -116,7 +116,7 @@ internal static class ImageDispatcher
                 channels = csn.Value switch
                 {
                     "DeviceGray" => 1,
-                    "DeviceRGB"  => 3,
+                    "DeviceRGB" => 3,
                     "DeviceCMYK" => 4,
                     _ => 3,
                 };
@@ -162,7 +162,7 @@ internal static class ImageDispatcher
             double m = cmyk[i * 4 + 1] / 255.0;
             double y = cmyk[i * 4 + 2] / 255.0;
             double k = cmyk[i * 4 + 3] / 255.0;
-            rgb[i * 3]     = (byte)((1 - c) * (1 - k) * 255);
+            rgb[i * 3] = (byte)((1 - c) * (1 - k) * 255);
             rgb[i * 3 + 1] = (byte)((1 - m) * (1 - k) * 255);
             rgb[i * 3 + 2] = (byte)((1 - y) * (1 - k) * 255);
         }

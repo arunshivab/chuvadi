@@ -152,12 +152,12 @@ public static class DisplayListBuilder
                 case "d": ParseDashArray(operands, s); break;
 
                 // ── Color ────────────────────────────────────────────────
-                case "g":  if (operands.Count > 0) { s.FillColor = PdfColor.Gray(Num(operands[0])); } break;
-                case "G":  if (operands.Count > 0) { s.StrokeColor = PdfColor.Gray(Num(operands[0])); } break;
+                case "g": if (operands.Count > 0) { s.FillColor = PdfColor.Gray(Num(operands[0])); } break;
+                case "G": if (operands.Count > 0) { s.StrokeColor = PdfColor.Gray(Num(operands[0])); } break;
                 case "rg": if (operands.Count >= 3) { s.FillColor = PdfColor.Rgb(Num(operands[0]), Num(operands[1]), Num(operands[2])); } break;
                 case "RG": if (operands.Count >= 3) { s.StrokeColor = PdfColor.Rgb(Num(operands[0]), Num(operands[1]), Num(operands[2])); } break;
-                case "k":  if (operands.Count >= 4) { s.FillColor = PdfColor.Cmyk(Num(operands[0]), Num(operands[1]), Num(operands[2]), Num(operands[3])); } break;
-                case "K":  if (operands.Count >= 4) { s.StrokeColor = PdfColor.Cmyk(Num(operands[0]), Num(operands[1]), Num(operands[2]), Num(operands[3])); } break;
+                case "k": if (operands.Count >= 4) { s.FillColor = PdfColor.Cmyk(Num(operands[0]), Num(operands[1]), Num(operands[2]), Num(operands[3])); } break;
+                case "K": if (operands.Count >= 4) { s.StrokeColor = PdfColor.Cmyk(Num(operands[0]), Num(operands[1]), Num(operands[2]), Num(operands[3])); } break;
 
                 // ── Path construction ────────────────────────────────────
                 case "m":
@@ -222,16 +222,16 @@ public static class DisplayListBuilder
                     break;
 
                 // ── Path painting ────────────────────────────────────────
-                case "S":  EmitPath(s, PaintMode.Stroke, FillRule.NonZero); break;
-                case "s":  s.AppendClose(); EmitPath(s, PaintMode.Stroke, FillRule.NonZero); break;
+                case "S": EmitPath(s, PaintMode.Stroke, FillRule.NonZero); break;
+                case "s": s.AppendClose(); EmitPath(s, PaintMode.Stroke, FillRule.NonZero); break;
                 case "f":
-                case "F":  EmitPath(s, PaintMode.Fill, FillRule.NonZero); break;
+                case "F": EmitPath(s, PaintMode.Fill, FillRule.NonZero); break;
                 case "f*": EmitPath(s, PaintMode.Fill, FillRule.EvenOdd); break;
-                case "B":  EmitPath(s, PaintMode.FillAndStroke, FillRule.NonZero); break;
+                case "B": EmitPath(s, PaintMode.FillAndStroke, FillRule.NonZero); break;
                 case "B*": EmitPath(s, PaintMode.FillAndStroke, FillRule.EvenOdd); break;
-                case "b":  s.AppendClose(); EmitPath(s, PaintMode.FillAndStroke, FillRule.NonZero); break;
+                case "b": s.AppendClose(); EmitPath(s, PaintMode.FillAndStroke, FillRule.NonZero); break;
                 case "b*": s.AppendClose(); EmitPath(s, PaintMode.FillAndStroke, FillRule.EvenOdd); break;
-                case "n":  s.ResetPath(); break;
+                case "n": s.ResetPath(); break;
 
                 // ── Clipping ─────────────────────────────────────────────
                 case "W":
@@ -344,10 +344,19 @@ public static class DisplayListBuilder
                     break;
 
                 // ── Ignored / pass-through ───────────────────────────────
-                case "BMC": case "BDC": case "EMC":
-                case "gs": case "i":
-                case "CS": case "cs": case "sc": case "SC": case "scn": case "SCN":
-                case "ri": case "sh":
+                case "BMC":
+                case "BDC":
+                case "EMC":
+                case "gs":
+                case "i":
+                case "CS":
+                case "cs":
+                case "sc":
+                case "SC":
+                case "scn":
+                case "SCN":
+                case "ri":
+                case "sh":
                     break;
                 default: break;
             }
@@ -609,7 +618,7 @@ public static class DisplayListBuilder
                 return n.Value switch
                 {
                     "DeviceGray" => PdfColorSpace.DeviceGray,
-                    "DeviceRGB"  => PdfColorSpace.DeviceRgb,
+                    "DeviceRGB" => PdfColorSpace.DeviceRgb,
                     "DeviceCMYK" => PdfColorSpace.DeviceCmyk,
                     _ => PdfColorSpace.DeviceRgb,
                 };

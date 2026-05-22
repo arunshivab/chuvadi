@@ -168,10 +168,10 @@ internal sealed class SvgWriter
         {
             switch (ch)
             {
-                case '<':  sb.Append("&lt;");   break;
-                case '>':  sb.Append("&gt;");   break;
-                case '&':  sb.Append("&amp;");  break;
-                case '"':  sb.Append("&quot;"); break;
+                case '<': sb.Append("&lt;"); break;
+                case '>': sb.Append("&gt;"); break;
+                case '&': sb.Append("&amp;"); break;
+                case '"': sb.Append("&quot;"); break;
                 case '\'': sb.Append("&apos;"); break;
                 default:
                     if (ch < 0x20 && ch != '\t' && ch != '\n' && ch != '\r')
