@@ -3,6 +3,7 @@
 // SPEC:  PDF 32000-1:2008 §12.5.2 — Annotation dictionaries
 //        PDF 32000-1:2008 §12.5.6 — Annotation types
 // PHASE: Phase 1.1 — Chuvadi.Pdf.Annotations
+//        v2.0.1 — extended with shape annotation parsing
 // Reads annotations from a PDF page's /Annots array.
 
 using System;
@@ -108,7 +109,7 @@ public static class AnnotationReader
         RectangleF rect = ReadRect(dict);
         string? contents = ReadString(dict, PdfName.Intern("Contents"));
         string? author = ReadString(dict, PdfName.Intern("T"));
-        ColorF? color = ReadColor(dict);
+        ColorF? color = ReadColor(dict, PdfName.Intern("C"));
         float opacity = ReadOpacity(dict);
 
         // Subtype dispatch
@@ -129,6 +130,11 @@ public static class AnnotationReader
             "StrikeOut" => ReadMarkup(AnnotationType.StrikeOut, pageIndex, rect, contents, color, author, opacity, dict),
             "Stamp" => ReadStamp(pageIndex, rect, contents, color, author, opacity, dict),
             "Ink" => ReadInk(pageIndex, rect, contents, color, author, opacity, dict),
+            "Square" => ReadSquare(pageIndex, rect, contents, color, author, opacity, dict),
+            "Circle" => ReadCircle(pageIndex, rect, contents, color, author, opacity, dict),
+            "Line" => ReadLineAnnotation(pageIndex, rect, contents, color, author, opacity, dict),
+            "Polygon" => ReadPolygon(pageIndex, rect, contents, color, author, opacity, dict),
+            "PolyLine" => ReadPolyLine(pageIndex, rect, contents, color, author, opacity, dict),
             _ => new GenericAnnotation(pageIndex, rect, subName.Value, contents, color, author, opacity),
         };
     }
@@ -287,6 +293,83 @@ public static class AnnotationReader
         return new InkAnnotation(pageIndex, rect, strokes, contents, color, author, opacity);
     }
 
+    private static SquareAnnotation ReadSquare(
+        int pageIndex, RectangleF rect, string? contents, ColorF? color,
+        string? author, float opacity, PdfDictionary dict)
+    {
+        BorderStyle? bs = ReadBorderStyle(dict);
+        ColorF? ic = ReadColor(dict, PdfName.Intern("IC"));
+        return new SquareAnnotation(pageIndex, rect, bs, ic, contents, color, author, opacity);
+    }
+
+    private static CircleAnnotation ReadCircle(
+        int pageIndex, RectangleF rect, string? contents, ColorF? color,
+        string? author, float opacity, PdfDictionary dict)
+    {
+        BorderStyle? bs = ReadBorderStyle(dict);
+        ColorF? ic = ReadColor(dict, PdfName.Intern("IC"));
+        return new CircleAnnotation(pageIndex, rect, bs, ic, contents, color, author, opacity);
+    }
+
+    private static LineAnnotation? ReadLineAnnotation(
+        int pageIndex, RectangleF rect, string? contents, ColorF? color,
+        string? author, float opacity, PdfDictionary dict)
+    {
+        if (!dict.TryGetValue(PdfName.Intern("L"), out PdfPrimitive? lPrim) ||
+            lPrim is not PdfArray lArr || lArr.Count < 4)
+        {
+            return null;
+        }
+
+        PointF start = new PointF(ToDouble(lArr[0]), ToDouble(lArr[1]));
+        PointF end = new PointF(ToDouble(lArr[2]), ToDouble(lArr[3]));
+
+        BorderStyle? bs = ReadBorderStyle(dict);
+        (LineEnding s, LineEnding e) = ReadLineEndings(dict);
+
+        return new LineAnnotation(
+            pageIndex, rect, start, end, bs, s, e,
+            contents, color, author, opacity);
+    }
+
+    private static PolygonAnnotation? ReadPolygon(
+        int pageIndex, RectangleF rect, string? contents, ColorF? color,
+        string? author, float opacity, PdfDictionary dict)
+    {
+        IReadOnlyList<PointF>? vertices = ReadVertices(dict);
+
+        if (vertices is null || vertices.Count < 3)
+        {
+            return null;
+        }
+
+        BorderStyle? bs = ReadBorderStyle(dict);
+        ColorF? ic = ReadColor(dict, PdfName.Intern("IC"));
+
+        return new PolygonAnnotation(
+            pageIndex, rect, vertices, bs, ic,
+            contents, color, author, opacity);
+    }
+
+    private static PolyLineAnnotation? ReadPolyLine(
+        int pageIndex, RectangleF rect, string? contents, ColorF? color,
+        string? author, float opacity, PdfDictionary dict)
+    {
+        IReadOnlyList<PointF>? vertices = ReadVertices(dict);
+
+        if (vertices is null || vertices.Count < 2)
+        {
+            return null;
+        }
+
+        BorderStyle? bs = ReadBorderStyle(dict);
+        (LineEnding s, LineEnding e) = ReadLineEndings(dict);
+
+        return new PolyLineAnnotation(
+            pageIndex, rect, vertices, bs, s, e,
+            contents, color, author, opacity);
+    }
+
     // ── Field helpers ─────────────────────────────────────────────────────
 
     private static RectangleF ReadRect(PdfDictionary dict)
@@ -319,9 +402,9 @@ public static class AnnotationReader
         };
     }
 
-    private static ColorF? ReadColor(PdfDictionary dict)
+    private static ColorF? ReadColor(PdfDictionary dict, PdfName key)
     {
-        if (!dict.TryGetValue(PdfName.Intern("C"), out PdfPrimitive? cPrim) ||
+        if (!dict.TryGetValue(key, out PdfPrimitive? cPrim) ||
             cPrim is not PdfArray arr)
         {
             return null;
@@ -354,6 +437,110 @@ public static class AnnotationReader
         }
 
         return 1f;
+    }
+
+    private static BorderStyle? ReadBorderStyle(PdfDictionary dict)
+    {
+        if (!dict.TryGetValue(PdfName.Intern("BS"), out PdfPrimitive? bsPrim) ||
+            bsPrim is not PdfDictionary bs)
+        {
+            return null;
+        }
+
+        float width = 1f;
+
+        if (bs.TryGetValue(PdfName.Intern("W"), out PdfPrimitive? wPrim))
+        {
+            width = (float)ToDouble(wPrim);
+        }
+
+        BorderStyleType style = BorderStyleType.Solid;
+
+        if (bs.TryGetValue(PdfName.Intern("S"), out PdfPrimitive? sPrim) && sPrim is PdfName sn)
+        {
+            style = sn.Value switch
+            {
+                "S" => BorderStyleType.Solid,
+                "D" => BorderStyleType.Dashed,
+                "B" => BorderStyleType.Beveled,
+                "I" => BorderStyleType.Inset,
+                "U" => BorderStyleType.Underline,
+                _ => BorderStyleType.Solid,
+            };
+        }
+
+        IReadOnlyList<float>? dashPattern = null;
+
+        if (bs.TryGetValue(PdfName.Intern("D"), out PdfPrimitive? dPrim) && dPrim is PdfArray dArr)
+        {
+            List<float> pattern = new List<float>(dArr.Count);
+
+            for (int i = 0; i < dArr.Count; i++)
+            {
+                pattern.Add((float)ToDouble(dArr[i]));
+            }
+
+            if (pattern.Count > 0)
+            {
+                dashPattern = pattern;
+            }
+        }
+
+        return new BorderStyle(width, style, dashPattern);
+    }
+
+    private static (LineEnding Start, LineEnding End) ReadLineEndings(PdfDictionary dict)
+    {
+        if (!dict.TryGetValue(PdfName.Intern("LE"), out PdfPrimitive? lePrim) ||
+            lePrim is not PdfArray leArr || leArr.Count < 2)
+        {
+            return (LineEnding.None, LineEnding.None);
+        }
+
+        return (ParseLineEnding(leArr[0]), ParseLineEnding(leArr[1]));
+    }
+
+    private static LineEnding ParseLineEnding(PdfPrimitive p)
+    {
+        if (p is not PdfName n)
+        {
+            return LineEnding.None;
+        }
+
+        return n.Value switch
+        {
+            "None" => LineEnding.None,
+            "Square" => LineEnding.Square,
+            "Circle" => LineEnding.Circle,
+            "Diamond" => LineEnding.Diamond,
+            "OpenArrow" => LineEnding.OpenArrow,
+            "ClosedArrow" => LineEnding.ClosedArrow,
+            "Butt" => LineEnding.Butt,
+            "ROpenArrow" => LineEnding.ROpenArrow,
+            "RClosedArrow" => LineEnding.RClosedArrow,
+            "Slash" => LineEnding.Slash,
+            _ => LineEnding.None,
+        };
+    }
+
+    private static IReadOnlyList<PointF>? ReadVertices(PdfDictionary dict)
+    {
+        if (!dict.TryGetValue(PdfName.Intern("Vertices"), out PdfPrimitive? vPrim) ||
+            vPrim is not PdfArray vArr)
+        {
+            return null;
+        }
+
+        List<PointF> vertices = new List<PointF>(vArr.Count / 2);
+
+        for (int i = 0; i + 1 < vArr.Count; i += 2)
+        {
+            double x = ToDouble(vArr[i]);
+            double y = ToDouble(vArr[i + 1]);
+            vertices.Add(new PointF(x, y));
+        }
+
+        return vertices.Count > 0 ? vertices : null;
     }
 
     private static double ToDouble(PdfPrimitive p)
