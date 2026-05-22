@@ -52,7 +52,7 @@ Gets the owner password used to derive the O/OE entries.
 int Permissions
 ```
 
-Gets or initialises the permission bit mask written to /P. Default: all permissions allowed.
+Gets or initialises the permission bit mask written to /P. Defaults to `AllPermissionsAllowed` (every action permitted). Set a narrower value to restrict what user-password holders may do.
 
 ### `EncryptMetadata`
 
@@ -83,6 +83,16 @@ static EncryptionOptions Aes256(string userPassword, string? ownerPassword = nul
 ```
 
 Creates options for AES-256 encryption (V=5, R=6, ISO 32000-2 standardised). Generates a random 32-byte file key.
+
+## Fields
+
+### `AllPermissionsAllowed`
+
+```csharp
+const int AllPermissionsAllowed = -4
+```
+
+The /P permission mask that grants every action defined by PDF 32000-1:2008 §7.6.3.2, Table 22 (print, modify, copy, annotate, fill forms, accessibility extract, assemble, high-quality print).
 
 ---
 
