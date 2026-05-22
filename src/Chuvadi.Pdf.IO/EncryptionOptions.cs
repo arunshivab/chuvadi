@@ -1,6 +1,7 @@
 // Copyright 2025 Chuvadi Contributors
 // SPDX-License-Identifier: Apache-2.0
 // PHASE: Phase 1.1.5 (integration) — Chuvadi.Pdf.IO
+//        v2.0.2 — corrected the "allow everything" default
 //
 // Configuration for writing encrypted PDFs.
 
@@ -18,13 +19,26 @@ namespace Chuvadi.Pdf.IO;
 /// </remarks>
 public sealed class EncryptionOptions
 {
+    /// <summary>
+    /// The /P permission mask that grants every action defined by PDF
+    /// 32000-1:2008 §7.6.3.2, Table 22 (print, modify, copy, annotate,
+    /// fill forms, accessibility extract, assemble, high-quality print).
+    /// </summary>
+    /// <remarks>
+    /// Equal to <c>-4</c> (0xFFFFFFFC): all eight permission bits set,
+    /// both reserved-must-be-1 bits set (bits 7 and 8), and all high
+    /// reserved bits (13..32) set. Only bits 1 and 2 are clear because
+    /// the spec reserves them to 0.
+    /// </remarks>
+    public const int AllPermissionsAllowed = -4;
+
     private EncryptionOptions(EncryptionAlgorithm algorithm, byte[] fileKey, string userPassword, string ownerPassword)
     {
         Algorithm = algorithm;
         FileKey = fileKey;
         UserPassword = userPassword;
         OwnerPassword = ownerPassword;
-        Permissions = -3904;  // default: allow everything (PDF spec all-bits-on)
+        Permissions = AllPermissionsAllowed;
         EncryptMetadata = true;
     }
 
@@ -41,8 +55,9 @@ public sealed class EncryptionOptions
     public string OwnerPassword { get; }
 
     /// <summary>
-    /// Gets or initialises the permission bit mask written to /P. Default: all
-    /// permissions allowed.
+    /// Gets or initialises the permission bit mask written to /P. Defaults to
+    /// <see cref="AllPermissionsAllowed"/> (every action permitted). Set a
+    /// narrower value to restrict what user-password holders may do.
     /// </summary>
     public int Permissions { get; init; }
 

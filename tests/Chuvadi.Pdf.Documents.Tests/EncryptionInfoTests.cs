@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPEC:  PDF 32000-1:2008 §7.6.3.2, Table 22 — User access permissions
 // PHASE: v2.0.0 — EncryptionInfo unit tests
+//        v2.0.2 — sample permission value updated to -4 for consistency
 
 using Chuvadi.Pdf.Encryption;
 using FluentAssertions;
@@ -11,7 +12,7 @@ namespace Chuvadi.Pdf.Documents.Tests;
 
 public sealed class EncryptionInfoTests
 {
-    // ── Property propagation ──────────────────────────────────────────────
+    // ── Property propagation ────────────────────────────────────────────────
 
     [Fact]
     public void Constructor_PropertiesPropagate()
@@ -21,14 +22,14 @@ public sealed class EncryptionInfoTests
             keyLength: 32,
             revision: 6,
             version: 5,
-            permissions: -3904,
+            permissions: -4,
             encryptMetadata: true);
 
         info.Algorithm.Should().Be(EncryptionAlgorithm.Aes_256);
         info.KeyLength.Should().Be(32);
         info.Revision.Should().Be(6);
         info.Version.Should().Be(5);
-        info.Permissions.Should().Be(-3904);
+        info.Permissions.Should().Be(-4);
         info.EncryptMetadata.Should().BeTrue();
     }
 

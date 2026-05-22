@@ -11,6 +11,54 @@ numbered A01..ANN).
 
 ---
 
+## [2.0.2] - 2026-05-22
+
+### Fixed
+- **`EncryptionOptions` default permission mask** — `EncryptionOptions`
+  constructed via the `Aes128` or `Aes256` factories was defaulting
+  `Permissions` to `-3904` under the mistaken belief that the value
+  meant "allow everything (PDF spec all-bits-on)". In fact `-3904`
+  (`0xFFFFF0C0`) has **every** PDF 32000-1 §7.6.3.2 Table 22 permission
+  bit CLEAR — print, modify, copy, annotate, fill-forms, accessibility
+  extract, assemble, and high-quality print are all denied. The
+  correct "allow everything" value is `-4` (`0xFFFFFFFC`): all eight
+  permission bits set, both reserved-must-be-1 bits set, and all high
+  reserved bits set. Encrypted PDFs written with default
+  `EncryptionOptions` in v1.4.0 through v2.0.1 are maximally
+  restricted regardless of intent
+- Introduced `public const int EncryptionOptions.AllPermissionsAllowed = -4;`
+  as a self-documenting reference value for the canonical "allow
+  everything" mask, replacing the magic-number literal in the default
+  constructor and the misleading doc comment. Callers who want to
+  restrict specific permissions can continue to assign directly to
+  the `Permissions` init property
+
+### Tests
+- New `EncryptionDefaultsRoundTripTests` under
+  `tests/Chuvadi.Pdf.Documents.Tests` covering the AES-128 and AES-256
+  write → read round-trip with default options, verifying that the
+  read-back `PdfDocument.Encryption.Permissions` equals
+  `EncryptionOptions.AllPermissionsAllowed` and that every `Allow*`
+  decoder reports true. A guard test pins the constant to `-4` so any
+  future regression to `-3904` is the loudest possible alarm
+- Existing `EncryptionInfoTests.Constructor_PropertiesPropagate`
+  updated to use `-4` as its sample permission value for consistency
+  with the new constant; behaviour and assertions otherwise unchanged
+
+### Notes
+- The reader-side default for an absent `/P` entry in
+  `EncryptionDictionary.Parse` (also `-3904`) is **intentionally not
+  changed**. PDF spec requires `/P` to be present on encrypted
+  documents; if a malformed document omits it, defaulting to all-bits-
+  clear (deny by default) is the safer behaviour than auto-granting
+  every permission
+- The bug only affected the **default** permission value. Callers who
+  passed an explicit `Permissions` value via the init property
+  (e.g. `EncryptionOptions.Aes256("pw") with { Permissions = ... }`)
+  were unaffected
+
+---
+
 ## [2.0.1] - 2026-05-22
 
 ### Added
