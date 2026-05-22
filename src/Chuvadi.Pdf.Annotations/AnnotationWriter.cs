@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPEC:  PDF 32000-1:2008 §12.5 — Annotations
 // PHASE: Phase 1.1 — Chuvadi.Pdf.Annotations
+//        v2.0.1 — extended with shape annotation writing
 // Appends annotations to a PDF and writes the result.
 
 using System;
@@ -174,6 +175,34 @@ public static class AnnotationWriter
             case InkAnnotation ink:
                 dict.Set(PdfName.Intern("InkList"), MakeInkList(ink.Strokes));
                 break;
+
+            case SquareAnnotation sq:
+                AddBorderStyle(dict, sq.BorderStyle);
+                AddInteriorColor(dict, sq.InteriorColor);
+                break;
+
+            case CircleAnnotation ci:
+                AddBorderStyle(dict, ci.BorderStyle);
+                AddInteriorColor(dict, ci.InteriorColor);
+                break;
+
+            case LineAnnotation ln:
+                dict.Set(PdfName.Intern("L"), MakeLinePoints(ln.Start, ln.End));
+                AddBorderStyle(dict, ln.BorderStyle);
+                AddLineEndings(dict, ln.LineEndingStart, ln.LineEndingEnd);
+                break;
+
+            case PolygonAnnotation pg:
+                dict.Set(PdfName.Intern("Vertices"), MakeVertices(pg.Vertices));
+                AddBorderStyle(dict, pg.BorderStyle);
+                AddInteriorColor(dict, pg.InteriorColor);
+                break;
+
+            case PolyLineAnnotation pl:
+                dict.Set(PdfName.Intern("Vertices"), MakeVertices(pl.Vertices));
+                AddBorderStyle(dict, pl.BorderStyle);
+                AddLineEndings(dict, pl.LineEndingStart, pl.LineEndingEnd);
+                break;
         }
 
         return dict;
@@ -201,6 +230,56 @@ public static class AnnotationWriter
         }
 
         dict.Set(PdfName.Intern("A"), action);
+    }
+
+    private static void AddBorderStyle(PdfDictionary dict, BorderStyle? bs)
+    {
+        if (bs is null)
+        {
+            return;
+        }
+
+        PdfDictionary bsDict = new PdfDictionary();
+        bsDict.Set(PdfName.Type, PdfName.Intern("Border"));
+        bsDict.Set(PdfName.Intern("W"), new PdfReal(bs.Width));
+        bsDict.Set(PdfName.Intern("S"), PdfName.Intern(BorderStyleName(bs.Style)));
+
+        if (bs.DashPattern is not null && bs.DashPattern.Count > 0)
+        {
+            PdfArray dArr = new PdfArray(Array.Empty<PdfPrimitive>());
+
+            foreach (float v in bs.DashPattern)
+            {
+                dArr.Add(new PdfReal(v));
+            }
+
+            bsDict.Set(PdfName.Intern("D"), dArr);
+        }
+
+        dict.Set(PdfName.Intern("BS"), bsDict);
+    }
+
+    private static void AddInteriorColor(PdfDictionary dict, ColorF? ic)
+    {
+        if (ic is null)
+        {
+            return;
+        }
+
+        dict.Set(PdfName.Intern("IC"), MakeColor(ic.Value));
+    }
+
+    private static void AddLineEndings(PdfDictionary dict, LineEnding start, LineEnding end)
+    {
+        if (start == LineEnding.None && end == LineEnding.None)
+        {
+            return;
+        }
+
+        PdfArray arr = new PdfArray(Array.Empty<PdfPrimitive>());
+        arr.Add(PdfName.Intern(LineEndingName(start)));
+        arr.Add(PdfName.Intern(LineEndingName(end)));
+        dict.Set(PdfName.Intern("LE"), arr);
     }
 
     private static PdfArray BuildMergedAnnotsArray(
@@ -286,6 +365,29 @@ public static class AnnotationWriter
         }
 
         return outer;
+    }
+
+    private static PdfArray MakeLinePoints(PointF start, PointF end)
+    {
+        return new PdfArray([
+            new PdfReal(start.X),
+            new PdfReal(start.Y),
+            new PdfReal(end.X),
+            new PdfReal(end.Y),
+        ]);
+    }
+
+    private static PdfArray MakeVertices(IReadOnlyList<PointF> vertices)
+    {
+        PdfArray arr = new PdfArray(Array.Empty<PdfPrimitive>());
+
+        foreach (PointF v in vertices)
+        {
+            arr.Add(new PdfReal(v.X));
+            arr.Add(new PdfReal(v.Y));
+        }
+
+        return arr;
     }
 
     // ── Object-graph plumbing ─────────────────────────────────────────────
@@ -423,6 +525,36 @@ public static class AnnotationWriter
         AnnotationType.StrikeOut => "StrikeOut",
         AnnotationType.Stamp => "Stamp",
         AnnotationType.Ink => "Ink",
+        AnnotationType.Square => "Square",
+        AnnotationType.Circle => "Circle",
+        AnnotationType.Line => "Line",
+        AnnotationType.Polygon => "Polygon",
+        AnnotationType.PolyLine => "PolyLine",
         _ => throw new AnnotationException($"Cannot write Unknown annotation type."),
+    };
+
+    private static string BorderStyleName(BorderStyleType s) => s switch
+    {
+        BorderStyleType.Solid => "S",
+        BorderStyleType.Dashed => "D",
+        BorderStyleType.Beveled => "B",
+        BorderStyleType.Inset => "I",
+        BorderStyleType.Underline => "U",
+        _ => "S",
+    };
+
+    private static string LineEndingName(LineEnding e) => e switch
+    {
+        LineEnding.None => "None",
+        LineEnding.Square => "Square",
+        LineEnding.Circle => "Circle",
+        LineEnding.Diamond => "Diamond",
+        LineEnding.OpenArrow => "OpenArrow",
+        LineEnding.ClosedArrow => "ClosedArrow",
+        LineEnding.Butt => "Butt",
+        LineEnding.ROpenArrow => "ROpenArrow",
+        LineEnding.RClosedArrow => "RClosedArrow",
+        LineEnding.Slash => "Slash",
+        _ => "None",
     };
 }
