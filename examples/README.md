@@ -1,6 +1,6 @@
 # Chuvadi Examples
 
-Eight runnable example projects, one per major capability. Each example is
+Nine runnable example projects, one per major capability. Each example is
 self-contained: its own `.csproj` referencing only the Chuvadi modules it
 needs, a single `Program.cs` (typically 30–80 lines), and a `README.md`
 explaining what it does and how to run it.
@@ -17,6 +17,7 @@ explaining what it does and how to run it.
 | [Outlines](Chuvadi.Examples.Outlines/README.md) | Print the document outline (bookmarks) tree. |
 | [PageOps](Chuvadi.Examples.PageOps/README.md) | Merge, split, delete, and rotate pages. |
 | [Annotations](Chuvadi.Examples.Annotations/README.md) | Read existing annotations and add sticky-notes + stamps. |
+| [Reader](Chuvadi.Examples.Reader/README.md) | Exercise the high-level IPdfReader facade end-to-end. |
 
 ## Running an example
 

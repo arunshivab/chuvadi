@@ -12,7 +12,7 @@ public sealed class SvgRenderer
 
 This is the Phase 2.1 architectural pivot: SVG output no longer walks the PDF content stream directly. Instead, `DisplayListBuilder` produces a neutral `PageDisplayList`, and this renderer turns it into SVG. The same display list also feeds the WPF renderer (Phase 2.1 Stage 11) and any future output adapters (software rasterizer, etc.).  
 
- Coordinate system: PDF uses bottom-left origin, SVG uses top-left. The output wraps content in a single `&lt;g transform="matrix(1 0 0 -1 0 H)"&gt;` outer group so PDF-native coordinates flow through directly. Text elements receive a local counter-flip to read upright.
+ Coordinate system: PDF uses bottom-left origin, SVG uses top-left. The output wraps content in a single `&lt;g transform="matrix(1 0 0 -1 0 H)"&gt;` outer group so PDF-native coordinates flow through directly. Text elements and images both receive a local counter-flip to read upright after the outer flip is applied.
 
 ## Constructors
 

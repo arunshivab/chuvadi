@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPEC:  PDF 32000-1:2008
 // PHASE: Phase 2.1 — SVG renderer over display list
+//        v2.1.1 — image counter-flip fix
 
 using System;
 using System.Collections.Generic;
@@ -28,7 +29,8 @@ namespace Chuvadi.Pdf.Svg;
 /// Coordinate system: PDF uses bottom-left origin, SVG uses top-left. The
 /// output wraps content in a single <c>&lt;g transform="matrix(1 0 0 -1 0 H)"&gt;</c>
 /// outer group so PDF-native coordinates flow through directly. Text elements
-/// receive a local counter-flip to read upright.
+/// and images both receive a local counter-flip to read upright after the
+/// outer flip is applied.
 /// </para>
 /// </remarks>
 public sealed class SvgRenderer
@@ -164,7 +166,21 @@ public sealed class SvgRenderer
     {
         string? dataUrl = ImageEncoder.BuildDataUrl(op);
         if (dataUrl is null) { return; }
-        string transform = op.Transform.ToSvgMatrix();
+
+        // The image's unit square (0,0)–(1,1) is mapped to user space by
+        // op.Transform. PDF expects raster row 0 at image-space y=0; SVG's
+        // <image> element also paints raster row 0 at local y=0. Without
+        // compensation, the outer page-flip (matrix(1,0,0,-1,0,H)) inverts
+        // the image vertically — row 0 ends up at the bottom in SVG space.
+        //
+        // The fix mirrors what EmitText does: compose a local counter-flip
+        // into the transform. The flip is about y = 0.5 within the unit
+        // square (matrix(1,0,0,-1,0,1)), so raster row 0 ends up at the
+        // top of the destination box after all transforms are applied.
+        AffineMatrix localFlip = new(1, 0, 0, -1, 0, 1);
+        AffineMatrix combined = localFlip.Multiply(op.Transform);
+        string transform = combined.ToSvgMatrix();
+
         w.OpenGroup(transform);
         w.EmitImage(dataUrl, 0, 0, 1, 1);
         w.CloseGroup();
