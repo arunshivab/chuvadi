@@ -14,6 +14,7 @@ using Chuvadi.Pdf.Documents;
 using FluentAssertions;
 using Xunit;
 namespace Chuvadi.Pdf.Svg.Tests;
+
 public sealed class SvgExporterTests
 {
     [Fact]
