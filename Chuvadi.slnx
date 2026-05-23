@@ -7,6 +7,7 @@
     <Project Path="examples/Chuvadi.Examples.FormFill/Chuvadi.Examples.FormFill.csproj" />
     <Project Path="examples/Chuvadi.Examples.Outlines/Chuvadi.Examples.Outlines.csproj" />
     <Project Path="examples/Chuvadi.Examples.PageOps/Chuvadi.Examples.PageOps.csproj" />
+    <Project Path="examples/Chuvadi.Examples.Reader/Chuvadi.Examples.Reader.csproj" />
     <Project Path="examples/Chuvadi.Examples.Redaction/Chuvadi.Examples.Redaction.csproj" />
     <Project Path="examples/Chuvadi.Examples.Render/Chuvadi.Examples.Render.csproj" />
     <Project Path="examples/Chuvadi.Examples.TextExtraction/Chuvadi.Examples.TextExtraction.csproj" />
@@ -59,6 +60,7 @@
     <Project Path="tests/Chuvadi.Pdf.Redaction.Tests/Chuvadi.Pdf.Redaction.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Rendering.Tests/Chuvadi.Pdf.Rendering.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Signatures.Tests/Chuvadi.Pdf.Signatures.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Svg.Tests/Chuvadi.Pdf.Svg.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Text.Tests/Chuvadi.Pdf.Text.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Watermark.Tests/Chuvadi.Pdf.Watermark.Tests.csproj" />
   </Folder>

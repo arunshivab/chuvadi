@@ -78,3 +78,6 @@ crashes/
 
 # -- BenchmarkDotNet output ------------------------------------------------
 benchmarks/**/BenchmarkDotNet.Artifacts/
+
+# Reader example output
+page-*.svg
