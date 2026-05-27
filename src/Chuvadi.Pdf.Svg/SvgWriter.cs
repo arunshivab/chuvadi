@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // PHASE: Phase 2.0 — SVG export
 //        v2.1.1 — attribute-value escaping audit
+//        v2.1.2 — xml:space="preserve" + per-glyph X positions + style hints
 
 using System.Collections.Generic;
 using System.Globalization;
@@ -101,8 +102,22 @@ internal sealed class SvgWriter
         _body.Append("/>");
     }
 
+    /// <summary>
+    /// Emits a text element at a single (x, y) position. The browser uses
+    /// its own font metrics for character positioning within the run.
+    /// </summary>
+    /// <remarks>
+    /// v2.1.2: every emitted text element now carries
+    /// <c>xml:space="preserve"</c>. Without this, browsers strip leading and
+    /// trailing spaces and collapse runs of spaces, which silently drops
+    /// inter-word whitespace that the source PDF placed there deliberately.
+    /// The optional <paramref name="fontWeight"/> and
+    /// <paramref name="fontStyle"/> parameters carry the bold/italic hints
+    /// derived from the PDF font name so embedded variants render correctly.
+    /// </remarks>
     internal void EmitText(string content, double x, double y, string fontFamily,
-        double fontSize, string fill, string? transform = null)
+        double fontSize, string fill, string? transform = null,
+        string? fontWeight = null, string? fontStyle = null)
     {
         _body.Append("<text");
         if (transform is not null)
@@ -114,7 +129,70 @@ internal sealed class SvgWriter
         _body.Append(" font-family=\"").Append(EscapeXml(fontFamily)).Append('"');
         _body.AppendFormat(CultureInfo.InvariantCulture,
             " font-size=\"{0}\"", F(fontSize));
+        if (fontWeight is not null)
+        {
+            _body.Append(" font-weight=\"").Append(EscapeXml(fontWeight)).Append('"');
+        }
+        if (fontStyle is not null)
+        {
+            _body.Append(" font-style=\"").Append(EscapeXml(fontStyle)).Append('"');
+        }
         _body.Append(" fill=\"").Append(EscapeXml(fill)).Append('"');
+        _body.Append(" xml:space=\"preserve\"");
+        _body.Append('>').Append(EscapeXml(content)).Append("</text>");
+    }
+
+    /// <summary>
+    /// Emits a text element with per-character X positions, allowing the
+    /// caller to specify exactly where each character of the text content
+    /// should be placed. Y remains a single value (all characters share
+    /// the same baseline).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The SVG <c>x</c> attribute on <c>&lt;text&gt;</c> accepts a
+    /// space-separated list of positions. Each character of the text
+    /// content is placed at the corresponding position. If fewer positions
+    /// are supplied than characters, the remaining characters follow the
+    /// previous character's natural advance.
+    /// </para>
+    /// <para>
+    /// v2.1.2: this overload is the renderer's primary mechanism for
+    /// reproducing the PDF's exact glyph positions. Without it, the
+    /// browser's own font metrics determine character spacing, which
+    /// drifts from the PDF's positions and makes consecutive runs visually
+    /// mis-aligned (the "Addres s" / "SpecialS kills" symptom).
+    /// </para>
+    /// </remarks>
+    internal void EmitText(string content, IReadOnlyList<double> xPositions, double y,
+        string fontFamily, double fontSize, string fill, string? transform = null,
+        string? fontWeight = null, string? fontStyle = null)
+    {
+        _body.Append("<text");
+        if (transform is not null)
+        {
+            _body.Append(" transform=\"").Append(EscapeXml(transform)).Append('"');
+        }
+        _body.Append(" x=\"");
+        for (int i = 0; i < xPositions.Count; i++)
+        {
+            if (i > 0) { _body.Append(' '); }
+            _body.Append(F(xPositions[i]));
+        }
+        _body.Append('"');
+        _body.AppendFormat(CultureInfo.InvariantCulture, " y=\"{0}\"", F(y));
+        _body.Append(" font-family=\"").Append(EscapeXml(fontFamily)).Append('"');
+        _body.AppendFormat(CultureInfo.InvariantCulture, " font-size=\"{0}\"", F(fontSize));
+        if (fontWeight is not null)
+        {
+            _body.Append(" font-weight=\"").Append(EscapeXml(fontWeight)).Append('"');
+        }
+        if (fontStyle is not null)
+        {
+            _body.Append(" font-style=\"").Append(EscapeXml(fontStyle)).Append('"');
+        }
+        _body.Append(" fill=\"").Append(EscapeXml(fill)).Append('"');
+        _body.Append(" xml:space=\"preserve\"");
         _body.Append('>').Append(EscapeXml(content)).Append("</text>");
     }
 

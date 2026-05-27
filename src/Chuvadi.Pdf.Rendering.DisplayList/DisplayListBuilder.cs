@@ -1,7 +1,8 @@
 // Copyright 2025 Chuvadi Contributors
 // SPDX-License-Identifier: Apache-2.0
-// SPEC:  PDF 32000-1:2008 §8 (Graphics), §9 (Text)
+// SPEC:  PDF 32000-1:2008 §8 (Graphics), §9 (Text), §9.4.3 (Text-showing operators)
 // PHASE: Phase 2.1 — display-list intermediate
+//        v2.1.2 — text-run word boundary correctness
 
 using System;
 using System.Collections.Generic;
@@ -37,7 +38,41 @@ public static class DisplayListBuilder
         private readonly List<RenderOp> _ops = new();
         private readonly Dictionary<string, FontWidths> _widthsByKey = new();
         private readonly Dictionary<string, bool> _compositeByKey = new();
+        // v2.1.2: collected for downstream renderers that embed font programs
+        // (e.g. SvgRenderer emits CSS @font-face data URLs from these). Keys
+        // match the resource-name used in TextOp.FontKey.
+        private readonly Dictionary<string, PdfDictionary> _fontDictsByKey = new();
         private PdfDictionary? _resources;
+
+        // ── v2.1.2: gap-tracking for word-boundary space insertion ───────────
+        //
+        // After each text emit on the same line, we record the text-matrix
+        // X position that EmitText left things at (post-advance) and whether
+        // the run ended with a space character. Before the next emit, we
+        // compare the recorded X position to the current text-matrix X
+        // position. A gap larger than a fraction of the space-width tells
+        // us the PDF intends a word break, and we insert a synthetic space
+        // glyph at the start of the next run so the extracted text contains
+        // the space character.
+        //
+        // Guards:
+        //   - skip if no previous run on this line
+        //   - skip if the previous run ENDED with a space — otherwise we'd
+        //     produce double spaces (the "Current  Job" symptom)
+        //   - skip if the next run STARTS with a space — same reason
+        //
+        // The line break operators (Td, TD, Tm, T*, ', ") and BT reset
+        // this tracking so we never insert a space across a line boundary.
+        private bool _hasPrevRunOnLine;
+        private double _prevRunEndX;   // post-emit text-matrix E (X translation)
+        private double _prevRunEndY;   // post-emit text-matrix F — sanity check
+        private bool _prevRunEndedWithSpace;
+        // Gap threshold: a gap exceeding 30% of a space-width is treated as a
+        // word boundary. PDFBox uses similar values, determined by trial and
+        // error against real PDFs. PDF.js uses 0.1–0.25 depending on context.
+        // 0.3 is conservative — we insert fewer spurious spaces and miss a
+        // few legitimate breaks. Better than the opposite.
+        private const double GapToleranceFraction = 0.3;
 
         internal Builder(PdfDocument doc) { _doc = doc; }
 
@@ -50,7 +85,7 @@ public static class DisplayListBuilder
             int rotation = 0;
             if (page.Dictionary.TryGetValue(PdfName.Intern("Rotate"), out PdfPrimitive? rv)
                 && rv is PdfInteger ri) { rotation = ri.Value; }
-            return new PageDisplayList(_ops, page.Width, page.Height, rotation);
+            return new PageDisplayList(_ops, page.Width, page.Height, rotation, _fontDictsByKey);
         }
 
         private byte[] LoadContent(PdfPage page)
@@ -124,7 +159,7 @@ public static class DisplayListBuilder
             BuilderState s = stack.Current;
             switch (op)
             {
-                // ── State ────────────────────────────────────────────────
+                // ── State ─────────────────────────────────────────────────────
                 case "q":
                     stack.Push();
                     _ops.Add(new TransformOp { Push = true, Ctm = s.Ctm });
@@ -144,14 +179,14 @@ public static class DisplayListBuilder
                     }
                     break;
 
-                // ── Stroke params ────────────────────────────────────────
+                // ── Stroke params ────────────────────────────────────────────
                 case "w": if (operands.Count > 0) { s.LineWidth = Num(operands[0]); } break;
                 case "J": if (operands.Count > 0) { s.LineCap = (LineCap)(int)Num(operands[0]); } break;
                 case "j": if (operands.Count > 0) { s.LineJoin = (LineJoin)(int)Num(operands[0]); } break;
                 case "M": if (operands.Count > 0) { s.MiterLimit = Num(operands[0]); } break;
                 case "d": ParseDashArray(operands, s); break;
 
-                // ── Color ────────────────────────────────────────────────
+                // ── Color ────────────────────────────────────────────────────
                 case "g": if (operands.Count > 0) { s.FillColor = PdfColor.Gray(Num(operands[0])); } break;
                 case "G": if (operands.Count > 0) { s.StrokeColor = PdfColor.Gray(Num(operands[0])); } break;
                 case "rg": if (operands.Count >= 3) { s.FillColor = PdfColor.Rgb(Num(operands[0]), Num(operands[1]), Num(operands[2])); } break;
@@ -159,7 +194,7 @@ public static class DisplayListBuilder
                 case "k": if (operands.Count >= 4) { s.FillColor = PdfColor.Cmyk(Num(operands[0]), Num(operands[1]), Num(operands[2]), Num(operands[3])); } break;
                 case "K": if (operands.Count >= 4) { s.StrokeColor = PdfColor.Cmyk(Num(operands[0]), Num(operands[1]), Num(operands[2]), Num(operands[3])); } break;
 
-                // ── Path construction ────────────────────────────────────
+                // ── Path construction ────────────────────────────────────────
                 case "m":
                     if (operands.Count >= 2)
                     {
@@ -221,7 +256,7 @@ public static class DisplayListBuilder
                     }
                     break;
 
-                // ── Path painting ────────────────────────────────────────
+                // ── Path painting ────────────────────────────────────────────
                 case "S": EmitPath(s, PaintMode.Stroke, FillRule.NonZero); break;
                 case "s": s.AppendClose(); EmitPath(s, PaintMode.Stroke, FillRule.NonZero); break;
                 case "f":
@@ -233,7 +268,7 @@ public static class DisplayListBuilder
                 case "b*": s.AppendClose(); EmitPath(s, PaintMode.FillAndStroke, FillRule.EvenOdd); break;
                 case "n": s.ResetPath(); break;
 
-                // ── Clipping ─────────────────────────────────────────────
+                // ── Clipping ──────────────────────────────────────────────────
                 case "W":
                 case "W*":
                     if (s.HasCurrentPath)
@@ -246,12 +281,15 @@ public static class DisplayListBuilder
                     }
                     break;
 
-                // ── Text ─────────────────────────────────────────────────
+                // ── Text ──────────────────────────────────────────────────────
                 case "BT":
                     s.TextMatrix = AffineMatrix.Identity;
                     s.TextLineMatrix = AffineMatrix.Identity;
+                    ResetGapTracking();
                     break;
-                case "ET": break;
+                case "ET":
+                    ResetGapTracking();
+                    break;
                 case "Tf":
                     if (operands.Count >= 2)
                     {
@@ -266,6 +304,8 @@ public static class DisplayListBuilder
                         AffineMatrix t = new(1, 0, 0, 1, Num(operands[0]), Num(operands[1]));
                         s.TextLineMatrix = t.Multiply(s.TextLineMatrix);
                         s.TextMatrix = s.TextLineMatrix;
+                        // Line-changing op: don't track gap across this boundary.
+                        ResetGapTracking();
                     }
                     break;
                 case "TD":
@@ -276,6 +316,7 @@ public static class DisplayListBuilder
                         AffineMatrix t = new(1, 0, 0, 1, tdx, tdy);
                         s.TextLineMatrix = t.Multiply(s.TextLineMatrix);
                         s.TextMatrix = s.TextLineMatrix;
+                        ResetGapTracking();
                     }
                     break;
                 case "Tm":
@@ -287,6 +328,7 @@ public static class DisplayListBuilder
                             Num(operands[4]), Num(operands[5]));
                         s.TextMatrix = tm;
                         s.TextLineMatrix = tm;
+                        ResetGapTracking();
                     }
                     break;
                 case "T*":
@@ -294,6 +336,7 @@ public static class DisplayListBuilder
                         AffineMatrix t = new(1, 0, 0, 1, 0, -s.Leading);
                         s.TextLineMatrix = t.Multiply(s.TextLineMatrix);
                         s.TextMatrix = s.TextLineMatrix;
+                        ResetGapTracking();
                     }
                     break;
                 case "Tc": if (operands.Count > 0) { s.CharSpacing = Num(operands[0]); } break;
@@ -311,6 +354,7 @@ public static class DisplayListBuilder
                         AffineMatrix t = new(1, 0, 0, 1, 0, -s.Leading);
                         s.TextLineMatrix = t.Multiply(s.TextLineMatrix);
                         s.TextMatrix = s.TextLineMatrix;
+                        ResetGapTracking();
                         if (operands.Count > 0) { EmitText(operands[0], s); }
                     }
                     break;
@@ -322,20 +366,23 @@ public static class DisplayListBuilder
                         AffineMatrix t = new(1, 0, 0, 1, 0, -s.Leading);
                         s.TextLineMatrix = t.Multiply(s.TextLineMatrix);
                         s.TextMatrix = s.TextLineMatrix;
+                        ResetGapTracking();
                         EmitText(operands[2], s);
                     }
                     break;
                 case "TJ":
-                    foreach (PdfToken tok in operands)
-                    {
-                        if (tok.Type == PdfTokenType.LiteralString || tok.Type == PdfTokenType.HexString)
-                        {
-                            EmitText(tok, s);
-                        }
-                    }
+                    // v2.1.3 (fold): consecutive string literals separated by
+                    // small (sub-space-width) numeric kerns are merged into a
+                    // single TextOp so that downstream renderers using
+                    // embedded fonts can let the font's natural hmtx drive
+                    // glyph advance across an entire word, eliminating the
+                    // inter-chunk gap caused by PDF /Widths and font hmtx
+                    // disagreeing. Large kerns still break the fold so real
+                    // word spaces survive as TextOp boundaries.
+                    EmitTJ(operands, s);
                     break;
 
-                // ── XObject ──────────────────────────────────────────────
+                // ── XObject ────────────────────────────────────────────────────
                 case "Do":
                     if (operands.Count > 0)
                     {
@@ -343,7 +390,7 @@ public static class DisplayListBuilder
                     }
                     break;
 
-                // ── Ignored / pass-through ───────────────────────────────
+                // ── Ignored / pass-through ─────────────────────────────────────
                 case "BMC":
                 case "BDC":
                 case "EMC":
@@ -384,6 +431,58 @@ public static class DisplayListBuilder
             s.ResetPath();
         }
 
+        private void ResetGapTracking()
+        {
+            _hasPrevRunOnLine = false;
+            _prevRunEndedWithSpace = false;
+        }
+
+        /// <summary>
+        /// v2.1.2 helper (Bug 2): returns the synthetic glyph for a leading
+        /// space to prepend to a run when the gap from the previous run on
+        /// the same line exceeds the word-boundary threshold. Returns null
+        /// when no space should be inserted (no previous run, line changed,
+        /// gap below threshold, or the previous run already ended in space).
+        /// </summary>
+        private DisplayListGlyph? MaybeBuildLeadingSpace(BuilderState s, FontWidths widths)
+        {
+            if (!_hasPrevRunOnLine) { return null; }
+            // v2.1.2 (issue B): if the previous run on this line ended with
+            // a space character, the word boundary is already represented
+            // in the extracted text. Inserting another space here produces
+            // the double-space symptom ("Current  Job").
+            if (_prevRunEndedWithSpace) { return null; }
+
+            double curX = s.TextMatrix.E;
+            double curY = s.TextMatrix.F;
+
+            // If the line changed (Y differs significantly), gap tracking would
+            // have been reset by Td/TD/Tm/T*/'. Belt-and-braces: also check Y.
+            if (Math.Abs(curY - _prevRunEndY) > 0.01) { return null; }
+
+            double gap = curX - _prevRunEndX;
+            if (gap <= 0) { return null; }
+
+            // Compute space-width in user-space points. Use the font's space
+            // glyph width if available; otherwise fall back to 0.25 × FontSize.
+            double spaceWidth1000 = widths.GetWidth(0x20);
+            double spaceWidth = spaceWidth1000 > 0
+                ? (spaceWidth1000 / 1000.0) * s.FontSize
+                : 0.25 * s.FontSize;
+            spaceWidth *= s.HorizontalScaling / 100.0;
+
+            if (gap < spaceWidth * GapToleranceFraction) { return null; }
+
+            // X=0, Advance=0: the synthetic space adds the character for
+            // text extraction without affecting downstream glyph positioning.
+            return new DisplayListGlyph(
+                GlyphId: 0x20,
+                Unicode: " ",
+                X: 0,
+                Y: 0,
+                Advance: 0);
+        }
+
         private void EmitText(PdfToken token, BuilderState s)
         {
             if (s.FontKey is null) { return; }
@@ -393,7 +492,8 @@ public static class DisplayListBuilder
             FontWidths widths = GetWidths(s.FontKey);
             bool composite = _compositeByKey.GetValueOrDefault(s.FontKey, false);
 
-            // Walk bytes → codes → unicode + advance, accumulating positions.
+            // Decode all glyphs first so we can inspect the first character
+            // before deciding whether to prepend a synthetic leading space.
             List<DisplayListGlyph> glyphs = new();
             double xAdvance = 0;
             int codeStep = composite ? 2 : 1;
@@ -410,7 +510,6 @@ public static class DisplayListBuilder
                 double advance = (rawWidth / 1000.0) * s.FontSize
                                  + s.CharSpacing
                                  + (unicode == " " ? s.WordSpacing : 0.0);
-                // Horizontal scaling (Tz) factor
                 advance *= s.HorizontalScaling / 100.0;
 
                 glyphs.Add(new DisplayListGlyph(
@@ -424,6 +523,22 @@ public static class DisplayListBuilder
             }
 
             if (glyphs.Count == 0) { return; }
+
+            // v2.1.2 (Bug 2): if the previous run on this line ended far
+            // enough away to constitute a word break, AND the new run does
+            // not already begin with a literal space character, prepend a
+            // synthetic space so the extracted text has the word boundary.
+            // The "already has space" guard prevents double-spacing when
+            // the PDF supplied an explicit space at the start of the run.
+            bool firstIsAlreadySpace = glyphs[0].Unicode == " ";
+            if (!firstIsAlreadySpace)
+            {
+                DisplayListGlyph? leading = MaybeBuildLeadingSpace(s, widths);
+                if (leading is not null)
+                {
+                    glyphs.Insert(0, leading.Value);
+                }
+            }
 
             AffineMatrix combined = s.TextMatrix.Multiply(s.Ctm);
             _ops.Add(new TextOp
@@ -441,6 +556,226 @@ public static class DisplayListBuilder
             // Advance text matrix by the total advance of this run.
             AffineMatrix step = new(1, 0, 0, 1, xAdvance, 0);
             s.TextMatrix = step.Multiply(s.TextMatrix);
+
+            // v2.1.2 (Bug 2): record the end position so we can detect a gap
+            // before the next emit on the same line. Also record whether this
+            // run ended with a space — used to suppress double-space insertion
+            // ("Current  Job") on the next run.
+            _hasPrevRunOnLine = true;
+            _prevRunEndX = s.TextMatrix.E;
+            _prevRunEndY = s.TextMatrix.F;
+            _prevRunEndedWithSpace = glyphs[glyphs.Count - 1].Unicode == " ";
+        }
+
+        /// <summary>
+        /// v2.1.3 — TJ-array handler with sub-space-width kerning fold.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// PDF §9.4.3: a TJ array alternates between string literals (which
+        /// show glyphs) and numeric kerns (which translate the text matrix
+        /// horizontally). Word emits TJ arrays where one logical word becomes
+        /// many tiny string literals separated by sub-point typographic kerns
+        /// like <c>-8</c> or <c>-6</c>. Treating every literal as its own
+        /// <see cref="TextOp"/> means downstream renderers see word fragments
+        /// at independent anchor positions, and when the SVG renderer trusts
+        /// an embedded font's hmtx instead of PDF <c>/Widths</c>, the
+        /// fragment anchors and the font's glyph extents disagree by a
+        /// fraction of an em — producing visible intra-word gaps.
+        /// </para>
+        /// <para>
+        /// The fold buffers consecutive same-state string literals into a
+        /// single <see cref="TextOp"/>. Small kerns (below
+        /// <see cref="GapToleranceFraction"/> of the space width) are absorbed
+        /// into the running cursor position so per-glyph X offsets within
+        /// the fold include them; the renderer is then free to honour or
+        /// ignore those offsets depending on whether the font is embedded.
+        /// Large kerns flush the fold and start a fresh <see cref="TextOp"/>
+        /// after the kern, so real word spaces remain encoded as TextOp
+        /// boundaries.
+        /// </para>
+        /// </remarks>
+        private void EmitTJ(List<PdfToken> operands, BuilderState s)
+        {
+            if (s.FontKey is null) { return; }
+
+            FontWidths widths = GetWidths(s.FontKey);
+            bool composite = _compositeByKey.GetValueOrDefault(s.FontKey, false);
+            int codeStep = composite ? 2 : 1;
+
+            // Break-the-fold threshold: a kern whose magnitude exceeds this
+            // many user-space points starts a new TextOp after the kern.
+            // Mirrors the word-boundary heuristic in MaybeBuildLeadingSpace.
+            double spaceWidth1000 = widths.GetWidth(0x20);
+            double spaceWidthPoints = spaceWidth1000 > 0
+                ? (spaceWidth1000 / 1000.0) * s.FontSize
+                : 0.25 * s.FontSize;
+            spaceWidthPoints *= s.HorizontalScaling / 100.0;
+            double breakThreshold = spaceWidthPoints * GapToleranceFraction;
+
+            // Pending fold state.
+            List<DisplayListGlyph> pending = new();
+            AffineMatrix pendingTransform = AffineMatrix.Identity;
+            double cursorX = 0;
+
+            for (int idx = 0; idx < operands.Count; idx++)
+            {
+                PdfToken tok = operands[idx];
+                if (tok.Type == PdfTokenType.LiteralString
+                    || tok.Type == PdfTokenType.HexString)
+                {
+                    byte[] bytes = StringExtractor.Extract(tok);
+                    if (bytes.Length == 0) { continue; }
+
+                    bool startingNewFold = pending.Count == 0;
+                    if (startingNewFold)
+                    {
+                        pendingTransform = s.TextMatrix.Multiply(s.Ctm);
+                        cursorX = 0;
+                    }
+
+                    // Decode glyphs and accumulate into the pending fold.
+                    List<DisplayListGlyph> decoded = new();
+                    for (int i = 0; i + codeStep <= bytes.Length; i += codeStep)
+                    {
+                        int code = composite
+                            ? ((bytes[i] << 8) | bytes[i + 1])
+                            : bytes[i];
+                        string unicode = DecodeSingleCode(bytes, i, codeStep, s.FontKey);
+                        double rawWidth = widths.GetWidth(code);
+                        double advance = (rawWidth / 1000.0) * s.FontSize
+                                         + s.CharSpacing
+                                         + (unicode == " " ? s.WordSpacing : 0.0);
+                        advance *= s.HorizontalScaling / 100.0;
+
+                        decoded.Add(new DisplayListGlyph(
+                            GlyphId: code,
+                            Unicode: unicode,
+                            X: cursorX,
+                            Y: 0,
+                            Advance: advance));
+                        cursorX += advance;
+                    }
+
+                    // On a fold START, optionally prepend a synthetic leading
+                    // space for text-extraction word boundaries. The same
+                    // logic as EmitText's leading-space prepend, but applied
+                    // exactly once per fold rather than once per literal.
+                    if (startingNewFold && decoded.Count > 0)
+                    {
+                        bool firstIsAlreadySpace = decoded[0].Unicode == " ";
+                        if (!firstIsAlreadySpace)
+                        {
+                            DisplayListGlyph? leading = MaybeBuildLeadingSpace(s, widths);
+                            if (leading is not null)
+                            {
+                                pending.Add(leading.Value);
+                            }
+                        }
+                    }
+
+                    pending.AddRange(decoded);
+                }
+                else if (tok.IsNumeric)
+                {
+                    double n = Num(tok);
+                    // Negative n shifts text forward (right) in LTR per §9.4.3.
+                    double tx = -(n / 1000.0) * s.FontSize * (s.HorizontalScaling / 100.0);
+
+                    // v2.1.3 — lookahead: if this kern is immediately followed
+                    // by a string literal whose first character is " ", treat
+                    // the kern as small regardless of magnitude. Word emits
+                    // a large positive shift before the space glyph to widen
+                    // inter-word gaps; combined with the explicit space char
+                    // that follows, the visible word break is doubled. By
+                    // absorbing the kern, the embedded font's own space-glyph
+                    // advance alone provides the visible word break. Without
+                    // this rule the kern would flush the fold and produce
+                    // either a missing space (when the snap shrink fires and
+                    // over-corrects) or a too-wide space (when it doesn't).
+                    bool nextIsLeadingSpace = false;
+                    if (idx + 1 < operands.Count)
+                    {
+                        PdfToken nextTok = operands[idx + 1];
+                        if (nextTok.Type == PdfTokenType.LiteralString
+                            || nextTok.Type == PdfTokenType.HexString)
+                        {
+                            byte[] nextBytes = StringExtractor.Extract(nextTok);
+                            if (nextBytes.Length >= codeStep)
+                            {
+                                string firstUnicode = DecodeSingleCode(
+                                    nextBytes, 0, codeStep, s.FontKey);
+                                nextIsLeadingSpace = firstUnicode == " ";
+                            }
+                        }
+                    }
+
+                    if (pending.Count == 0)
+                    {
+                        // No fold in progress — apply kern directly to text
+                        // matrix, matching the pre-fold behaviour for leading
+                        // or post-flush kerns.
+                        AffineMatrix step = new(1, 0, 0, 1, tx, 0);
+                        s.TextMatrix = step.Multiply(s.TextMatrix);
+                    }
+                    else if (Math.Abs(tx) >= breakThreshold && !nextIsLeadingSpace)
+                    {
+                        // Large kern that's NOT Word's kern-before-space
+                        // idiom: flush, apply the kern, start a new fold.
+                        FlushFold(pending, pendingTransform, cursorX, s);
+                        pending = new List<DisplayListGlyph>();
+                        AffineMatrix step = new(1, 0, 0, 1, tx, 0);
+                        s.TextMatrix = step.Multiply(s.TextMatrix);
+                        cursorX = 0;
+                    }
+                    else
+                    {
+                        // Small kern, or kern-before-space: absorb into
+                        // the cursor so the following glyph(s) sit at the
+                        // kerned position within the same fold.
+                        cursorX += tx;
+                    }
+                }
+            }
+
+            // Final flush at end of TJ. If pending is empty, any trailing
+            // kerns have already been applied directly to the text matrix.
+            if (pending.Count > 0)
+            {
+                FlushFold(pending, pendingTransform, cursorX, s);
+            }
+        }
+
+        /// <summary>
+        /// v2.1.3 — emit a folded TextOp and update gap-tracking state.
+        /// Advances <see cref="BuilderState.TextMatrix"/> by
+        /// <paramref name="cursorX"/> (the total run width including any
+        /// absorbed small kerns).
+        /// </summary>
+        private void FlushFold(List<DisplayListGlyph> pending,
+            AffineMatrix transform, double cursorX, BuilderState s)
+        {
+            if (pending.Count == 0) { return; }
+
+            _ops.Add(new TextOp
+            {
+                FontKey = s.FontKey!,
+                BaseFont = s.BaseFont ?? "Helvetica",
+                FontSize = s.FontSize,
+                Glyphs = pending,
+                Transform = transform,
+                RenderingMode = s.RenderingMode,
+                FillColor = s.FillColor,
+                StrokeColor = s.StrokeColor,
+            });
+
+            AffineMatrix step = new(1, 0, 0, 1, cursorX, 0);
+            s.TextMatrix = step.Multiply(s.TextMatrix);
+
+            _hasPrevRunOnLine = true;
+            _prevRunEndX = s.TextMatrix.E;
+            _prevRunEndY = s.TextMatrix.F;
+            _prevRunEndedWithSpace = pending[pending.Count - 1].Unicode == " ";
         }
 
         private FontWidths GetWidths(string fontKey)
@@ -466,6 +801,10 @@ public static class DisplayListBuilder
 
         private PdfDictionary? ResolveFontDict(string fontKey)
         {
+            if (_fontDictsByKey.TryGetValue(fontKey, out PdfDictionary? cached))
+            {
+                return cached;
+            }
             if (_resources is null) { return null; }
             if (!_resources.TryGetValue(PdfName.Intern("Font"), out PdfPrimitive? fonts))
             {
@@ -474,7 +813,12 @@ public static class DisplayListBuilder
             PdfDictionary? fd = _doc.Objects.ResolveAs<PdfDictionary>(fonts);
             if (fd is null) { return null; }
             if (!fd.TryGetValue(PdfName.Intern(fontKey), out PdfPrimitive? fv)) { return null; }
-            return _doc.Objects.ResolveAs<PdfDictionary>(fv);
+            PdfDictionary? resolved = _doc.Objects.ResolveAs<PdfDictionary>(fv);
+            if (resolved is not null)
+            {
+                _fontDictsByKey[fontKey] = resolved;
+            }
+            return resolved;
         }
 
         private static FontWidths FontWidthsFallback()

@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Chuvadi.Examples.Reader</RootNamespace>
@@ -7,12 +6,11 @@
     <IsPackable>false</IsPackable>
     <Description>Exercise the high-level IPdfReader facade end-to-end against a PDF.</Description>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Filters\Chuvadi.Pdf.Filters.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Forms\Chuvadi.Pdf.Forms.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Reader\Chuvadi.Pdf.Reader.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Rendering.DisplayList\Chuvadi.Pdf.Rendering.DisplayList.csproj" />
   </ItemGroup>
-
 </Project>
