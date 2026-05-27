@@ -3,6 +3,11 @@
 // PHASE: Phase 2.0 — SVG export
 //        v2.1.1 — attribute-value escaping audit
 //        v2.1.2 — xml:space="preserve" + per-glyph X positions + style hints
+//        v2.1.4 — optional preserveAspectRatio attribute on emitted images;
+//                 PDF images live in a unit-square mapped via the CTM, so
+//                 callers want "none" (don't preserve the JPEG's intrinsic
+//                 aspect ratio — the CTM already encodes the destination
+//                 shape).
 
 using System.Collections.Generic;
 using System.Globalization;
@@ -196,8 +201,18 @@ internal sealed class SvgWriter
         _body.Append('>').Append(EscapeXml(content)).Append("</text>");
     }
 
+    /// <summary>
+    /// Emits an <c>&lt;image&gt;</c> element. The optional
+    /// <paramref name="preserveAspectRatio"/> argument, when non-null,
+    /// is written verbatim as the <c>preserveAspectRatio</c> attribute.
+    /// PDF callers pass <c>"none"</c> here because PDF places images in a
+    /// unit square and encodes the destination aspect ratio in the CTM;
+    /// the SVG default of <c>xMidYMid meet</c> would otherwise letterbox
+    /// the bitmap inside the unit square and produce visibly compressed
+    /// output.
+    /// </summary>
     internal void EmitImage(string href, double x, double y, double width, double height,
-        string? transform = null)
+        string? transform = null, string? preserveAspectRatio = null)
     {
         _body.Append("<image");
         if (transform is not null)
@@ -207,6 +222,11 @@ internal sealed class SvgWriter
         _body.AppendFormat(CultureInfo.InvariantCulture,
             " x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{3}\"",
             F(x), F(y), F(width), F(height));
+        if (preserveAspectRatio is not null)
+        {
+            _body.Append(" preserveAspectRatio=\"")
+                .Append(EscapeXml(preserveAspectRatio)).Append('"');
+        }
         _body.Append(" xlink:href=\"").Append(EscapeXml(href)).Append("\"/>");
     }
 
