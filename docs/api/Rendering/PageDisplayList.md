@@ -12,7 +12,9 @@ public sealed class PageDisplayList : IReadOnlyList<RenderOp>
 
 Built by `DisplayListBuilder.Build`; consumed by output adapters such as `SvgRenderer`, `WpfRenderer`, or future software rasterizers.  
 
- Pure value-like type: same page bytes, same display list. No rendering side effects.
+ Pure value-like type: same page bytes, same display list. No rendering side effects.  
+
+ v2.1.2: also exposes the page's font dictionaries keyed by the resource name used in `TextOp.FontKey`. This allows downstream renderers that want to embed font programs (e.g. `SvgRenderer` emitting CSS `@font-face` rules with base64-encoded TrueType data URLs) to access the source font dictionaries without re-walking the page resources or holding a reference to the original `PdfDocument`.
 
 ## Properties
 
@@ -39,6 +41,14 @@ int Rotation
 ```
 
 Clockwise rotation in degrees (0, 90, 180, 270).
+
+### `FontDictsByKey`
+
+```csharp
+IReadOnlyDictionary<string, PdfDictionary> FontDictsByKey
+```
+
+Font dictionaries for every font referenced on this page, keyed by the resource-name used in `TextOp.FontKey`. Empty when the builder did not populate it (e.g. legacy callers using the four-argument constructor). Never null.
 
 ### `Count`
 
