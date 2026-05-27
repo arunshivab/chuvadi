@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPEC:  PDF 32000-1:2008 §9.10.3 — ToUnicode CMaps
 // PHASE: Phase 1 — Chuvadi.Pdf.Fonts
+//        v2.1.4 — codespacerange parsing + multi-byte mapping support.
+//                 The legacy Parse() returns just the bf-char/bf-range mapping
+//                 (1- or 2-byte codes packed into int keys, unchanged from
+//                 v2.1.3); the new ParseFull() additionally returns the
+//                 codespacerange declarations so the decoder can size byte
+//                 windows correctly for fonts whose ToUnicode CMap uses
+//                 3+ byte source codes (e.g. Word's UTF-8-encoded
+//                 Wingdings glyph codes).
 // Parses ToUnicode CMap streams to build code→Unicode mappings.
 
 using System;
@@ -11,15 +19,47 @@ using System.Text;
 namespace Chuvadi.Pdf.Fonts;
 
 /// <summary>
+/// A declared codespace range from a CMap's
+/// <c>begincodespacerange ... endcodespacerange</c> block.
+/// </summary>
+/// <param name="Lo">Inclusive low code point (bytes packed big-endian into an integer).</param>
+/// <param name="Hi">Inclusive high code point (bytes packed big-endian into an integer).</param>
+/// <param name="ByteCount">Number of source bytes consumed by codes in this range.</param>
+/// <remarks>
+/// PDF 32000-1:2008 §9.7.6.2 — codespace ranges declare how the input byte
+/// stream is partitioned into character codes. A CMap can mix 1-byte and
+/// multi-byte ranges; the decoder uses the longest declared byte count as
+/// the upper bound when matching codes.
+/// </remarks>
+public readonly record struct CodespaceRange(int Lo, int Hi, int ByteCount);
+
+/// <summary>
+/// The full result of parsing a ToUnicode CMap: the bf-char/bf-range mappings
+/// and the declared codespace ranges.
+/// </summary>
+public sealed class CMapParseResult
+{
+    /// <summary>Code → Unicode string mapping from bfchar/bfrange sections.</summary>
+    public required IReadOnlyDictionary<int, string> Mapping { get; init; }
+
+    /// <summary>Declared codespace ranges from begincodespacerange sections.</summary>
+    public required IReadOnlyList<CodespaceRange> CodespaceRanges { get; init; }
+}
+
+/// <summary>
 /// Parses a PDF ToUnicode CMap stream and builds a character code to
 /// Unicode string mapping.
 /// </summary>
 /// <remarks>
 /// A ToUnicode CMap is a PostScript-like text stream that maps character
-/// codes (1 or 2 bytes) to Unicode codepoints or sequences.
+/// codes (1 to 4 bytes) to Unicode codepoints or sequences.
 ///
-/// The two key sections are:
+/// The three key sections are:
 /// <list type="bullet">
+///   <item>
+///     <c>begincodespacerange / endcodespacerange</c> — declares valid
+///     source code-byte windows.
+///   </item>
 ///   <item>
 ///     <c>beginbfchar / endbfchar</c> — individual code→Unicode mappings.
 ///   </item>
@@ -29,7 +69,10 @@ namespace Chuvadi.Pdf.Fonts;
 ///   </item>
 /// </list>
 ///
-/// PDF 32000-1:2008 §9.10.3 — ToUnicode CMaps.
+/// PDF 32000-1:2008 §9.10.3 — ToUnicode CMaps. The bf-char and bf-range
+/// sections accept hex source codes of any byte width (1, 2, 3, 4 bytes);
+/// the codespacerange block tells the decoder how to slice the byte stream
+/// into codes of that width.
 /// </remarks>
 public sealed class CMapParser
 {
@@ -58,9 +101,15 @@ public sealed class CMapParser
     /// Parses the CMap and returns a dictionary mapping character codes
     /// (as integers) to Unicode strings.
     /// </summary>
+    /// <remarks>
+    /// Equivalent to <see cref="ParseFull"/>.<see cref="CMapParseResult.Mapping"/>.
+    /// Retained for callers that only need the code→Unicode mapping and
+    /// don't care about codespace declarations.
+    /// </remarks>
     /// <returns>
-    /// A dictionary where keys are character codes (0-65535 for 2-byte CMaps,
-    /// 0-255 for 1-byte CMaps) and values are the corresponding Unicode strings.
+    /// A dictionary where keys are character codes (1- to 4-byte codes
+    /// packed big-endian into int) and values are the corresponding
+    /// Unicode strings.
     /// </returns>
     public Dictionary<int, string> Parse()
     {
@@ -68,6 +117,113 @@ public sealed class CMapParser
         ParseBfChar(result);
         ParseBfRange(result);
         return result;
+    }
+
+    /// <summary>
+    /// Parses the CMap and returns the full result, including the
+    /// code→Unicode mapping and the declared codespace ranges.
+    /// </summary>
+    /// <returns>A <see cref="CMapParseResult"/> with both pieces.</returns>
+    public CMapParseResult ParseFull()
+    {
+        Dictionary<int, string> mapping = new Dictionary<int, string>();
+        ParseBfChar(mapping);
+        ParseBfRange(mapping);
+
+        List<CodespaceRange> ranges = new List<CodespaceRange>();
+        ParseCodespaceRanges(ranges);
+
+        return new CMapParseResult
+        {
+            Mapping = mapping,
+            CodespaceRanges = ranges,
+        };
+    }
+
+    // ── codespacerange ────────────────────────────────────────────────────
+
+    private void ParseCodespaceRanges(List<CodespaceRange> ranges)
+    {
+        // N begincodespacerange
+        // <srcLo> <srcHi>
+        // ...
+        // endcodespacerange
+        int searchFrom = 0;
+
+        while (true)
+        {
+            int beginIdx = _content.IndexOf(
+                "begincodespacerange", searchFrom, StringComparison.Ordinal);
+
+            if (beginIdx < 0)
+            {
+                break;
+            }
+
+            int endIdx = _content.IndexOf(
+                "endcodespacerange", beginIdx, StringComparison.Ordinal);
+
+            if (endIdx < 0)
+            {
+                break;
+            }
+
+            string section = _content[beginIdx..endIdx];
+            ParseCodespaceRangeSection(section, ranges);
+            searchFrom = endIdx + 17; // 17 = "endcodespacerange".Length
+        }
+    }
+
+    private static void ParseCodespaceRangeSection(
+        string section, List<CodespaceRange> ranges)
+    {
+        int pos = 0;
+
+        while (pos < section.Length)
+        {
+            int loStart = section.IndexOf('<', pos);
+
+            if (loStart < 0)
+            {
+                break;
+            }
+
+            int loEnd = section.IndexOf('>', loStart);
+
+            if (loEnd < 0)
+            {
+                break;
+            }
+
+            string loHex = section[(loStart + 1)..loEnd].Trim();
+            int loCode = ParseHexCode(loHex);
+            int loBytes = (loHex.Length + 1) / 2;
+            pos = loEnd + 1;
+
+            int hiStart = section.IndexOf('<', pos);
+
+            if (hiStart < 0)
+            {
+                break;
+            }
+
+            int hiEnd = section.IndexOf('>', hiStart);
+
+            if (hiEnd < 0)
+            {
+                break;
+            }
+
+            string hiHex = section[(hiStart + 1)..hiEnd].Trim();
+            int hiCode = ParseHexCode(hiHex);
+            int hiBytes = (hiHex.Length + 1) / 2;
+            pos = hiEnd + 1;
+
+            if (loCode >= 0 && hiCode >= 0 && loBytes == hiBytes && loBytes >= 1)
+            {
+                ranges.Add(new CodespaceRange(loCode, hiCode, loBytes));
+            }
+        }
     }
 
     // ── bfchar ────────────────────────────────────────────────────────────

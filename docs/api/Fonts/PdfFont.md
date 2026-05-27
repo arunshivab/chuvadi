@@ -57,6 +57,8 @@ Converts a sequence of bytes from a PDF text string operator to Unicode text.
 
 **Returns:** The decoded Unicode string.
 
+**Remarks:** v2.1.4: at each byte position the decoder tries widths from `MaxSupportedByteCount` down to 1 against the ToUnicode mapping; the first width whose packed code is present in the map consumes that many bytes. If no width matches, the byte falls through to the single-byte encoding fallback and the cursor advances by one. This correctly handles 1-byte simple-font CMaps, 2-byte composite CMaps, and 3-byte CMaps emitted by Word for non-Latin/symbol fonts (UTF-8 encoding of the semantic Unicode codepoint as the source code).
+
 ### `DecodeCode`
 
 ```csharp
