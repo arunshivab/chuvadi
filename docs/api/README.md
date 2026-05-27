@@ -230,6 +230,7 @@ python tools/gen_api_docs.py
 |---|---|---|
 | [BrotliEncoder](Fonts/BrotliEncoder.md) | class | Pure-C# Brotli encoder. |
 | [BrotliStoredEncoder](Fonts/BrotliStoredEncoder.md) | class | Emits Brotli-compatible bitstreams for WOFF2 packaging. |
+| [CMapParseResult](Fonts/CMapParseResult.md) | class | The full result of parsing a ToUnicode CMap: the bf-char/bf-range mappings and the declared codespace ranges. |
 | [CMapParser](Fonts/CMapParser.md) | class | Parses a PDF ToUnicode CMap stream and builds a character code to Unicode string mapping. |
 | [CffLoader](Fonts/CffLoader.md) | class | Loads a Compact Font Format (CFF) / Type 1C font program and produces glyph outlines. |
 | [FontException](Fonts/FontException.md) | class | Thrown when a font dictionary cannot be parsed or a character code cannot be mapped to a Unicode codepoint. |

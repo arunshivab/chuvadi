@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPEC:  PDF 32000-1:2008 §9.6, §9.10.3
 // PHASE: Phase 1 — Chuvadi.Pdf.Fonts tests
+//        v2.1.4 — added CodespaceRangeTests and PdfFontMultiByteTests
+//                 covering codespacerange parsing and longest-match-first
+//                 byte consumption for multi-byte ToUnicode entries
+//                 (Word Wingdings UTF-8 case).
 
 using System;
 using System.Collections.Generic;
@@ -235,6 +239,110 @@ endbfchar";
     }
 }
 
+// ── CodespaceRange parsing (v2.1.4) ───────────────────────────────────────
+
+public sealed class CodespaceRangeTests
+{
+    [Fact]
+    public void Parse_CodespaceRange_SingleByteWidth_Recognised()
+    {
+        string cmap = @"
+1 begincodespacerange
+<00> <FF>
+endcodespacerange";
+        CMapParser parser = new CMapParser(cmap);
+        CMapParseResult result = parser.ParseFull();
+
+        result.CodespaceRanges.Should().ContainSingle();
+        result.CodespaceRanges[0].Lo.Should().Be(0);
+        result.CodespaceRanges[0].Hi.Should().Be(0xFF);
+        result.CodespaceRanges[0].ByteCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Parse_CodespaceRange_TwoByteWidth_Recognised()
+    {
+        string cmap = @"
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange";
+        CMapParser parser = new CMapParser(cmap);
+        CMapParseResult result = parser.ParseFull();
+
+        result.CodespaceRanges[0].ByteCount.Should().Be(2);
+        result.CodespaceRanges[0].Hi.Should().Be(0xFFFF);
+    }
+
+    [Fact]
+    public void Parse_CodespaceRange_ThreeByteWidth_Recognised()
+    {
+        // The Word-Wingdings shape: 3-byte UTF-8 source codes.
+        string cmap = @"
+1 begincodespacerange
+<000000> <FFFFFF>
+endcodespacerange";
+        CMapParser parser = new CMapParser(cmap);
+        CMapParseResult result = parser.ParseFull();
+
+        result.CodespaceRanges[0].ByteCount.Should().Be(3);
+        result.CodespaceRanges[0].Hi.Should().Be(0xFFFFFF);
+    }
+
+    [Fact]
+    public void Parse_CodespaceRange_MixedWidths_BothRecognised()
+    {
+        string cmap = @"
+2 begincodespacerange
+<00> <80>
+<8140> <9FFC>
+endcodespacerange";
+        CMapParser parser = new CMapParser(cmap);
+        CMapParseResult result = parser.ParseFull();
+
+        result.CodespaceRanges.Should().HaveCount(2);
+        result.CodespaceRanges[0].ByteCount.Should().Be(1);
+        result.CodespaceRanges[1].ByteCount.Should().Be(2);
+        result.CodespaceRanges[1].Lo.Should().Be(0x8140);
+        result.CodespaceRanges[1].Hi.Should().Be(0x9FFC);
+    }
+
+    [Fact]
+    public void ParseFull_NoCodespaceSection_RangesEmpty()
+    {
+        string cmap = @"
+beginbfchar
+<41> <0041>
+endbfchar";
+        CMapParser parser = new CMapParser(cmap);
+        CMapParseResult result = parser.ParseFull();
+
+        result.CodespaceRanges.Should().BeEmpty();
+        result.Mapping[0x41].Should().Be("A");
+    }
+
+    [Fact]
+    public void ParseFull_WordWingdingsShape_MultiByteBfCharStored()
+    {
+        // The actual shape Word emits for the Wingdings checkmark: glyph
+        // byte 0xFC re-encoded as UTF-8 bytes E2 9C 93, paired with a
+        // ToUnicode mapping back to the semantic check-mark codepoint
+        // U+2713.
+        string cmap = @"
+1 begincodespacerange
+<000000> <FFFFFF>
+endcodespacerange
+beginbfchar
+<E29C93> <2713>
+endbfchar";
+        CMapParser parser = new CMapParser(cmap);
+        CMapParseResult result = parser.ParseFull();
+
+        result.CodespaceRanges[0].ByteCount.Should().Be(3);
+        result.Mapping.Should().ContainKey(0xE29C93);
+        result.Mapping[0xE29C93].Should().Be("\u2713");
+    }
+}
+
 // ── PdfFont ───────────────────────────────────────────────────────────────
 
 public sealed class PdfFontDefaultTests
@@ -282,5 +390,138 @@ public sealed class PdfFontDefaultTests
     {
         PdfFont font = PdfFont.Default();
         font.DecodeCode(0x01).Should().Be(string.Empty);
+    }
+}
+
+// ── PdfFont longest-match decoding (v2.1.4) ───────────────────────────────
+
+public sealed class PdfFontMultiByteTests
+{
+    private static readonly IReadOnlyList<CodespaceRange> ThreeByteRange =
+        new CodespaceRange[] { new CodespaceRange(0, 0xFFFFFF, 3) };
+
+    [Fact]
+    public void Decode_ThreeByteCode_LongestMatchWins()
+    {
+        // Word Wingdings shape: bytes E2 9C 93 map to U+2713 ✓.
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0xE29C93, "\u2713" },
+        };
+        PdfFont font = PdfFont.FromMappings(
+            map,
+            ThreeByteRange,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"));
+
+        font.Decode([0xE2, 0x9C, 0x93]).Should().Be("\u2713");
+    }
+
+    [Fact]
+    public void Decode_ThreeByteCode_FollowedByAscii_BothDecoded()
+    {
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0xE29C93, "\u2713" },
+        };
+        PdfFont font = PdfFont.FromMappings(
+            map,
+            ThreeByteRange,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"));
+
+        font.Decode([0xE2, 0x9C, 0x93, 0x41, 0x42]).Should().Be("\u2713AB");
+    }
+
+    [Fact]
+    public void Decode_NoMultiByteMatch_FallsBackToWinAnsiPerByte()
+    {
+        // Map has only the 3-byte entry; the 0xE2 0x41 sequence doesn't
+        // match at any width, so each byte falls through to WinAnsi:
+        // 0xE2 → U+00E2 'â', 0x41 → 'A'.
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0xE29C93, "\u2713" },
+        };
+        PdfFont font = PdfFont.FromMappings(
+            map,
+            ThreeByteRange,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"));
+
+        font.Decode([0xE2, 0x41]).Should().Be("\u00E2A");
+    }
+
+    [Fact]
+    public void Decode_OneByteMapWithOneByteFont_StillWorks()
+    {
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0x41, "X" },
+        };
+        PdfFont font = PdfFont.FromMappings(
+            map,
+            codespaceRanges: null,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"));
+
+        // 0x41 hits the map, 0x42 falls through to WinAnsi.
+        font.Decode([0x41, 0x42]).Should().Be("XB");
+    }
+
+    [Fact]
+    public void Decode_TwoByteCompositeMap_StillWorks()
+    {
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0x0041, "X" },
+        };
+        PdfFont font = PdfFont.FromMappings(
+            map,
+            codespaceRanges: null,
+            encoding: null,
+            isComposite: true);
+
+        font.Decode([0x00, 0x41]).Should().Be("X");
+    }
+
+    [Fact]
+    public void FromMappings_NullMap_StillDecodesViaEncoding()
+    {
+        PdfFont font = PdfFont.FromMappings(
+            toUnicodeMap: null,
+            codespaceRanges: null,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"));
+
+        font.Decode([0x41]).Should().Be("A");
+    }
+
+    [Fact]
+    public void FromMappings_LongerCodeOverShorter_LongestWins()
+    {
+        // Both 1-byte and 3-byte entries cover the leading byte; the
+        // longest match takes precedence.
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0xE2, "shouldNotBeUsed" },
+            { 0xE29C93, "\u2713" },
+        };
+        PdfFont font = PdfFont.FromMappings(map, ThreeByteRange);
+
+        font.Decode([0xE2, 0x9C, 0x93]).Should().Be("\u2713");
+    }
+
+    [Fact]
+    public void FromMappings_TruncatedTrailingBytes_FallsBackPerByte()
+    {
+        // Only 2 trailing bytes after a leading 0xE2; the 3-byte entry
+        // can't match because there aren't enough bytes. The first byte
+        // falls through (no shorter match in map either) to WinAnsi.
+        Dictionary<int, string> map = new Dictionary<int, string>
+        {
+            { 0xE29C93, "\u2713" },
+        };
+        PdfFont font = PdfFont.FromMappings(
+            map,
+            ThreeByteRange,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"));
+
+        font.Decode([0xE2, 0x9C]).Should().Be("\u00E2\u0153");
     }
 }

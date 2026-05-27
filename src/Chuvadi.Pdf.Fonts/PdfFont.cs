@@ -4,6 +4,19 @@
 //        PDF 32000-1:2008 §9.7 — Composite fonts (Type0)
 //        PDF 32000-1:2008 §9.10 — Extraction of text content
 // PHASE: Phase 1 — Chuvadi.Pdf.Fonts
+//        v2.1.4 — longest-match-first byte consumption against the parsed
+//                 ToUnicode map. Previously, simple fonts decoded one byte
+//                 at a time and composite fonts decoded two bytes; that
+//                 misses ToUnicode entries whose source code is wider
+//                 than the font's nominal width — notably Word's
+//                 Wingdings export, which encodes the original 0xFC
+//                 glyph byte as the three UTF-8 bytes E2 9C 93 paired
+//                 with a CMap entry <E29C93> <2713>. The new decoder
+//                 derives the maximum window size from the CMap's
+//                 codespace ranges and the highest key in the mapping,
+//                 then tries widths from longest to shortest at each
+//                 byte position. Encoding-based fallback for single
+//                 bytes is preserved.
 // Maps character codes from PDF text strings to Unicode codepoints.
 
 using System;
@@ -33,18 +46,26 @@ namespace Chuvadi.Pdf.Fonts;
 /// </remarks>
 public sealed class PdfFont
 {
-    private readonly Dictionary<int, string>? _toUnicodeMap;
+    private readonly IReadOnlyDictionary<int, string>? _toUnicodeMap;
     private readonly PdfFontEncoding? _encoding;
-    private readonly bool _isComposite;
+    private readonly int _maxByteCount;
+
+    // PDF codes are conventionally up to 4 bytes; longer windows would
+    // overflow a signed 32-bit code anyway. The fallback (when neither a
+    // codespace range nor the mapping suggests a wider window) is 2 bytes
+    // for composite fonts and 1 byte for simple fonts — matching pre-v2.1.4
+    // behaviour for the common cases.
+    private const int MaxSupportedByteCount = 4;
 
     private PdfFont(
-        Dictionary<int, string>? toUnicodeMap,
+        IReadOnlyDictionary<int, string>? toUnicodeMap,
+        IReadOnlyList<CodespaceRange>? codespaceRanges,
         PdfFontEncoding? encoding,
         bool isComposite)
     {
         _toUnicodeMap = toUnicodeMap;
         _encoding = encoding;
-        _isComposite = isComposite;
+        _maxByteCount = DeriveMaxByteCount(toUnicodeMap, codespaceRanges, isComposite);
     }
 
     // ── Factory ───────────────────────────────────────────────────────────
@@ -71,7 +92,7 @@ public sealed class PdfFont
             subtype.Value.Equals("Type0", StringComparison.Ordinal);
 
         // Try ToUnicode first — most reliable for all font types.
-        Dictionary<int, string>? toUnicodeMap = ParseToUnicode(fontDict, resolver);
+        CMapParseResult? toUnicode = ParseToUnicode(fontDict, resolver);
 
         // For simple fonts, also parse the encoding as fallback.
         PdfFontEncoding? encoding = null;
@@ -91,7 +112,11 @@ public sealed class PdfFont
             encoding = PdfFontEncoding.Build(encodingEntry);
         }
 
-        return new PdfFont(toUnicodeMap, encoding, isComposite);
+        return new PdfFont(
+            toUnicode?.Mapping,
+            toUnicode?.CodespaceRanges,
+            encoding,
+            isComposite);
     }
 
     /// <summary>
@@ -100,7 +125,44 @@ public sealed class PdfFont
     /// </summary>
     public static PdfFont Default()
     {
-        return new PdfFont(null, PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"), false);
+        return new PdfFont(
+            toUnicodeMap: null,
+            codespaceRanges: null,
+            PdfFontEncoding.FromNamedEncoding("WinAnsiEncoding"),
+            isComposite: false);
+    }
+
+    /// <summary>
+    /// Constructs a font directly from explicit mappings, bypassing PDF
+    /// dictionary parsing. Useful for synthetic PDFs, programmatic font
+    /// construction, and unit tests that need deterministic mapping state.
+    /// </summary>
+    /// <param name="toUnicodeMap">
+    /// Source-code-to-Unicode mapping. Keys are 1- to 4-byte codes packed
+    /// big-endian into an int (e.g. the byte sequence 0xE2 0x9C 0x93 is the
+    /// key 0xE29C93). May be <c>null</c>.
+    /// </param>
+    /// <param name="codespaceRanges">
+    /// Optional codespace declarations from the source CMap. Used (together
+    /// with the maximum key in <paramref name="toUnicodeMap"/>) to bound the
+    /// byte window the decoder considers. May be <c>null</c>.
+    /// </param>
+    /// <param name="encoding">
+    /// Optional single-byte encoding for fallback when no
+    /// <paramref name="toUnicodeMap"/> entry matches a position.
+    /// </param>
+    /// <param name="isComposite">
+    /// Whether this represents a Type0/composite font. Affects the default
+    /// byte-window width when neither codespace ranges nor mapping keys
+    /// suggest a wider window.
+    /// </param>
+    public static PdfFont FromMappings(
+        IReadOnlyDictionary<int, string>? toUnicodeMap,
+        IReadOnlyList<CodespaceRange>? codespaceRanges = null,
+        PdfFontEncoding? encoding = null,
+        bool isComposite = false)
+    {
+        return new PdfFont(toUnicodeMap, codespaceRanges, encoding, isComposite);
     }
 
     // ── Public API ────────────────────────────────────────────────────────
@@ -110,6 +172,17 @@ public sealed class PdfFont
     /// </summary>
     /// <param name="bytes">The raw bytes from a Tj, TJ, or similar operator.</param>
     /// <returns>The decoded Unicode string.</returns>
+    /// <remarks>
+    /// v2.1.4: at each byte position the decoder tries widths from
+    /// <see cref="MaxSupportedByteCount"/> down to 1 against the ToUnicode
+    /// mapping; the first width whose packed code is present in the map
+    /// consumes that many bytes. If no width matches, the byte falls
+    /// through to the single-byte encoding fallback and the cursor advances
+    /// by one. This correctly handles 1-byte simple-font CMaps, 2-byte
+    /// composite CMaps, and 3-byte CMaps emitted by Word for
+    /// non-Latin/symbol fonts (UTF-8 encoding of the semantic Unicode
+    /// codepoint as the source code).
+    /// </remarks>
     public string Decode(byte[] bytes)
     {
         if (bytes is null)
@@ -124,13 +197,23 @@ public sealed class PdfFont
 
         StringBuilder sb = new StringBuilder(bytes.Length);
 
-        if (_isComposite)
+        int i = 0;
+
+        while (i < bytes.Length)
         {
-            DecodeComposite(bytes, sb);
-        }
-        else
-        {
-            DecodeSimple(bytes, sb);
+            int matched = TryMatchLongest(bytes, i, sb);
+
+            if (matched > 0)
+            {
+                i += matched;
+            }
+            else
+            {
+                // No multi-byte hit; fall through to the single-byte
+                // encoding/fallback decode and advance one byte.
+                sb.Append(DecodeCode(bytes[i]));
+                i++;
+            }
         }
 
         return sb.ToString();
@@ -170,44 +253,101 @@ public sealed class PdfFont
 
     // ── Private decoding ──────────────────────────────────────────────────
 
-    private void DecodeSimple(byte[] bytes, StringBuilder sb)
+    /// <summary>
+    /// Attempts to match the longest ToUnicode entry starting at
+    /// <paramref name="start"/>. Appends the matched Unicode string to
+    /// <paramref name="sb"/> and returns the number of bytes consumed,
+    /// or 0 if no width matches.
+    /// </summary>
+    private int TryMatchLongest(byte[] bytes, int start, StringBuilder sb)
     {
-        foreach (byte b in bytes)
+        if (_toUnicodeMap is null)
         {
-            sb.Append(DecodeCode(b));
+            return 0;
         }
+
+        int available = bytes.Length - start;
+        int tryCount = _maxByteCount < available ? _maxByteCount : available;
+
+        for (int n = tryCount; n >= 1; n--)
+        {
+            int code = 0;
+
+            for (int k = 0; k < n; k++)
+            {
+                code = (code << 8) | bytes[start + k];
+            }
+
+            if (_toUnicodeMap.TryGetValue(code, out string? unicode))
+            {
+                sb.Append(unicode);
+                return n;
+            }
+        }
+
+        return 0;
     }
 
-    private void DecodeComposite(byte[] bytes, StringBuilder sb)
+    /// <summary>
+    /// Computes the maximum byte width the decoder should consider when
+    /// matching ToUnicode entries. The result is the maximum of: the
+    /// largest <see cref="CodespaceRange.ByteCount"/>, the byte width
+    /// implied by the highest key in <paramref name="map"/>, and the
+    /// minimum implied by the font subtype (2 for composite, 1 for
+    /// simple). Capped at <see cref="MaxSupportedByteCount"/>.
+    /// </summary>
+    private static int DeriveMaxByteCount(
+        IReadOnlyDictionary<int, string>? map,
+        IReadOnlyList<CodespaceRange>? ranges,
+        bool isComposite)
     {
-        // Composite fonts use 2-byte codes (CIDFont / Type0).
-        // Try 2-byte codes first; fall back to 1-byte.
-        int i = 0;
+        int maxFromRanges = 0;
 
-        while (i < bytes.Length)
+        if (ranges is not null)
         {
-            if (i + 1 < bytes.Length)
+            foreach (CodespaceRange r in ranges)
             {
-                int twoByteCode = (bytes[i] << 8) | bytes[i + 1];
-                string decoded = DecodeCode(twoByteCode);
-
-                if (decoded.Length > 0)
+                if (r.ByteCount > maxFromRanges)
                 {
-                    sb.Append(decoded);
-                    i += 2;
-                    continue;
+                    maxFromRanges = r.ByteCount;
+                }
+            }
+        }
+
+        int maxFromKeys = 0;
+
+        if (map is not null)
+        {
+            int maxKey = 0;
+
+            foreach (int key in map.Keys)
+            {
+                if (key > maxKey)
+                {
+                    maxKey = key;
                 }
             }
 
-            // Fall back to 1-byte.
-            sb.Append(DecodeCode(bytes[i]));
-            i++;
+            if (maxKey > 0xFFFFFF) { maxFromKeys = 4; }
+            else if (maxKey > 0xFFFF) { maxFromKeys = 3; }
+            else if (maxKey > 0xFF) { maxFromKeys = 2; }
+            else { maxFromKeys = 1; }
         }
+
+        int floor = isComposite ? 2 : 1;
+        int result = floor;
+
+        if (maxFromRanges > result) { result = maxFromRanges; }
+        if (maxFromKeys > result) { result = maxFromKeys; }
+
+        if (result > MaxSupportedByteCount) { result = MaxSupportedByteCount; }
+
+        return result;
     }
 
     // ── ToUnicode parsing ─────────────────────────────────────────────────
 
-    private static Dictionary<int, string>? ParseToUnicode(
+    private static CMapParseResult? ParseToUnicode(
         PdfDictionary fontDict,
         IPdfObjectResolver resolver)
     {
@@ -238,6 +378,6 @@ public sealed class PdfFont
         }
 
         CMapParser parser = new CMapParser(rawBytes);
-        return parser.Parse();
+        return parser.ParseFull();
     }
 }
