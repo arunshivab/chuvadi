@@ -3,6 +3,10 @@
 // SPEC:  PDF 32000-1:2008
 // PHASE: Phase 2.1 — SVG renderer over display list
 //        v2.1.1 — image counter-flip fix
+//        v2.1.4 — preserveAspectRatio="none" on emitted images (PDF places
+//                 images in a unit square; the CTM carries the destination
+//                 aspect ratio, so the default xMidYMid meet would
+//                 letterbox and produce horizontally compressed output)
 //        v2.1.2 — per-glyph X positions; bold/italic style hints;
 //                 snap-tolerance for kerning gaps before space characters,
 //                 resilient to interleaved graphics-state ops (Word q/Q);
@@ -612,7 +616,13 @@ public sealed class SvgRenderer
         string transform = combined.ToSvgMatrix();
 
         w.OpenGroup(transform);
-        w.EmitImage(dataUrl, 0, 0, 1, 1);
+        // v2.1.4: PDF places images in a unit square at (0,0)-(1,1); the
+        // CTM (already applied via the group transform above) encodes the
+        // destination width and height. preserveAspectRatio="none" tells
+        // the SVG user agent not to letterbox the bitmap inside that unit
+        // square — otherwise non-square images render visibly compressed
+        // along the long axis.
+        w.EmitImage(dataUrl, 0, 0, 1, 1, preserveAspectRatio: "none");
         w.CloseGroup();
     }
 

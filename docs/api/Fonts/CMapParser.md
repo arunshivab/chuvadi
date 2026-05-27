@@ -10,10 +10,11 @@ public sealed class CMapParser
 
 ## Remarks
 
-A ToUnicode CMap is a PostScript-like text stream that maps character codes (1 or 2 bytes) to Unicode codepoints or sequences. The two key sections are: 
+A ToUnicode CMap is a PostScript-like text stream that maps character codes (1 to 4 bytes) to Unicode codepoints or sequences. The three key sections are: 
  
+-  `begincodespacerange / endcodespacerange` — declares valid source code-byte windows.  
 -  `beginbfchar / endbfchar` — individual code→Unicode mappings.  
--  `beginbfrange / endbfrange` — range mappings where a contiguous block of codes maps to a contiguous block of Unicode values.   PDF 32000-1:2008 §9.10.3 — ToUnicode CMaps.
+-  `beginbfrange / endbfrange` — range mappings where a contiguous block of codes maps to a contiguous block of Unicode values.   PDF 32000-1:2008 §9.10.3 — ToUnicode CMaps. The bf-char and bf-range sections accept hex source codes of any byte width (1, 2, 3, 4 bytes); the codespacerange block tells the decoder how to slice the byte stream into codes of that width.
 
 ## Constructors
 
@@ -39,7 +40,19 @@ Dictionary<int, string> Parse()
 
 Parses the CMap and returns a dictionary mapping character codes (as integers) to Unicode strings.
 
-**Returns:** A dictionary where keys are character codes (0-65535 for 2-byte CMaps, 0-255 for 1-byte CMaps) and values are the corresponding Unicode strings.
+**Returns:** A dictionary where keys are character codes (1- to 4-byte codes packed big-endian into int) and values are the corresponding Unicode strings.
+
+**Remarks:** Equivalent to `ParseFull`.`CMapParseResult.Mapping`. Retained for callers that only need the code→Unicode mapping and don't care about codespace declarations.
+
+### `ParseFull`
+
+```csharp
+CMapParseResult ParseFull()
+```
+
+Parses the CMap and returns the full result, including the code→Unicode mapping and the declared codespace ranges.
+
+**Returns:** A `CMapParseResult` with both pieces.
 
 ---
 
