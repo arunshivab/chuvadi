@@ -16,6 +16,16 @@ Phase 1 supports text extraction only — no glyph rendering or metrics. The map
 - Encoding + glyph name lookup — for simple fonts without ToUnicode. 
 - Direct code-as-Unicode — last resort for unrecognised configurations.  PDF 32000-1:2008 §9.10.2 — Mapping character codes to Unicode values.
 
+## Properties
+
+### `ToUnicodeMap`
+
+```csharp
+IReadOnlyDictionary<int, string>? ToUnicodeMap => _toUnicodeMap
+```
+
+The ToUnicode CMap mapping (source code → Unicode string) for this font, or `null` when the font has no ToUnicode entry.
+
 ## Methods
 
 ### `FromDictionary`
