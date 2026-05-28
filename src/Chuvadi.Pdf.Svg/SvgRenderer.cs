@@ -24,6 +24,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using Chuvadi.Pdf.Documents;
+using Chuvadi.Pdf.Fonts;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
 using Chuvadi.Pdf.Rendering.DisplayList;
@@ -290,6 +291,16 @@ public sealed class SvgRenderer
     /// font's BaseFont name (with any subset prefix stripped). Returns a
     /// dictionary that text emission consults to choose font-family.
     /// </summary>
+    /// <remarks>
+    /// v2.1.5: a <see cref="PdfFont"/> is constructed alongside each font
+    /// dictionary and handed to <see cref="FontEmbedder.TryEmbed"/>. The
+    /// embedder consults the font's ToUnicode mapping to rewrite the
+    /// embedded TrueType font program's cmap so the browser can address
+    /// glyphs at semantic Unicode code points rather than the legacy
+    /// encoding code points the font program ships with. If PdfFont
+    /// construction fails (corrupt dictionary, unparseable ToUnicode),
+    /// the embedder receives null and falls back to v2.1.4 behaviour.
+    /// </remarks>
     private static Dictionary<string, string> BuildFontRegistry(
         PageDisplayList list, SvgWriter w, IPdfObjectResolver? resolver)
     {
@@ -303,8 +314,13 @@ public sealed class SvgRenderer
         {
             string baseFont = ExtractBaseFontName(kv.Value);
             if (familyByBaseFont.ContainsKey(baseFont)) { continue; }
+
+            PdfFont? pdfFont = null;
+            try { pdfFont = PdfFont.FromDictionary(kv.Value, resolver); }
+            catch (Exception) { /* leave pdfFont null; embed without cmap remap */ }
+
             string? family = FontEmbedder.TryEmbed(
-                kv.Value, baseFont, w, resolver, emittedFamilies);
+                kv.Value, baseFont, w, resolver, emittedFamilies, pdfFont);
             if (family is not null)
             {
                 familyByBaseFont[baseFont] = family;

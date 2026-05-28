@@ -17,6 +17,10 @@
 //                 then tries widths from longest to shortest at each
 //                 byte position. Encoding-based fallback for single
 //                 bytes is preserved.
+//        v2.1.5 — exposes ToUnicodeMap as a public read-only property so
+//                 consumers (notably FontEmbedder when augmenting an
+//                 embedded TrueType font's cmap) can inspect the
+//                 CID → Unicode mapping that drives glyph-side remapping.
 // Maps character codes from PDF text strings to Unicode codepoints.
 
 using System;
@@ -166,6 +170,20 @@ public sealed class PdfFont
     }
 
     // ── Public API ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The ToUnicode CMap mapping (source code → Unicode string) for this
+    /// font, or <c>null</c> when the font has no ToUnicode entry.
+    /// </summary>
+    /// <remarks>
+    /// Keys are character codes (1- to 4-byte source codes packed
+    /// big-endian into an integer); values are the corresponding Unicode
+    /// strings, which may be one or more <c>char</c> code units. For most
+    /// font dictionaries the keys equal the glyph indices (CIDs) used in
+    /// text-showing operators; this is the basis for the v2.1.5 cmap
+    /// remap path in <c>FontEmbedder</c>.
+    /// </remarks>
+    public IReadOnlyDictionary<int, string>? ToUnicodeMap => _toUnicodeMap;
 
     /// <summary>
     /// Converts a sequence of bytes from a PDF text string operator to Unicode text.
