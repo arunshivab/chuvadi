@@ -23,4 +23,11 @@
     <ProjectReference Include="..\..\src\Chuvadi.Pdf.Documents\Chuvadi.Pdf.Documents.csproj" />
   </ItemGroup>
 
+  <!-- Test fixtures: copy to bin/ so File.Exists("fixtures/...") works at runtime -->
+  <ItemGroup>
+    <None Update="fixtures\cff_type1c.pdf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

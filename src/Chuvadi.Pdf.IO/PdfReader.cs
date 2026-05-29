@@ -220,9 +220,23 @@ public sealed class PdfReader : IDisposable
         int finalEncryptObjNum = encryptObjectNumber;
         bool finalEncryptMetadata = encryptMetadata;
 
+        // The object-stream reader caches decoded /ObjStm containers so
+        // repeated lookups against the same container are cheap. We construct
+        // it once and share it across all lazy loads. PDF 32000-1:2008 §7.5.7.
+        ObjectStreamReader streamReader = new ObjectStreamReader();
+
+        // The store has to be referenced from inside the lazy loader (so that
+        // the Compressed-entry branch in LoadObjectFromFile can ask for the
+        // container object through the same resolution + decryption path).
+        // We use a single-element holder to defer the back-reference until
+        // after the store is constructed; the loader is only invoked lazily
+        // when the store is queried, by which time the holder is populated.
+        PdfObjectStore[] storeHolder = new PdfObjectStore[1];
+
         PdfObjectStore objects = new PdfObjectStore(id =>
         {
-            PdfIndirectObject? loaded = LoadObjectFromFile(parser, xref, id);
+            PdfIndirectObject? loaded = LoadObjectFromFile(
+                parser, xref, id, streamReader, storeHolder[0]);
 
             if (loaded is null || finalDecryptor is null)
             {
@@ -245,6 +259,8 @@ public sealed class PdfReader : IDisposable
             return new PdfIndirectObject(loaded.Id, decryptedValue);
         });
 
+        storeHolder[0] = objects;
+
         return new PdfReader(stream, leaveOpen, trailer, objects);
     }
 
@@ -262,7 +278,7 @@ public sealed class PdfReader : IDisposable
         if (encryptPrim is PdfReference encRef)
         {
             encryptObjectNumber = encRef.ObjectId.ObjectNumber;
-            PdfIndirectObject? indirect = LoadObjectFromFile(parser, xref, encRef.ObjectId);
+            PdfIndirectObject? indirect = LoadInUseObjectFromFile(parser, xref, encRef.ObjectId);
 
             if (indirect?.Value is not PdfDictionary d)
             {
@@ -676,15 +692,68 @@ public sealed class PdfReader : IDisposable
     private static PdfIndirectObject? LoadObjectFromFile(
         PdfObjectParser parser,
         XrefTable xref,
-        PdfObjectId id)
+        PdfObjectId id,
+        ObjectStreamReader streamReader,
+        PdfObjectStore store)
     {
-        long offset = xref.GetOffset(id.ObjectNumber);
-
-        if (offset < 0)
+        if (!xref.TryGet(id.ObjectNumber, out XrefEntry entry))
         {
             return null;
         }
 
+        if (entry.IsInUse)
+        {
+            return LoadInUseObject(parser, id, entry.ByteOffset);
+        }
+
+        if (entry.IsCompressed)
+        {
+            // PDF 32000-1:2008 §7.5.7: the entry names the containing object
+            // stream (StreamObjectNumber) and the zero-based index of this
+            // object within it (IndexInStream). We resolve the container via
+            // the store so it goes through caching + per-object decryption.
+            PdfPrimitive? value = streamReader.TryRead(
+                entry.StreamObjectNumber,
+                entry.IndexInStream,
+                containerObjNum => ResolveContainerAsIndirect(store, containerObjNum));
+
+            if (value is null) { return null; }
+
+            return new PdfIndirectObject(id, value);
+        }
+
+        // Free entry, or unknown type — caller treats as missing.
+        return null;
+    }
+
+    /// <summary>
+    /// Loads an object that is guaranteed to be a classic in-use indirect
+    /// object (xref type 1). Used before the document's object store and
+    /// object-stream reader exist, in particular for the /Encrypt object
+    /// during decryption setup (which per PDF 32000-1:2008 §7.6 must not
+    /// be stored in an object stream).
+    /// </summary>
+    private static PdfIndirectObject? LoadInUseObjectFromFile(
+        PdfObjectParser parser,
+        XrefTable xref,
+        PdfObjectId id)
+    {
+        long offset = xref.GetOffset(id.ObjectNumber);
+        if (offset < 0)
+        {
+            return null;
+        }
+        return LoadInUseObject(parser, id, offset);
+    }
+
+    /// <summary>
+    /// Reads a classic in-use indirect object at the given byte offset.
+    /// </summary>
+    private static PdfIndirectObject LoadInUseObject(
+        PdfObjectParser parser,
+        PdfObjectId id,
+        long offset)
+    {
         try
         {
             parser.Seek(offset);
@@ -695,6 +764,25 @@ public sealed class PdfReader : IDisposable
             throw new PdfParseException(
                 $"Error reading object {id} at offset {offset}.", ex);
         }
+    }
+
+    /// <summary>
+    /// Helper for <see cref="ObjectStreamReader"/>: loads the container
+    /// (an object stream) through the store, so decryption and caching
+    /// run normally, and re-wraps the result as a <see cref="PdfIndirectObject"/>.
+    /// Returns null when the container is missing or not a stream.
+    /// </summary>
+    private static PdfIndirectObject? ResolveContainerAsIndirect(
+        PdfObjectStore store,
+        int objectNumber)
+    {
+        PdfObjectId id = new PdfObjectId(objectNumber, 0);
+        PdfPrimitive value = store.ResolveById(id);
+        if (value is PdfNull)
+        {
+            return null;
+        }
+        return new PdfIndirectObject(id, value);
     }
 
     // ── Utilities ─────────────────────────────────────────────────────────
