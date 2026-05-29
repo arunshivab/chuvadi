@@ -21,6 +21,15 @@
 //                 checkmark) fall back to a generic system glyph when the
 //                 SVG text element asks for U+2713 ✓. Mirrors pdf2htmlEX's
 //                 font remapping strategy.
+//        v2.1.6 — for /FontFile3 subtypes /Type1C and /CIDFontType0C
+//                 (bare CFF programs), wraps the CFF in an OpenType (OTTO)
+//                 envelope with a synthesised cmap, so browsers can
+//                 address each glyph by semantic Unicode code point.
+//                 The /OpenType subtype is already a complete OpenType
+//                 font and is passed through unchanged. CID fonts compose
+//                 the ToUnicode CMap with CffLoader's charset CID→GID;
+//                 simple fonts compose CffLoader's charset name→GID with
+//                 the Adobe Glyph List name→Unicode resolver.
 
 using System;
 using System.Collections.Generic;
@@ -37,7 +46,9 @@ namespace Chuvadi.Pdf.Svg;
 /// emits it into an SVG document as a CSS <c>@font-face</c> rule. For
 /// Type0 TrueType fonts with a ToUnicode CMap, the embedded program's
 /// cmap table is rewritten so the browser can locate each glyph by its
-/// semantic Unicode code point.
+/// semantic Unicode code point. For CFF fonts (/FontFile3 subtypes
+/// /Type1C and /CIDFontType0C), the bare CFF program is wrapped in an
+/// OpenType (OTTO) envelope with a synthesised cmap (v2.1.6).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -49,10 +60,11 @@ namespace Chuvadi.Pdf.Svg;
 ///   <item><c>/FontFile2</c> — TrueType. Browsers consume this directly with
 ///   <c>format("truetype")</c>. The v2.1.5 cmap remap path runs here.</item>
 ///   <item><c>/FontFile3</c> — CFF (Compact Font Format) or OpenType. The
-///   stream's <c>/Subtype</c> distinguishes the two; both are consumed by
-///   browsers with <c>format("opentype")</c>. CFF cmap remapping is
-///   deferred to v2.1.6 (CFF requires wrapping in an OpenType envelope
-///   before browsers will accept the cmap rewrite).</item>
+///   stream's <c>/Subtype</c> distinguishes the three cases (/Type1C,
+///   /CIDFontType0C, /OpenType). The first two are bare CFF programs and
+///   are wrapped in an OTTO envelope (v2.1.6); the third is already a
+///   complete OpenType font and is passed through unchanged. All three
+///   are consumed by browsers with <c>format("opentype")</c>.</item>
 /// </list>
 /// <para>
 /// For composite (Type0) fonts the FontDescriptor lives on the descendant
@@ -85,8 +97,9 @@ internal static class FontEmbedder
     /// Optional. When provided and the embedded program is a TrueType font
     /// belonging to a Type0 font dictionary, the program's cmap table is
     /// rewritten to map semantic Unicode code points (derived from the
-    /// font's ToUnicode CMap) to glyph indices. Pass <c>null</c> to skip
-    /// the cmap remap step, falling back to v2.1.4 behaviour.
+    /// font's ToUnicode CMap) to glyph indices. Also consulted by the
+    /// v2.1.6 CFF wrap path for CIDFontType0C fonts. Pass <c>null</c> to
+    /// skip the cmap remap step, falling back to v2.1.4 behaviour.
     /// </param>
     internal static string? TryEmbed(
         PdfDictionary fontDict,
@@ -111,6 +124,7 @@ internal static class FontEmbedder
         // directly and conversion would be a substantial extra dependency.
         PdfStream? fontProgram = null;
         string? format = null;
+        string? fontFile3Subtype = null;
         if (descriptor.TryGetValue(PdfName.Intern("FontFile2"), out PdfPrimitive? ff2)
             && resolver.Resolve(ff2) is PdfStream ff2Stream)
         {
@@ -123,14 +137,16 @@ internal static class FontEmbedder
             fontProgram = ff3Stream;
             // PDF 32000-1 §9.9 Table 126: /FontFile3 Subtype is one of
             // /Type1C, /CIDFontType0C, /OpenType. The first two are CFF
-            // programs; the third is a complete OpenType font. Browsers
-            // accept all three under format("opentype").
+            // programs that we wrap in an OpenType envelope (v2.1.6); the
+            // third is already a complete OpenType font and is passed
+            // through unchanged. Browsers accept all three under
+            // format("opentype").
             if (ff3Stream.Dictionary.TryGetValue(PdfName.Intern("Subtype"), out PdfPrimitive? sub)
                 && sub is PdfName subName)
             {
-                format = subName.Value == "OpenType" ? "opentype" : "opentype";
+                fontFile3Subtype = subName.Value;
             }
-            else { format = "opentype"; }
+            format = "opentype";
         }
         if (fontProgram is null || format is null) { return null; }
 
@@ -149,8 +165,7 @@ internal static class FontEmbedder
         // For simple fonts (descendant is null) we don't remap: the
         // existing font cmap already maps the encoding code points the
         // browser will use, and we don't have a CIDToGIDMap layer to invert.
-        // CFF font remapping requires CFF→OpenType wrapping first and is
-        // tracked separately (v2.1.6).
+        // CFF font remapping is handled by the v2.1.6 wrap path below.
         if (pdfFont is not null
             && format == "truetype"
             && descendant is not null
@@ -171,6 +186,26 @@ internal static class FontEmbedder
                     // the original bytes. Browser will render with the
                     // legacy fallback as in v2.1.4.
                 }
+            }
+        }
+
+        // v2.1.6 — wrap CFF font programs in an OpenType (OTTO) envelope.
+        //
+        // /FontFile3 with subtype /Type1C (simple CFF) or /CIDFontType0C
+        // (CID-keyed CFF) is a bare CFF program; browsers cannot consume it
+        // directly and silently fall back to a system font. We wrap it in an
+        // OpenType envelope with a synthesised cmap that maps semantic Unicode
+        // code points to glyph indices, so the browser can locate each glyph.
+        //
+        // /OpenType is already a complete OpenType/SFNT font and is passed
+        // through unchanged — wrapping it would double-wrap a finished font.
+        if (fontFile3Subtype is "Type1C" or "CIDFontType0C")
+        {
+            byte[]? wrapped = TryWrapCff(
+                fontBytes, fontFile3Subtype, descriptor, descendant, pdfFont, resolver);
+            if (wrapped is not null)
+            {
+                fontBytes = wrapped;
             }
         }
 
@@ -368,6 +403,161 @@ internal static class FontEmbedder
         }
 
         return result;
+    }
+
+    // ── CFF → OpenType wrapping (v2.1.6) ──────────────────────────────────
+
+    /// <summary>
+    /// Wraps a bare CFF font program (<paramref name="cffBytes"/>) in an
+    /// OpenType (OTTO) envelope with a synthesised cmap. Returns the wrapped
+    /// bytes, or <c>null</c> when the CFF cannot be parsed, no usable
+    /// Unicode→glyph mapping can be built, or the OTTO assembly throws
+    /// (in which case the caller emits the original bytes, matching
+    /// pre-v2.1.6 behaviour).
+    /// </summary>
+    /// <param name="cffBytes">The decoded CFF program.</param>
+    /// <param name="subtype">The /FontFile3 subtype (Type1C or CIDFontType0C).</param>
+    /// <param name="descriptor">The resolved FontDescriptor (for style flags).</param>
+    /// <param name="descendant">The descendant CIDFont dictionary, or null for simple fonts.</param>
+    /// <param name="pdfFont">The PdfFont, used for the CID font's ToUnicode map.</param>
+    /// <param name="resolver">Resolver for indirect object references.</param>
+    private static byte[]? TryWrapCff(
+        byte[] cffBytes,
+        string subtype,
+        PdfDictionary descriptor,
+        PdfDictionary? descendant,
+        PdfFont? pdfFont,
+        IPdfObjectResolver resolver)
+    {
+        CffLoader loader;
+        try
+        {
+            loader = new CffLoader(cffBytes);
+        }
+        catch (FontRenderingException)
+        {
+            return null;
+        }
+
+        Dictionary<int, int> unicodeToGid;
+        if (subtype == "CIDFontType0C")
+        {
+            // CID-keyed: ToUnicode (code→Unicode) composed with the charset's
+            // CID→GID. For CIDFontType0C the charset's CID→GID is authoritative;
+            // we fall back to the descendant's explicit /CIDToGIDMap only when
+            // the charset yielded nothing AND a descendant is present.
+            if (pdfFont?.ToUnicodeMap is not { Count: > 0 } toUnicode)
+            {
+                return null;
+            }
+
+            IReadOnlyDictionary<int, int>? cidToGid;
+            if (loader.CidToGid.Count > 0)
+            {
+                cidToGid = loader.CidToGid;
+            }
+            else if (descendant is not null)
+            {
+                // Guarded: ParseCidToGidMap requires a non-null descendant.
+                cidToGid = ParseCidToGidMap(descendant, resolver);
+            }
+            else
+            {
+                // No charset, no descendant — let BuildUnicodeToGid use
+                // identity (cidToGid == null → gid = cid).
+                cidToGid = null;
+            }
+
+            unicodeToGid = BuildUnicodeToGid(toUnicode, cidToGid);
+        }
+        else
+        {
+            // Simple CFF (Type1C): the charset maps glyph name → GID, and the
+            // Adobe Glyph List resolves glyph name → Unicode. Compose them.
+            unicodeToGid = BuildUnicodeToGidFromNames(loader.GlyphNameToGid);
+        }
+
+        if (unicodeToGid.Count == 0)
+        {
+            return null;
+        }
+
+        (bool isBold, bool isItalic) = DetectStyle(descriptor);
+
+        // The PostScript name passed to OpenTypeFontBuilder is for the OTTO
+        // /name table; it is sanitised by the builder. We pass the FontName
+        // from the descriptor when present, otherwise an empty placeholder.
+        string psName = ResolveFontName(descriptor);
+
+        try
+        {
+            return OpenTypeFontBuilder.Build(
+                cffBytes, loader, unicodeToGid, psName, isBold, isItalic);
+        }
+        catch (FontRenderingException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Builds a Unicode→GID map for a simple CFF by resolving each charset
+    /// glyph name to a Unicode scalar via the Adobe Glyph List and pairing it
+    /// with the name's glyph index. Names that decompose to multiple
+    /// scalars (e.g. the <c>ffi</c> ligature) yield <c>null</c> from
+    /// <see cref="GlyphNameToUnicode.ResolveSingle"/> and are skipped —
+    /// they are unreachable via a single-char cmap entry by design.
+    /// </summary>
+    private static Dictionary<int, int> BuildUnicodeToGidFromNames(
+        IReadOnlyDictionary<string, int> glyphNameToGid)
+    {
+        Dictionary<int, int> result = new(glyphNameToGid.Count);
+
+        foreach (KeyValuePair<string, int> kv in glyphNameToGid)
+        {
+            int gid = kv.Value;
+            if (gid <= 0 || gid > 0xFFFF) { continue; }
+
+            int? codePoint = GlyphNameToUnicode.ResolveSingle(kv.Key);
+            if (codePoint is null) { continue; }
+            if (codePoint.Value < 0x20) { continue; }
+
+            result.TryAdd(codePoint.Value, gid);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Determines bold/italic style from the FontDescriptor. Bold is read from
+    /// the ForceBold flag (PDF 32000-1 Table 121, bit 19 → mask 0x40000);
+    /// italic from either the Italic flag (bit 7 → mask 0x40) or a non-zero
+    /// ItalicAngle. Bit positions are 1-based per the table.
+    /// </summary>
+    private static (bool IsBold, bool IsItalic) DetectStyle(PdfDictionary descriptor)
+    {
+        int flags = descriptor.GetInteger(PdfName.Intern("Flags"), 0);
+        double italicAngle = descriptor.GetNumber(PdfName.Intern("ItalicAngle"), 0.0);
+
+        bool isBold = (flags & 0x40000) != 0;
+        bool isItalic = (flags & 0x40) != 0 || italicAngle != 0.0;
+
+        return (isBold, isItalic);
+    }
+
+    /// <summary>
+    /// Reads the FontName from a FontDescriptor for use as the OTTO name-table
+    /// PostScript name. Returns an empty string when absent; the builder
+    /// sanitises and defaults the value.
+    /// </summary>
+    private static string ResolveFontName(PdfDictionary descriptor)
+    {
+        if (descriptor.TryGetValue(PdfName.Intern("FontName"), out PdfPrimitive? fn)
+            && fn is PdfName name)
+        {
+            return name.Value;
+        }
+        return string.Empty;
     }
 
     // ── Misc ─────────────────────────────────────────────────────────────
