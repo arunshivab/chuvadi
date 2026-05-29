@@ -228,6 +228,7 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
+| [AdobeGlyphList](Fonts/AdobeGlyphList.md) | class | Provides the canonical Adobe Glyph List (AGL) version 2.0, mapping PostScript glyph names to their Unicode scalar values. |
 | [BrotliEncoder](Fonts/BrotliEncoder.md) | class | Pure-C# Brotli encoder. |
 | [BrotliStoredEncoder](Fonts/BrotliStoredEncoder.md) | class | Emits Brotli-compatible bitstreams for WOFF2 packaging. |
 | [CMapParseResult](Fonts/CMapParseResult.md) | class | The full result of parsing a ToUnicode CMap: the bf-char/bf-range mappings and the declared codespace ranges. |
@@ -237,7 +238,9 @@ python tools/gen_api_docs.py
 | [FontRenderer](Fonts/FontRenderer.md) | class | High-level API for extracting glyph outlines from a TrueType or OpenType font. |
 | [FontRenderingException](Fonts/FontRenderingException.md) | class | Thrown when a font file cannot be parsed or a glyph outline cannot be extracted due to an invalid or unsupported font structure. |
 | [GlyphMetrics](Fonts/GlyphMetrics.md) | class | Typographic metrics for a single glyph, in font units (unscaled). |
+| [GlyphNameToUnicode](Fonts/GlyphNameToUnicode.md) | class | Implements the Adobe Glyph List algorithm for deriving Unicode scalar values from a glyph name. |
 | [GlyphOutline](Fonts/GlyphOutline.md) | class | The outline of a single glyph as a `Path` of contours, together with its `GlyphMetrics`. |
+| [OpenTypeFontBuilder](Fonts/OpenTypeFontBuilder.md) | class | Wraps a raw CFF font program in an OpenType (OTTO) SFNT envelope with the synthesised tables a browser requires (`CFF `, `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post`), so the font can be embedded in an SVG `@font-face` rule and located by semantic Unicode code point. |
 | [PdfFont](Fonts/PdfFont.md) | class | Represents a PDF font and provides character code to Unicode mapping for text extraction purposes. |
 | [PdfFontEncoding](Fonts/PdfFontEncoding.md) | class | Maps 1-byte character codes (0-255) to Unicode codepoints for simple fonts. |
 | [RenderableFont](Fonts/RenderableFont.md) | class | A PDF font that supports both text decoding (character codes to Unicode) and glyph rendering (character codes to vector outlines + metrics). |

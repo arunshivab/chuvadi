@@ -38,6 +38,30 @@ int NumGlyphs => _charStrings.Count
 
 Number of glyphs in the font.
 
+### `IsCidFont`
+
+```csharp
+bool IsCidFont => _isCidFont
+```
+
+Whether the font is CID-keyed (CIDFontType0C). When `true`, `CidToGid` is populated from the charset; when `false`, `GlyphNameToGid` is populated instead.
+
+### `CidToGid`
+
+```csharp
+IReadOnlyDictionary<int, int> CidToGid => _cidToGid
+```
+
+For CID-keyed fonts, maps each character identifier (CID) to its glyph index (GID). Empty for simple (Type1C) fonts.
+
+### `GlyphNameToGid`
+
+```csharp
+IReadOnlyDictionary<string, int> GlyphNameToGid => _glyphNameToGid
+```
+
+For simple (Type1C) fonts, maps each glyph name to its glyph index (GID). Empty for CID-keyed fonts.
+
 ## Methods
 
 ### `GetGlyphIndex`

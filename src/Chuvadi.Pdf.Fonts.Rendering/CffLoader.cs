@@ -37,6 +37,9 @@ public sealed class CffLoader
     private readonly List<byte[]> _charStrings;
     private readonly List<byte[]> _localSubrs;
     private readonly Dictionary<int, int> _charsetToGid;
+    private readonly Dictionary<int, int> _cidToGid;
+    private readonly Dictionary<string, int> _glyphNameToGid;
+    private readonly bool _isCidFont;
     private readonly int _defaultWidthX;
     private readonly int _nominalWidthX;
     private readonly int _unitsPerEm;
@@ -51,6 +54,8 @@ public sealed class CffLoader
         _charStrings = new List<byte[]>();
         _localSubrs = new List<byte[]>();
         _charsetToGid = new Dictionary<int, int>();
+        _cidToGid = new Dictionary<int, int>();
+        _glyphNameToGid = new Dictionary<string, int>(StringComparer.Ordinal);
 
         // Header
         int cursor = 0;
@@ -69,9 +74,9 @@ public sealed class CffLoader
         if (topDicts.Count == 0) { throw new FontRenderingException("CFF Top DICT missing."); }
         Dictionary<int, double[]> topDict = ParseDict(topDicts[0]);
 
-        // String INDEX
-        List<byte[]> strings = ReadIndex(cursor, out cursor);
-        _ = strings;
+        // String INDEX — retained so the charset's SIDs can be resolved to
+        // glyph names (SIDs >= 391 index this list as sid - 391).
+        List<byte[]> stringIndex = ReadIndex(cursor, out cursor);
 
         // Global Subrs INDEX
         _globalSubrs = ReadIndex(cursor, out cursor);
@@ -85,7 +90,11 @@ public sealed class CffLoader
             privateOffset = (int)priv[1];
         }
         int charsetOffset = (int)(topDict.GetValueOrDefault(15, new double[] { 0 })[0]);
-        int encodingOffset = (int)(topDict.GetValueOrDefault(16, new double[] { 0 })[0]);
+
+        // ROS operator (12 30) is present iff the font is CID-keyed
+        // (CIDFontType0C). For CID fonts the charset maps GID -> CID; for
+        // simple fonts (Type1C) it maps GID -> SID (a glyph name).
+        _isCidFont = topDict.ContainsKey(0x0C1E);
 
         // FontMatrix gives unitsPerEm. Default [0.001, 0, 0, 0.001, 0, 0] = 1000 units/em.
         _unitsPerEm = 1000;
@@ -115,9 +124,10 @@ public sealed class CffLoader
             }
         }
 
-        // Build the charset → GID map. (Encoding/Charset details only matter when callers
-        // ask GetGlyphIndex(codePoint); the charstrings are addressed directly by GID.)
-        BuildCharsetMap(charsetOffset, encodingOffset);
+        // Build the charset maps. For CID-keyed fonts this yields CID -> GID
+        // (CidToGid); for simple fonts it yields glyph-name -> GID
+        // (GlyphNameToGid). The charstrings are addressed directly by GID.
+        BuildCharsetMap(charsetOffset, stringIndex);
     }
 
     /// <summary>Font units per em (typically 1000 for CFF).</summary>
@@ -125,6 +135,25 @@ public sealed class CffLoader
 
     /// <summary>Number of glyphs in the font.</summary>
     public int NumGlyphs => _charStrings.Count;
+
+    /// <summary>
+    /// Whether the font is CID-keyed (CIDFontType0C). When <c>true</c>,
+    /// <see cref="CidToGid"/> is populated from the charset; when <c>false</c>,
+    /// <see cref="GlyphNameToGid"/> is populated instead.
+    /// </summary>
+    public bool IsCidFont => _isCidFont;
+
+    /// <summary>
+    /// For CID-keyed fonts, maps each character identifier (CID) to its glyph
+    /// index (GID). Empty for simple (Type1C) fonts.
+    /// </summary>
+    public IReadOnlyDictionary<int, int> CidToGid => _cidToGid;
+
+    /// <summary>
+    /// For simple (Type1C) fonts, maps each glyph name to its glyph index
+    /// (GID). Empty for CID-keyed fonts.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> GlyphNameToGid => _glyphNameToGid;
 
     /// <summary>Maps a Unicode code point to a glyph index. Returns 0 if not mapped.</summary>
     public int GetGlyphIndex(int codePoint)
@@ -293,14 +322,114 @@ public sealed class CffLoader
         }
     }
 
-    private void BuildCharsetMap(int charsetOffset, int encodingOffset)
+    private void BuildCharsetMap(int charsetOffset, List<byte[]> stringIndex)
     {
-        // For Phase 2.1 v1: we don't reconstruct a full code-point map without the
-        // String INDEX SID→name decoding. Consumers that need codePoint→GID can use
-        // the PdfFont ToUnicode CMap; CFF charset is mainly relevant for glyph
-        // name lookups which we don't surface yet.
-        _ = charsetOffset;
-        _ = encodingOffset;
+        int numGlyphs = _charStrings.Count;
+        if (numGlyphs == 0) { return; }
+
+        // gidToValue maps GID -> SID (simple fonts) or GID -> CID (CID fonts).
+        // GID 0 (.notdef) is implicit and never stored in the charset data.
+        Dictionary<int, int> gidToValue = new(numGlyphs) { [0] = 0 };
+
+        // Predefined charsets (0 = ISOAdobe, 1 = Expert, 2 = ExpertSubset) and
+        // any offset that would read out of bounds: fall back to identity, the
+        // most useful default (GID == SID/CID for gid >= 1).
+        if (charsetOffset <= 2 || charsetOffset >= _data.Length)
+        {
+            for (int gid = 1; gid < numGlyphs; gid++) { gidToValue[gid] = gid; }
+        }
+        else
+        {
+            ParseCharset(charsetOffset, numGlyphs, gidToValue);
+        }
+
+        if (_isCidFont)
+        {
+            // Charset values are CIDs. Invert to CID -> GID. First writer wins
+            // so the lowest GID is kept on the rare duplicate CID.
+            foreach (KeyValuePair<int, int> kv in gidToValue)
+            {
+                _cidToGid.TryAdd(kv.Value, kv.Key);
+            }
+        }
+        else
+        {
+            // Charset values are SIDs (glyph names). Resolve each to a name and
+            // map name -> GID.
+            foreach (KeyValuePair<int, int> kv in gidToValue)
+            {
+                string? name = ResolveSid(kv.Value, stringIndex);
+                if (name is not null)
+                {
+                    _glyphNameToGid.TryAdd(name, kv.Key);
+                }
+            }
+        }
+    }
+
+    private void ParseCharset(int charsetOffset, int numGlyphs, Dictionary<int, int> gidToValue)
+    {
+        int format = _data[charsetOffset];
+        int p = charsetOffset + 1;
+        int gid = 1;
+
+        if (format == 0)
+        {
+            while (gid < numGlyphs && p + 1 < _data.Length)
+            {
+                int sid = (_data[p] << 8) | _data[p + 1];
+                p += 2;
+                gidToValue[gid] = sid;
+                gid++;
+            }
+        }
+        else if (format == 1)
+        {
+            while (gid < numGlyphs && p + 2 < _data.Length)
+            {
+                int first = (_data[p] << 8) | _data[p + 1];
+                int nLeft = _data[p + 2];
+                p += 3;
+                for (int i = 0; i <= nLeft && gid < numGlyphs; i++)
+                {
+                    gidToValue[gid] = first + i;
+                    gid++;
+                }
+            }
+        }
+        else if (format == 2)
+        {
+            while (gid < numGlyphs && p + 3 < _data.Length)
+            {
+                int first = (_data[p] << 8) | _data[p + 1];
+                int nLeft = (_data[p + 2] << 8) | _data[p + 3];
+                p += 4;
+                for (int i = 0; i <= nLeft && gid < numGlyphs; i++)
+                {
+                    gidToValue[gid] = first + i;
+                    gid++;
+                }
+            }
+        }
+        else
+        {
+            // Unknown format — fall back to identity for the remaining glyphs.
+            for (; gid < numGlyphs; gid++) { gidToValue[gid] = gid; }
+        }
+    }
+
+    private static string? ResolveSid(int sid, List<byte[]> stringIndex)
+    {
+        string? standard = CffStandardStrings.Get(sid);
+        if (standard is not null) { return standard; }
+
+        int idx = sid - CffStandardStrings.Count;
+        if (idx >= 0 && idx < stringIndex.Count)
+        {
+            return Encoding.Latin1.GetString(stringIndex[idx]);
+        }
+
+        return null;
     }
 
     private static RectangleF BoundsOf(Path p)
