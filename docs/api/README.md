@@ -383,6 +383,7 @@ python tools/gen_api_docs.py
 | [BlendModeOp](Rendering/BlendModeOp.md) | class | Pushes or pops a blend mode. |
 | [ClipOp](Rendering/ClipOp.md) | class | Pushes a clipping region. |
 | [ClipPath](Rendering/ClipPath.md) | struct | A clipping path applied to a single render operation. |
+| [DiagnosticKind](Rendering/DiagnosticKind.md) | enum | Classifies a `RenderingDiagnostic`. |
 | [DisplayListBuilder](Rendering/DisplayListBuilder.md) | class | Builds a `PageDisplayList` from a `PdfPage` by interpreting the page's content stream. |
 | [DisplayListBuilder](Rendering/DisplayListBuilder.md) | class | Builds a `PageDisplayList` by walking a page's content stream and translating each PDF operator to a `RenderOp`. |
 | [DocumentSearch](Rendering/DocumentSearch.md) | class | Searches the text of a `PdfDocument` by page, streaming matches asynchronously. |
