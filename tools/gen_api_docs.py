@@ -51,6 +51,8 @@ class TypeDecl:
     is_sealed: bool = False
     is_static: bool = False
     base_types: list[str] = field(default_factory=list)
+    record_params: str = ""   # positional-record primary-ctor signature, e.g. "(int X, string Y)"
+    params: list[tuple[str, str]] = field(default_factory=list)  # type-level <param> docs (records)
     members: list[Member] = field(default_factory=list)
     file_path: Path = None
 
@@ -69,8 +71,9 @@ TYPE_DECL = re.compile(
     r'(?P<kind>class|struct|enum|interface|record(?:\s+(?:class|struct))?)\s+'
     r'(?P<name>[A-Z][A-Za-z0-9_]*)'
     r'(?:\s*<[^>]+>)?'      # generic params
-    r'(?:\s*:\s*(?P<bases>[^{]+))?'
-    r'\s*[{]?\s*$'
+    r'(?P<record_params>\s*\([^)]*\))?'   # positional-record / primary-ctor params
+    r'(?:\s*:\s*(?P<bases>[^{;]+))?'       # base list (stop at ; for no-body records)
+    r'\s*[;{]?\s*$'                        # allow trailing ; for no-body declarations
 )
 
 # Member: looks for public methods, properties, fields with their signature
@@ -224,8 +227,19 @@ def parse_file(path: Path) -> list[TypeDecl]:
                 is_sealed="sealed" in modifiers,
                 is_static="static" in modifiers,
                 base_types=bases,
+                record_params=(type_match.group("record_params") or "").strip(),
+                params=[(n, clean_xml_refs(d)) for n, d in doc["params"]],
                 file_path=path,
             )
+
+            # No-body declarations — positional records such as
+            # `public sealed record Foo(int X);` — terminate with ';' on the
+            # declaration line and have no member block. Without this guard the
+            # brace scan below runs to EOF looking for a '{' that never comes.
+            if lines[i].rstrip().endswith(";"):
+                types.append(td)
+                i += 1
+                continue
 
             # Parse members within this type's body
             body_start = i
@@ -453,7 +467,7 @@ def render_type(t: TypeDecl) -> str:
     # Declaration
     out.append("```csharp")
     bases = f" : {', '.join(t.base_types)}" if t.base_types else ""
-    out.append(f"public {modifier_str}{t.kind} {t.name}{bases}")
+    out.append(f"public {modifier_str}{t.kind} {t.name}{t.record_params}{bases}")
     out.append("```")
     out.append("")
 
@@ -461,6 +475,14 @@ def render_type(t: TypeDecl) -> str:
         out.append("## Remarks")
         out.append("")
         out.append(t.remarks)
+        out.append("")
+
+    # Positional-record parameters (documented via type-level <param> tags)
+    if t.kind == "record" and t.params:
+        out.append("## Parameters")
+        out.append("")
+        for n, d in t.params:
+            out.append(f"- `{n}` — {d or '_(undocumented)_'}")
         out.append("")
 
     # Enum values
@@ -654,10 +676,10 @@ def main() -> int:
         mod_dir.mkdir(parents=True, exist_ok=True)
         for t in types:
             md_path = mod_dir / f"{t.name}.md"
-            md_path.write_text(render_type(t), encoding="utf-8")
+            md_path.write_text(render_type(t), encoding="utf-8", newline="\n")
 
     # Top-level index
-    (OUT_DIR / "README.md").write_text(render_index(types_by_module), encoding="utf-8")
+    (OUT_DIR / "README.md").write_text(render_index(types_by_module), encoding="utf-8", newline="\n")
 
     print(f"Scanned {file_count} files, emitted {type_count} type pages "
           f"across {len(types_by_module)} modules.")

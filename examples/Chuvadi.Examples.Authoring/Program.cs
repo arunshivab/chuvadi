@@ -46,12 +46,12 @@ p.DrawTable(x: 50, y: 130, width: 495)
     .Font(StandardFonts.Helvetica, 10)
     .HeaderStyle(bold: true, background: Color.FromHex("#e8eef5"))
     .Border(BorderStyle.Single, Colors.Gray, 0.5)
-    .AddRow("Patient Name",   "Sharma, Vikram")
-    .AddRow("Date of Birth",  "1975-08-14")
+    .AddRow("Patient Name", "Sharma, Vikram")
+    .AddRow("Date of Birth", "1975-08-14")
     .AddRow("Admission Date", "2026-05-12")
     .AddRow("Discharge Date", "2026-05-16")
-    .AddRow("Attending",      "Dr. Khaire (Cardiology)")
-    .AddRow("Diagnosis",      "Acute MI, post-PCI")
+    .AddRow("Attending", "Dr. Khaire (Cardiology)")
+    .AddRow("Diagnosis", "Acute MI, post-PCI")
     .Render();
 
 // Body prose
