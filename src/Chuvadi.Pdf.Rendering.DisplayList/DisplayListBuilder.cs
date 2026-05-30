@@ -42,6 +42,15 @@ public static class DisplayListBuilder
         // (e.g. SvgRenderer emits CSS @font-face data URLs from these). Keys
         // match the resource-name used in TextOp.FontKey.
         private readonly Dictionary<string, PdfDictionary> _fontDictsByKey = new();
+
+        // v2.1.8: graceful-degradation events accumulated during build,
+        // surfaced on PageDisplayList.Diagnostics. Deduplicated by
+        // (kind, message) so a single condition that fires per-character
+        // (e.g. font resolution failure on every glyph of a 31-char string)
+        // emits one diagnostic, not 31.
+        private readonly List<RenderingDiagnostic> _diagnostics = new();
+        private readonly HashSet<(DiagnosticKind, string)> _diagnosticKeys = new();
+
         private PdfDictionary? _resources;
 
         // ── v2.1.2: gap-tracking for word-boundary space insertion ───────────
@@ -85,7 +94,7 @@ public static class DisplayListBuilder
             int rotation = 0;
             if (page.Dictionary.TryGetValue(PdfName.Intern("Rotate"), out PdfPrimitive? rv)
                 && rv is PdfInteger ri) { rotation = ri.Value; }
-            return new PageDisplayList(_ops, page.Width, page.Height, rotation, _fontDictsByKey);
+            return new PageDisplayList(_ops, page.Width, page.Height, rotation, _fontDictsByKey, _diagnostics);
         }
 
         private byte[] LoadContent(PdfPage page)
@@ -839,22 +848,60 @@ public static class DisplayListBuilder
 
         private string DecodeText(byte[] bytes, string fontKey)
         {
-            if (_resources is null) { return TryLatin(bytes); }
+            if (_resources is null)
+            {
+                AddDiagnostic(DiagnosticKind.DecodeFallback,
+                    $"Font '{fontKey}' could not be resolved: page has no /Resources. Falling back to Latin-1 decoding.");
+                return TryLatin(bytes);
+            }
             if (!_resources.TryGetValue(PdfName.Intern("Font"), out PdfPrimitive? fonts))
             {
+                AddDiagnostic(DiagnosticKind.DecodeFallback,
+                    $"Font '{fontKey}' could not be resolved: /Resources has no /Font entry. Falling back to Latin-1 decoding.");
                 return TryLatin(bytes);
             }
             PdfDictionary? fd = _doc.Objects.ResolveAs<PdfDictionary>(fonts);
-            if (fd is null) { return TryLatin(bytes); }
-            if (!fd.TryGetValue(PdfName.Intern(fontKey), out PdfPrimitive? fv)) { return TryLatin(bytes); }
+            if (fd is null)
+            {
+                AddDiagnostic(DiagnosticKind.DecodeFallback,
+                    $"Font '{fontKey}' could not be resolved: /Resources/Font reference did not resolve to a dictionary. Falling back to Latin-1 decoding.");
+                return TryLatin(bytes);
+            }
+            if (!fd.TryGetValue(PdfName.Intern(fontKey), out PdfPrimitive? fv))
+            {
+                AddDiagnostic(DiagnosticKind.DecodeFallback,
+                    $"Font '{fontKey}' could not be resolved: /Font sub-dictionary has no entry for this key. Falling back to Latin-1 decoding.");
+                return TryLatin(bytes);
+            }
             PdfDictionary? font = _doc.Objects.ResolveAs<PdfDictionary>(fv);
-            if (font is null) { return TryLatin(bytes); }
+            if (font is null)
+            {
+                AddDiagnostic(DiagnosticKind.DecodeFallback,
+                    $"Font '{fontKey}' could not be resolved: the font reference did not resolve to a dictionary. Falling back to Latin-1 decoding.");
+                return TryLatin(bytes);
+            }
             try
             {
                 PdfFont pf = PdfFont.FromDictionary(font, _doc.Objects);
                 return pf.Decode(bytes);
             }
-            catch { return TryLatin(bytes); }
+            catch (Exception ex)
+            {
+                AddDiagnostic(DiagnosticKind.DecodeFallback,
+                    $"Font '{fontKey}' could not be resolved: PdfFont.FromDictionary threw {ex.GetType().Name}: {ex.Message}. Falling back to Latin-1 decoding.");
+                return TryLatin(bytes);
+            }
+        }
+
+        // v2.1.8: record a graceful-degradation event for downstream consumers.
+        // Dedupes by (kind, message) so a per-character DecodeText fallback
+        // emits one diagnostic per page, not one per glyph.
+        private void AddDiagnostic(DiagnosticKind kind, string message)
+        {
+            if (_diagnosticKeys.Add((kind, message)))
+            {
+                _diagnostics.Add(new RenderingDiagnostic(kind, message));
+            }
         }
 
         private static string TryLatin(byte[] bytes)

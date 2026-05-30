@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Chuvadi.Pdf.Rendering.DisplayList.Tests</AssemblyName>
+    <RootNamespace>Chuvadi.Pdf.Rendering.DisplayList.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <!--
+    References ONLY the newer Chuvadi.Pdf.Rendering.DisplayList project, NOT
+    the older Chuvadi.Pdf.Rendering. The two projects both declare namespace
+    Chuvadi.Pdf.Rendering.DisplayList and define their own PageDisplayList,
+    so referencing both would create ambiguity. Tests here target the newer
+    project's types unambiguously.
+    See project memory: "two parallel DisplayList projects (technical debt)".
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Rendering.DisplayList\Chuvadi.Pdf.Rendering.DisplayList.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Pdf.Primitives\Chuvadi.Pdf.Primitives.csproj" />
+  </ItemGroup>
+
+</Project>
