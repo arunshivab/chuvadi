@@ -243,8 +243,8 @@ public sealed class CommandSmokeTests : IDisposable
     private static void WriteSamplePdf(string path)
     {
         PdfObjectId catalogId = new PdfObjectId(1, 0);
-        PdfObjectId pagesId   = new PdfObjectId(2, 0);
-        PdfObjectId pageId    = new PdfObjectId(3, 0);
+        PdfObjectId pagesId = new PdfObjectId(2, 0);
+        PdfObjectId pageId = new PdfObjectId(3, 0);
 
         PdfDictionary pageDict = new PdfDictionary();
         pageDict.Set(PdfName.Type, PdfName.Page);

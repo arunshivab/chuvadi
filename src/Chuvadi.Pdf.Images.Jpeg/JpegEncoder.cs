@@ -250,9 +250,9 @@ public static class JpegEncoder
                     byte g = pixels[pi + 1];
                     byte b = pixels[pi + 2];
                     // ITU-R BT.601 RGB → YCbCr
-                    double y  =  0.299    * r + 0.587    * g + 0.114    * b - 128.0;
-                    double cb = -0.168736 * r - 0.331264 * g + 0.5      * b;
-                    double cr =  0.5      * r - 0.418688 * g - 0.081312 * b;
+                    double y = 0.299 * r + 0.587 * g + 0.114 * b - 128.0;
+                    double cb = -0.168736 * r - 0.331264 * g + 0.5 * b;
+                    double cr = 0.5 * r - 0.418688 * g - 0.081312 * b;
                     int k = j * 8 + i;
                     yBlock[k] = y;
                     cbBlock[k] = cb;

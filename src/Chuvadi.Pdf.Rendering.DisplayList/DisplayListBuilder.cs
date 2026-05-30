@@ -43,6 +43,16 @@ public static class DisplayListBuilder
         // match the resource-name used in TextOp.FontKey.
         private readonly Dictionary<string, PdfDictionary> _fontDictsByKey = new();
 
+        // Follow-up item 2 (docs/v2.1.8-filter-array-and-followups.md):
+        // resolved PdfFont cache, keyed by the resource-name used in
+        // TextOp.FontKey. DecodeText is invoked per character code via
+        // DecodeSingleCode; previously each call rebuilt the PdfFont — and
+        // therefore re-parsed the ToUnicode CMap — for every glyph. Building
+        // the PdfFont once per key and reusing it removes that per-character
+        // re-parse. The resolution and diagnostic chain in DecodeText is
+        // unchanged; only the PdfFont.FromDictionary build is memoised.
+        private readonly Dictionary<string, PdfFont> _pdfFontByKey = new();
+
         // v2.1.8: graceful-degradation events accumulated during build,
         // surfaced on PageDisplayList.Diagnostics. Deduplicated by
         // (kind, message) so a single condition that fires per-character
@@ -846,6 +856,23 @@ public static class DisplayListBuilder
             return DecodeText(slice, fontKey);
         }
 
+        // Follow-up item 2: build the PdfFont for a resource key once and reuse
+        // it on subsequent character decodes. The five resolution guards and
+        // their diagnostics remain inline in DecodeText; only the expensive
+        // PdfFont.FromDictionary (ToUnicode CMap parse) is memoised here. A
+        // throw propagates intentionally — DecodeText's try/catch around the
+        // call records the diagnostic and falls back to Latin-1.
+        private PdfFont GetOrBuildPdfFont(string fontKey, PdfDictionary font)
+        {
+            if (_pdfFontByKey.TryGetValue(fontKey, out PdfFont? cached))
+            {
+                return cached;
+            }
+            PdfFont pf = PdfFont.FromDictionary(font, _doc.Objects);
+            _pdfFontByKey[fontKey] = pf;
+            return pf;
+        }
+
         private string DecodeText(byte[] bytes, string fontKey)
         {
             if (_resources is null)
@@ -882,7 +909,7 @@ public static class DisplayListBuilder
             }
             try
             {
-                PdfFont pf = PdfFont.FromDictionary(font, _doc.Objects);
+                PdfFont pf = GetOrBuildPdfFont(fontKey, font);
                 return pf.Decode(bytes);
             }
             catch (Exception ex)

@@ -37,7 +37,7 @@ public static class ColorConversion
         for (int i = 0; i < pixels; i++)
         {
             (byte r, byte g, byte b) = CmykToSrgb(cmyk[i * 4], cmyk[i * 4 + 1], cmyk[i * 4 + 2], cmyk[i * 4 + 3]);
-            rgb[i * 3]     = r;
+            rgb[i * 3] = r;
             rgb[i * 3 + 1] = g;
             rgb[i * 3 + 2] = b;
         }
@@ -64,7 +64,7 @@ public static class ColorConversion
             input[2] = cmyk[i * 4 + 2] / 255.0;
             input[3] = cmyk[i * 4 + 3] / 255.0;
             (double r, double g, double b) = profile.ToSrgb(input);
-            rgb[i * 3]     = (byte)Math.Clamp(r * 255, 0, 255);
+            rgb[i * 3] = (byte)Math.Clamp(r * 255, 0, 255);
             rgb[i * 3 + 1] = (byte)Math.Clamp(g * 255, 0, 255);
             rgb[i * 3 + 2] = (byte)Math.Clamp(b * 255, 0, 255);
         }
