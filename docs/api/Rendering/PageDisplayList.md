@@ -50,6 +50,14 @@ IReadOnlyDictionary<string, PdfDictionary> FontDictsByKey
 
 Font dictionaries for every font referenced on this page, keyed by the resource-name used in `TextOp.FontKey`. Empty when the builder did not populate it (e.g. legacy callers using the four-argument constructor). Never null.
 
+### `Diagnostics`
+
+```csharp
+IReadOnlyList<RenderingDiagnostic> Diagnostics
+```
+
+Graceful-degradation events recorded by the builder during page construction (e.g. a font that could not be resolved, causing `DiagnosticKind.DecodeFallback`). Empty when nothing went wrong. Never null. New in v2.1.8 — older callers using constructors without this argument see an empty list.
+
 ### `Count`
 
 ```csharp

@@ -38,6 +38,9 @@ public sealed class PageDisplayList : IReadOnlyList<RenderOp>
     private static readonly IReadOnlyDictionary<string, PdfDictionary> EmptyFonts
         = new Dictionary<string, PdfDictionary>(0);
 
+    private static readonly IReadOnlyList<RenderingDiagnostic> EmptyDiagnostics
+        = Array.Empty<RenderingDiagnostic>();
+
     private readonly IReadOnlyList<RenderOp> _ops;
 
     /// <summary>
@@ -65,13 +68,32 @@ public sealed class PageDisplayList : IReadOnlyList<RenderOp>
         double mediaHeight,
         int rotation,
         IReadOnlyDictionary<string, PdfDictionary> fontDictsByKey)
+        : this(ops, mediaWidth, mediaHeight, rotation, fontDictsByKey, EmptyDiagnostics)
+    {
+    }
+
+    /// <summary>
+    /// Initialises a display list with the given ops, page metadata, font
+    /// dictionaries, and the diagnostics accumulated during build
+    /// (graceful-degradation events such as a font that could not be
+    /// resolved). New in v2.1.8.
+    /// </summary>
+    public PageDisplayList(
+        IReadOnlyList<RenderOp> ops,
+        double mediaWidth,
+        double mediaHeight,
+        int rotation,
+        IReadOnlyDictionary<string, PdfDictionary> fontDictsByKey,
+        IReadOnlyList<RenderingDiagnostic> diagnostics)
     {
         _ops = ops ?? throw new ArgumentNullException(nameof(ops));
         ArgumentNullException.ThrowIfNull(fontDictsByKey);
+        ArgumentNullException.ThrowIfNull(diagnostics);
         MediaWidth = mediaWidth;
         MediaHeight = mediaHeight;
         Rotation = rotation;
         FontDictsByKey = fontDictsByKey;
+        Diagnostics = diagnostics;
     }
 
     /// <summary>Page width in points.</summary>
@@ -90,6 +112,15 @@ public sealed class PageDisplayList : IReadOnlyList<RenderOp>
     /// four-argument constructor). Never null.
     /// </summary>
     public IReadOnlyDictionary<string, PdfDictionary> FontDictsByKey { get; }
+
+    /// <summary>
+    /// Graceful-degradation events recorded by the builder during page
+    /// construction (e.g. a font that could not be resolved, causing
+    /// <see cref="DiagnosticKind.DecodeFallback"/>). Empty when nothing
+    /// went wrong. Never null. New in v2.1.8 — older callers using
+    /// constructors without this argument see an empty list.
+    /// </summary>
+    public IReadOnlyList<RenderingDiagnostic> Diagnostics { get; }
 
     /// <inheritdoc />
     public int Count => _ops.Count;

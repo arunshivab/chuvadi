@@ -11,7 +11,6 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Chuvadi.Pdf.Filters;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Encryption;
 using Chuvadi.Pdf.Primitives;
@@ -664,16 +663,12 @@ public sealed class PdfReader : IDisposable
 
     private static byte[] DecodeStreamBytes(PdfDictionary dict, byte[] rawBytes)
     {
-        PdfName? filterName = dict.GetName(PdfName.Filter);
-
-        if (filterName is null)
-        {
-            return rawBytes;
-        }
-
-        FilterPipeline pipeline = FilterRegistry.CreateDefaultPipeline();
-        string resolvedFilter = FilterRegistry.ResolveAlias(filterName.Value);
-        return pipeline.Decode(resolvedFilter, rawBytes);
+        // v2.1.8: handles single-Name AND Array /Filter via the shared
+        // helper in ObjectStreamReader. Prior to v2.1.8 this method only
+        // honoured the single-Name case and silently emitted raw bytes
+        // when /Filter was an array — see
+        // docs/v2.1.8-filter-array-and-followups.md.
+        return ObjectStreamReader.Decode(dict, rawBytes);
     }
 
     private static void MergeTrailer(PdfDictionary target, PdfDictionary source)

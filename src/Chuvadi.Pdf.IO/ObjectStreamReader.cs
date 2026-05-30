@@ -147,16 +147,22 @@ internal sealed class ObjectStreamReader
     }
 
     /// <summary>
-    /// Decodes the raw bytes of an object stream, honouring a /Filter
-    /// entry that may be a single Name or an Array of Names.
+    /// Decodes the raw bytes of a PDF stream, honouring a /Filter entry
+    /// that may be a single Name or an Array of Names. Shared between
+    /// <see cref="ObjectStreamReader"/> and
+    /// <c>PdfReader.DecodeStreamBytes</c> (v2.1.8 onwards).
     /// </summary>
     /// <remarks>
-    /// PdfReader.DecodeStreamBytes only handles the single-Name case
-    /// today; object streams are typically /FlateDecode (one filter) but
-    /// the array form is legal per §7.4. We handle both here so an
-    /// uncommon authoring choice in a future PDF doesn't silently miss.
+    /// PDF 32000-1:2008 §7.4 allows /Filter to be either a Name (single
+    /// filter) or an Array of Names (chain of filters applied in order).
+    /// Up to v2.1.7 PdfReader handled only the single-Name case and
+    /// silently emitted raw (undecoded) bytes when /Filter was an array;
+    /// that was the bug fixed here.
+    ///
+    /// /DecodeParms (the per-filter parameter sibling of /Filter) is not
+    /// yet threaded through; see docs/v2.1.8-filter-array-and-followups.md.
     /// </remarks>
-    private static byte[] Decode(PdfDictionary dict, byte[] rawBytes)
+    internal static byte[] Decode(PdfDictionary dict, byte[] rawBytes)
     {
         if (!dict.TryGetValue(PdfName.Filter, out PdfPrimitive? filterPrim))
         {
@@ -180,7 +186,7 @@ internal sealed class ObjectStreamReader
                 if (filterArray[i] is not PdfName filterName)
                 {
                     throw new PdfParseException(
-                        "Object stream /Filter array contains a non-Name entry.");
+                        "Stream /Filter array contains a non-Name entry.");
                 }
                 string resolved = FilterRegistry.ResolveAlias(filterName.Value);
                 current = pipeline.Decode(resolved, current);
@@ -189,7 +195,7 @@ internal sealed class ObjectStreamReader
         }
 
         throw new PdfParseException(
-            $"Object stream /Filter must be a Name or Array, got {filterPrim.GetType().Name}.");
+            $"Stream /Filter must be a Name or Array, got {filterPrim.GetType().Name}.");
     }
 
     /// <summary>

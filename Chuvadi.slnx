@@ -58,6 +58,7 @@
     <Project Path="tests/Chuvadi.Pdf.Primitives.Tests/Chuvadi.Pdf.Primitives.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Reader.Tests/Chuvadi.Pdf.Reader.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Redaction.Tests/Chuvadi.Pdf.Redaction.Tests.csproj" />
+	<Project Path="tests/Chuvadi.Pdf.Rendering.DisplayList.Tests/Chuvadi.Pdf.Rendering.DisplayList.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Rendering.Tests/Chuvadi.Pdf.Rendering.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Signatures.Tests/Chuvadi.Pdf.Signatures.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Svg.Tests/Chuvadi.Pdf.Svg.Tests.csproj" />
