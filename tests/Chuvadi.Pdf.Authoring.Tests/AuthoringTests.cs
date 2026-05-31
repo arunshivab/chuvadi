@@ -1,9 +1,8 @@
 // Copyright 2025 Chuvadi Contributors
 // SPDX-License-Identifier: Apache-2.0
-// PHASE: Phase 1.3 — Authoring module
+// PHASE: Phase 1.3 â€” Authoring module
 
 using System.IO;
-using Chuvadi.Pdf.Authoring;
 using Chuvadi.Pdf.Documents;
 using FluentAssertions;
 using Xunit;

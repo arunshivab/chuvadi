@@ -115,24 +115,18 @@ public static class SignatureVerifier
         //   maskGenAlgorithm  [1] MaskGenAlgorithm DEFAULT mgf1SHA1,
         //   saltLength        [2] INTEGER DEFAULT 20,
         //   trailerField      [3] INTEGER DEFAULT 1
-        // For PDF signatures the parameters are explicit. Defaults (SHA-1) are
-        // deliberately rejected — see SHA-1 policy in HashFactory.
-        HashAlgorithmName hashAlg = HashAlgorithmName.Sha256;
-        HashAlgorithmName mgfHashAlg = HashAlgorithmName.Sha256;
-        int saltLength = 32;
-        bool parametersFound = false;
-
-        if (signatureAlgorithm.Parameters is not null)
-        {
-            (hashAlg, mgfHashAlg, saltLength) = ParsePssParameters(signatureAlgorithm.Parameters);
-            parametersFound = true;
-        }
-
-        if (!parametersFound)
+        // For PDF signatures the parameters are explicit. Absent parameters
+        // imply the SHA-1 defaults, which Chuvadi deliberately rejects.
+        // (AlgorithmIdentifier normalises absent parameters to an empty array,
+        // so test for absence, not null.)
+        if (signatureAlgorithm.ParametersAreAbsent)
         {
             throw new NotSupportedException(
                 "RSA-PSS signature has no parameters; defaults imply SHA-1 which Chuvadi does not support.");
         }
+
+        (HashAlgorithmName hashAlg, HashAlgorithmName mgfHashAlg, int saltLength) =
+            ParsePssParameters(signatureAlgorithm.Parameters);
 
         return RsaVerifier.VerifyPss(rsa, hashAlg, mgfHashAlg, saltLength, messageHash, signature);
     }

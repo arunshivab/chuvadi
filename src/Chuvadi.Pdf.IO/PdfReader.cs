@@ -450,6 +450,34 @@ public sealed class PdfReader : IDisposable
         }
     }
 
+    // ── Public: xref loading ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Locates the file's <c>startxref</c> offset, walks the complete
+    /// cross-reference chain (classic xref tables and/or xref streams, following
+    /// <c>/Prev</c> links), and returns the merged cross-reference table.
+    /// </summary>
+    /// <param name="stream">
+    /// A readable, seekable stream positioned anywhere; this method seeks as
+    /// needed and leaves the stream at an unspecified position.
+    /// </param>
+    /// <returns>The merged <see cref="XrefTable"/> for the whole file.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
+    /// <exception cref="PdfParseException">
+    /// The <c>startxref</c> keyword or a valid offset could not be found, or an
+    /// xref section could not be parsed.
+    /// </exception>
+    public static XrefTable LoadXref(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+
+        long startXrefOffset = FindStartXref(stream);
+        XrefTable xref = new();
+        PdfDictionary trailer = new();
+        LoadXrefChain(stream, startXrefOffset, xref, trailer);
+        return xref;
+    }
+
     // ── Private: xref location ────────────────────────────────────────────
 
     private static long FindStartXref(Stream stream)

@@ -5,7 +5,7 @@
 A single path segment.
 
 ```csharp
-public record PathSegment(PathCommand Command, double X1, double Y1, double X2, double Y2, double X3, double Y3)
+public readonly record struct PathSegment(PathCommand Command, double X1, double Y1, double X2, double Y2, double X3, double Y3)
 ```
 
 ---

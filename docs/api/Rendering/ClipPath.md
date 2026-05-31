@@ -5,7 +5,7 @@
 A clipping path applied to a single render operation.
 
 ```csharp
-public struct ClipPath
+public readonly struct ClipPath
 ```
 
 ## Remarks

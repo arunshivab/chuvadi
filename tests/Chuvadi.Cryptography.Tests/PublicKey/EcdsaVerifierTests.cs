@@ -7,7 +7,6 @@
 // curve (P-256, P-384, P-521).
 
 using System;
-using System.Numerics;
 using Chuvadi.Cryptography.PublicKey;
 using FluentAssertions;
 using Xunit;

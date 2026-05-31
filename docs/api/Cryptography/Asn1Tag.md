@@ -5,7 +5,7 @@
 Immutable description of an ASN.1 tag.
 
 ```csharp
-public struct Asn1Tag : IEquatable<Asn1Tag>
+public readonly struct Asn1Tag : IEquatable<Asn1Tag>
 ```
 
 ## Remarks

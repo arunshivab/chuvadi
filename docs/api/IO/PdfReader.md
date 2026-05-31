@@ -93,6 +93,22 @@ void Dispose()
 
 <inheritdoc/>
 
+### `LoadXref`
+
+__static__
+
+```csharp
+static XrefTable LoadXref(Stream stream)
+```
+
+Locates the file's `startxref` offset, walks the complete cross-reference chain (classic xref tables and/or xref streams, following `/Prev` links), and returns the merged cross-reference table.
+
+**Parameters**
+
+- `stream` — A readable, seekable stream positioned anywhere; this method seeks as needed and leaves the stream at an unspecified position.
+
+**Returns:** The merged `XrefTable` for the whole file. <exception cref="ArgumentNullException">`stream` is null.</exception> <exception cref="PdfParseException"> The `startxref` keyword or a valid offset could not be found, or an xref section could not be parsed. </exception>
+
 ---
 
 _Source: [`src/Chuvadi.Pdf.IO/PdfReader.cs`](../../../src/Chuvadi.Pdf.IO/PdfReader.cs)_

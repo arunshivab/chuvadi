@@ -38,10 +38,10 @@ python tools/gen_api_docs.py
 | Type | Kind | Description |
 |---|---|---|
 | [BorderStyle](Authoring/BorderStyle.md) | enum | Border style for tables and rectangles. |
-| [Color](Authoring/Color.md) | record | An RGB color in [0, 1] floating-point space. |
+| [Color](Authoring/Color.md) | record struct | An RGB color in [0, 1] floating-point space. |
 | [Colors](Authoring/Colors.md) | class | Common named colors. |
 | [PageBuilder](Authoring/PageBuilder.md) | class | Per-page drawing API. |
-| [PageSize](Authoring/PageSize.md) | record | A page size in PDF points (1 pt = 1/72 inch). |
+| [PageSize](Authoring/PageSize.md) | record struct | A page size in PDF points (1 pt = 1/72 inch). |
 | [PdfDocumentBuilder](Authoring/PdfDocumentBuilder.md) | class | Top-level entry point for creating fresh PDF documents. |
 | [StandardFonts](Authoring/StandardFonts.md) | class | The PDF Standard 14 fonts. |
 | [TableBuilder](Authoring/TableBuilder.md) | class | Fluent table builder. |
@@ -236,7 +236,7 @@ python tools/gen_api_docs.py
 | [CMapParseResult](Fonts/CMapParseResult.md) | class | The full result of parsing a ToUnicode CMap: the bf-char/bf-range mappings and the declared codespace ranges. |
 | [CMapParser](Fonts/CMapParser.md) | class | Parses a PDF ToUnicode CMap stream and builds a character code to Unicode string mapping. |
 | [CffLoader](Fonts/CffLoader.md) | class | Loads a Compact Font Format (CFF) / Type 1C font program and produces glyph outlines. |
-| [CodespaceRange](Fonts/CodespaceRange.md) | record | A declared codespace range from a CMap's `begincodespacerange ... endcodespacerange` block. |
+| [CodespaceRange](Fonts/CodespaceRange.md) | record struct | A declared codespace range from a CMap's `begincodespacerange ... endcodespacerange` block. |
 | [FontException](Fonts/FontException.md) | class | Thrown when a font dictionary cannot be parsed or a character code cannot be mapped to a Unicode codepoint. |
 | [FontRenderer](Fonts/FontRenderer.md) | class | High-level API for extracting glyph outlines from a TrueType or OpenType font. |
 | [FontRenderingException](Fonts/FontRenderingException.md) | class | Thrown when a font file cannot be parsed or a glyph outline cannot be extracted due to an invalid or unsupported font structure. |
@@ -347,7 +347,7 @@ python tools/gen_api_docs.py
 | [PdfInteger](Primitives/PdfInteger.md) | class | Represents a PDF integer object. |
 | [PdfName](Primitives/PdfName.md) | class | Represents a PDF name object (e.g. `/Type`, `/Page`). |
 | [PdfNull](Primitives/PdfNull.md) | class | Represents the PDF null object. |
-| [PdfObjectId](Primitives/PdfObjectId.md) | record | Uniquely identifies an indirect object in a PDF file. |
+| [PdfObjectId](Primitives/PdfObjectId.md) | record struct | Uniquely identifies an indirect object in a PDF file. |
 | [PdfPaddedInteger](Primitives/PdfPaddedInteger.md) | class | A PDF integer that serialises to exactly `PaddedWidth` ASCII characters, left-padded with leading zeros. |
 | [PdfParseException](Primitives/PdfParseException.md) | class | Thrown when the bytes of a PDF cannot be parsed because they violate the PDF syntax: malformed tokens, structural errors in dictionaries or arrays, invalid integer or real literals, missing required keywords. |
 | [PdfPermissionException](Primitives/PdfPermissionException.md) | class | Thrown when an operation is blocked because the document's permission flags forbid it: extracting text from a copy-restricted document, modifying a write-protected document, assembling a no-assembly document. |
@@ -384,7 +384,7 @@ python tools/gen_api_docs.py
 
 | Type | Kind | Description |
 |---|---|---|
-| [AffineMatrix](Rendering/AffineMatrix.md) | record | 2D affine transformation matrix in PDF convention.  |
+| [AffineMatrix](Rendering/AffineMatrix.md) | record struct | 2D affine transformation matrix in PDF convention.  |
 | [BlendModeOp](Rendering/BlendModeOp.md) | class | Pushes or pops a blend mode. |
 | [ClipOp](Rendering/ClipOp.md) | class | Pushes a clipping region. |
 | [ClipPath](Rendering/ClipPath.md) | struct | A clipping path applied to a single render operation. |
@@ -396,7 +396,7 @@ python tools/gen_api_docs.py
 | [DrawImageOp](Rendering/DrawImageOp.md) | class | Paints a decoded image at the position specified by a transformation matrix. |
 | [FillPathOp](Rendering/FillPathOp.md) | class | Fills a path with a flat colour, applying the configured fill rule. |
 | [FillRule](Rendering/FillRule.md) | enum | Fill rule for a path or clip region. |
-| [GlyphPosition](Rendering/GlyphPosition.md) | record | The position of a single glyph in a `TextRun`. |
+| [GlyphPosition](Rendering/GlyphPosition.md) | record struct | The position of a single glyph in a `TextRun`. |
 | [ImageFormat](Rendering/ImageFormat.md) | enum | Raster format of image pixel data. |
 | [ImageOp](Rendering/ImageOp.md) | class | Renders a raster image. |
 | [LineCap](Rendering/LineCap.md) | enum | Line cap style (PDF §8.4.3.3). |
@@ -410,12 +410,12 @@ python tools/gen_api_docs.py
 | [PathCommand](Rendering/PathCommand.md) | enum | Type of a path command. |
 | [PathGeometry](Rendering/PathGeometry.md) | class | An ordered sequence of path segments. |
 | [PathOp](Rendering/PathOp.md) | class | Renders a path with fill and/or stroke. |
-| [PathSegment](Rendering/PathSegment.md) | record | A single path segment. |
+| [PathSegment](Rendering/PathSegment.md) | record struct | A single path segment. |
 | [PdfBlendMode](Rendering/PdfBlendMode.md) | enum | PDF blend modes (§11.3.5). |
-| [PdfColor](Rendering/PdfColor.md) | record | A color value with explicit source color space. |
+| [PdfColor](Rendering/PdfColor.md) | record struct | A color value with explicit source color space. |
 | [PdfColorSpace](Rendering/PdfColorSpace.md) | enum | The source color space of a `PdfColor`. |
 | [PdfPageExtensions](Rendering/PdfPageExtensions.md) | class | Extensions on `PdfDocument` and `PdfPage` for the display-list and text-run APIs. |
-| [Rect](Rendering/Rect.md) | record | An axis-aligned bounding rectangle in PDF user-space coords. |
+| [Rect](Rendering/Rect.md) | record struct | An axis-aligned bounding rectangle in PDF user-space coords. |
 | [RenderOp](Rendering/RenderOp.md) | class | Abstract base for all operations in a `PageDisplayList`. |
 | [RenderOp](Rendering/RenderOp.md) | class | Abstract base for all display-list operations. |
 | [RenderOpKind](Rendering/RenderOpKind.md) | enum | Tag identifying the concrete `RenderOp` subtype. |

@@ -5,6 +5,7 @@
 using System;
 using Chuvadi.Cryptography.Hashing;
 using Chuvadi.Cryptography.PublicKey;
+using Chuvadi.Cryptography.Signing;
 using Chuvadi.Cryptography.X509;
 using FluentAssertions;
 using Xunit;

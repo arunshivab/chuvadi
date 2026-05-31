@@ -5,7 +5,7 @@
 A page size in PDF points (1 pt = 1/72 inch).
 
 ```csharp
-public record PageSize(double Width, double Height)
+public readonly record struct PageSize(double Width, double Height)
 ```
 
 ## Properties

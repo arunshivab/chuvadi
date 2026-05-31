@@ -5,7 +5,7 @@
 Represents one entry in a PDF cross-reference table or stream.
 
 ```csharp
-public struct XrefEntry : IEquatable<XrefEntry>
+public readonly struct XrefEntry : IEquatable<XrefEntry>
 ```
 
 ## Remarks

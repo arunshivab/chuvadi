@@ -9,7 +9,7 @@
  Applied to a point (x, y): (A*x + C*y + E, B*x + D*y + F).
 
 ```csharp
-public record AffineMatrix(double A, double B, double C, double D, double E, double F)
+public readonly record struct AffineMatrix(double A, double B, double C, double D, double E, double F)
 ```
 
 ## Properties

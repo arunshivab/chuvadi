@@ -56,9 +56,13 @@ public sealed class TrustStoreTests
     private static TrustAnchor MakeAnchor(string dn)
     {
         X509Name name = SimpleName(dn);
+        // rawEncoding is required by the constructor but not exercised by these
+        // tests (they assert on the Subject name only, never spki.RawEncoding),
+        // so a minimal non-null placeholder is sufficient here.
         SubjectPublicKeyInfo spki = new(
             new AlgorithmIdentifier(new ObjectIdentifier("1.2.3"), null),
-            new BitStringValue(new byte[] { 0x01 }, 0));
+            new BitStringValue(new byte[] { 0x01 }, 0),
+            new byte[] { 0x30, 0x00 });
         return new TrustAnchor(name, spki);
     }
 

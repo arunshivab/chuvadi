@@ -50,6 +50,7 @@ class TypeDecl:
     is_abstract: bool = False
     is_sealed: bool = False
     is_static: bool = False
+    is_readonly: bool = False
     base_types: list[str] = field(default_factory=list)
     record_params: str = ""   # positional-record primary-ctor signature, e.g. "(int X, string Y)"
     params: list[tuple[str, str]] = field(default_factory=list)  # type-level <param> docs (records)
@@ -205,7 +206,7 @@ def parse_file(path: Path) -> list[TypeDecl]:
         if type_match:
             doc = parse_doc_block(doc_lines)
             modifiers = type_match.group("modifiers") or ""
-            kind = type_match.group("kind").split()[0]
+            kind = " ".join(type_match.group("kind").split())
             bases_raw = type_match.group("bases") or ""
             bases = [b.strip() for b in bases_raw.split(",") if b.strip()] if bases_raw else []
 
@@ -226,6 +227,7 @@ def parse_file(path: Path) -> list[TypeDecl]:
                 is_abstract="abstract" in modifiers,
                 is_sealed="sealed" in modifiers,
                 is_static="static" in modifiers,
+                is_readonly="readonly" in modifiers,
                 base_types=bases,
                 record_params=(type_match.group("record_params") or "").strip(),
                 params=[(n, clean_xml_refs(d)) for n, d in doc["params"]],
@@ -444,7 +446,7 @@ def render_type(t: TypeDecl) -> str:
         "enum": "Enum",
         "interface": "Interface",
         "record": "Record",
-    }.get(t.kind, "Type")
+    }.get(t.kind.split()[0], "Type")
 
     modifiers = []
     if t.is_static:
@@ -453,6 +455,8 @@ def render_type(t: TypeDecl) -> str:
         modifiers.append("abstract")
     elif t.is_sealed:
         modifiers.append("sealed")
+    if t.is_readonly:
+        modifiers.append("readonly")
     modifier_str = " ".join(modifiers) + " " if modifiers else ""
 
     out.append(f"# {t.name}")

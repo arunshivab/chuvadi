@@ -434,6 +434,18 @@ public sealed class Asn1TagLengthRoundTripTests
         decoded.Should().Be(original);
     }
 
+    // Length-encoding forms per X.690 §8.1.3:
+    //   0..127        short form (1 octet)
+    //   128..255      long form, 1 length octet
+    //   256..65535    long form, 2 length octets
+    //   65536..2^24-1 long form, 3 length octets
+    //   2^24..        long form, 4 length octets
+    // Each band gets a representative value, round-tripped against a buffer that
+    // actually holds the declared content (Read rejects an element that extends
+    // past the end of the source). 0x01000000 (16 MiB) covers the 4-octet form.
+    // int.MaxValue is NOT round-tripped here: its content cannot be allocated,
+    // and Read correctly rejects it — that path is covered by
+    // Read_LengthExceedingBuffer_ThrowsAsn1Exception below.
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -445,20 +457,34 @@ public sealed class Asn1TagLengthRoundTripTests
     [InlineData(65536)]
     [InlineData(0x00FFFFFF)]
     [InlineData(0x01000000)]
-    [InlineData(0x7FFFFFFF)]
     public void RoundTrip_Length_PreservesValue(int length)
     {
         using MemoryStream ms = new();
         Asn1TagLength.Write(ms, Asn1Tag.Primitive(Asn1UniversalTag.OctetString), length);
         byte[] header = ms.ToArray();
 
-        // Append fake content so the read succeeds. We only care about the
-        // length round-trip, not validating real content.
+        // The buffer must actually hold the declared content, because Read
+        // rejects an element that extends past the end of the source.
         byte[] full = new byte[header.Length + length];
         Buffer.BlockCopy(header, 0, full, 0, header.Length);
 
         Asn1TagLength.Read(full, 0, out _, out _, out int decodedLength);
         decodedLength.Should().Be(length);
+    }
+
+    [Fact]
+    public void Read_LengthExceedingBuffer_ThrowsAsn1Exception()
+    {
+        // A header declaring length == int.MaxValue with no content present.
+        // Read must reject it rather than overflow or over-read; this exercises
+        // the Int32-overflow defence in the "extends past end of buffer" guard.
+        using MemoryStream ms = new();
+        Asn1TagLength.Write(
+            ms, Asn1Tag.Primitive(Asn1UniversalTag.OctetString), int.MaxValue);
+        byte[] header = ms.ToArray();
+
+        Action act = () => Asn1TagLength.Read(header, 0, out _, out _, out _);
+        act.Should().Throw<Asn1Exception>();
     }
 
     [Theory]

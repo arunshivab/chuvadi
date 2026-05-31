@@ -5,7 +5,7 @@
 An immutable 2D affine transformation matrix.
 
 ```csharp
-public struct Transform : IEquatable<Transform>
+public readonly struct Transform : IEquatable<Transform>
 ```
 
 ## Remarks
