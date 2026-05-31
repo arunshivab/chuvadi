@@ -5,7 +5,7 @@
 An immutable axis-aligned rectangle in PDF user space (points, 1/72 inch). Origin is bottom-left by PDF convention; Y increases upward.
 
 ```csharp
-public struct RectangleF : IEquatable<RectangleF>
+public readonly struct RectangleF : IEquatable<RectangleF>
 ```
 
 ## Constructors

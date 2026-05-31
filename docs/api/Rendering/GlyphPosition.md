@@ -5,7 +5,7 @@
 The position of a single glyph in a `TextRun`.
 
 ```csharp
-public record GlyphPosition(double X, double Y, double Advance, string Unicode)
+public readonly record struct GlyphPosition(double X, double Y, double Advance, string Unicode)
 ```
 
 ---

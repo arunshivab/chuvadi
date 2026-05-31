@@ -5,7 +5,7 @@
 An immutable size (width × height) in PDF points (1/72 inch).
 
 ```csharp
-public struct SizeF : IEquatable<SizeF>
+public readonly struct SizeF : IEquatable<SizeF>
 ```
 
 ## Constructors

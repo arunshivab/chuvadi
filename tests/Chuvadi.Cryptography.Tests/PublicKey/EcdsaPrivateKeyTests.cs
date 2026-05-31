@@ -3,7 +3,6 @@
 // PHASE: Phase 1.2.2 — ECDSA private key parsing
 
 using System;
-using Chuvadi.Cryptography.Asn1;
 using Chuvadi.Cryptography.PublicKey;
 using FluentAssertions;
 using Xunit;

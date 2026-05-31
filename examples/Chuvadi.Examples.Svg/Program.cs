@@ -29,11 +29,11 @@ p1.DrawTable(50, 130, 495)
     .AddColumn("Status", 0.15)
     .HeaderStyle(bold: true, background: Color.FromHex("#e8eef5"))
     .Border(BorderStyle.Single, Colors.Gray)
-    .AddRow("Heart Rate",    "62",  "98",  "78",  "Normal")
-    .AddRow("Sys BP",        "108", "138", "122", "Normal")
-    .AddRow("Dia BP",        "68",  "88",  "76",  "Normal")
-    .AddRow("Temperature",   "36.4","37.2","36.7","Normal")
-    .AddRow("SpO2",          "96",  "99",  "98",  "Normal")
+    .AddRow("Heart Rate", "62", "98", "78", "Normal")
+    .AddRow("Sys BP", "108", "138", "122", "Normal")
+    .AddRow("Dia BP", "68", "88", "76", "Normal")
+    .AddRow("Temperature", "36.4", "37.2", "36.7", "Normal")
+    .AddRow("SpO2", "96", "99", "98", "Normal")
     .Render();
 
 var p2 = builder.AddPage(PageSize.A4);
@@ -55,7 +55,8 @@ Console.WriteLine($"PDF: {pdfPath} ({pdfBytes.Length} bytes)");
 // Export each page to its own SVG
 using var doc = PdfDocument.Open(new MemoryStream(pdfBytes), leaveOpen: false);
 int n = 0;
-foreach (string svg in SvgExporter.ExportPages(doc))
+var renderer = new SvgRenderer();
+foreach (string svg in renderer.RenderPages(doc))
 {
     string svgPath = Path.Combine(outDir, $"demo-page{n + 1}.svg");
     File.WriteAllText(svgPath, svg);

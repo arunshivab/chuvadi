@@ -7,6 +7,7 @@ using System;
 using System.IO;
 using Chuvadi.Pdf.Documents;
 using Chuvadi.Pdf.Filters;
+using Chuvadi.Pdf.IO;
 using Chuvadi.Pdf.Objects;
 using Chuvadi.Pdf.Primitives;
 
@@ -399,7 +400,7 @@ public sealed class InspectXrefCommand : ICommand
 
         using (FileStream fs = File.OpenRead(inputPath))
         {
-            XrefTable xref = XrefTable.Parse(fs);
+            XrefTable xref = PdfReader.LoadXref(fs);
 
             stdout.WriteLine($"{"Obj",-6}  {"Gen",-5}  {"Type",-8}  Offset");
             stdout.WriteLine(new string('-', 40));

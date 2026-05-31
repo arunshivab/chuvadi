@@ -167,7 +167,11 @@ def check_file(path):
             stripped = line.strip()
             if stripped.startswith("//"):
                 continue
-            if re.search(r'(?<!using )\bvar\b', line):
+            # IDE0008 targets implicit-typed locals. Tuple deconstruction
+            # (`var (a, b) = ...` / `foreach (var (x, y) in ...)`) is legal and
+            # not flagged by Roslyn IDE0008, so exempt `var` immediately
+            # followed by `(`.
+            if re.search(r'(?<!using )\bvar\b(?!\s*\()', line):
                 issues.append(f"  IDE0008 L{i}: 'var' in src/ file: {stripped[:70]}")
 
     # Rule 2: duplicate using directives
@@ -291,11 +295,48 @@ CONFLICT_OVERRIDES = {
 }
 
 
+def _referenced_projects(csproj_path, _seen=None):
+    """
+    Returns the set of project FILE NAMES (e.g. 'Chuvadi.Pdf.Primitives.csproj')
+    reachable from csproj_path through the TRANSITIVE ProjectReference graph,
+    including csproj_path's own file name. Roslyn resolves namespaces through
+    this transitive closure, so a direct ProjectReference is not required for a
+    used namespace as long as some project in the closure provides it.
+
+    Cycle-safe via _seen. Missing referenced files are skipped (the build would
+    catch a genuinely broken reference; this checker only avoids false positives).
+    """
+    import os
+    if _seen is None:
+        _seen = set()
+    csproj_path = os.path.normpath(csproj_path)
+    if csproj_path in _seen:
+        return set()
+    _seen.add(csproj_path)
+
+    names = {os.path.basename(csproj_path)}
+    try:
+        with open(csproj_path) as f:
+            content = f.read()
+    except OSError:
+        return names
+
+    base_dir = os.path.dirname(csproj_path)
+    for inc in re.findall(r'<ProjectReference\s+Include="([^"]+)"', content):
+        # csproj Include paths use backslashes; normalise for the host OS.
+        rel = inc.replace("\\", os.sep)
+        ref_path = os.path.normpath(os.path.join(base_dir, rel))
+        names.add(os.path.basename(ref_path))
+        names |= _referenced_projects(ref_path, _seen)
+    return names
+
+
 def check_csproj(cs_path):
     """
     For each .cs file, find its project's .csproj and verify that every
-    Chuvadi.Pdf.* namespace imported via 'using' has a matching ProjectReference.
-    Raises no issues for the project's own namespace.
+    Chuvadi.Pdf.* namespace imported via 'using' is provided by some project in
+    the TRANSITIVE ProjectReference closure of that csproj. Raises no issue for
+    the project's own namespace or for namespaces reachable transitively.
     """
     issues = []
     import os
@@ -311,9 +352,6 @@ def check_csproj(cs_path):
     if csproj_path is None:
         return issues
 
-    with open(csproj_path) as f:
-        csproj_content = f.read()
-
     with open(cs_path) as f:
         cs_content = f.read()
 
@@ -324,11 +362,19 @@ def check_csproj(cs_path):
     own_ns_match = re.search(r"^namespace (Chuvadi\.Pdf\.[A-Za-z]+)", cs_content, re.MULTILINE)
     own_ns = own_ns_match.group(1) if own_ns_match else ""
 
+    # Transitive closure of project file names reachable from this csproj.
+    reachable = _referenced_projects(csproj_path)
+
     for ns in used_namespaces:
         if ns == own_ns:
             continue
         required_ref = REQUIRED_REFERENCES.get(ns)
-        if required_ref and required_ref not in csproj_content:
+        if not required_ref:
+            continue
+        # Satisfied if the providing project appears anywhere in the transitive
+        # closure (matches how Roslyn resolves the reference).
+        provider_csproj = required_ref + ".csproj"
+        if provider_csproj not in reachable:
             issues.append(
                 f"  CS0234: '{ns}' used but not in ProjectReferences of {os.path.basename(csproj_path)}")
 
@@ -378,48 +424,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-def check_syntax(path):
-    """Basic C# syntax sanity checks to catch Python-escaping corruption."""
-    issues = []
-
-    with open(path, 'rb') as f:
-        raw = f.read()
-
-    # Check for control characters (CR, LF, TAB are OK; others are suspicious inside code)
-    text = raw.decode('utf-8', errors='replace')
-    lines = text.splitlines()
-
-    for i, line in enumerate(lines, 1):
-        # Detect unterminated character literals: a line with an odd number of
-        # unescaped single quotes that are NOT inside a string literal.
-        # Simple heuristic: if a line has a char literal like '\'  (backslash then quote-close)
-        # that's malformed.
-        stripped = line.strip()
-        if stripped.startswith("//"):
-            continue
-
-        # Detect common Python escape corruption patterns:
-        # 1. A bare backslash at end of a char literal: (byte)'\' 
-        if "'\\" in line and "'\\\\" not in line and "'\\n'" not in line and "'\\r'" not in line and "'\\t'" not in line:
-            # Check if there's a lone backslash char literal
-            import re
-            if re.search(r"'\\'[^']", line) or re.search(r"== \(byte\)'\\'\s", line):
-                issues.append(f"  SYNTAX L{i}: possible corrupt char literal (lone backslash): {stripped[:60]}")
-
-        # 2. Actual newline/CR/TAB embedded inside a char/string literal
-        # This is caught by checking raw bytes for control chars in suspicious positions
-        # (Too complex for heuristic — rely on the heredoc rule instead)
-
-    return issues
-
-
-# Patch the main check_file to also call check_syntax
-_original_check_file = check_file
-
-def check_file(path):
-    issues = _original_check_file(path)
-    issues.extend(check_syntax(path))
-    return issues

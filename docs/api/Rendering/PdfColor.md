@@ -5,7 +5,7 @@
 A color value with explicit source color space. Conversion to sRGB happens in the renderer, not in the display list.
 
 ```csharp
-public record PdfColor(PdfColorSpace Space, double C0, double C1, double C2, double C3)
+public readonly record struct PdfColor(PdfColorSpace Space, double C0, double C1, double C2, double C3)
 ```
 
 ## Properties

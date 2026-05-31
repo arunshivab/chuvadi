@@ -5,7 +5,7 @@
 An immutable colour value, with support for DeviceGray, DeviceRGB, and DeviceCMYK colour spaces. All component values are in the range [0, 1]. PDF 32000-1:2008 §8.6.4 — Device colour spaces.
 
 ```csharp
-public struct ColorF : IEquatable<ColorF>
+public readonly struct ColorF : IEquatable<ColorF>
 ```
 
 ## Properties

@@ -31,6 +31,12 @@ namespace Chuvadi.Cryptography.Asn1;
 /// </remarks>
 public static class Asn1String
 {
+    // Encoding.UTF8 uses replacement fallback and never throws on malformed
+    // input. A strict decoder is required so that invalid UTF-8 in a UTF8String
+    // is rejected (the DecoderFallbackException is converted to Asn1Exception).
+    private static readonly UTF8Encoding StrictUtf8 =
+        new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     private static readonly HashSet<char> PrintableChars = BuildPrintableChars();
 
     private static HashSet<char> BuildPrintableChars()
@@ -69,7 +75,7 @@ public static class Asn1String
         }
         try
         {
-            value = Encoding.UTF8.GetString(source, contentOffset, len);
+            value = StrictUtf8.GetString(source, contentOffset, len);
         }
         catch (DecoderFallbackException ex)
         {

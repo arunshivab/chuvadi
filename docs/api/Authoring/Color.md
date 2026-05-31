@@ -5,7 +5,7 @@
 An RGB color in [0, 1] floating-point space. Internally maps to PDF DeviceRGB.
 
 ```csharp
-public record Color(double R, double G, double B)
+public readonly record struct Color(double R, double G, double B)
 ```
 
 ## Methods

@@ -5,7 +5,7 @@
 An axis-aligned bounding rectangle in PDF user-space coords.
 
 ```csharp
-public record Rect(double X, double Y, double Width, double Height)
+public readonly record struct Rect(double X, double Y, double Width, double Height)
 ```
 
 ## Properties

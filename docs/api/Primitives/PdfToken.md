@@ -5,7 +5,7 @@
 A lightweight token produced by `PdfTokenizer`.
 
 ```csharp
-public struct PdfToken : IEquatable<PdfToken>
+public readonly struct PdfToken : IEquatable<PdfToken>
 ```
 
 ## Remarks

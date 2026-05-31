@@ -5,7 +5,7 @@
 An immutable point in 2D user space, measured in PDF points (1/72 inch). Origin is PDF convention: bottom-left, Y increases upward.
 
 ```csharp
-public struct PointF : IEquatable<PointF>
+public readonly struct PointF : IEquatable<PointF>
 ```
 
 ## Constructors

@@ -5,7 +5,7 @@
 A single segment in a vector graphics path. Stores up to three points (for cubic Bezier curves). PDF 32000-1:2008 §8.5.2.
 
 ```csharp
-public struct PathSegment
+public readonly struct PathSegment
 ```
 
 ## Properties

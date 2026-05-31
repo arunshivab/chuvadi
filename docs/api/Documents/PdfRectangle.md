@@ -5,7 +5,7 @@
 An immutable rectangle in PDF user space (points, 1/72 inch). Origin is bottom-left by PDF convention.
 
 ```csharp
-public struct PdfRectangle
+public readonly struct PdfRectangle
 ```
 
 ## Constructors

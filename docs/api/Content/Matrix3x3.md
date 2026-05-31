@@ -5,7 +5,7 @@
 A 3x3 matrix used for 2D affine transformations in PDF user space. PDF uses the form [a b c d e f] representing the matrix: | a b 0 | | c d 0 | | e f 1 | PDF 32000-1:2008 §8.3.3 — Transformation matrices.
 
 ```csharp
-public struct Matrix3x3
+public readonly struct Matrix3x3
 ```
 
 ## Constructors

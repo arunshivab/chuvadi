@@ -5,17 +5,12 @@
 Uniquely identifies an indirect object in a PDF file.
 
 ```csharp
-public record PdfObjectId(int ObjectNumber, int Generation)
+public readonly record struct PdfObjectId(int ObjectNumber, int Generation)
 ```
 
 ## Remarks
 
 Every indirect object in a PDF is identified by a pair of non-negative integers: an object number and a generation number. The generation number is almost always zero in modern PDFs; it increments only when an object is deleted and a new object reuses the same object number (a rare operation in incremental updates). PDF 32000-1:2008 §7.3.10 — Indirect objects.
-
-## Parameters
-
-- `ObjectNumber` — The object number. Must be greater than zero for real objects. Object number 0 is reserved by the PDF specification.
-- `Generation` — The generation number. Zero in the vast majority of PDFs.
 
 ## Properties
 

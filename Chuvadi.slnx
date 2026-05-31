@@ -11,6 +11,7 @@
     <Project Path="examples/Chuvadi.Examples.Reader/Chuvadi.Examples.Reader.csproj" />
     <Project Path="examples/Chuvadi.Examples.Redaction/Chuvadi.Examples.Redaction.csproj" />
     <Project Path="examples/Chuvadi.Examples.Render/Chuvadi.Examples.Render.csproj" />
+    <Project Path="examples/Chuvadi.Examples.Svg/Chuvadi.Examples.Svg.csproj" />
     <Project Path="examples/Chuvadi.Examples.TextExtraction/Chuvadi.Examples.TextExtraction.csproj" />
     <Project Path="examples/Chuvadi.Examples.Watermark/Chuvadi.Examples.Watermark.csproj" />
   </Folder>
@@ -44,7 +45,10 @@
     <Project Path="src/Chuvadi.Pdf.Watermark/Chuvadi.Pdf.Watermark.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Chuvadi.Cryptography.Tests/Chuvadi.Cryptography.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Annotations.Tests/Chuvadi.Pdf.Annotations.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Authoring.Tests/Chuvadi.Pdf.Authoring.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Pdf.Cli.Tests/Chuvadi.Pdf.Cli.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Content.Tests/Chuvadi.Pdf.Content.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Documents.Tests/Chuvadi.Pdf.Documents.Tests.csproj" />
     <Project Path="tests/Chuvadi.Pdf.Encryption.Tests/Chuvadi.Pdf.Encryption.Tests.csproj" />
