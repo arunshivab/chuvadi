@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Sheets.ManualTests</RootNamespace>
+    <AssemblyName>Chuvadi.Sheets.ManualTests</AssemblyName>
+    <StartupObject>Chuvadi.Sheets.ManualTests.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Sheets\Chuvadi.Sheets.csproj" />
+  </ItemGroup>
+
+  <!-- The xUnit project drives these test groups as facts. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Sheets.Tests" />
+  </ItemGroup>
+
+</Project>

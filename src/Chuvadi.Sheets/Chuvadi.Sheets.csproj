@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Sheets</RootNamespace>
+    <AssemblyName>Chuvadi.Sheets</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata (used when publishing/copying the DLL) -->
+    <Product>Chuvadi.Sheets</Product>
+    <Description>Pure-BCL spreadsheet (xlsx) and zip library for .NET. No NuGet dependencies.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>1.1.1</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Generate the XML doc file for IntelliSense without requiring 100% doc coverage. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>xlsx;excel;spreadsheet;zip;ooxml;encryption</PackageTags>
+  </PropertyGroup>
+
+  <!-- Make internals visible to the test/sample assembly so manual tests can exercise the
+       Chuvadi.Sheets.Internal namespace directly. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Sheets.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Sheets.Tests" />
+  </ItemGroup>
+
+  <!-- Shared pure-BCL internals (OOXML packaging, MS-OFFCRYPTO crypto, hardening utilities)
+       are SOURCE-LINKED so the shipped DLL stays a single zero-dependency assembly while the
+       code exists exactly once in the monorepo. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)..\..\shared\Chuvadi.Internal\**\*.cs"
+             Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,764 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Xml;
+using Chuvadi.Docs.Word;
+using Chuvadi.Internal;
+
+namespace Chuvadi.Docs.Internal;
+
+/// <summary>
+/// Serializes a <see cref="Document"/> into a complete WordprocessingML package:
+/// /word/document.xml (+ .rels), /word/styles.xml, /word/numbering.xml (when lists exist),
+/// /word/settings.xml, header/footer parts, docProps, [Content_Types].xml and root .rels —
+/// all through the shared <see cref="OoxmlPackage"/> plumbing. All XML is emitted via
+/// XmlWriter (automatic escaping; no string-concatenated markup).
+///
+/// "Word as ground truth": the structures here follow ECMA-376 WordprocessingML and are
+/// cross-validated against python-docx (an independent OOXML implementation) in the test
+/// suite.
+/// </summary>
+internal static class DocumentSerializer
+{
+    internal const string W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    internal const string R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+    private const string CtDocument = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+    private const string CtStyles = "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+    private const string CtNumbering = "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
+    private const string CtSettings = "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+    private const string CtHeader = "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+    private const string CtFooter = "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+    private const string CtCore = "application/vnd.openxmlformats-package.core-properties+xml";
+    private const string CtApp = "application/vnd.openxmlformats-officedocument.extended-properties+xml";
+
+    private const string RelOfficeDocument = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
+    private const string RelStyles = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
+    private const string RelNumbering = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering";
+    private const string RelSettings = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
+    private const string RelHeader = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
+    private const string RelFooter = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
+    private const string RelHyperlink = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+    private const string RelCore = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
+    private const string RelApp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
+
+    public static void Write(Stream output, Document doc)
+    {
+        using var pkg = OoxmlPackage.Create(output);
+
+        // Collect hyperlinks while writing the body; their relationships are added afterwards.
+        var hyperlinks = new List<(string RelId, string Url)>();
+        bool hasLists = DocumentHasLists(doc);
+
+        // ---- /word/document.xml ----
+        using (var s = pkg.CreatePart("/word/document.xml", CtDocument))
+        using (var x = CreateXml(s))
+        {
+            x.WriteStartDocument(standalone: true);
+            x.WriteStartElement("w", "document", W);
+            x.WriteAttributeString("xmlns", "r", null, R);
+            x.WriteStartElement("body", W);
+
+            object? previous = null;
+            foreach (var block in doc.Blocks)
+            {
+                // Two adjacent tables merge into one in Word; separate them with an
+                // empty paragraph so authoring intent is preserved.
+                if (block is DocTable && previous is DocTable)
+                    WriteEmptyParagraph(x);
+
+                if (block is Paragraph p) WriteParagraph(x, p, hyperlinks);
+                else if (block is DocTable t) WriteTable(x, t, hyperlinks);
+                previous = block;
+            }
+
+            // A table as the last body child (directly before sectPr) trips some Word
+            // versions; always close with a paragraph in that case.
+            if (previous is DocTable) WriteEmptyParagraph(x);
+
+            WriteSectionProperties(x, doc);
+
+            x.WriteEndElement(); // body
+            x.WriteEndElement(); // document
+            x.WriteEndDocument();
+        }
+
+        // ---- /word/styles.xml ----
+        using (var s = pkg.CreatePart("/word/styles.xml", CtStyles))
+        using (var x = CreateXml(s))
+        {
+            WriteStyles(x);
+        }
+
+        // ---- /word/numbering.xml (only when lists are used) ----
+        if (hasLists)
+        {
+            using var s = pkg.CreatePart("/word/numbering.xml", CtNumbering);
+            using var x = CreateXml(s);
+            WriteNumbering(x);
+        }
+
+        // ---- /word/settings.xml (always present; carries documentProtection when set) ----
+        using (var s = pkg.CreatePart("/word/settings.xml", CtSettings))
+        using (var x = CreateXml(s))
+        {
+            WriteSettings(x, doc);
+        }
+
+        // ---- header/footer parts ----
+        int hfIndex = 1;
+        var hfParts = new List<(string Uri, string RelId, string RelType, HeaderFooterContent Content, bool IsHeader)>();
+        void AddHf(HeaderFooterContent c, bool isHeader)
+        {
+            if (!c.HasContent) return;
+            var uri = $"/word/{(isHeader ? "header" : "footer")}{hfIndex}.xml";
+            hfParts.Add((uri, $"rIdHf{hfIndex}", isHeader ? RelHeader : RelFooter, c, isHeader));
+            hfIndex++;
+        }
+        AddHf(doc.Header, isHeader: true);
+        AddHf(doc.Footer, isHeader: false);
+        AddHf(doc.FirstPageHeader, isHeader: true);
+        AddHf(doc.FirstPageFooter, isHeader: false);
+
+        foreach (var (uri, _, _, content, isHeader) in hfParts)
+        {
+            using var s = pkg.CreatePart(uri, isHeader ? CtHeader : CtFooter);
+            using var x = CreateXml(s);
+            x.WriteStartDocument(standalone: true);
+            x.WriteStartElement("w", isHeader ? "hdr" : "ftr", W);
+            x.WriteAttributeString("xmlns", "r", null, R);
+            foreach (var p in content) WriteParagraph(x, p, hyperlinks: null);
+            x.WriteEndElement();
+            x.WriteEndDocument();
+        }
+
+        // ---- docProps ----
+        WriteCoreProps(pkg);
+        WriteAppProps(pkg);
+
+        // ---- relationships ----
+        pkg.AddRelationship("/", "/word/document.xml", RelOfficeDocument, "rId1");
+        pkg.AddRelationship("/", "/docProps/core.xml", RelCore, "rId2");
+        pkg.AddRelationship("/", "/docProps/app.xml", RelApp, "rId3");
+
+        pkg.AddRelationship("/word/document.xml", "/word/styles.xml", RelStyles, "rIdStyles");
+        pkg.AddRelationship("/word/document.xml", "/word/settings.xml", RelSettings, "rIdSettings");
+        if (hasLists)
+            pkg.AddRelationship("/word/document.xml", "/word/numbering.xml", RelNumbering, "rIdNumbering");
+        foreach (var (uri, relId, relType, _, _) in hfParts)
+            pkg.AddRelationship("/word/document.xml", uri, relType, relId);
+        foreach (var (relId, url) in hyperlinks)
+            pkg.AddExternalRelationship("/word/document.xml", url, RelHyperlink, relId);
+
+        pkg.Close();
+    }
+
+    // ---- Body blocks -----------------------------------------------------------------
+
+    private static void WriteEmptyParagraph(XmlWriter x)
+    {
+        x.WriteStartElement("p", W);
+        x.WriteEndElement();
+    }
+
+    internal static void WriteParagraph(XmlWriter x, Paragraph p, List<(string RelId, string Url)>? hyperlinks)
+    {
+        x.WriteStartElement("p", W);
+
+        // pPr — paragraph properties. Child order matters: pStyle, numPr, spacing, jc...
+        bool needsPpr = p.Style != ParagraphStyle.Normal
+            || p.Alignment != ParagraphAlignment.Left
+            || p.List != ListKind.None;
+        if (needsPpr)
+        {
+            x.WriteStartElement("pPr", W);
+            if (p.Style != ParagraphStyle.Normal)
+            {
+                x.WriteStartElement("pStyle", W);
+                x.WriteAttributeString("val", W, StyleId(p.Style));
+                x.WriteEndElement();
+            }
+            if (p.List != ListKind.None)
+            {
+                x.WriteStartElement("numPr", W);
+                x.WriteStartElement("ilvl", W);
+                x.WriteAttributeString("val", W, Math.Clamp(p.ListLevel, 0, 8).ToString(CultureInfo.InvariantCulture));
+                x.WriteEndElement();
+                x.WriteStartElement("numId", W);
+                x.WriteAttributeString("val", W, p.List == ListKind.Bullet ? "1" : "2");
+                x.WriteEndElement();
+                x.WriteEndElement();
+            }
+            if (p.Alignment != ParagraphAlignment.Left)
+            {
+                x.WriteStartElement("jc", W);
+                x.WriteAttributeString("val", W, p.Alignment switch
+                {
+                    ParagraphAlignment.Center => "center",
+                    ParagraphAlignment.Right => "right",
+                    ParagraphAlignment.Justify => "both",
+                    _ => "left",
+                });
+                x.WriteEndElement();
+            }
+            x.WriteEndElement(); // pPr
+        }
+
+        if (p.PageBreakBefore)
+        {
+            x.WriteStartElement("r", W);
+            x.WriteStartElement("br", W);
+            x.WriteAttributeString("type", W, "page");
+            x.WriteEndElement();
+            x.WriteEndElement();
+        }
+
+        foreach (var run in p.Runs)
+        {
+            if (run.FieldInstruction is not null)
+            {
+                // <w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>
+                x.WriteStartElement("fldSimple", W);
+                x.WriteAttributeString("instr", W, run.FieldInstruction);
+                x.WriteStartElement("r", W);
+                WriteText(x, run.TextContent);
+                x.WriteEndElement();
+                x.WriteEndElement();
+                continue;
+            }
+
+            if (run.HyperlinkUrl is not null && hyperlinks is not null)
+            {
+                var relId = $"rIdLink{hyperlinks.Count + 1}";
+                hyperlinks.Add((relId, run.HyperlinkUrl));
+                x.WriteStartElement("hyperlink", W);
+                x.WriteAttributeString("id", R, relId);
+                x.WriteAttributeString("history", W, "1");
+                x.WriteStartElement("r", W);
+                x.WriteStartElement("rPr", W);
+                x.WriteStartElement("rStyle", W);
+                x.WriteAttributeString("val", W, "Hyperlink");
+                x.WriteEndElement();
+                x.WriteEndElement();
+                WriteText(x, run.TextContent);
+                x.WriteEndElement();
+                x.WriteEndElement();
+                continue;
+            }
+
+            x.WriteStartElement("r", W);
+            WriteRunProperties(x, run.Format);
+            WriteText(x, run.TextContent);
+            x.WriteEndElement();
+        }
+
+        x.WriteEndElement(); // p
+    }
+
+    /// <summary>rPr children in schema order: rFonts, b, i, strike, color, sz, u, highlight.</summary>
+    private static void WriteRunProperties(XmlWriter x, TextFormat f)
+    {
+        if (f.IsDefault) return;
+        x.WriteStartElement("rPr", W);
+        if (f.Font is not null)
+        {
+            x.WriteStartElement("rFonts", W);
+            x.WriteAttributeString("ascii", W, f.Font);
+            x.WriteAttributeString("hAnsi", W, f.Font);
+            x.WriteEndElement();
+        }
+        if (f.Bold) { x.WriteStartElement("b", W); x.WriteEndElement(); }
+        if (f.Italic) { x.WriteStartElement("i", W); x.WriteEndElement(); }
+        if (f.Strikethrough) { x.WriteStartElement("strike", W); x.WriteEndElement(); }
+        if (f.ColorHex is not null)
+        {
+            x.WriteStartElement("color", W);
+            x.WriteAttributeString("val", W, f.ColorHex.TrimStart('#'));
+            x.WriteEndElement();
+        }
+        if (f.SizePt > 0)
+        {
+            // Half-points.
+            x.WriteStartElement("sz", W);
+            x.WriteAttributeString("val", W, ((int)Math.Round(f.SizePt * 2)).ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+        if (f.Underline)
+        {
+            x.WriteStartElement("u", W);
+            x.WriteAttributeString("val", W, "single");
+            x.WriteEndElement();
+        }
+        if (f.Highlight is not null)
+        {
+            x.WriteStartElement("highlight", W);
+            x.WriteAttributeString("val", W, f.Highlight);
+            x.WriteEndElement();
+        }
+        x.WriteEndElement();
+    }
+
+    private static void WriteText(XmlWriter x, string text)
+    {
+        x.WriteStartElement("t", W);
+        if (text.Length > 0 && (char.IsWhiteSpace(text[0]) || char.IsWhiteSpace(text[^1])))
+            x.WriteAttributeString("xml", "space", null, "preserve");
+        x.WriteString(text);
+        x.WriteEndElement();
+    }
+
+    private static void WriteTable(XmlWriter x, DocTable t, List<(string RelId, string Url)> hyperlinks)
+    {
+        x.WriteStartElement("tbl", W);
+
+        // tblPr
+        x.WriteStartElement("tblPr", W);
+        x.WriteStartElement("tblW", W);
+        x.WriteAttributeString("w", W, "0");
+        x.WriteAttributeString("type", W, "auto");
+        x.WriteEndElement();
+        if (t.Borders)
+        {
+            x.WriteStartElement("tblBorders", W);
+            foreach (var edge in new[] { "top", "left", "bottom", "right", "insideH", "insideV" })
+            {
+                x.WriteStartElement(edge, W);
+                x.WriteAttributeString("val", W, "single");
+                x.WriteAttributeString("sz", W, "4");
+                x.WriteAttributeString("space", W, "0");
+                x.WriteAttributeString("color", W, "auto");
+                x.WriteEndElement();
+            }
+            x.WriteEndElement();
+        }
+        x.WriteEndElement(); // tblPr
+
+        // tblGrid — one gridCol per column.
+        x.WriteStartElement("tblGrid", W);
+        for (int c = 0; c < t.Columns; c++)
+        {
+            x.WriteStartElement("gridCol", W);
+            if (t.ColumnWidthsPt is not null && c < t.ColumnWidthsPt.Length && t.ColumnWidthsPt[c] > 0)
+                x.WriteAttributeString("w", W, PtToTwips(t.ColumnWidthsPt[c]));
+            x.WriteEndElement();
+        }
+        x.WriteEndElement();
+
+        foreach (var row in t.Rows)
+        {
+            x.WriteStartElement("tr", W);
+            if (row.IsHeader)
+            {
+                x.WriteStartElement("trPr", W);
+                x.WriteStartElement("tblHeader", W);
+                x.WriteEndElement();
+                x.WriteEndElement();
+            }
+
+            int col = 0;
+            while (col < t.Columns)
+            {
+                var cell = row.Cells[col];
+                int span = Math.Clamp(cell.ColumnSpan, 1, t.Columns - col);
+
+                x.WriteStartElement("tc", W);
+                x.WriteStartElement("tcPr", W);
+                x.WriteStartElement("tcW", W);
+                if (t.ColumnWidthsPt is not null && col < t.ColumnWidthsPt.Length && t.ColumnWidthsPt[col] > 0)
+                {
+                    x.WriteAttributeString("w", W, PtToTwips(t.ColumnWidthsPt[col]));
+                    x.WriteAttributeString("type", W, "dxa");
+                }
+                else
+                {
+                    x.WriteAttributeString("w", W, "0");
+                    x.WriteAttributeString("type", W, "auto");
+                }
+                x.WriteEndElement();
+                if (span > 1)
+                {
+                    x.WriteStartElement("gridSpan", W);
+                    x.WriteAttributeString("val", W, span.ToString(CultureInfo.InvariantCulture));
+                    x.WriteEndElement();
+                }
+                if (cell.ShadeHex is not null)
+                {
+                    x.WriteStartElement("shd", W);
+                    x.WriteAttributeString("val", W, "clear");
+                    x.WriteAttributeString("color", W, "auto");
+                    x.WriteAttributeString("fill", W, cell.ShadeHex.TrimStart('#'));
+                    x.WriteEndElement();
+                }
+                x.WriteEndElement(); // tcPr
+
+                // Every tc must contain at least one paragraph.
+                if (cell.Paragraphs.Count == 0) WriteEmptyParagraph(x);
+                else foreach (var p in cell.Paragraphs) WriteParagraph(x, p, hyperlinks);
+
+                x.WriteEndElement(); // tc
+                col += span;
+            }
+
+            x.WriteEndElement(); // tr
+        }
+
+        x.WriteEndElement(); // tbl
+    }
+
+    // ---- Section properties (page setup + header/footer references) -------------------
+
+    private static void WriteSectionProperties(XmlWriter x, Document doc)
+    {
+        x.WriteStartElement("sectPr", W);
+
+        int hfIndex = 1;
+        void Reference(HeaderFooterContent c, bool isHeader, string type)
+        {
+            if (!c.HasContent) return;
+            x.WriteStartElement(isHeader ? "headerReference" : "footerReference", W);
+            x.WriteAttributeString("type", W, type);
+            x.WriteAttributeString("id", R, $"rIdHf{hfIndex}");
+            x.WriteEndElement();
+            hfIndex++;
+        }
+        Reference(doc.Header, isHeader: true, "default");
+        Reference(doc.Footer, isHeader: false, "default");
+        Reference(doc.FirstPageHeader, isHeader: true, "first");
+        Reference(doc.FirstPageFooter, isHeader: false, "first");
+
+        var (pw, ph) = doc.Page.PortraitTwips;
+        bool landscape = doc.Page.Orientation == PageOrientation.Landscape;
+        x.WriteStartElement("pgSz", W);
+        x.WriteAttributeString("w", W, (landscape ? ph : pw).ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("h", W, (landscape ? pw : ph).ToString(CultureInfo.InvariantCulture));
+        if (landscape) x.WriteAttributeString("orient", W, "landscape");
+        x.WriteEndElement();
+
+        x.WriteStartElement("pgMar", W);
+        x.WriteAttributeString("top", W, PtToTwips(doc.Page.TopMarginPt));
+        x.WriteAttributeString("right", W, PtToTwips(doc.Page.RightMarginPt));
+        x.WriteAttributeString("bottom", W, PtToTwips(doc.Page.BottomMarginPt));
+        x.WriteAttributeString("left", W, PtToTwips(doc.Page.LeftMarginPt));
+        x.WriteAttributeString("header", W, "708");
+        x.WriteAttributeString("footer", W, "708");
+        x.WriteAttributeString("gutter", W, "0");
+        x.WriteEndElement();
+
+        if (doc.DifferentFirstPage)
+        {
+            x.WriteStartElement("titlePg", W);
+            x.WriteEndElement();
+        }
+
+        x.WriteEndElement(); // sectPr
+    }
+
+    // ---- styles.xml --------------------------------------------------------------------
+
+    private static void WriteStyles(XmlWriter x)
+    {
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("w", "styles", W);
+
+        // Document defaults: Calibri 11pt.
+        x.WriteStartElement("docDefaults", W);
+        x.WriteStartElement("rPrDefault", W);
+        x.WriteStartElement("rPr", W);
+        x.WriteStartElement("rFonts", W);
+        x.WriteAttributeString("ascii", W, "Calibri");
+        x.WriteAttributeString("hAnsi", W, "Calibri");
+        x.WriteAttributeString("cs", W, "Calibri");
+        x.WriteEndElement();
+        x.WriteStartElement("sz", W);
+        x.WriteAttributeString("val", W, "22");
+        x.WriteEndElement();
+        x.WriteEndElement();
+        x.WriteEndElement();
+        x.WriteStartElement("pPrDefault", W);
+        x.WriteEndElement();
+        x.WriteEndElement();
+
+        void Style(string id, string name, bool isDefault, Action? pPr, Action? rPr, bool character = false)
+        {
+            x.WriteStartElement("style", W);
+            x.WriteAttributeString("type", W, character ? "character" : "paragraph");
+            if (isDefault) x.WriteAttributeString("default", W, "1");
+            x.WriteAttributeString("styleId", W, id);
+            x.WriteStartElement("name", W);
+            x.WriteAttributeString("val", W, name);
+            x.WriteEndElement();
+            x.WriteStartElement("qFormat", W);
+            x.WriteEndElement();
+            if (pPr is not null) { x.WriteStartElement("pPr", W); pPr(); x.WriteEndElement(); }
+            if (rPr is not null) { x.WriteStartElement("rPr", W); rPr(); x.WriteEndElement(); }
+            x.WriteEndElement();
+        }
+        void Sz(int halfPoints)
+        {
+            x.WriteStartElement("sz", W);
+            x.WriteAttributeString("val", W, halfPoints.ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+        void Bold() { x.WriteStartElement("b", W); x.WriteEndElement(); }
+        void Color(string hex)
+        {
+            x.WriteStartElement("color", W);
+            x.WriteAttributeString("val", W, hex);
+            x.WriteEndElement();
+        }
+        void SpacingBefore(int twips)
+        {
+            x.WriteStartElement("spacing", W);
+            x.WriteAttributeString("before", W, twips.ToString(CultureInfo.InvariantCulture));
+            x.WriteAttributeString("after", W, "120");
+            x.WriteEndElement();
+        }
+        void OutlineLvl(int n)
+        {
+            x.WriteStartElement("outlineLvl", W);
+            x.WriteAttributeString("val", W, n.ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+
+        Style("Normal", "Normal", isDefault: true, pPr: null, rPr: null);
+        Style("Title", "Title", false,
+            pPr: () => SpacingBefore(0),
+            rPr: () => { Sz(56); Color("1F3864"); });
+        Style("Heading1", "heading 1", false,
+            pPr: () => { SpacingBefore(240); OutlineLvl(0); },
+            rPr: () => { Bold(); Sz(32); Color("2E74B5"); });
+        Style("Heading2", "heading 2", false,
+            pPr: () => { SpacingBefore(200); OutlineLvl(1); },
+            rPr: () => { Bold(); Sz(26); Color("2E74B5"); });
+        Style("Heading3", "heading 3", false,
+            pPr: () => { SpacingBefore(160); OutlineLvl(2); },
+            rPr: () => { Bold(); Sz(24); Color("1F4D78"); });
+        Style("Quote", "Quote", false,
+            pPr: () =>
+            {
+                x.WriteStartElement("ind", W);
+                x.WriteAttributeString("left", W, "720");
+                x.WriteAttributeString("right", W, "720");
+                x.WriteEndElement();
+            },
+            rPr: () =>
+            {
+                x.WriteStartElement("i", W);
+                x.WriteEndElement();
+                Color("404040");
+            });
+        Style("ListParagraph", "List Paragraph", false,
+            pPr: () =>
+            {
+                x.WriteStartElement("ind", W);
+                x.WriteAttributeString("left", W, "720");
+                x.WriteEndElement();
+                x.WriteStartElement("contextualSpacing", W);
+                x.WriteEndElement();
+            },
+            rPr: null);
+        Style("Hyperlink", "Hyperlink", false,
+            pPr: null,
+            rPr: () =>
+            {
+                Color("0563C1");
+                x.WriteStartElement("u", W);
+                x.WriteAttributeString("val", W, "single");
+                x.WriteEndElement();
+            },
+            character: true);
+
+        x.WriteEndElement(); // styles
+        x.WriteEndDocument();
+    }
+
+    // ---- numbering.xml -------------------------------------------------------------------
+
+    private static void WriteNumbering(XmlWriter x)
+    {
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("w", "numbering", W);
+
+        // abstractNum 0 — bullets; abstractNum 1 — decimal numbering. 9 levels each.
+        string[] bulletChars = { "\u2022", "o", "\u25AA" };
+        for (int abs = 0; abs < 2; abs++)
+        {
+            x.WriteStartElement("abstractNum", W);
+            x.WriteAttributeString("abstractNumId", W, abs.ToString(CultureInfo.InvariantCulture));
+            for (int lvl = 0; lvl < 9; lvl++)
+            {
+                x.WriteStartElement("lvl", W);
+                x.WriteAttributeString("ilvl", W, lvl.ToString(CultureInfo.InvariantCulture));
+                x.WriteStartElement("start", W);
+                x.WriteAttributeString("val", W, "1");
+                x.WriteEndElement();
+                x.WriteStartElement("numFmt", W);
+                x.WriteAttributeString("val", W, abs == 0 ? "bullet" : "decimal");
+                x.WriteEndElement();
+                x.WriteStartElement("lvlText", W);
+                x.WriteAttributeString("val", W, abs == 0
+                    ? bulletChars[lvl % bulletChars.Length]
+                    : $"%{lvl + 1}.");
+                x.WriteEndElement();
+                x.WriteStartElement("lvlJc", W);
+                x.WriteAttributeString("val", W, "left");
+                x.WriteEndElement();
+                x.WriteStartElement("pPr", W);
+                x.WriteStartElement("ind", W);
+                x.WriteAttributeString("left", W, ((lvl + 1) * 720).ToString(CultureInfo.InvariantCulture));
+                x.WriteAttributeString("hanging", W, "360");
+                x.WriteEndElement();
+                x.WriteEndElement();
+                if (abs == 0)
+                {
+                    x.WriteStartElement("rPr", W);
+                    x.WriteStartElement("rFonts", W);
+                    x.WriteAttributeString("ascii", W, lvl % 3 == 1 ? "Courier New" : "Symbol");
+                    x.WriteAttributeString("hAnsi", W, lvl % 3 == 1 ? "Courier New" : "Symbol");
+                    x.WriteEndElement();
+                    x.WriteEndElement();
+                }
+                x.WriteEndElement(); // lvl
+            }
+            x.WriteEndElement(); // abstractNum
+        }
+
+        // num 1 → bullets, num 2 → decimal.
+        for (int num = 1; num <= 2; num++)
+        {
+            x.WriteStartElement("num", W);
+            x.WriteAttributeString("numId", W, num.ToString(CultureInfo.InvariantCulture));
+            x.WriteStartElement("abstractNumId", W);
+            x.WriteAttributeString("val", W, (num - 1).ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+            x.WriteEndElement();
+        }
+
+        x.WriteEndElement();
+        x.WriteEndDocument();
+    }
+
+    // ---- settings.xml (+ documentProtection) ----------------------------------------------
+
+    private static void WriteSettings(XmlWriter x, Document doc)
+    {
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("w", "settings", W);
+
+        if (doc.IsProtected)
+        {
+            // Same iterated-SHA-512 hash family as Excel's sheet protection ([MS-OFFCRYPTO] §2.4.2.4).
+            var salt = Chuvadi.Internal.Crypto.PasswordHasher.GenerateSalt();
+            var hash = Chuvadi.Internal.Crypto.PasswordHasher.ComputeHashBase64(
+                doc.ProtectionPassword!, salt, Chuvadi.Internal.Crypto.PasswordHasher.DefaultSpinCount);
+
+            x.WriteStartElement("documentProtection", W);
+            x.WriteAttributeString("edit", W, doc.ProtectionMode switch
+            {
+                DocumentProtectionMode.ReadOnly => "readOnly",
+                DocumentProtectionMode.Comments => "comments",
+                DocumentProtectionMode.TrackedChanges => "trackedChanges",
+                DocumentProtectionMode.Forms => "forms",
+                _ => "readOnly",
+            });
+            x.WriteAttributeString("enforcement", W, "1");
+            x.WriteAttributeString("cryptProviderType", W, "rsaAES");
+            x.WriteAttributeString("cryptAlgorithmClass", W, "hash");
+            x.WriteAttributeString("cryptAlgorithmType", W, "typeAny");
+            x.WriteAttributeString("cryptAlgorithmSid", W, "14"); // SHA-512
+            x.WriteAttributeString("cryptSpinCount", W,
+                Chuvadi.Internal.Crypto.PasswordHasher.DefaultSpinCount.ToString(CultureInfo.InvariantCulture));
+            x.WriteAttributeString("hash", W, hash);
+            x.WriteAttributeString("salt", W, Convert.ToBase64String(salt));
+            x.WriteEndElement();
+        }
+
+        x.WriteEndElement();
+        x.WriteEndDocument();
+    }
+
+    // ---- docProps ----------------------------------------------------------------------------
+
+    private static void WriteCoreProps(OoxmlPackage pkg)
+    {
+        const string cp = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
+        const string dc = "http://purl.org/dc/elements/1.1/";
+        const string dcterms = "http://purl.org/dc/terms/";
+        const string xsi = "http://www.w3.org/2001/XMLSchema-instance";
+
+        using var s = pkg.CreatePart("/docProps/core.xml", CtCore);
+        using var x = CreateXml(s);
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("cp", "coreProperties", cp);
+        x.WriteAttributeString("xmlns", "dc", null, dc);
+        x.WriteAttributeString("xmlns", "dcterms", null, dcterms);
+        x.WriteAttributeString("xmlns", "xsi", null, xsi);
+        x.WriteStartElement("creator", dc);
+        x.WriteString("Chuvadi.Docs");
+        x.WriteEndElement();
+        var now = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+        x.WriteStartElement("dcterms", "created", dcterms);
+        x.WriteAttributeString("xsi", "type", xsi, "dcterms:W3CDTF");
+        x.WriteString(now);
+        x.WriteEndElement();
+        x.WriteStartElement("dcterms", "modified", dcterms);
+        x.WriteAttributeString("xsi", "type", xsi, "dcterms:W3CDTF");
+        x.WriteString(now);
+        x.WriteEndElement();
+        x.WriteEndElement();
+        x.WriteEndDocument();
+    }
+
+    private static void WriteAppProps(OoxmlPackage pkg)
+    {
+        const string ep = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+        using var s = pkg.CreatePart("/docProps/app.xml", CtApp);
+        using var x = CreateXml(s);
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("Properties", ep);
+        x.WriteStartElement("Application", ep);
+        x.WriteString("Chuvadi.Docs");
+        x.WriteEndElement();
+        x.WriteEndElement();
+        x.WriteEndDocument();
+    }
+
+    // ---- Helpers --------------------------------------------------------------------------
+
+    internal static string StyleId(ParagraphStyle s) => s switch
+    {
+        ParagraphStyle.Title => "Title",
+        ParagraphStyle.Heading1 => "Heading1",
+        ParagraphStyle.Heading2 => "Heading2",
+        ParagraphStyle.Heading3 => "Heading3",
+        ParagraphStyle.Quote => "Quote",
+        ParagraphStyle.ListParagraph => "ListParagraph",
+        _ => "Normal",
+    };
+
+    private static bool DocumentHasLists(Document doc)
+    {
+        foreach (var b in doc.Blocks)
+        {
+            if (b is Paragraph p && p.List != ListKind.None) return true;
+            if (b is DocTable t)
+                foreach (var row in t.Rows)
+                    foreach (var cell in row.Cells)
+                        foreach (var cp in cell.Paragraphs)
+                            if (cp.List != ListKind.None) return true;
+        }
+        return false;
+    }
+
+    private static string PtToTwips(double pt)
+        => ((int)Math.Round(pt * 20)).ToString(CultureInfo.InvariantCulture);
+
+    private static XmlWriter CreateXml(Stream s)
+        => XmlWriter.Create(s, new XmlWriterSettings
+        {
+            Encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            CloseOutput = false,
+            Indent = false,
+        });
+}

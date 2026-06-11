@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build solution (warnings as errors)
+        run: dotnet build -c Release
+
+      - name: Enforce pure-BCL libraries (no PackageReference in src/ or shared/)
+        shell: bash
+        run: |
+          if grep -R "<PackageReference" src/ shared/ ; then
+            echo "::error::Shipped libraries must remain pure-BCL — PackageReference found under src/ or shared/."
+            exit 1
+          fi
+
+      - name: Unit tests — Chuvadi.Sheets (xUnit)
+        run: dotnet test tests/Chuvadi.Sheets.Tests -c Release --no-build --logger "trx;LogFileName=sheets.trx"
+
+      - name: Unit tests — Chuvadi.Docs (xUnit)
+        run: dotnet test tests/Chuvadi.Docs.Tests -c Release --no-build --logger "trx;LogFileName=docs.trx"
+
+      - name: Verification suite — Chuvadi.Sheets (end-to-end)
+        run: dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
+
+      - name: Verification suite — Chuvadi.Docs (end-to-end)
+        run: dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
+
+      - name: Pack both packages
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          dotnet pack src/Chuvadi.Sheets/Chuvadi.Sheets.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Docs/Chuvadi.Docs.csproj -c Release --no-build
+
+      - name: Upload package artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: |
+            artifacts/bin/Chuvadi.Sheets/Release/*.nupkg
+            artifacts/bin/Chuvadi.Docs/Release/*.nupkg

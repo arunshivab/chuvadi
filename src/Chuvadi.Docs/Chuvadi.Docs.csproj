@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Docs</RootNamespace>
+    <AssemblyName>Chuvadi.Docs</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Docs</Product>
+    <Description>Pure-BCL Word document (docx) library for .NET. Write reports with styles, tables, lists, headers/footers; read documents; fill designed templates; password encryption (read and write). No NuGet dependencies.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>1.0.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Generate the XML doc file for IntelliSense without requiring 100% doc coverage. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>docx;word;document;report;template;ooxml;encryption</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Docs.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Docs.Tests" />
+  </ItemGroup>
+
+  <!-- Shared pure-BCL internals (OOXML packaging, MS-OFFCRYPTO crypto, hardening utilities)
+       are SOURCE-LINKED so the shipped DLL stays a single zero-dependency assembly while the
+       code exists exactly once in the monorepo. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)..\..\shared\Chuvadi.Internal\**\*.cs"
+             Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Shared MSBuild properties for all projects in the Chuvadi.Sheets solution.
+    This file is picked up automatically by MSBuild from any project beneath it.
+  -->
+
+  <PropertyGroup>
+    <!-- Disable any accidental NuGet package usage. The library MUST remain pure-BCL. -->
+    <DisableImplicitFrameworkReferences>false</DisableImplicitFrameworkReferences>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+
+    <!-- Compiler hygiene -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Output organization -->
+    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts\bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+</Project>

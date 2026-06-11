@@ -1,0 +1,89 @@
+name: Release
+
+# Per-package releases via tag prefix:
+#   git tag -s sheets-v1.1.1 -m "Chuvadi.Sheets 1.1.1" && git push origin sheets-v1.1.1
+#   git tag -s docs-v1.0.0   -m "Chuvadi.Docs 1.0.0"   && git push origin docs-v1.0.0
+# The prefix selects which package is built, tested, packed, and released.
+# Signed tags (-s) are strongly recommended — see RELEASING.md.
+on:
+  push:
+    tags: ["sheets-v*", "docs-v*"]
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve package from tag prefix
+        id: pkg
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            sheets-v*) NAME="Chuvadi.Sheets" ;;
+            docs-v*)   NAME="Chuvadi.Docs" ;;
+            *) echo "::error::Unrecognized tag prefix: $TAG"; exit 1 ;;
+          esac
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Releasing $NAME from tag $TAG"
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # The whole solution is built and BOTH suites run — a release of one package must
+      # never ship from a commit where the other is broken (shared internals).
+      - name: Build + test everything
+        run: |
+          dotnet build -c Release
+          dotnet test tests/Chuvadi.Sheets.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Docs.Tests -c Release --no-build
+          dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
+
+      - name: Pack ${{ steps.pkg.outputs.name }}
+        run: dotnet pack "src/${{ steps.pkg.outputs.name }}/${{ steps.pkg.outputs.name }}.csproj" -c Release --no-build
+
+      # Author signing (optional): runs only when a code-signing certificate is configured.
+      # Configure two repository secrets:
+      #   SIGNING_CERT_PFX_BASE64 — your PFX code-signing certificate, base64-encoded
+      #   SIGNING_CERT_PASSWORD   — its password
+      - name: Sign package (if certificate configured)
+        if: ${{ env.HAS_CERT == 'true' }}
+        env:
+          HAS_CERT: ${{ secrets.SIGNING_CERT_PFX_BASE64 != '' }}
+          PFX_B64: ${{ secrets.SIGNING_CERT_PFX_BASE64 }}
+          PFX_PWD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          echo "$PFX_B64" | base64 -d > signing.pfx
+          dotnet nuget sign "artifacts/bin/${{ steps.pkg.outputs.name }}/Release/"*.nupkg \
+            --certificate-path signing.pfx \
+            --certificate-password "$PFX_PWD" \
+            --timestamper http://timestamp.digicert.com
+          rm -f signing.pfx
+
+      - name: Create GitHub release with the package attached
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/bin/${{ steps.pkg.outputs.name }}/Release/*.nupkg
+          generate_release_notes: true
+
+      # NuGet.org publication (optional): configure the NUGET_API_KEY secret to enable.
+      - name: Push to NuGet.org (if API key configured)
+        if: ${{ env.HAS_KEY == 'true' }}
+        env:
+          HAS_KEY: ${{ secrets.NUGET_API_KEY != '' }}
+        run: |
+          dotnet nuget push "artifacts/bin/${{ steps.pkg.outputs.name }}/Release/"*.nupkg \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

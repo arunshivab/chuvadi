@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Chuvadi.Docs.ManualTests/Chuvadi.Docs.ManualTests.csproj" />
+    <Project Path="samples/Chuvadi.Sheets.ManualTests/Chuvadi.Sheets.ManualTests.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Chuvadi.Docs/Chuvadi.Docs.csproj" />
+    <Project Path="src/Chuvadi.Sheets/Chuvadi.Sheets.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Chuvadi.Docs.Tests/Chuvadi.Docs.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Sheets.Tests/Chuvadi.Sheets.Tests.csproj" />
+  </Folder>
+</Solution>
