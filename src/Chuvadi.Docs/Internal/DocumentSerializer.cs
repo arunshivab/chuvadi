@@ -314,10 +314,33 @@ internal static class DocumentSerializer
 
         // tblPr
         x.WriteStartElement("tblPr", W);
-        x.WriteStartElement("tblW", W);
-        x.WriteAttributeString("w", W, "0");
-        x.WriteAttributeString("type", W, "auto");
-        x.WriteEndElement();
+        // Table width + layout:
+        //   • Explicit ColumnWidthsPt → fixed layout at the summed width (Word AND LibreOffice
+        //     honour the column widths and don't stretch to page width).
+        //   • No widths → autofit: tblW w=0 type=auto + tblLayout type=autofit. Word fits to
+        //     content; LibreOffice interprets autofit rather than defaulting to full page width.
+        if (t.ColumnWidthsPt is not null && t.ColumnWidthsPt.Length > 0)
+        {
+            double totalTwips = 0;
+            foreach (var w in t.ColumnWidthsPt) totalTwips += w * 20;
+            x.WriteStartElement("tblW", W);
+            x.WriteAttributeString("w", W, ((int)Math.Round(totalTwips)).ToString(CultureInfo.InvariantCulture));
+            x.WriteAttributeString("type", W, "dxa");
+            x.WriteEndElement();
+            x.WriteStartElement("tblLayout", W);
+            x.WriteAttributeString("type", W, "fixed");
+            x.WriteEndElement();
+        }
+        else
+        {
+            x.WriteStartElement("tblW", W);
+            x.WriteAttributeString("w", W, "0");
+            x.WriteAttributeString("type", W, "auto");
+            x.WriteEndElement();
+            x.WriteStartElement("tblLayout", W);
+            x.WriteAttributeString("type", W, "autofit");
+            x.WriteEndElement();
+        }
         if (t.Borders)
         {
             x.WriteStartElement("tblBorders", W);
@@ -581,7 +604,14 @@ internal static class DocumentSerializer
         x.WriteStartElement("w", "numbering", W);
 
         // abstractNum 0 — bullets; abstractNum 1 — decimal numbering. 9 levels each.
-        string[] bulletChars = { "\u2022", "o", "\u25AA" };
+        //
+        // Bullet characters: plain Unicode, NO font override (no Symbol/Wingdings/Courier).
+        // Word's own built-in bullet list does the same — these code points are in every
+        // modern system font, so they render correctly in Word AND LibreOffice.
+        //   U+2022 BULLET            • level 0, 3, 6
+        //   U+2013 EN DASH           – level 1, 4, 7
+        //   U+25AA BLACK SMALL SQ    ▪ level 2, 5, 8
+        string[] bulletChars = { "\u2022", "\u2013", "\u25AA" };
         for (int abs = 0; abs < 2; abs++)
         {
             x.WriteStartElement("abstractNum", W);
@@ -610,15 +640,8 @@ internal static class DocumentSerializer
                 x.WriteAttributeString("hanging", W, "360");
                 x.WriteEndElement();
                 x.WriteEndElement();
-                if (abs == 0)
-                {
-                    x.WriteStartElement("rPr", W);
-                    x.WriteStartElement("rFonts", W);
-                    x.WriteAttributeString("ascii", W, lvl % 3 == 1 ? "Courier New" : "Symbol");
-                    x.WriteAttributeString("hAnsi", W, lvl % 3 == 1 ? "Courier New" : "Symbol");
-                    x.WriteEndElement();
-                    x.WriteEndElement();
-                }
+                // No rPr/rFonts on bullet levels — inherit paragraph font.
+                // This matches Word's own built-in bullet list behaviour.
                 x.WriteEndElement(); // lvl
             }
             x.WriteEndElement(); // abstractNum
