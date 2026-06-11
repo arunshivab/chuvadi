@@ -31,11 +31,13 @@ jobs:
       - name: Build solution (warnings as errors)
         run: dotnet build -c Release
 
-      - name: Enforce pure-BCL libraries (no PackageReference in src/ or shared/)
+      - name: Enforce pure-BCL libraries (no PackageReference in shipped project files)
         shell: bash
         run: |
-          if grep -R "<PackageReference" src/ shared/ ; then
-            echo "::error::Shipped libraries must remain pure-BCL — PackageReference found under src/ or shared/."
+          # Only project files define dependencies — scanning everything would false-positive
+          # on documentation that merely MENTIONS the tag (e.g. package READMEs).
+          if grep -R --include="*.csproj" --include="*.props" --include="*.targets"                "<PackageReference" src/ shared/ ; then
+            echo "::error::Shipped libraries must remain pure-BCL — PackageReference found in a project file under src/ or shared/."
             exit 1
           fi
 

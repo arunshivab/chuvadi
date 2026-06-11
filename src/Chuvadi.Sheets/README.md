@@ -192,9 +192,9 @@ open them in Excel to verify visually.
 
 - `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`
 - `<Nullable>enable</Nullable>`
-- No `<PackageReference>` entries in the SHIPPED LIBRARY (`src/`). Adding one is a
-  deliberate violation, and CI enforces it. Dev-time test tooling (xUnit) lives in
-  `tests/` and never ships.
+- No NuGet package references in the SHIPPED LIBRARY (`src/`). Adding one is a
+  deliberate violation, and CI enforces it by scanning the project files. Dev-time
+  test tooling (xUnit) lives in `tests/` and never ships.
 
 ## License
 
