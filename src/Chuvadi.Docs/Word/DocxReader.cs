@@ -262,41 +262,59 @@ public sealed class DocxReader : IDisposable
         List<string>? currentRow = null;
         StringBuilder? cellText = null;
         bool firstCellParagraph = true;
+        // Track nesting depth relative to the root <w:tbl> we were handed.
+        // depth 0 = the root tbl element itself; depth 1 = direct tr/tc children.
+        // Any w:tbl encountered at depth >= 1 is a NESTED table — we collect its
+        // text inline (so the cell is not empty) but do not let its tr/tc/t nodes
+        // corrupt the outer row/cell state machine.
+        int tblDepth = 0;
 
         if (!sub.Read()) return Array.Empty<string[]>();
         while (!sub.EOF)
         {
             if (sub.NodeType == XmlNodeType.Element && sub.NamespaceURI == DocumentSerializer.W)
             {
+                bool isEmpty = sub.IsEmptyElement;
                 switch (sub.LocalName)
                 {
-                    case "tr":
+                    case "tbl":
+                        tblDepth++;
+                        break;
+                    case "tr" when tblDepth <= 1:
                         currentRow = new List<string>();
                         break;
-                    case "tc":
+                    case "tc" when tblDepth <= 1:
                         cellText = new StringBuilder();
                         firstCellParagraph = true;
                         break;
-                    case "p" when cellText is not null:
+                    case "p" when cellText is not null && tblDepth <= 1:
                         if (!firstCellParagraph) cellText.Append('\n');
                         firstCellParagraph = false;
                         break;
                     case "t" when cellText is not null:
+                        // Collect text regardless of nesting depth — nested table
+                        // text belongs in the containing cell.
                         cellText.Append(sub.ReadElementContentAsString());
                         continue; // cursor already advanced past </t>
                 }
+                // Empty elements have no matching EndElement — adjust depth now.
+                if (isEmpty && sub.LocalName == "tbl") tblDepth--;
             }
             else if (sub.NodeType == XmlNodeType.EndElement && sub.NamespaceURI == DocumentSerializer.W)
             {
-                if (sub.LocalName == "tc" && currentRow is not null && cellText is not null)
+                switch (sub.LocalName)
                 {
-                    currentRow.Add(cellText.ToString());
-                    cellText = null;
-                }
-                else if (sub.LocalName == "tr" && currentRow is not null)
-                {
-                    rows.Add(currentRow.ToArray());
-                    currentRow = null;
+                    case "tbl":
+                        tblDepth--;
+                        break;
+                    case "tc" when tblDepth <= 1 && currentRow is not null && cellText is not null:
+                        currentRow.Add(cellText.ToString());
+                        cellText = null;
+                        break;
+                    case "tr" when tblDepth <= 1 && currentRow is not null:
+                        rows.Add(currentRow.ToArray());
+                        currentRow = null;
+                        break;
                 }
             }
             if (!sub.Read()) break;
