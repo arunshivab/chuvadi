@@ -118,6 +118,23 @@ public sealed class TableCell
         return this;
     }
 
+    /// <summary>Replaces the cell content with a single image paragraph.</summary>
+    public TableCell SetImage(ImageSpec image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        Paragraphs.Clear();
+        Paragraphs.Add(new Paragraph().Image(image));
+        return this;
+    }
+
+    /// <summary>Adds an image paragraph to the cell, keeping any existing content.</summary>
+    public TableCell AddImage(ImageSpec image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        Paragraphs.Add(new Paragraph().Image(image));
+        return this;
+    }
+
     /// <summary>All cell text (paragraphs joined with newlines).</summary>
     public string GetText()
         => string.Join("\n", Paragraphs.ConvertAll(p => p.GetText()));

@@ -19,6 +19,34 @@ internal static class DocumentLoader
 
     public static Document Load(Stream packageStream)
     {
+        // Buffer once: we read the package twice — for the editable model and (via DocxReader)
+        // for image extraction — and OoxmlPackage.Open closes the stream it is given.
+        byte[] bytes;
+        using (var ms = new MemoryStream())
+        {
+            packageStream.CopyTo(ms);
+            bytes = ms.ToArray();
+        }
+
+        var doc = BuildModel(new MemoryStream(bytes));
+
+        // Populate the Images collection from body, headers, and footers.
+        try
+        {
+            using var reader = DocxReader.Open(new MemoryStream(bytes));
+            foreach (var img in reader.Images())
+                doc.AddLoadedImage(img);
+        }
+        catch
+        {
+            // Image extraction is best-effort; a malformed drawing must not fail document load.
+        }
+
+        return doc;
+    }
+
+    private static Document BuildModel(Stream packageStream)
+    {
         using var pkg = OoxmlPackage.Open(packageStream);
 
         string? documentUri = null;

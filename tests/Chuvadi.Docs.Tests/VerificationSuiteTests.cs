@@ -25,6 +25,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_Tables() => TablesTest.Run(FreshOutDir());
     [Fact] public void Suite_HeaderFooterPage() => HeaderFooterPageTest.Run(FreshOutDir());
     [Fact] public void Suite_ReaderRoundTrip() => ReaderRoundTripTest.Run(FreshOutDir());
+    [Fact] public void Suite_Images() => ImageTests.Run(FreshOutDir());
     [Fact] public void Suite_Template() => TemplateTest.Run(FreshOutDir());
     [Fact] public void Suite_ProtectionEncryption() => ProtectionEncryptionTest.Run(FreshOutDir());
 
@@ -137,6 +138,61 @@ public class VerificationSuiteTests
     {
         Assert.ThrowsAny<System.ArgumentException>(() =>
             DocxTemplate.Fill("in.docx", "out.docx", null!));
+    }
+
+    [Fact]
+    public void ImageSpec_AutoSize_FromPngBytes()
+    {
+        // 80x40 @96dpi PNG -> 60x30 pt.
+        var png = ImageTests.SamplePng80x40();
+        var spec = Chuvadi.Docs.Word.ImageSpec.FromBytes(png);
+        Assert.Equal("image/png", spec.ContentType);
+        Assert.True(System.Math.Abs(spec.WidthPt - 60) < 0.5);
+        Assert.True(System.Math.Abs(spec.HeightPt - 30) < 0.5);
+    }
+
+    [Fact]
+    public void Image_InlineRoundTrip_PreservesBytesAndSize()
+    {
+        var dir = FreshOutDir();
+        var path = System.IO.Path.Combine(dir, "rt.docx");
+        var png = ImageTests.SamplePng80x40();
+        var doc = new Chuvadi.Docs.Word.Document();
+        doc.AddImage(Chuvadi.Docs.Word.ImageSpec.Inline(png, "image/png", 60, 30));
+        doc.SaveTo(path);
+
+        using var reader = Chuvadi.Docs.Word.DocxReader.Open(path);
+        var imgs = reader.Images();
+        Assert.Single(imgs);
+        Assert.Equal(png.Length, imgs[0].Bytes.Length);
+        Assert.True(System.Math.Abs(imgs[0].WidthPt - 60) < 0.5);
+        Assert.Equal(Chuvadi.Docs.Word.ImagePlacement.Inline, imgs[0].Placement);
+    }
+
+    [Fact]
+    public void Image_Floating_EmitsAnchor()
+    {
+        var dir = FreshOutDir();
+        var path = System.IO.Path.Combine(dir, "float.docx");
+        var png = ImageTests.SamplePng80x40();
+        var pos = new Chuvadi.Docs.Word.FloatingPosition
+        {
+            HorizontalAnchor = Chuvadi.Docs.Word.HorizontalAnchor.Page,
+            VerticalAnchor = Chuvadi.Docs.Word.VerticalAnchor.Page,
+            HAlign = Chuvadi.Docs.Word.HorizontalAlignment.Center,
+            VAlign = Chuvadi.Docs.Word.VerticalAlignment.Center,
+            Wrap = Chuvadi.Docs.Word.TextWrap.None,
+            BehindText = true,
+        };
+        var doc = new Chuvadi.Docs.Word.Document();
+        doc.AddImage(Chuvadi.Docs.Word.ImageSpec.Float(png, "image/png", 200, 100, pos));
+        doc.SaveTo(path);
+
+        using var reader = Chuvadi.Docs.Word.DocxReader.Open(path);
+        var img = Assert.Single(reader.Images());
+        Assert.Equal(Chuvadi.Docs.Word.ImagePlacement.Floating, img.Placement);
+        Assert.NotNull(img.Position);
+        Assert.True(img.Position!.BehindText);
     }
 
     [Fact]

@@ -59,6 +59,18 @@ public sealed class Document
     /// <summary>Document blocks in order. Items are <see cref="Paragraph"/> or <see cref="DocTable"/>.</summary>
     public IReadOnlyList<object> Blocks => _blocks;
 
+    private readonly List<ImageInfo> _images = new();
+
+    /// <summary>
+    /// Images discovered when the document was loaded (body, headers, and footers), with
+    /// their bytes, display size, placement, and table location. Empty for documents built
+    /// in memory — images you add via <see cref="AddImage"/> are stored on their paragraphs,
+    /// not here. This list is for inspecting LOADED documents (e.g. for the PDF pipeline).
+    /// </summary>
+    public IReadOnlyList<ImageInfo> Images => _images;
+
+    internal void AddLoadedImage(ImageInfo image) => _images.Add(image);
+
     // ---- Building -------------------------------------------------------------------
 
     /// <summary>Adds an empty paragraph and returns it for fluent run building.</summary>
@@ -124,6 +136,15 @@ public sealed class Document
     /// <summary>Inserts a page break (an empty paragraph that starts a new page).</summary>
     public void AddPageBreak()
         => _blocks.Add(new Paragraph { PageBreakBefore = true });
+
+    /// <summary>Adds a new paragraph containing the image (inline or floating).</summary>
+    public Paragraph AddImage(ImageSpec image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        var p = new Paragraph().Image(image);
+        _blocks.Add(p);
+        return p;
+    }
 
     /// <summary>
     /// Applies "restrict editing" protection. COOPERATIVE locking only — content stays

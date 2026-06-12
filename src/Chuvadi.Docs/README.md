@@ -90,6 +90,65 @@ For untrusted files, cap decompression: `DocxReader.Open(path, options: new Docx
 
 `Document.Load(path)` instead builds an **editable** model — paragraphs with basic run formatting (bold/italic/underline/strikethrough, font, size, color, highlight), styles, alignment, lists, and tables as text — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
 
+## Images
+
+Insert images inline (in the text flow) or floating (absolutely positioned, with text wrap):
+
+```csharp
+var doc = new Document();
+
+// Inline — auto-sized from the file's pixel dimensions and DPI:
+doc.AddImage(ImageSpec.FromFile("chart.png"));
+
+// Inline with an explicit display size, inside a paragraph:
+var p = new Paragraph();
+p.Text("Logo: ").Image(ImageSpec.Inline(File.ReadAllBytes("logo.png"), "image/png", 80, 40));
+doc.AddBlock(p);
+
+// Inside a table cell:
+table.Rows[0].Cell(1).SetImage(ImageSpec.FromFile("seal.jpg", widthPt: 48, heightPt: 48));
+
+// Floating watermark, centred on the page, behind the text:
+doc.AddImage(ImageSpec.Float(
+    File.ReadAllBytes("wm.png"), "image/png", widthPt: 300, heightPt: 150,
+    new FloatingPosition
+    {
+        HorizontalAnchor = HorizontalAnchor.Page, HAlign = HorizontalAlignment.Center,
+        VerticalAnchor   = VerticalAnchor.Page,   VAlign = VerticalAlignment.Center,
+        Wrap = TextWrap.None, BehindText = true,
+    }));
+```
+
+`ImageSpec` auto-sizes from PNG, JPEG, BMP, GIF, and TIFF (reading dimensions and DPI in pure BCL); use `Inline`/`Float` with explicit points for any format, including EMF/WMF. `ScaleToWidth`/`ScaleToHeight` rescale while preserving aspect ratio.
+
+**Reading images back:**
+
+```csharp
+using var r = DocxReader.Open("report.docx");
+foreach (var img in r.Images())
+    Console.WriteLine($"{img.FileName} {img.ContentType} {img.WidthPt}x{img.HeightPt}pt " +
+                      $"{img.Placement} table={img.TableIndex} r{img.TableRow} c{img.TableColumn}");
+
+r.SaveImages("./extracted");   // writes image1.png, image2.jpeg, ...
+```
+
+Every `ImageInfo` carries the raw bytes, content type, display size, placement, floating position, host (body/header/footer), and table location — everything a downstream PDF renderer needs.
+
+**Images in templates** — two ways, set up entirely in Word:
+
+```csharp
+DocxTemplate.Fill("template.docx", "out.docx",
+    textValues:  new Dictionary<string,string> { ["Customer"] = "Acme Pvt Ltd" },
+    imageValues: new Dictionary<string,ImageSpec>
+    {
+        // (a) text-to-image: a {{Logo}} placeholder becomes this image, in place.
+        ["Logo"]  = ImageSpec.FromFile("acme-logo.png", widthPt: 90, heightPt: 30),
+        // (b) replace-by-alt-text: an existing template image whose Alt Text is "Seal"
+        //     has its bytes swapped, keeping the template's position and size.
+        ["Seal"]  = ImageSpec.FromFile("seal-2026.png"),
+    });
+```
+
 ## Password protection
 
 ```csharp
@@ -105,9 +164,11 @@ Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` r
 
 There is also cooperative "restrict editing" protection — `doc.Protect("pass", DocumentProtectionMode.ReadOnly)` — which, like Excel's sheet protection, signals intent but does not encrypt; anyone can still read the content.
 
-## Scope (v1)
+## Scope
 
-Deliberately not included: legacy `.doc` (pre-2007 binary format), macros (`.docm`), images, comments, tracked changes, footnote authoring, and multi-section documents. Images and comments are the most likely v1.1 additions.
+Included: paragraphs and rich run formatting, styles, lists, tables, hyperlinks, headers/footers, page setup, **images (inline and floating, read and write, in templates)**, encryption, and restrict-editing protection.
+
+Deliberately not included yet: legacy `.doc` (pre-2007 binary format), macros (`.docm`), comments, tracked changes, footnote authoring, and multi-section documents. Page-to-image rendering is intentionally out of scope for a pure-BCL library and is planned via a future Word→PDF pipeline (the reader already exposes all image bytes and geometry that pipeline needs).
 
 ## License
 

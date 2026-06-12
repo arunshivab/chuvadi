@@ -38,7 +38,7 @@ public sealed class DocxReaderOptions
 /// string everything = r.ExtractText();
 /// </code>
 /// </summary>
-public sealed class DocxReader : IDisposable
+public sealed partial class DocxReader : IDisposable
 {
     private readonly OoxmlPackage _package;
     private readonly string _documentUri;

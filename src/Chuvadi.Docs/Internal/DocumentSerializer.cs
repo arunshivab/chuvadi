@@ -42,14 +42,81 @@ internal static class DocumentSerializer
     private const string RelHyperlink = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
     private const string RelCore = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
     private const string RelApp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
+    private const string RelImage = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+
+    // DrawingML namespaces for images.
+    internal const string WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+    internal const string A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+    internal const string PIC = "http://schemas.openxmlformats.org/drawingml/2006/picture";
+
+    /// <summary>English Metric Units per point (1 pt = 12,700 EMU).</summary>
+    internal const long EmuPerPoint = 12700;
+
+    /// <summary>
+    /// Per-part write context: accumulates the hyperlink and image relationships that a
+    /// single part (document.xml, a header, or a footer) needs, and assigns shared media
+    /// parts through a package-wide registry. Each host part has its own relationship id
+    /// space, so ids only need to be unique within the part.
+    /// </summary>
+    internal sealed class PartContext
+    {
+        public string PartUri { get; }
+        public List<(string RelId, string Url)> Hyperlinks { get; } = new();
+        public List<(string RelId, string MediaUri)> Images { get; } = new();
+
+        private readonly Func<ImageSpec, string> _registerMedia;
+        private readonly Func<int> _nextDrawingId;
+        private int _linkCounter;
+        private int _imageCounter;
+
+        public PartContext(string partUri, Func<ImageSpec, string> registerMedia, Func<int> nextDrawingId)
+        {
+            PartUri = partUri;
+            _registerMedia = registerMedia;
+            _nextDrawingId = nextDrawingId;
+        }
+
+        public string AddHyperlink(string url)
+        {
+            var id = $"rIdLink{++_linkCounter}";
+            Hyperlinks.Add((id, url));
+            return id;
+        }
+
+        /// <summary>Registers the image as a media part and returns the relationship id for this part.</summary>
+        public string AddImage(ImageSpec image)
+        {
+            var mediaUri = _registerMedia(image);
+            var id = $"rIdImg{++_imageCounter}";
+            Images.Add((id, mediaUri));
+            return id;
+        }
+
+        public int NextDrawingId() => _nextDrawingId();
+    }
 
     public static void Write(Stream output, Document doc)
     {
         using var pkg = OoxmlPackage.Create(output);
-
-        // Collect hyperlinks while writing the body; their relationships are added afterwards.
-        var hyperlinks = new List<(string RelId, string Url)>();
         bool hasLists = DocumentHasLists(doc);
+
+        // Package-wide media registry: each image becomes a unique /word/media/imageN.ext
+        // part, written after all the XML parts. A global drawing-id counter keeps every
+        // <wp:docPr id="..."> unique across the whole document, as Word expects.
+        var mediaParts = new List<(string Uri, ImageSpec Image)>();
+        int mediaCounter = 0;
+        int drawingIdCounter = 0;
+        string RegisterMedia(ImageSpec img)
+        {
+            mediaCounter++;
+            var ext = ImageMetadata.ExtensionFor(img.ContentType);
+            var uri = $"/word/media/image{mediaCounter}.{ext}";
+            mediaParts.Add((uri, img));
+            return uri;
+        }
+        int NextDrawingId() => ++drawingIdCounter;
+
+        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId);
 
         // ---- /word/document.xml ----
         using (var s = pkg.CreatePart("/word/document.xml", CtDocument))
@@ -68,8 +135,8 @@ internal static class DocumentSerializer
                 if (block is DocTable && previous is DocTable)
                     WriteEmptyParagraph(x);
 
-                if (block is Paragraph p) WriteParagraph(x, p, hyperlinks);
-                else if (block is DocTable t) WriteTable(x, t, hyperlinks);
+                if (block is Paragraph p) WriteParagraph(x, p, bodyCtx);
+                else if (block is DocTable t) WriteTable(x, t, bodyCtx);
                 previous = block;
             }
 
@@ -121,16 +188,26 @@ internal static class DocumentSerializer
         AddHf(doc.FirstPageHeader, isHeader: true);
         AddHf(doc.FirstPageFooter, isHeader: false);
 
+        var hfContexts = new List<PartContext>();
         foreach (var (uri, _, _, content, isHeader) in hfParts)
         {
+            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId);
+            hfContexts.Add(hfCtx);
             using var s = pkg.CreatePart(uri, isHeader ? CtHeader : CtFooter);
             using var x = CreateXml(s);
             x.WriteStartDocument(standalone: true);
             x.WriteStartElement("w", isHeader ? "hdr" : "ftr", W);
             x.WriteAttributeString("xmlns", "r", null, R);
-            foreach (var p in content) WriteParagraph(x, p, hyperlinks: null);
+            foreach (var p in content) WriteParagraph(x, p, hfCtx);
             x.WriteEndElement();
             x.WriteEndDocument();
+        }
+
+        // ---- media parts (binary) ----
+        foreach (var (uri, img) in mediaParts)
+        {
+            using var s = pkg.CreatePart(uri, img.ContentType);
+            s.Write(img.Bytes, 0, img.Bytes.Length);
         }
 
         // ---- docProps ----
@@ -148,8 +225,17 @@ internal static class DocumentSerializer
             pkg.AddRelationship("/word/document.xml", "/word/numbering.xml", RelNumbering, "rIdNumbering");
         foreach (var (uri, relId, relType, _, _) in hfParts)
             pkg.AddRelationship("/word/document.xml", uri, relType, relId);
-        foreach (var (relId, url) in hyperlinks)
-            pkg.AddExternalRelationship("/word/document.xml", url, RelHyperlink, relId);
+
+        // Per-part hyperlink + image relationships (body and each header/footer).
+        void WriteContextRels(PartContext ctx)
+        {
+            foreach (var (relId, url) in ctx.Hyperlinks)
+                pkg.AddExternalRelationship(ctx.PartUri, url, RelHyperlink, relId);
+            foreach (var (relId, mediaUri) in ctx.Images)
+                pkg.AddRelationship(ctx.PartUri, mediaUri, RelImage, relId);
+        }
+        WriteContextRels(bodyCtx);
+        foreach (var ctx in hfContexts) WriteContextRels(ctx);
 
         pkg.Close();
     }
@@ -162,7 +248,7 @@ internal static class DocumentSerializer
         x.WriteEndElement();
     }
 
-    internal static void WriteParagraph(XmlWriter x, Paragraph p, List<(string RelId, string Url)>? hyperlinks)
+    internal static void WriteParagraph(XmlWriter x, Paragraph p, PartContext? ctx)
     {
         x.WriteStartElement("p", W);
 
@@ -228,10 +314,15 @@ internal static class DocumentSerializer
                 continue;
             }
 
-            if (run.HyperlinkUrl is not null && hyperlinks is not null)
+            if (run.Image is not null && ctx is not null)
             {
-                var relId = $"rIdLink{hyperlinks.Count + 1}";
-                hyperlinks.Add((relId, run.HyperlinkUrl));
+                WriteDrawingRun(x, run.Image, ctx);
+                continue;
+            }
+
+            if (run.HyperlinkUrl is not null && ctx is not null)
+            {
+                var relId = ctx.AddHyperlink(run.HyperlinkUrl);
                 x.WriteStartElement("hyperlink", W);
                 x.WriteAttributeString("id", R, relId);
                 x.WriteAttributeString("history", W, "1");
@@ -247,6 +338,9 @@ internal static class DocumentSerializer
                 continue;
             }
 
+            // Skip empty non-image runs (e.g. an image run reached without a context).
+            if (run.Image is not null) continue;
+
             x.WriteStartElement("r", W);
             WriteRunProperties(x, run.Format);
             WriteText(x, run.TextContent);
@@ -255,6 +349,296 @@ internal static class DocumentSerializer
 
         x.WriteEndElement(); // p
     }
+
+    // ---- Drawing (image) emission ----------------------------------------------------
+
+    /// <summary>Writes a run containing a w:drawing: inline or floating (wp:anchor).</summary>
+    private static void WriteDrawingRun(XmlWriter x, ImageSpec image, PartContext ctx)
+    {
+        var relId = ctx.AddImage(image);
+        int docPrId = ctx.NextDrawingId();
+        long cx = (long)Math.Round(image.WidthPt * EmuPerPoint);
+        long cy = (long)Math.Round(image.HeightPt * EmuPerPoint);
+        string name = $"Picture {docPrId}";
+        string? alt = image.AltText;
+
+        x.WriteStartElement("r", W);
+        x.WriteStartElement("drawing", W);
+
+        if (image.Placement == ImagePlacement.Floating && image.Position is not null)
+            WriteAnchor(x, image.Position, cx, cy, docPrId, name, alt, relId);
+        else
+            WriteInline(x, cx, cy, docPrId, name, alt, relId);
+
+        x.WriteEndElement(); // drawing
+        x.WriteEndElement(); // r
+    }
+
+    private static void WriteInline(XmlWriter x, long cx, long cy, int docPrId, string name, string? alt, string relId)
+    {
+        x.WriteStartElement("wp", "inline", WP);
+        x.WriteAttributeString("distT", "0");
+        x.WriteAttributeString("distB", "0");
+        x.WriteAttributeString("distL", "0");
+        x.WriteAttributeString("distR", "0");
+        WriteExtent(x, cx, cy);
+        WriteEffectExtent(x);
+        WriteDocPr(x, docPrId, name, alt);
+        WriteGraphicFrameLocks(x);
+        WriteGraphic(x, cx, cy, name, relId);
+        x.WriteEndElement(); // inline
+    }
+
+    private static void WriteAnchor(XmlWriter x, FloatingPosition pos, long cx, long cy,
+        int docPrId, string name, string? alt, string relId)
+    {
+        long dist = (long)Math.Round(pos.DistanceFromTextPt * EmuPerPoint);
+        x.WriteStartElement("wp", "anchor", WP);
+        x.WriteAttributeString("distT", dist.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("distB", dist.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("distL", dist.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("distR", dist.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("simplePos", "0");
+        x.WriteAttributeString("relativeHeight",
+            (pos.RelativeHeight ?? (251658240L + docPrId)).ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("behindDoc", pos.Wrap == TextWrap.None && pos.BehindText ? "1" : "0");
+        x.WriteAttributeString("locked", pos.LockAnchor ? "1" : "0");
+        x.WriteAttributeString("layoutInCell", "1");
+        x.WriteAttributeString("allowOverlap", pos.AllowOverlap ? "1" : "0");
+
+        x.WriteStartElement("wp", "simplePos", WP);
+        x.WriteAttributeString("x", "0");
+        x.WriteAttributeString("y", "0");
+        x.WriteEndElement();
+
+        // Horizontal position.
+        x.WriteStartElement("wp", "positionH", WP);
+        x.WriteAttributeString("relativeFrom", HorizontalAnchorValue(pos.HorizontalAnchor));
+        if (pos.HAlign is HorizontalAlignment ha)
+        {
+            x.WriteStartElement("wp", "align", WP);
+            x.WriteString(ha switch
+            {
+                HorizontalAlignment.Left => "left",
+                HorizontalAlignment.Center => "center",
+                HorizontalAlignment.Right => "right",
+                HorizontalAlignment.Inside => "inside",
+                HorizontalAlignment.Outside => "outside",
+                _ => "left",
+            });
+            x.WriteEndElement();
+        }
+        else
+        {
+            x.WriteStartElement("wp", "posOffset", WP);
+            x.WriteString(((long)Math.Round(pos.HorizontalOffsetPt * EmuPerPoint)).ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+        x.WriteEndElement(); // positionH
+
+        // Vertical position.
+        x.WriteStartElement("wp", "positionV", WP);
+        x.WriteAttributeString("relativeFrom", VerticalAnchorValue(pos.VerticalAnchor));
+        if (pos.VAlign is VerticalAlignment va)
+        {
+            x.WriteStartElement("wp", "align", WP);
+            x.WriteString(va switch
+            {
+                VerticalAlignment.Top => "top",
+                VerticalAlignment.Center => "center",
+                VerticalAlignment.Bottom => "bottom",
+                VerticalAlignment.Inside => "inside",
+                VerticalAlignment.Outside => "outside",
+                _ => "top",
+            });
+            x.WriteEndElement();
+        }
+        else
+        {
+            x.WriteStartElement("wp", "posOffset", WP);
+            x.WriteString(((long)Math.Round(pos.VerticalOffsetPt * EmuPerPoint)).ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+        x.WriteEndElement(); // positionV
+
+        WriteExtent(x, cx, cy);
+        WriteEffectExtent(x);
+        WriteWrap(x, pos);
+        WriteDocPr(x, docPrId, name, alt);
+        WriteGraphicFrameLocks(x);
+        WriteGraphic(x, cx, cy, name, relId);
+        x.WriteEndElement(); // anchor
+    }
+
+    private static void WriteWrap(XmlWriter x, FloatingPosition pos)
+    {
+        switch (pos.Wrap)
+        {
+            case TextWrap.None:
+                x.WriteStartElement("wp", "wrapNone", WP);
+                x.WriteEndElement();
+                break;
+            case TextWrap.Square:
+                x.WriteStartElement("wp", "wrapSquare", WP);
+                x.WriteAttributeString("wrapText", "bothSides");
+                x.WriteEndElement();
+                break;
+            case TextWrap.Tight:
+                x.WriteStartElement("wp", "wrapTight", WP);
+                x.WriteAttributeString("wrapText", "bothSides");
+                WriteDefaultWrapPolygon(x);
+                x.WriteEndElement();
+                break;
+            case TextWrap.Through:
+                x.WriteStartElement("wp", "wrapThrough", WP);
+                x.WriteAttributeString("wrapText", "bothSides");
+                WriteDefaultWrapPolygon(x);
+                x.WriteEndElement();
+                break;
+            case TextWrap.TopAndBottom:
+                x.WriteStartElement("wp", "wrapTopAndBottom", WP);
+                x.WriteEndElement();
+                break;
+        }
+    }
+
+    private static void WriteDefaultWrapPolygon(XmlWriter x)
+    {
+        // A simple rectangular wrap polygon (full extent) — Tight/Through still need one.
+        x.WriteStartElement("wp", "wrapPolygon", WP);
+        x.WriteAttributeString("edited", "0");
+        void Pt(string elem, long xx, long yy)
+        {
+            x.WriteStartElement("wp", elem, WP);
+            x.WriteAttributeString("x", xx.ToString(CultureInfo.InvariantCulture));
+            x.WriteAttributeString("y", yy.ToString(CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+        Pt("start", 0, 0);
+        Pt("lineTo", 0, 21600);
+        Pt("lineTo", 21600, 21600);
+        Pt("lineTo", 21600, 0);
+        Pt("lineTo", 0, 0);
+        x.WriteEndElement();
+    }
+
+    private static void WriteExtent(XmlWriter x, long cx, long cy)
+    {
+        x.WriteStartElement("wp", "extent", WP);
+        x.WriteAttributeString("cx", cx.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("cy", cy.ToString(CultureInfo.InvariantCulture));
+        x.WriteEndElement();
+    }
+
+    private static void WriteEffectExtent(XmlWriter x)
+    {
+        x.WriteStartElement("wp", "effectExtent", WP);
+        x.WriteAttributeString("l", "0");
+        x.WriteAttributeString("t", "0");
+        x.WriteAttributeString("r", "0");
+        x.WriteAttributeString("b", "0");
+        x.WriteEndElement();
+    }
+
+    private static void WriteDocPr(XmlWriter x, int id, string name, string? alt)
+    {
+        x.WriteStartElement("wp", "docPr", WP);
+        x.WriteAttributeString("id", id.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("name", name);
+        if (!string.IsNullOrEmpty(alt)) x.WriteAttributeString("descr", alt);
+        x.WriteEndElement();
+    }
+
+    private static void WriteGraphicFrameLocks(XmlWriter x)
+    {
+        x.WriteStartElement("wp", "cNvGraphicFramePr", WP);
+        x.WriteStartElement("a", "graphicFrameLocks", A);
+        x.WriteAttributeString("xmlns", "a", null, A);
+        x.WriteAttributeString("noChangeAspect", "1");
+        x.WriteEndElement();
+        x.WriteEndElement();
+    }
+
+    private static void WriteGraphic(XmlWriter x, long cx, long cy, string name, string relId)
+    {
+        x.WriteStartElement("a", "graphic", A);
+        x.WriteAttributeString("xmlns", "a", null, A);
+        x.WriteStartElement("a", "graphicData", A);
+        x.WriteAttributeString("uri", PIC);
+
+        x.WriteStartElement("pic", "pic", PIC);
+        x.WriteAttributeString("xmlns", "pic", null, PIC);
+
+        // nvPicPr
+        x.WriteStartElement("pic", "nvPicPr", PIC);
+        x.WriteStartElement("pic", "cNvPr", PIC);
+        x.WriteAttributeString("id", "0");
+        x.WriteAttributeString("name", name);
+        x.WriteEndElement();
+        x.WriteStartElement("pic", "cNvPicPr", PIC);
+        x.WriteEndElement();
+        x.WriteEndElement(); // nvPicPr
+
+        // blipFill
+        x.WriteStartElement("pic", "blipFill", PIC);
+        x.WriteStartElement("a", "blip", A);
+        x.WriteAttributeString("r", "embed", R, relId);
+        x.WriteEndElement();
+        x.WriteStartElement("a", "stretch", A);
+        x.WriteStartElement("a", "fillRect", A);
+        x.WriteEndElement();
+        x.WriteEndElement();
+        x.WriteEndElement(); // blipFill
+
+        // spPr
+        x.WriteStartElement("pic", "spPr", PIC);
+        x.WriteStartElement("a", "xfrm", A);
+        x.WriteStartElement("a", "off", A);
+        x.WriteAttributeString("x", "0");
+        x.WriteAttributeString("y", "0");
+        x.WriteEndElement();
+        x.WriteStartElement("a", "ext", A);
+        x.WriteAttributeString("cx", cx.ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("cy", cy.ToString(CultureInfo.InvariantCulture));
+        x.WriteEndElement();
+        x.WriteEndElement(); // xfrm
+        x.WriteStartElement("a", "prstGeom", A);
+        x.WriteAttributeString("prst", "rect");
+        x.WriteStartElement("a", "avLst", A);
+        x.WriteEndElement();
+        x.WriteEndElement(); // prstGeom
+        x.WriteEndElement(); // spPr
+
+        x.WriteEndElement(); // pic
+        x.WriteEndElement(); // graphicData
+        x.WriteEndElement(); // graphic
+    }
+
+    private static string HorizontalAnchorValue(HorizontalAnchor a) => a switch
+    {
+        HorizontalAnchor.Page => "page",
+        HorizontalAnchor.Margin => "margin",
+        HorizontalAnchor.Column => "column",
+        HorizontalAnchor.Character => "character",
+        HorizontalAnchor.LeftMargin => "leftMargin",
+        HorizontalAnchor.RightMargin => "rightMargin",
+        HorizontalAnchor.InsideMargin => "insideMargin",
+        HorizontalAnchor.OutsideMargin => "outsideMargin",
+        _ => "column",
+    };
+
+    private static string VerticalAnchorValue(VerticalAnchor a) => a switch
+    {
+        VerticalAnchor.Page => "page",
+        VerticalAnchor.Margin => "margin",
+        VerticalAnchor.Line => "line",
+        VerticalAnchor.Paragraph => "paragraph",
+        VerticalAnchor.TopMargin => "topMargin",
+        VerticalAnchor.BottomMargin => "bottomMargin",
+        VerticalAnchor.InsideMargin => "insideMargin",
+        VerticalAnchor.OutsideMargin => "outsideMargin",
+        _ => "paragraph",
+    };
 
     /// <summary>rPr children in schema order: rFonts, b, i, strike, color, sz, u, highlight.</summary>
     private static void WriteRunProperties(XmlWriter x, TextFormat f)
@@ -308,7 +692,7 @@ internal static class DocumentSerializer
         x.WriteEndElement();
     }
 
-    private static void WriteTable(XmlWriter x, DocTable t, List<(string RelId, string Url)> hyperlinks)
+    private static void WriteTable(XmlWriter x, DocTable t, PartContext ctx)
     {
         x.WriteStartElement("tbl", W);
 
@@ -417,7 +801,7 @@ internal static class DocumentSerializer
 
                 // Every tc must contain at least one paragraph.
                 if (cell.Paragraphs.Count == 0) WriteEmptyParagraph(x);
-                else foreach (var p in cell.Paragraphs) WriteParagraph(x, p, hyperlinks);
+                else foreach (var p in cell.Paragraphs) WriteParagraph(x, p, ctx);
 
                 x.WriteEndElement(); // tc
                 col += span;

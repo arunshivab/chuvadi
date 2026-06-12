@@ -378,24 +378,59 @@ internal sealed class OoxmlPackage : IDisposable
         var entry = _zip.GetEntry(ContentTypesPath)
             ?? throw new InvalidDataException("Package is missing [Content_Types].xml; not a valid OOXML package.");
 
-        using var stream = entry.Open();
-        using var reader = XmlReader.Create(stream, new XmlReaderSettings
+        // A part's content type comes from an <Override PartName=.../> when present, otherwise
+        // from the <Default Extension=.../> for its extension. Word writes media (images, fonts)
+        // using Default entries, so honoring Defaults is required to open those parts — not just
+        // the Overrides we ourselves emit. We collect both, then materialize a part for every
+        // non-metadata zip entry, preferring its Override and falling back to its Default.
+        var defaults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        using (var stream = entry.Open())
+        using (var reader = XmlReader.Create(stream, new XmlReaderSettings
         {
             IgnoreWhitespace = true,
             IgnoreComments = true,
             CloseInput = false,
-        });
-
-        while (reader.Read())
+        }))
         {
-            if (reader.NodeType != XmlNodeType.Element) continue;
-            if (reader.LocalName != "Override") continue;
+            while (reader.Read())
+            {
+                if (reader.NodeType != XmlNodeType.Element) continue;
+                if (reader.LocalName == "Default")
+                {
+                    var ext = reader.GetAttribute("Extension");
+                    var ct = reader.GetAttribute("ContentType");
+                    if (ext is not null && ct is not null) defaults[ext.TrimStart('.')] = ct;
+                }
+                else if (reader.LocalName == "Override")
+                {
+                    var partName = reader.GetAttribute("PartName");
+                    var contentType = reader.GetAttribute("ContentType");
+                    if (partName is not null && contentType is not null) overrides[partName] = contentType;
+                }
+            }
+        }
 
-            var partName = reader.GetAttribute("PartName");
-            var contentType = reader.GetAttribute("ContentType");
-            if (partName is null || contentType is null) continue;
-
+        // Register every Override part (these may not even correspond to a single extension rule).
+        foreach (var (partName, contentType) in overrides)
             _parts[partName] = new PackagePart(partName, contentType);
+
+        // Register parts covered only by a Default extension mapping (e.g. /word/media/image1.png).
+        // The .rels and [Content_Types].xml metadata files are not parts.
+        foreach (var zipEntry in _zip.Entries)
+        {
+            var partName = "/" + zipEntry.FullName;
+            if (_parts.ContainsKey(partName)) continue;
+            if (partName.EndsWith(".rels", StringComparison.Ordinal)) continue;
+            if (partName == "/" + ContentTypesPath) continue;
+            if (zipEntry.FullName.Length == 0 || zipEntry.FullName.EndsWith("/", StringComparison.Ordinal)) continue;
+
+            var dot = partName.LastIndexOf('.');
+            if (dot < 0) continue;
+            var ext = partName[(dot + 1)..];
+            if (defaults.TryGetValue(ext, out var ct))
+                _parts[partName] = new PackagePart(partName, ct);
         }
     }
 

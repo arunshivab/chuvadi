@@ -60,6 +60,14 @@ public sealed class Paragraph
         return this;
     }
 
+    /// <summary>Appends an image run (inline, or floating anchored to this paragraph).</summary>
+    public Paragraph Image(ImageSpec image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        _runs.Add(new Run(string.Empty, TextFormat.None) { Image = image });
+        return this;
+    }
+
     /// <summary>Appends a "Page N" / "Page N of M" field sequence (meaningful in headers/footers).</summary>
     public Paragraph PageNumber(bool includeTotal = false)
     {
@@ -99,6 +107,9 @@ public sealed class Run
     /// <summary>Non-null when this run is a simple field; holds the field instruction
     /// (e.g. " PAGE ", " NUMPAGES ").</summary>
     public string? FieldInstruction { get; private init; }
+
+    /// <summary>Non-null when this run is an image (inline or floating).</summary>
+    public ImageSpec? Image { get; init; }
 
     public Run(string text, TextFormat format)
     {

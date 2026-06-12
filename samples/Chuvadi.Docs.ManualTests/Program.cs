@@ -26,6 +26,7 @@ public static class Program
             ("Tables", TablesTest.Run),
             ("HeaderFooterPage", HeaderFooterPageTest.Run),
             ("ReaderRoundTrip", ReaderRoundTripTest.Run),
+            ("Images", ImageTests.Run),
             ("Template", TemplateTest.Run),
             ("ProtectionEncryption", ProtectionEncryptionTest.Run),
         };
