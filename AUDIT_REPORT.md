@@ -1,6 +1,6 @@
 # Chuvadi.Sheets — Full Audit Report & Remediation Record
 
-**Subject:** `github.com/arunshivab/Chuvadi.Sheets` (C# / .NET 10, pure-BCL xlsx + zip library)
+**Subject:** `github.com/arunshivab/chuvadi` (C# / .NET 10, pure-BCL xlsx + zip library)
 **Report date:** 2026-06-11 (updated same day for v1.1.0)
 **Scope:** Security, compliance, IP (patent/trademark/copyright), cybersecurity, capability
 assessment, and code-comment review — followed by implementation of all remediations
