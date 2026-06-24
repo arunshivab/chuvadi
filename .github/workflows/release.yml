@@ -3,11 +3,12 @@ name: Release
 # Per-package releases via tag prefix:
 #   git tag -s sheets-v1.1.1 -m "Chuvadi.Sheets 1.1.1" && git push origin sheets-v1.1.1
 #   git tag -s docs-v1.0.0   -m "Chuvadi.Docs 1.0.0"   && git push origin docs-v1.0.0
+#   git tag -s print-v0.1.0  -m "Chuvadi.Print 0.1.0"  && git push origin print-v0.1.0
 # The prefix selects which package is built, tested, packed, and released.
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*"]
 
 permissions:
   contents: write
@@ -30,6 +31,7 @@ jobs:
           case "$TAG" in
             sheets-v*) NAME="Chuvadi.Sheets" ;;
             docs-v*)   NAME="Chuvadi.Docs" ;;
+            print-v*)  NAME="Chuvadi.Print" ;;
             *) echo "::error::Unrecognized tag prefix: $TAG"; exit 1 ;;
           esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
@@ -40,23 +42,22 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      # The whole solution is built and BOTH suites run — a release of one package must
-      # never ship from a commit where the other is broken (shared internals).
+      # The whole solution is built and ALL suites run — a release of one package must
+      # never ship from a commit where another is broken (shared internals).
       - name: Build + test everything
         run: |
           dotnet build -c Release
           dotnet test tests/Chuvadi.Sheets.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Docs.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Print.Tests -c Release --no-build
           dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
 
       - name: Pack ${{ steps.pkg.outputs.name }}
         run: dotnet pack "src/${{ steps.pkg.outputs.name }}/${{ steps.pkg.outputs.name }}.csproj" -c Release --no-build
 
       # Author signing (optional): runs only when a code-signing certificate is configured.
-      # Configure two repository secrets:
-      #   SIGNING_CERT_PFX_BASE64 — your PFX code-signing certificate, base64-encoded
-      #   SIGNING_CERT_PASSWORD   — its password
       - name: Sign package (if certificate configured)
         if: ${{ env.HAS_CERT == 'true' }}
         env:
