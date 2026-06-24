@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Print</RootNamespace>
+    <AssemblyName>Chuvadi.Print</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Print</Product>
+    <Description>Pure-BCL printing library for .NET: device-independent print settings, page selection, and the portable spool envelope. No NuGet dependencies. (Windows spooler and PDF rasterisation arrive in later layers.)</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>print;printing;spool;pdf;reports</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Print.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Print.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
