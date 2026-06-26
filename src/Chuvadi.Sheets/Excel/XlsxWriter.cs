@@ -616,99 +616,103 @@ $@"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>
     /// </summary>
     private static int ScanAndWrite(byte[] buffer, int total, Stream dest)
     {
-        ReadOnlySpan<byte> prefix = "__CHUVADI_SS_"u8;
-        ReadOnlySpan<byte> suffix = "_END__"u8;
-
-        int i = 0;
-        int writeFrom = 0;
-
-        while (i <= total - prefix.Length)
+        int safeEnd = 0;
+        foreach (var seg in FindPlaceholderSegments(buffer, total))
         {
-            if (buffer[i] != prefix[0] || !buffer.AsSpan(i, prefix.Length).SequenceEqual(prefix))
-            {
-                i++;
-                continue;
-            }
-
-            int idStart = i + prefix.Length;
-            int idEnd = idStart;
-            while (idEnd < total && buffer[idEnd] >= (byte)'0' && buffer[idEnd] <= (byte)'9')
-                idEnd++;
-
-            if (idEnd == total || idEnd + suffix.Length > total)
-                break;  // Insufficient bytes; carry to next read.
-
-            if (idEnd == idStart)
-            {
-                i++;
-                continue;  // Malformed.
-            }
-
-            if (!buffer.AsSpan(idEnd, suffix.Length).SequenceEqual(suffix))
-            {
-                i++;
-                continue;
-            }
-
-            if (i > writeFrom) dest.Write(buffer, writeFrom, i - writeFrom);
-            dest.Write(buffer, idStart, idEnd - idStart);
-
-            int placeholderEnd = idEnd + suffix.Length;
-            writeFrom = placeholderEnd;
-            i = placeholderEnd;
+            if (seg.LiteralLen > 0) dest.Write(buffer, seg.LiteralFrom, seg.LiteralLen);
+            if (seg.IdLen > 0)      dest.Write(buffer, seg.IdFrom, seg.IdLen);
+            safeEnd = seg.NextI;
         }
-
-        // Determine the final flush.
-        int safeEnd = i;
-        if (safeEnd < writeFrom) safeEnd = writeFrom;
-        if (safeEnd > writeFrom) dest.Write(buffer, writeFrom, safeEnd - writeFrom);
         return safeEnd;
     }
 
     private static async Task<int> ScanAndWriteAsync(byte[] buffer, int total, Stream dest, CancellationToken ct)
     {
-        // Identical logic to ScanAndWrite, but uses WriteAsync. We don't share the scan logic
-        // because async lambdas would explode this in source; the duplication is acceptable for
-        // a hot path.
-        const string prefixStr = "__CHUVADI_SS_";
-        const string suffixStr = "_END__";
-        byte[] prefix = Encoding.ASCII.GetBytes(prefixStr);
-        byte[] suffix = Encoding.ASCII.GetBytes(suffixStr);
+        int safeEnd = 0;
+        foreach (var seg in FindPlaceholderSegments(buffer, total))
+        {
+            if (seg.LiteralLen > 0)
+                await dest.WriteAsync(buffer.AsMemory(seg.LiteralFrom, seg.LiteralLen), ct).ConfigureAwait(false);
+            if (seg.IdLen > 0)
+                await dest.WriteAsync(buffer.AsMemory(seg.IdFrom, seg.IdLen), ct).ConfigureAwait(false);
+            safeEnd = seg.NextI;
+        }
+        return safeEnd;
+    }
+
+    /// <summary>
+    /// One write batch produced by the scanner: a literal run (bytes to pass through verbatim)
+    /// followed by an id run (the digit bytes inside a resolved placeholder). Either run may be
+    /// empty. NextI is the byte index immediately after this segment — the value to return as
+    /// "safeEnd" for the carry-over calculation.
+    /// </summary>
+    private readonly record struct ScanSegment(int LiteralFrom, int LiteralLen, int IdFrom, int IdLen, int NextI);
+
+    /// <summary>
+    /// Single placeholder-scan implementation shared by sync and async copy paths. Yields a
+    /// segment for each placeholder found, plus a final tail segment with any trailing literal
+    /// bytes. The caller decides whether to write sync or async; this method does no I/O.
+    /// The prefix/suffix byte arrays are static-init so no per-call allocation occurs (this
+    /// was a real bug in the prior async path — it called Encoding.ASCII.GetBytes per call).
+    /// </summary>
+    private static readonly byte[] PlaceholderPrefixBytes = "__CHUVADI_SS_"u8.ToArray();
+    private static readonly byte[] PlaceholderSuffixBytes = "_END__"u8.ToArray();
+
+    private static IEnumerable<ScanSegment> FindPlaceholderSegments(byte[] buffer, int total)
+    {
+        int prefixLen = PlaceholderPrefixBytes.Length;
+        int suffixLen = PlaceholderSuffixBytes.Length;
 
         int i = 0;
         int writeFrom = 0;
 
-        while (i <= total - prefix.Length)
+        while (i <= total - prefixLen)
         {
-            if (buffer[i] != prefix[0] || !buffer.AsSpan(i, prefix.Length).SequenceEqual(prefix))
+            var prefix = PlaceholderPrefixBytes.AsSpan();
+            if (buffer[i] != prefix[0] || !buffer.AsSpan(i, prefixLen).SequenceEqual(prefix))
             {
                 i++;
                 continue;
             }
 
-            int idStart = i + prefix.Length;
+            int idStart = i + prefixLen;
             int idEnd = idStart;
             while (idEnd < total && buffer[idEnd] >= (byte)'0' && buffer[idEnd] <= (byte)'9')
                 idEnd++;
 
-            if (idEnd == total || idEnd + suffix.Length > total) break;
-            if (idEnd == idStart) { i++; continue; }
-            if (!buffer.AsSpan(idEnd, suffix.Length).SequenceEqual(suffix)) { i++; continue; }
+            if (idEnd == total || idEnd + suffixLen > total)
+                break;  // Insufficient bytes; carry to next read.
 
-            if (i > writeFrom)
-                await dest.WriteAsync(buffer.AsMemory(writeFrom, i - writeFrom), ct).ConfigureAwait(false);
-            await dest.WriteAsync(buffer.AsMemory(idStart, idEnd - idStart), ct).ConfigureAwait(false);
+            if (idEnd == idStart)
+            {
+                i++;
+                continue;  // Malformed (no digits).
+            }
 
-            int placeholderEnd = idEnd + suffix.Length;
+            if (!buffer.AsSpan(idEnd, suffixLen).SequenceEqual(PlaceholderSuffixBytes.AsSpan()))
+            {
+                i++;
+                continue;
+            }
+
+            int placeholderEnd = idEnd + suffixLen;
+            yield return new ScanSegment(
+                LiteralFrom: writeFrom,
+                LiteralLen:  i - writeFrom,
+                IdFrom:      idStart,
+                IdLen:       idEnd - idStart,
+                NextI:       placeholderEnd);
+
             writeFrom = placeholderEnd;
             i = placeholderEnd;
         }
 
+        // Final tail — flush remaining literal between writeFrom and the safe boundary.
         int safeEnd = i;
-        if (safeEnd < writeFrom) safeEnd = writeFrom;
         if (safeEnd > writeFrom)
-            await dest.WriteAsync(buffer.AsMemory(writeFrom, safeEnd - writeFrom), ct).ConfigureAwait(false);
-        return safeEnd;
+            yield return new ScanSegment(writeFrom, safeEnd - writeFrom, 0, 0, safeEnd);
+        else if (safeEnd == 0 && writeFrom == 0)
+            yield return new ScanSegment(0, 0, 0, 0, 0);  // Empty input — caller still expects a return value.
     }
 
     // ---- Helpers -------------------------------------------------------------------

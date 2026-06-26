@@ -572,94 +572,19 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
     // ---- Internal async row machinery ----------------------------------------------
     //
-    // The async path uses XmlWriter's *Async methods to avoid blocking on the underlying
-    // FileStream. The XML element structure is identical to the sync path.
+    // The XmlWriter writes into a 64KB buffered FileStream opened with FileOptions.Asynchronous.
+    // The XmlWriter's per-call writes hit that in-memory buffer; the buffer drains to disk
+    // asynchronously when it fills. Calling the XmlWriter's *Async methods individually doesn't
+    // add value here — they just defer the synchronous buffer copy through a Task wrapper.
+    // So all async row APIs route through the sync implementations and return CompletedTask.
 
-    private async Task EnsureWorksheetOpenAsync()
-    {
-        EnsureNotDisposed();
-        if (_worksheetOpened) return;
-
-        await _xml.WriteStartDocumentAsync(true).ConfigureAwait(false);
-        await _xml.WriteStartElementAsync(null, "worksheet", SsNs).ConfigureAwait(false);
-        await _xml.WriteAttributeStringAsync("xmlns", "r", null, RelNs).ConfigureAwait(false);
-
-        if (_freezeRows > 0 || _freezeCols > 0)
-        {
-            await _xml.WriteStartElementAsync(null, "sheetViews", SsNs).ConfigureAwait(false);
-            await _xml.WriteStartElementAsync(null, "sheetView", SsNs).ConfigureAwait(false);
-            await _xml.WriteAttributeStringAsync(null, "workbookViewId", null, "0").ConfigureAwait(false);
-            await _xml.WriteStartElementAsync(null, "pane", SsNs).ConfigureAwait(false);
-            if (_freezeCols > 0)
-                await _xml.WriteAttributeStringAsync(null, "xSplit", null,
-                    _freezeCols.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-            if (_freezeRows > 0)
-                await _xml.WriteAttributeStringAsync(null, "ySplit", null,
-                    _freezeRows.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-            await _xml.WriteAttributeStringAsync(null, "topLeftCell", null,
-                CellAddress.ToA1(_freezeRows + 1, _freezeCols + 1)).ConfigureAwait(false);
-            await _xml.WriteAttributeStringAsync(null, "activePane", null,
-                (_freezeRows > 0 && _freezeCols > 0) ? "bottomRight"
-                : (_freezeRows > 0)                  ? "bottomLeft"
-                                                     : "topRight").ConfigureAwait(false);
-            await _xml.WriteAttributeStringAsync(null, "state", null, "frozen").ConfigureAwait(false);
-            await _xml.WriteEndElementAsync().ConfigureAwait(false); // </pane>
-            await _xml.WriteEndElementAsync().ConfigureAwait(false); // </sheetView>
-            await _xml.WriteEndElementAsync().ConfigureAwait(false); // </sheetViews>
-        }
-
-        if (_columnWidths.Count > 0)
-        {
-            await _xml.WriteStartElementAsync(null, "cols", SsNs).ConfigureAwait(false);
-            foreach (var (min, max, width) in _columnWidths)
-            {
-                await _xml.WriteStartElementAsync(null, "col", SsNs).ConfigureAwait(false);
-                await _xml.WriteAttributeStringAsync(null, "min", null, min.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-                await _xml.WriteAttributeStringAsync(null, "max", null, max.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-                await _xml.WriteAttributeStringAsync(null, "width", null, width.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-                await _xml.WriteAttributeStringAsync(null, "customWidth", null, "1").ConfigureAwait(false);
-                await _xml.WriteEndElementAsync().ConfigureAwait(false);
-            }
-            await _xml.WriteEndElementAsync().ConfigureAwait(false);
-        }
-
-        await _xml.WriteStartElementAsync(null, "sheetData", SsNs).ConfigureAwait(false);
-        _worksheetOpened = true;
-    }
-
-    private async Task BeginRowAsync()
-    {
-        if (_rowInProgress) throw new InvalidOperationException("A row is already in progress.");
-        _rowsWritten++;
-        _currentColumn = 0;
-        _rowInProgress = true;
-
-        await _xml.WriteStartElementAsync(null, "row", SsNs).ConfigureAwait(false);
-        await _xml.WriteAttributeStringAsync(null, "r", null,
-            _rowsWritten.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-    }
-
-    private async Task EndRowAsync()
-    {
-        if (!_rowInProgress) return;
-        await _xml.WriteEndElementAsync().ConfigureAwait(false);
-        _rowInProgress = false;
-    }
-
-    /// <summary>
-    /// Async cell-write. To keep this file maintainable we route through the synchronous XmlWriter
-    /// methods inside an async wrapper. The performance critical part — actual IO to the temp file
-    /// — is async because the FileStream was opened with FileOptions.Asynchronous, and the
-    /// XmlWriter was created with Async=true (which makes its FlushAsync genuinely non-blocking).
-    /// </summary>
-    private async Task AppendCellAsync(object? value, int? styleId)
+    private Task EnsureWorksheetOpenAsync()      { EnsureWorksheetOpen(); return Task.CompletedTask; }
+    private Task BeginRowAsync()                 { BeginRow();             return Task.CompletedTask; }
+    private Task EndRowAsync()                   { EndRow();               return Task.CompletedTask; }
+    private Task AppendCellAsync(object? value, int? styleId)
     {
         AppendCell(value, styleId);
-        // Flush async at the end of each row would be ideal but causes huge overhead per row.
-        // Instead, we rely on FileStream's internal buffer to absorb writes, and FlushAsync at
-        // sheet finalization. This keeps async-write throughput close to sync-write throughput
-        // while ensuring no blocking I/O when the buffer eventually drains to disk.
-        await Task.CompletedTask.ConfigureAwait(false);
+        return Task.CompletedTask;
     }
 
     // ---- Finalization --------------------------------------------------------------

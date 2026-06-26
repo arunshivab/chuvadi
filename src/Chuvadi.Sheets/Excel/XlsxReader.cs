@@ -424,8 +424,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         int cellDepth = _xml.Depth;
         string? rawValue = null;
         bool isFormula = false;
-        bool inInlineStr = false;
-        var inlineSb = new System.Text.StringBuilder();
+        System.Text.StringBuilder? inlineSb = null;   // allocated lazily only for inline strings
 
         while (_xml.Read())
         {
@@ -447,13 +446,13 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 else if (_xml.LocalName == "is")
                 {
                     // Inline string container — extract its text content.
-                    inInlineStr = true;
+                    inlineSb ??= new System.Text.StringBuilder();
                     ExtractStringFromInlineStrContainer(inlineSb);
                 }
             }
         }
 
-        if (inInlineStr) return inlineSb.ToString();
+        if (inlineSb is not null) return inlineSb.ToString();
         if (rawValue is null) return null;
 
         return InterpretRawValue(cellType, rawValue, styleIndex, isFormula);
@@ -565,7 +564,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
 
     private void ClearRowBuffer()
     {
-        for (int i = 0; i < _maxColumnSeen; i++) _cellValues[i] = null;
+        if (_maxColumnSeen > 0)
+            Array.Clear(_cellValues, 0, _maxColumnSeen);
         _maxColumnSeen = 0;
     }
 
@@ -583,9 +583,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < _maxColumnSeen; i++)
         {
-            var v = _cellValues[i];
-            if (v is string s && !string.IsNullOrEmpty(s) && !map.ContainsKey(s))
-                map[s] = i;  // 0-based
+            if (_cellValues[i] is string s && !string.IsNullOrEmpty(s))
+                map.TryAdd(s, i);   // first occurrence wins
         }
         _sheet.SetHeaderIndex(map);
     }

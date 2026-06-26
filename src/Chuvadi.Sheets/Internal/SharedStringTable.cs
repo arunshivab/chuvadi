@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
 
@@ -41,6 +42,9 @@ internal sealed class SharedStringTable
 
     /// <summary>
     /// Returns the existing index for a string, or adds it and returns the new index.
+    /// Uses CollectionsMarshal.GetValueRefOrAddDefault for a single dictionary probe whether
+    /// the entry exists or not — the prior TryGetValue + indexer-set form did two probes per
+    /// call, which adds up at million-cell scale.
     /// </summary>
     public int GetOrAdd(string value)
     {
@@ -48,13 +52,12 @@ internal sealed class SharedStringTable
 
         TotalReferences++;
 
-        if (_index.TryGetValue(value, out var id))
-            return id;
+        ref int slot = ref CollectionsMarshal.GetValueRefOrAddDefault(_index, value, out bool existed);
+        if (existed) return slot;
 
-        id = _ordered.Count;
+        slot = _ordered.Count;
         _ordered.Add(value);
-        _index[value] = id;
-        return id;
+        return slot;
     }
 
     /// <summary>
