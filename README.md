@@ -8,7 +8,7 @@
 |---|---|---|
 | **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v1.1.1 |
 | **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v1.0.0 |
-| Chuvadi.Pdf | pdf | planned |
+| [Chuvadi.Pdf](https://github.com/arunshivab/chuvadi-pdf) | pdf | v2.7.0 (separate repo) |
 
 ## Shared foundation
 
