@@ -30,8 +30,8 @@
    `CHANGELOG.md` entry.
 2. Commit, then create a **signed** tag and push it:
    ```
-   git tag -s sheets-sheets-v1.1.1 -m "sheets-v1.1.1"
-   git push origin main sheets-v1.1.1
+   git tag -s sheets-vX.Y.Z -m "sheets-vX.Y.Z"
+   git push origin main sheets-vX.Y.Z
    ```
 3. The `Release` workflow builds, runs the full test suite, packs, signs the package
    (when the certificate secrets are configured), attaches the `.nupkg` to a GitHub

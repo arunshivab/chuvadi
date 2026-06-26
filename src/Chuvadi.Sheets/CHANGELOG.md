@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.2 (2026-06-26)
+
+### Performance
+- `SharedStringTable.GetOrAdd` uses `CollectionsMarshal.GetValueRefOrAddDefault` for a
+  single dictionary probe per call instead of two. Hot path on every string-cell write;
+  observable speedup at 100K+ row scale.
+- `XlsxWriter` placeholder scanner unified between sync and async paths. The async path
+  previously allocated two `byte[]` per buffer-fill via `Encoding.ASCII.GetBytes`; now
+  uses static UTF-8 byte arrays, zero allocations per call.
+- `XlsxReader` lazy-allocates its inline-string `StringBuilder` only when an `<is>`
+  element is actually encountered. Most cells are not inline strings, so this removes one
+  per-cell allocation in the common case.
+
+### Engineering
+- `SheetWriter`'s async XML methods (`EnsureWorksheetOpenAsync`, `BeginRowAsync`,
+  `EndRowAsync`, `AppendCellAsync`) collapsed into thin sync-call wrappers. The previous
+  explicit-async XmlWriter calls duplicated ~60 lines of sync logic without adding real
+  async value (the underlying FileStream is already async-buffered).
+- No public API changes. No output-format changes. No crypto changes. All 60 tests pass on
+  both Linux and Windows.
+
 ## 1.1.1 (2026-06-11)
 
 - Restructured into the `chuvadi` monorepo. Shared internals (OOXML packaging, MS-OFFCRYPTO

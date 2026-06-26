@@ -14,7 +14,7 @@
     <Description>Pure-BCL spreadsheet (xlsx) and zip library for .NET. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Generate the XML doc file for IntelliSense without requiring 100% doc coverage. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
