@@ -21,6 +21,12 @@ namespace Chuvadi.Print
         public ContentAlignment Alignment { get; set; } = ContentAlignment.Center;
         public Margins Margins { get; set; } = Margins.Default;
 
+        /// <summary>
+        /// When true, a page whose orientation differs from the printable area's (a landscape page on a
+        /// portrait sheet, or the reverse) is turned 90 degrees clockwise to fit better. Default false.
+        /// </summary>
+        public bool AutoRotate { get; set; }
+
         /// <summary>When true, print without showing any dialog (unattended/silent printing).</summary>
         public bool Silent { get; set; }
 
@@ -37,6 +43,7 @@ namespace Chuvadi.Print
             CustomScalePercent = CustomScalePercent,
             Alignment = Alignment,
             Margins = Margins,
+            AutoRotate = AutoRotate,
             Silent = Silent
         };
     }

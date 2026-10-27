@@ -5,19 +5,39 @@ using System.Text;
 namespace Chuvadi.Print
 {
     /// <summary>
-    /// The wire/spool payload: the document's PDF bytes plus its <see cref="PrintSettings"/>,
-    /// in a self-describing, checksummed, hand-rolled binary format (no third-party serializer).
+    /// The wire/spool payload: the document's PDF bytes plus its <see cref="PrintSettings"/> and job
+    /// metadata, in a self-describing, checksummed, hand-rolled binary format (no third-party serializer).
     /// This is what a web host hands to a print agent; the agent rasterises and prints.
     /// </summary>
+    /// <remarks>
+    /// Version 2 (current) adds <see cref="PrintSettings.AutoRotate"/> and the job metadata
+    /// (<see cref="JobId"/>, <see cref="DocumentTitle"/>, <see cref="UserName"/>, <see cref="TenantId"/>).
+    /// Version 1 envelopes are still read; their metadata is null and AutoRotate is false.
+    /// </remarks>
     public sealed class SpoolEnvelope
     {
         private static readonly byte[] MagicBytes = { (byte)'C', (byte)'V', (byte)'P', (byte)'R' };
 
-        /// <summary>Envelope format version.</summary>
-        public const byte CurrentVersion = 1;
+        /// <summary>Envelope format version written by <see cref="Serialize(Stream)"/>.</summary>
+        public const byte CurrentVersion = 2;
+
+        /// <summary>Oldest envelope format version <see cref="Deserialize"/> accepts.</summary>
+        public const byte MinimumVersion = 1;
 
         public byte[] PdfBytes { get; }
         public PrintSettings Settings { get; }
+
+        /// <summary>Identifier of the print job, if known.</summary>
+        public Guid? JobId { get; init; }
+
+        /// <summary>Human-readable document title for the audit trail.</summary>
+        public string? DocumentTitle { get; init; }
+
+        /// <summary>The user on whose behalf the job is printed.</summary>
+        public string? UserName { get; init; }
+
+        /// <summary>The tenant (organisation, site) the job belongs to.</summary>
+        public string? TenantId { get; init; }
 
         public SpoolEnvelope(byte[] pdfBytes, PrintSettings settings)
         {
@@ -25,15 +45,20 @@ namespace Chuvadi.Print
             Settings = settings ?? throw new ArgumentNullException(nameof(settings));
         }
 
-        public void Serialize(Stream destination)
+        public void Serialize(Stream destination) => Serialize(destination, CurrentVersion);
+
+        /// <summary>Writes a specific format version (used to verify backward compatibility).</summary>
+        internal void Serialize(Stream destination, byte version)
         {
             if (destination is null) throw new ArgumentNullException(nameof(destination));
-            byte[] body = BuildBody();
+            if (version < MinimumVersion || version > CurrentVersion)
+                throw new ArgumentOutOfRangeException(nameof(version));
+            byte[] body = BuildBody(version);
             using var w = new BinaryWriter(destination, Encoding.UTF8, leaveOpen: true);
             w.Write(MagicBytes);
-            w.Write(CurrentVersion);
+            w.Write(version);
             w.Write((byte)0);            // flags (reserved: bit0 = compressed)
-            w.Write(Crc32(body));
+            w.Write(Crc32.Compute(body));
             w.Write(body.Length);
             w.Write(body);
         }
@@ -53,17 +78,34 @@ namespace Chuvadi.Print
             if (magic.Length != 4 || magic[0] != MagicBytes[0] || magic[1] != MagicBytes[1]
                 || magic[2] != MagicBytes[2] || magic[3] != MagicBytes[3])
                 throw new InvalidDataException("Not a Chuvadi spool envelope.");
-            byte version = r.ReadByte();
-            if (version != CurrentVersion)
-                throw new InvalidDataException("Unsupported spool envelope version: " + version + ".");
-            _ = r.ReadByte();            // flags (reserved)
-            uint expectedCrc = r.ReadUInt32();
-            int bodyLength = r.ReadInt32();
+            byte version;
+            uint expectedCrc;
+            int bodyLength;
+            try
+            {
+                version = r.ReadByte();
+                if (version < MinimumVersion || version > CurrentVersion)
+                    throw new InvalidDataException("Unsupported spool envelope version: " + version + ".");
+                _ = r.ReadByte();            // flags (reserved)
+                expectedCrc = r.ReadUInt32();
+                bodyLength = r.ReadInt32();
+            }
+            catch (EndOfStreamException ex)
+            {
+                throw new InvalidDataException("Truncated spool envelope.", ex);
+            }
             if (bodyLength < 0) throw new InvalidDataException("Corrupt spool envelope (negative length).");
             byte[] body = r.ReadBytes(bodyLength);
             if (body.Length != bodyLength) throw new InvalidDataException("Truncated spool envelope.");
-            if (Crc32(body) != expectedCrc) throw new InvalidDataException("Checksum mismatch (corrupt spool).");
-            return ParseBody(body);
+            if (Crc32.Compute(body) != expectedCrc) throw new InvalidDataException("Checksum mismatch (corrupt spool).");
+            try
+            {
+                return ParseBody(body, version);
+            }
+            catch (EndOfStreamException ex)
+            {
+                throw new InvalidDataException("Corrupt spool envelope body.", ex);
+            }
         }
 
         public static SpoolEnvelope FromArray(byte[] data)
@@ -73,7 +115,7 @@ namespace Chuvadi.Print
             return Deserialize(ms);
         }
 
-        private byte[] BuildBody()
+        private byte[] BuildBody(byte version)
         {
             using var ms = new MemoryStream();
             using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
@@ -96,13 +138,22 @@ namespace Chuvadi.Print
                 w.Write((byte)Settings.Alignment.Vertical);
                 w.Write(Settings.Silent);
                 w.Write(Settings.Pages.ToCanonicalString());
+                if (version >= 2)
+                {
+                    w.Write(Settings.AutoRotate);
+                    w.Write(JobId.HasValue);
+                    if (JobId.HasValue) w.Write(JobId.Value.ToByteArray());
+                    WriteNullableString(w, DocumentTitle);
+                    WriteNullableString(w, UserName);
+                    WriteNullableString(w, TenantId);
+                }
                 w.Write((long)PdfBytes.LongLength);
                 w.Write(PdfBytes);
             }
             return ms.ToArray();
         }
 
-        private static SpoolEnvelope ParseBody(byte[] body)
+        private static SpoolEnvelope ParseBody(byte[] body, byte version)
         {
             using var ms = new MemoryStream(body, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
@@ -127,12 +178,35 @@ namespace Chuvadi.Print
             settings.Alignment = new ContentAlignment(ha, va);
             settings.Silent = r.ReadBoolean();
             settings.Pages = PageSelection.Parse(r.ReadString());
+
+            Guid? jobId = null;
+            string? title = null, user = null, tenant = null;
+            if (version >= 2)
+            {
+                settings.AutoRotate = r.ReadBoolean();
+                if (r.ReadBoolean())
+                {
+                    byte[] guid = r.ReadBytes(16);
+                    if (guid.Length != 16) throw new InvalidDataException("Truncated job id.");
+                    jobId = new Guid(guid);
+                }
+                title = ReadNullableString(r);
+                user = ReadNullableString(r);
+                tenant = ReadNullableString(r);
+            }
+
             long pdfLength = r.ReadInt64();
             if (pdfLength < 0 || pdfLength > int.MaxValue)
                 throw new InvalidDataException("Invalid PDF length in spool envelope.");
             byte[] pdf = r.ReadBytes((int)pdfLength);
             if (pdf.Length != pdfLength) throw new InvalidDataException("Truncated PDF payload.");
-            return new SpoolEnvelope(pdf, settings);
+            return new SpoolEnvelope(pdf, settings)
+            {
+                JobId = jobId,
+                DocumentTitle = title,
+                UserName = user,
+                TenantId = tenant
+            };
         }
 
         private static void WriteNullableString(BinaryWriter w, string? value)
@@ -143,29 +217,5 @@ namespace Chuvadi.Print
 
         private static string? ReadNullableString(BinaryReader r)
             => r.ReadBoolean() ? r.ReadString() : null;
-
-        private static readonly uint[] CrcTable = BuildCrcTable();
-
-        private static uint[] BuildCrcTable()
-        {
-            const uint polynomial = 0xEDB88320u;
-            var table = new uint[256];
-            for (uint i = 0; i < 256; i++)
-            {
-                uint c = i;
-                for (int k = 0; k < 8; k++)
-                    c = (c & 1) != 0 ? polynomial ^ (c >> 1) : c >> 1;
-                table[i] = c;
-            }
-            return table;
-        }
-
-        private static uint Crc32(byte[] data)
-        {
-            uint crc = 0xFFFFFFFFu;
-            foreach (byte b in data)
-                crc = (crc >> 8) ^ CrcTable[(crc ^ b) & 0xFF];
-            return crc ^ 0xFFFFFFFFu;
-        }
     }
 }
