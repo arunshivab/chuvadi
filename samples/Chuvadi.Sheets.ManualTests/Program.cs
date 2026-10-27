@@ -54,6 +54,9 @@ public static class Program
             if (testName is "all" or "hardening")
                 HardeningTest.Run(outputDir);
 
+            if (testName is "all" or "styleapi")
+                StyleApiTest.Run(outputDir);
+
             Console.WriteLine();
             Console.WriteLine(new string('-', 70));
             Console.WriteLine("All tests completed successfully.");

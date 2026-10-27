@@ -17,6 +17,9 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Write xlsx (one-liner export) | `.ToXlsx()`, `XlsxExport` |
 | Read xlsx (streaming) | `XlsxReader` |
 | Read xlsx (model) | `Workbook.Load()` |
+| Read styles: resolved per cell | `cell.Style`, `cell.StyleIndex` |
+| Read styles: full style table + theme | `wb.StyleTable` / `reader.StyleTable` (`CellStyleTable`) |
+| Read merges, column spans, row attributes | `sheet.MergeRanges`, `sheet.ColumnRanges`, `sheet.Columns[n]`, `sheet.Rows[n]`, `sheet.Format` |
 | Read xlsx (typed/ergonomic) | `.ReadXlsx<T>()`, `.ReadXlsxSheet()` |
 | Cell styling | `CellStyle`, `CellStyleBuilder` |
 | Tables, hyperlinks, comments | `SheetWriter.AddTable/Hyperlink/Comment` |
@@ -76,6 +79,17 @@ sheet.Protect("password", new SheetProtectionOptions {
     AllowAutoFilter = true,
 });
 
+// Reading styles (1.2.0): three layers — resolved, raw index, full table
+var book = Workbook.Load("in.xlsx", null, new XlsxReaderOptions { IncludeStyledEmptyCells = true });
+var sh = book.Sheets[0];
+var cell = sh.Cell("B2");
+CellStyle effective = cell.Style ?? book.StyleTable.DefaultCellStyle ?? default;  // flat, colours as RGB
+int xf = cell.StyleIndex < 0 ? 0 : cell.StyleIndex;          // raw s= index (-1 = none → xf 0)
+var font = book.StyleTable.Fonts[book.StyleTable.CellFormats[xf].FontId];   // walk the chain yourself
+string? rgb = book.StyleTable.ResolveColor(font.Color);      // theme / indexed / tint → "RRGGBB"
+foreach (var m in sh.MergeRanges) { /* "A1:C2" */ }
+double widthB = sh.Columns[2].Width;  bool hidden5 = sh.Rows[5].Hidden;
+
 // Zip a set of files
 using (var zip = ZipWriter.Create("bundle.zip"))
 {
@@ -122,10 +136,21 @@ open-password (`EncryptionOptions`).
 - Zip password protection is intentionally not provided (classic ZipCrypto is broken
   and AES-zip is not in the BCL). Use workbook encryption instead.
 
+## Reading styles: what round-trips
+
+`Workbook.Load` reads the full style data (see `CellStyleTable`), but the writer does not yet
+emit everything it reads. On load → save, the extended `CellStyle` properties added in 1.2.0
+(underline kind, strikethrough, super/subscript, non-solid pattern and gradient fills,
+diagonal borders, indent, rotation, shrink-to-fit, reading order, protection, quote prefix),
+locale-dependent built-in number formats (e.g. id 44), row heights/visibility/grouping and
+column visibility/grouping/styles are not written back. Fonts, colours, solid fills, all
+border styles, number formats with a code, alignment, wrap, merges and column widths are.
+
 ## Out of scope
 
-Charts, pivots, custom table styles (dxfs), embedded images, rich text, macros,
-zip encryption.
+Charts, pivots, custom table styles, embedded images, rich text, macros,
+zip encryption. (Differential formats are read via `CellStyleTable.DifferentialFormats`
+but not written.)
 
 ## Solution layout
 

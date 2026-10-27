@@ -29,9 +29,10 @@ internal static class WorkbookSerializer
     {
         using var sw = writer.AddSheet(sheet.Name);
 
-        // Column widths — must come before any row.
-        foreach (var kv in sheet.ColumnWidths)
-            sw.SetColumnWidth(kv.Key, kv.Value);
+        // Column widths — must come before any row. Loaded spans are kept as spans; widths set
+        // through Columns[n].Width override them. Sorted and non-overlapping.
+        foreach (var (min, max, width) in sheet.GetColumnWidthsForWrite())
+            sw.SetColumnWidth(min, max, width);
 
         // Freeze panes — must also come before any row.
         if (sheet.FreezeRowCount > 0) sw.FreezeRows(sheet.FreezeRowCount);

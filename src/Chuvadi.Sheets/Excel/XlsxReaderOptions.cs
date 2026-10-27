@@ -36,4 +36,17 @@ public sealed class XlsxReaderOptions
     /// A few hundred MB is a generous ceiling for real-world spreadsheets.
     /// </summary>
     public long? MaxPartBytes { get; set; }
+
+    /// <summary>
+    /// Applies to <see cref="Workbook.Load(string, string?, XlsxReaderOptions?)"/> and
+    /// <see cref="Workbook.Load(System.IO.Stream, XlsxReaderOptions?)"/> only. If true, cells
+    /// that have no value but carry a non-default style (s&gt;0) — e.g. an empty bordered or
+    /// shaded cell — are materialized in the model with their <see cref="Cell.Style"/>. If false
+    /// (default), only cells with a value are loaded, as in earlier versions, so
+    /// <see cref="Sheet.PopulatedCells"/> counts are unchanged. Turn on for rendering/conversion.
+    /// </summary>
+    public bool IncludeStyledEmptyCells { get; set; } = false;
+
+    /// <summary>A copy of these options, for loaders that must override individual settings.</summary>
+    internal XlsxReaderOptions Clone() => (XlsxReaderOptions)MemberwiseClone();
 }

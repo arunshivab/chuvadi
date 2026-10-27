@@ -379,6 +379,12 @@ internal sealed class StyleRegistry
         BorderStyle.Thick   => "thick",
         BorderStyle.Double  => "double",
         BorderStyle.Hair    => "hair",
+        BorderStyle.MediumDashed     => "mediumDashed",
+        BorderStyle.DashDot          => "dashDot",
+        BorderStyle.MediumDashDot    => "mediumDashDot",
+        BorderStyle.DashDotDot       => "dashDotDot",
+        BorderStyle.MediumDashDotDot => "mediumDashDotDot",
+        BorderStyle.SlantDashDot     => "slantDashDot",
         _ => "none",
     };
 
