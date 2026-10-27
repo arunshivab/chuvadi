@@ -11,16 +11,16 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Print</Product>
-    <Description>Pure-BCL printing library for .NET: device-independent print settings, page selection, and the portable spool envelope. No NuGet dependencies. (Windows spooler and PDF rasterisation arrive in later layers.)</Description>
+    <Description>Pure-BCL printing library for .NET: device-independent print settings, page layout, print planning, PrintJob orchestration with bounded-memory page rendering, the portable spool envelope, a PNG preview target and a one-event-per-job audit trail. No NuGet dependencies. Rasterisation is pluggable (IPageRasterizer); the Windows spooler arrives in a later layer.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;spool;pdf;reports</PackageTags>
+    <PackageTags>print;printing;spool;pdf;reports;preview;audit</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

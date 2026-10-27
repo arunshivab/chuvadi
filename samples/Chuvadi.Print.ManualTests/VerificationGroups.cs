@@ -8,7 +8,7 @@ namespace Chuvadi.Print.ManualTests
     /// Each method performs a self-contained verification and throws on failure.
     /// The console Program runs them all; the xUnit Tests project drives each as a [Fact].
     /// </summary>
-    public static class VerificationGroups
+    public static partial class VerificationGroups
     {
         private static void Require(bool condition, string message)
         {
@@ -156,7 +156,7 @@ namespace Chuvadi.Print.ManualTests
         }
 
         // --- helpers ---
-        public static IReadOnlyList<Action> All() => new Action[]
+        private static Action[] A1Groups() => new Action[]
         {
             DefaultSettingsAreSensible,
             SettingsCloneIsIndependent,
