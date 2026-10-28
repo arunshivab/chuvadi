@@ -100,104 +100,203 @@ internal static class DocumentLoader
     // is outside tables already; headers/footers are separate parts and never traversed.
     private static bool IsBodyLevel(XmlReader r) => true;
 
-    private static Paragraph LoadParagraph(XmlReader sub)
+    /// <summary>
+    /// Loads one <c>w:p</c> subtree: paragraph properties from <c>w:pPr</c>, then every run
+    /// (<c>w:r</c>) wherever it sits — directly, or inside hyperlinks, insertions, smart tags,
+    /// simple fields or content controls — with its full run formatting.
+    /// </summary>
+    internal static Paragraph LoadParagraph(XmlReader sub)
     {
         var p = new Paragraph();
+        if (!sub.Read()) return p; // positioned on <w:p>
 
-        // Run-property state collected from rPr before the run's text arrives.
-        bool b = false, i = false, u = false, strike = false;
-        string? font = null, color = null, highlight = null;
-        double sizePt = 0;
-        bool inRunProps = false;
-
-        void ResetRun()
+        while (sub.Read())
         {
-            b = i = u = strike = false;
-            font = color = highlight = null;
-            sizePt = 0;
-        }
-        TextFormat CurrentFormat() => new()
-        {
-            Bold = b, Italic = i, Underline = u, Strikethrough = strike,
-            Font = font, ColorHex = color, Highlight = highlight, SizePt = sizePt,
-        };
-
-        if (!sub.Read()) return p;
-        while (!sub.EOF)
-        {
-            if (sub.NodeType == XmlNodeType.Element && sub.NamespaceURI == W)
+            if (sub.NodeType != XmlNodeType.Element) continue;
+            if (IsAlternateRepresentation(sub))
             {
-                switch (sub.LocalName)
-                {
-                    case "pStyle":
-                        p.Style = StyleFromId(sub.GetAttribute("val", W));
-                        break;
-                    case "jc":
-                        p.Alignment = (sub.GetAttribute("val", W)) switch
-                        {
-                            "center" => ParagraphAlignment.Center,
-                            "right" or "end" => ParagraphAlignment.Right,
-                            "both" or "distribute" => ParagraphAlignment.Justify,
-                            _ => ParagraphAlignment.Left,
-                        };
-                        break;
-                    case "numId":
-                        // Our own files: 1 = bullet, 2 = number. Foreign files: treat any
-                        // list as a bullet (the abstract definitions aren't resolved here).
-                        p.List = sub.GetAttribute("val", W) == "2" ? ListKind.Number : ListKind.Bullet;
-                        if (p.Style == ParagraphStyle.Normal) p.Style = ParagraphStyle.ListParagraph;
-                        break;
-                    case "ilvl":
-                        if (int.TryParse(sub.GetAttribute("val", W), out var lvl)) p.ListLevel = lvl;
-                        break;
-                    case "r":
-                        ResetRun();
-                        break;
-                    case "rPr":
-                        inRunProps = true;
-                        break;
-                    case "b" when inRunProps:
-                        b = sub.GetAttribute("val", W) is not ("0" or "false");
-                        break;
-                    case "i" when inRunProps:
-                        i = sub.GetAttribute("val", W) is not ("0" or "false");
-                        break;
-                    case "u" when inRunProps:
-                        u = sub.GetAttribute("val", W) is not "none";
-                        break;
-                    case "strike" when inRunProps:
-                        strike = sub.GetAttribute("val", W) is not ("0" or "false");
-                        break;
-                    case "rFonts" when inRunProps:
-                        font = sub.GetAttribute("ascii", W) ?? sub.GetAttribute("hAnsi", W);
-                        break;
-                    case "color" when inRunProps:
-                        var c = sub.GetAttribute("val", W);
-                        color = (c is null or "auto") ? null : c;
-                        break;
-                    case "highlight" when inRunProps:
-                        highlight = sub.GetAttribute("val", W);
-                        break;
-                    case "sz" when inRunProps:
-                        if (double.TryParse(sub.GetAttribute("val", W), out var half)) sizePt = half / 2.0;
-                        break;
-                    case "br" when sub.GetAttribute("type", W) == "page":
-                        p.PageBreakBefore = true;
-                        break;
-                    case "t":
-                        var text = sub.ReadElementContentAsString();
-                        if (text.Length > 0) p.AddRun(new Run(text, CurrentFormat()));
-                        continue; // cursor already advanced
-                }
+                using (sub.ReadSubtree()) { } // mc:Fallback duplicates mc:Choice
+                continue;
             }
-            else if (sub.NodeType == XmlNodeType.EndElement && sub.NamespaceURI == W && sub.LocalName == "rPr")
+            if (sub.NamespaceURI != W) continue;
+            switch (sub.LocalName)
             {
-                inRunProps = false;
+                case "moveFrom":
+                case "del":
+                    // Moved-away / deleted content: not part of the current text. (Revision
+                    // reading is a later phase; skipping avoids showing moved text twice.)
+                    using (sub.ReadSubtree()) { }
+                    break;
+                case "pPr":
+                    using (var pPr = sub.ReadSubtree()) LoadParagraphProperties(pPr, p);
+                    break;
+                case "r":
+                    using (var r = sub.ReadSubtree()) LoadRun(r, p);
+                    break;
             }
-            if (!sub.Read()) break;
         }
         return p;
     }
+
+    private static void LoadParagraphProperties(XmlReader sub, Paragraph p)
+    {
+        if (!sub.Read()) return;
+        while (sub.Read())
+        {
+            if (sub.NodeType != XmlNodeType.Element || sub.NamespaceURI != W) continue;
+            switch (sub.LocalName)
+            {
+                case "pStyle":
+                    p.Style = StyleFromId(sub.GetAttribute("val", W));
+                    break;
+                case "jc":
+                    p.Alignment = (sub.GetAttribute("val", W)) switch
+                    {
+                        "center" => ParagraphAlignment.Center,
+                        "right" or "end" => ParagraphAlignment.Right,
+                        "both" or "distribute" => ParagraphAlignment.Justify,
+                        _ => ParagraphAlignment.Left,
+                    };
+                    break;
+                case "numId":
+                    // Our own files: 1 = bullet, 2 = number. Foreign files: treat any
+                    // list as a bullet (the abstract definitions aren't resolved here).
+                    var numId = sub.GetAttribute("val", W);
+                    if (numId is null or "0") break; // numId 0 = explicitly not a list
+                    p.List = numId == "2" ? ListKind.Number : ListKind.Bullet;
+                    if (p.Style == ParagraphStyle.Normal) p.Style = ParagraphStyle.ListParagraph;
+                    break;
+                case "ilvl":
+                    if (int.TryParse(sub.GetAttribute("val", W), out var lvl)) p.ListLevel = lvl;
+                    break;
+                case "rPr":        // paragraph-mark formatting: not part of the run model
+                case "pPrChange":  // tracked-change record of the PREVIOUS properties
+                case "sectPr":
+                    // Disposing a subtree reader leaves the cursor on the element's end tag,
+                    // so the loop's next Read continues with the following sibling.
+                    using (sub.ReadSubtree()) { }
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Loads one <c>w:r</c>: its run properties, then each content child in order.</summary>
+    private static void LoadRun(XmlReader sub, Paragraph p)
+    {
+        var format = TextFormat.None;
+        if (!sub.Read()) return; // positioned on <w:r>
+
+        // ReadElementContentAsString leaves the cursor on the NEXT node, so the loop only
+        // advances when the previous step did not already do so.
+        bool advance = true;
+        while (true)
+        {
+            if (advance && !sub.Read()) break;
+            advance = true;
+            if (sub.EOF) break;
+            if (sub.NodeType != XmlNodeType.Element) continue;
+
+            if (IsAlternateRepresentation(sub))
+            {
+                using (sub.ReadSubtree()) { } // mc:Fallback duplicates mc:Choice (text boxes)
+                continue;
+            }
+
+            if (sub.LocalName is "drawing" or "pict" or "object")
+            {
+                // Text boxes / shapes: keep their words, flattened (geometry is outside the model).
+                AppendEmbeddedText(sub, p);
+                continue;
+            }
+            if (sub.NamespaceURI != W) continue;
+
+            switch (sub.LocalName)
+            {
+                case "rPr":
+                    using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out _);
+                    break;
+                case "t":
+                    var text = sub.ReadElementContentAsString();
+                    if (text.Length > 0) p.AddRun(new Run(text, format));
+                    advance = false;
+                    break;
+                case "tab":
+                    p.AddRun(Run.TabRun(format));
+                    break;
+                case "br":
+                    var type = sub.GetAttribute("type", W);
+                    if (type == "page" && p.Runs.Count == 0)
+                        p.PageBreakBefore = true; // the shape Document.AddPageBreak writes
+                    else
+                        p.AddRun(Run.BreakRun(ParseBreak(type, sub.GetAttribute("clear", W)), format));
+                    break;
+                case "cr":
+                    p.AddRun(Run.BreakRun(BreakType.Line, format));
+                    break;
+                case "noBreakHyphen":
+                    p.AddRun(new Run("\u2011", format));
+                    break;
+                case "softHyphen":
+                    p.AddRun(new Run("\u00AD", format));
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Flattens the text of text boxes inside a drawing / VML shape into a plain run, so
+    /// their words are not lost (shape geometry is outside the model; images are exposed
+    /// separately through <see cref="Document.Images"/>). Consumes the element's subtree.
+    /// </summary>
+    private static void AppendEmbeddedText(XmlReader sub, Paragraph p)
+    {
+        var sb = new System.Text.StringBuilder();
+        using (var inner = sub.ReadSubtree())
+        {
+            bool advance = true;
+            while (true)
+            {
+                if (advance && !inner.Read()) break;
+                advance = true;
+                if (inner.EOF) break;
+                if (IsAlternateRepresentation(inner))
+                {
+                    inner.Skip();
+                    advance = false;
+                    continue;
+                }
+                if (inner.NodeType == XmlNodeType.Element && inner.NamespaceURI == W && inner.LocalName == "t")
+                {
+                    sb.Append(inner.ReadElementContentAsString());
+                    advance = false;
+                }
+            }
+        }
+        if (sb.Length > 0) p.AddRun(new Run(sb.ToString(), TextFormat.None));
+    }
+
+    private const string Mc = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+
+    /// <summary>
+    /// True for <c>mc:Fallback</c>: Word writes text boxes, shapes and some newer features
+    /// as mc:AlternateContent with a Choice and a Fallback carrying the SAME content in an
+    /// older form. Reading both would duplicate it; the Choice is kept.
+    /// </summary>
+    internal static bool IsAlternateRepresentation(XmlReader r)
+        => r.NodeType == XmlNodeType.Element && r.LocalName == "Fallback" && r.NamespaceURI == Mc;
+
+    private static BreakType ParseBreak(string? type, string? clear) => type switch
+    {
+        "page" => BreakType.Page,
+        "column" => BreakType.Column,
+        _ => clear switch
+        {
+            "left" => BreakType.TextWrappingClearLeft,
+            "right" => BreakType.TextWrappingClearRight,
+            "all" => BreakType.TextWrappingClearAll,
+            _ => BreakType.Line,
+        },
+    };
 
     private static DocTable LoadTable(XmlReader sub)
     {

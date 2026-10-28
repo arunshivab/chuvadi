@@ -327,11 +327,7 @@ internal static class DocumentSerializer
                 x.WriteAttributeString("id", R, relId);
                 x.WriteAttributeString("history", W, "1");
                 x.WriteStartElement("r", W);
-                x.WriteStartElement("rPr", W);
-                x.WriteStartElement("rStyle", W);
-                x.WriteAttributeString("val", W, "Hyperlink");
-                x.WriteEndElement();
-                x.WriteEndElement();
+                RunProperties.Write(x, run.Format, characterStyleId: "Hyperlink");
                 WriteText(x, run.TextContent);
                 x.WriteEndElement();
                 x.WriteEndElement();
@@ -342,8 +338,10 @@ internal static class DocumentSerializer
             if (run.Image is not null) continue;
 
             x.WriteStartElement("r", W);
-            WriteRunProperties(x, run.Format);
-            WriteText(x, run.TextContent);
+            RunProperties.Write(x, run.Format);
+            if (run.Break is BreakType bt) WriteBreak(x, bt);
+            else if (run.IsTab) { x.WriteStartElement("tab", W); x.WriteEndElement(); }
+            else WriteText(x, run.TextContent);
             x.WriteEndElement();
         }
 
@@ -640,55 +638,65 @@ internal static class DocumentSerializer
         _ => "paragraph",
     };
 
-    /// <summary>rPr children in schema order: rFonts, b, i, strike, color, sz, u, highlight.</summary>
-    private static void WriteRunProperties(XmlWriter x, TextFormat f)
+    /// <summary>
+    /// Writes run content as <c>w:t</c> segments, turning line feeds (<c>\n</c>, <c>\r\n</c>,
+    /// <c>\r</c>) into <c>w:br</c> and tab characters into <c>w:tab</c> — the elements Word
+    /// itself uses. A literal control character inside <c>w:t</c> would render as a space.
+    /// </summary>
+    internal static void WriteText(XmlWriter x, string text)
     {
-        if (f.IsDefault) return;
-        x.WriteStartElement("rPr", W);
-        if (f.Font is not null)
+        int start = 0;
+        for (int i = 0; i < text.Length; i++)
         {
-            x.WriteStartElement("rFonts", W);
-            x.WriteAttributeString("ascii", W, f.Font);
-            x.WriteAttributeString("hAnsi", W, f.Font);
-            x.WriteEndElement();
+            char c = text[i];
+            if (c != '\n' && c != '\r' && c != '\t') continue;
+            if (i > start) WriteTextSegment(x, text.Substring(start, i - start));
+            if (c == '\t')
+            {
+                x.WriteStartElement("tab", W);
+                x.WriteEndElement();
+            }
+            else
+            {
+                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++; // CRLF = one break
+                x.WriteStartElement("br", W);
+                x.WriteEndElement();
+            }
+            start = i + 1;
         }
-        if (f.Bold) { x.WriteStartElement("b", W); x.WriteEndElement(); }
-        if (f.Italic) { x.WriteStartElement("i", W); x.WriteEndElement(); }
-        if (f.Strikethrough) { x.WriteStartElement("strike", W); x.WriteEndElement(); }
-        if (f.ColorHex is not null)
-        {
-            x.WriteStartElement("color", W);
-            x.WriteAttributeString("val", W, f.ColorHex.TrimStart('#'));
-            x.WriteEndElement();
-        }
-        if (f.SizePt > 0)
-        {
-            // Half-points.
-            x.WriteStartElement("sz", W);
-            x.WriteAttributeString("val", W, ((int)Math.Round(f.SizePt * 2)).ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-        }
-        if (f.Underline)
-        {
-            x.WriteStartElement("u", W);
-            x.WriteAttributeString("val", W, "single");
-            x.WriteEndElement();
-        }
-        if (f.Highlight is not null)
-        {
-            x.WriteStartElement("highlight", W);
-            x.WriteAttributeString("val", W, f.Highlight);
-            x.WriteEndElement();
-        }
-        x.WriteEndElement();
+        if (start < text.Length || text.Length == 0)
+            WriteTextSegment(x, start == 0 ? text : text.Substring(start));
     }
 
-    private static void WriteText(XmlWriter x, string text)
+    private static void WriteTextSegment(XmlWriter x, string text)
     {
         x.WriteStartElement("t", W);
         if (text.Length > 0 && (char.IsWhiteSpace(text[0]) || char.IsWhiteSpace(text[^1])))
             x.WriteAttributeString("xml", "space", null, "preserve");
         x.WriteString(text);
+        x.WriteEndElement();
+    }
+
+    private static void WriteBreak(XmlWriter x, BreakType type)
+    {
+        x.WriteStartElement("br", W);
+        switch (type)
+        {
+            case BreakType.Page: x.WriteAttributeString("type", W, "page"); break;
+            case BreakType.Column: x.WriteAttributeString("type", W, "column"); break;
+            case BreakType.TextWrappingClearLeft:
+                x.WriteAttributeString("type", W, "textWrapping");
+                x.WriteAttributeString("clear", W, "left");
+                break;
+            case BreakType.TextWrappingClearRight:
+                x.WriteAttributeString("type", W, "textWrapping");
+                x.WriteAttributeString("clear", W, "right");
+                break;
+            case BreakType.TextWrappingClearAll:
+                x.WriteAttributeString("type", W, "textWrapping");
+                x.WriteAttributeString("clear", W, "all");
+                break;
+        }
         x.WriteEndElement();
     }
 
@@ -878,6 +886,11 @@ internal static class DocumentSerializer
         x.WriteAttributeString("cs", W, "Calibri");
         x.WriteEndElement();
         x.WriteStartElement("sz", W);
+        x.WriteAttributeString("val", W, "22");
+        x.WriteEndElement();
+        // Complex-script text (Indic, Arabic…) sizes from szCs; without it Word falls back to
+        // 10pt for those scripts while Latin text is 11pt.
+        x.WriteStartElement("szCs", W);
         x.WriteAttributeString("val", W, "22");
         x.WriteEndElement();
         x.WriteEndElement();

@@ -230,8 +230,10 @@ public static class DocxTemplate
 
             var xml = LoadXml(entry, lim);
 
-            // Text replacement (existing behaviour).
-            ReplaceText(xml, textValues);
+            // Text replacement (existing behaviour). Remember which w:t nodes changed so that
+            // line feeds / tabs inside FILLED values can become w:br / w:tab afterwards —
+            // untouched template text is never altered.
+            var changedTextNodes = ReplaceText(xml, textValues);
 
             // Image: replace-by-alt-text (swap bytes of an existing drawing's media).
             if (imageValues.Count > 0)
@@ -256,6 +258,8 @@ public static class DocxTemplate
                 if (insertions.Count > 0)
                     partInsertions[entry.FullName] = insertions;
             }
+
+            ExpandControlCharacters(changedTextNodes);
 
             rewrittenParts[entry.FullName] = SaveXml(xml);
         }
@@ -323,14 +327,15 @@ public static class DocxTemplate
 
     // ---- Text replacement (unchanged behaviour) --------------------------------------
 
-    private static void ReplaceText(XmlDocument xml, IReadOnlyDictionary<string, string> values)
+    private static HashSet<XmlElement> ReplaceText(XmlDocument xml, IReadOnlyDictionary<string, string> values)
     {
-        if (values.Count == 0) return;
+        var changed = new HashSet<XmlElement>();
+        if (values.Count == 0) return changed;
         var ns = new XmlNamespaceManager(xml.NameTable);
         ns.AddNamespace("w", W);
 
         var paragraphs = xml.SelectNodes("//w:p", ns);
-        if (paragraphs is null) return;
+        if (paragraphs is null) return changed;
 
         foreach (XmlNode p in paragraphs)
         {
@@ -338,7 +343,15 @@ public static class DocxTemplate
             if (textNodes is null || textNodes.Count == 0) continue;
 
             foreach (XmlNode t in textNodes)
-                t.InnerText = ReplaceAll(t.InnerText, values);
+            {
+                var before = t.InnerText;
+                var after = ReplaceAll(before, values);
+                if (after != before)
+                {
+                    t.InnerText = after;
+                    changed.Add((XmlElement)t);
+                }
+            }
 
             var combined = ConcatText(textNodes);
             if (ContainsCompletePlaceholder(combined))
@@ -349,10 +362,58 @@ public static class DocxTemplate
                     var first = (XmlElement)textNodes[0]!;
                     first.InnerText = replaced;
                     first.SetAttribute("space", "http://www.w3.org/XML/1998/namespace", "preserve");
+                    changed.Add(first);
                     for (int i = 1; i < textNodes.Count; i++)
                         textNodes[i]!.InnerText = string.Empty;
                 }
             }
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// In each FILLED text node, turns line feeds (\n, \r\n, \r) into <c>w:br</c> and tabs
+    /// into <c>w:tab</c> within the same run, so multi-line values (addresses, notes) render
+    /// on separate lines with the run's formatting. Nodes detached by image insertion are skipped.
+    /// </summary>
+    private static void ExpandControlCharacters(HashSet<XmlElement> textNodes)
+    {
+        const string XmlNs = "http://www.w3.org/XML/1998/namespace";
+        foreach (var t in textNodes)
+        {
+            var parent = t.ParentNode;
+            if (parent is null || t.OwnerDocument is null) continue;
+            var text = t.InnerText;
+            if (text.IndexOfAny(new[] { '\n', '\r', '\t' }) < 0) continue;
+
+            var doc = t.OwnerDocument;
+            var prefix = t.Prefix;
+            void AddText(string segment)
+            {
+                var el = doc.CreateElement(prefix, "t", W);
+                el.InnerText = segment;
+                if (segment.Length > 0 && (char.IsWhiteSpace(segment[0]) || char.IsWhiteSpace(segment[^1])))
+                    el.SetAttribute("space", XmlNs, "preserve");
+                parent.InsertBefore(el, t);
+            }
+            void AddEmpty(string name) => parent.InsertBefore(doc.CreateElement(prefix, name, W), t);
+
+            int start = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c != '\n' && c != '\r' && c != '\t') continue;
+                if (i > start) AddText(text.Substring(start, i - start));
+                if (c == '\t') AddEmpty("tab");
+                else
+                {
+                    if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
+                    AddEmpty("br");
+                }
+                start = i + 1;
+            }
+            if (start < text.Length) AddText(text.Substring(start));
+            parent.RemoveChild(t);
         }
     }
 

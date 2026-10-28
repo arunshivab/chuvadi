@@ -43,7 +43,11 @@ public sealed class Paragraph
         _runs.Add(new Run(text, format ?? TextFormat.None));
     }
 
-    /// <summary>Appends a text run.</summary>
+    /// <summary>
+    /// Appends a text run. Line feeds (<c>\n</c>, <c>\r\n</c>, <c>\r</c>) in the text are
+    /// written as line breaks and tab characters as tabs, so multi-line strings render as
+    /// they read; the run's text itself is stored unchanged.
+    /// </summary>
     public Paragraph Text(string text, TextFormat? format = null)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
@@ -51,12 +55,32 @@ public sealed class Paragraph
         return this;
     }
 
-    /// <summary>Appends an external hyperlink run (rendered blue + underlined).</summary>
-    public Paragraph Hyperlink(string text, string url)
+    /// <summary>Appends an external hyperlink run (rendered with Word's Hyperlink style: blue + underlined).</summary>
+    public Paragraph Hyperlink(string text, string url) => Hyperlink(text, url, TextFormat.None);
+
+    /// <summary>Appends an external hyperlink run with extra formatting layered over the Hyperlink style.</summary>
+    public Paragraph Hyperlink(string text, string url, TextFormat format)
     {
         if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text required.", nameof(text));
         if (string.IsNullOrEmpty(url)) throw new ArgumentException("URL required.", nameof(url));
-        _runs.Add(new Run(text, TextFormat.None) { HyperlinkUrl = url });
+        _runs.Add(new Run(text, format ?? TextFormat.None) { HyperlinkUrl = url });
+        return this;
+    }
+
+    /// <summary>Appends a break: line (default), page, column, or a text-wrapping break that clears floating objects.</summary>
+    public Paragraph Break(BreakType type = BreakType.Line, TextFormat? format = null)
+    {
+        _runs.Add(Run.BreakRun(type, format ?? TextFormat.None));
+        return this;
+    }
+
+    /// <summary>Appends a line break (Shift+Enter). Same as <see cref="Break(BreakType, TextFormat?)"/> with <see cref="BreakType.Line"/>.</summary>
+    public Paragraph LineBreak() => Break(BreakType.Line);
+
+    /// <summary>Appends a tab character, aligned to the paragraph's tab stops.</summary>
+    public Paragraph Tab(TextFormat? format = null)
+    {
+        _runs.Add(Run.TabRun(format ?? TextFormat.None));
         return this;
     }
 
@@ -94,7 +118,8 @@ public sealed class Paragraph
 
 /// <summary>
 /// One run: a contiguous span of text sharing one <see cref="TextFormat"/>. May instead be
-/// a simple field (PAGE / NUMPAGES) or carry a hyperlink target.
+/// a simple field (PAGE / NUMPAGES), an image, an explicit break or tab, or carry a
+/// hyperlink target.
 /// </summary>
 public sealed class Run
 {
@@ -111,6 +136,12 @@ public sealed class Run
     /// <summary>Non-null when this run is an image (inline or floating).</summary>
     public ImageSpec? Image { get; init; }
 
+    /// <summary>Non-null when this run is an explicit break (<see cref="TextContent"/> is "\n").</summary>
+    public BreakType? Break { get; private init; }
+
+    /// <summary>True when this run is an explicit tab (<see cref="TextContent"/> is "\t").</summary>
+    public bool IsTab { get; private init; }
+
     public Run(string text, TextFormat format)
     {
         TextContent = text ?? throw new ArgumentNullException(nameof(text));
@@ -119,4 +150,10 @@ public sealed class Run
 
     internal static Run Field(string instruction)
         => new("1", TextFormat.None) { FieldInstruction = instruction };
+
+    internal static Run BreakRun(BreakType type, TextFormat format)
+        => new("\n", format) { Break = type };
+
+    internal static Run TabRun(TextFormat format)
+        => new("\t", format) { IsTab = true };
 }

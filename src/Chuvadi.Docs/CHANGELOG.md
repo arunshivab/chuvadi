@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Text model (run formatting, scripts, breaks)
+
+- **Complete run formatting on `TextFormat`**: four font slots (`AsciiFont`, `HighAnsiFont`, `EastAsiaFont`, `ComplexScriptFont`) plus `FontForAllScripts`, theme fonts per slot and `FontHint`; complex-script `BoldComplexScript`, `ItalicComplexScript`, `SizeComplexScriptPt`, `ComplexScript`, `RightToLeft`; `Language` / `EastAsiaLanguage` / `ComplexScriptLanguage`; `UnderlineStyle` (all 18 styles) and `UnderlineColorHex`; `DoubleStrikethrough`, `Caps`, `SmallCaps`, `Hidden`, `Outline`, `Shadow`, `Emboss`, `Imprint`, `NoProof`; `VerticalPosition` (superscript/subscript), `BaselineShiftPt`, `CharacterSpacingPt`, `HorizontalScalePercent`, `KerningMinSizePt`; `ThemeColor` with tint/shade; `ShadingHex`. New toggles are tri-state (`bool?`) so they can switch an inherited effect off.
+- **Indic / complex-script fix**: `Font` only ever filled the Latin slots, so Tamil, Devanagari or Malayalam text ignored it, and bold/size didn't apply to those scripts. `FontForAllScripts` and `ComplexScriptFont` set the slot those scripts use, and with `MirrorToComplexScript` (default on) `Bold`, `Italic` and `SizePt` also write `bCs`, `iCs` and `szCs`, as Word's toolbar does. Document defaults now include `szCs`, so complex-script text defaults to 11pt like Latin text instead of Word's 10pt fallback.
+- **Breaks and tabs**: `Paragraph.Break(BreakType)` — line, page, column, and text-wrapping breaks that clear floating objects left/right/both — plus `LineBreak()` and `Tab()`. `\n`, `\r\n` and `\r` in text are written as `w:br`, and `\t` as `w:tab` (previously they landed inside `w:t` and rendered as spaces); the stored run text is unchanged.
+- **Templates**: line feeds and tabs inside a FILLED value become `w:br` / `w:tab` in the same run, keeping its formatting. Untouched template text is never altered.
+- **Formatted hyperlinks**: `Paragraph.Hyperlink(text, url, TextFormat)` layers formatting over the Hyperlink character style.
+- **Document.Load reads every run property** through the same mapping the writer uses, and loads breaks, tabs, non-breaking and soft hyphens as runs; text inside text boxes is kept (flattened). Loaded formats carry complex-script properties exactly as stated (`MirrorToComplexScript = false`), so load → save reproduces `document.xml` exactly. Tracked previous paragraph properties (`w:pPrChange`) no longer override current ones on load, and `numId 0` is no longer treated as a list.
+- `TextFormat.ExplicitlyOff` (`RunToggles`) carries bold/italic/strikethrough written as explicitly off (`w:val="0"`), so a run that cancels a style's bold round-trips; `highlight="none"` is kept likewise. Known gap until the shading model lands: run shading keeps only its fill color.
+- Text boxes stored as `mc:AlternateContent` are read once (the `mc:Fallback` copy is skipped) and moved-away / deleted content (`w:moveFrom`, `w:del`) is no longer shown — by both `Document.Load` and `DocxReader`. Previously text-box text appeared twice.
+- **Schema order fix**: `w:highlight` is now written before `w:u`, as CT_RPr requires (previously reversed).
+- `DocxReader` text extraction maps non-breaking and soft hyphens to U+2011 and U+00AD.
+
 ### Hardening for untrusted input
 
 - **Resource limits** on `DocxReaderOptions`, applied by `DocxReader.Open`, `Document.Load` and `DocxTemplate.Fill`: `MaxEntries` (10,000), `MaxTotalUncompressedBytes` (1 GiB), `MaxCompressionRatio` (1,000:1 above `CompressionRatioThresholdBytes`, 1 MiB), `MaxXmlDepth` (256) and `MaxSpinCount` (500,000). Package limits are checked from the zip central directory before any part is inflated; the declared sizes are a hard ceiling because the runtime never inflates an entry past them. The spin count is read from EncryptionInfo before key derivation starts. Every limit is nullable; `DocxReaderOptions.CreateUnrestricted()` disables them all.

@@ -50,6 +50,23 @@ doc.SaveTo("report.docx");
 
 Paragraph styles: `Title`, `Heading1`–`Heading3`, `Quote`, `Normal`, plus lists, hyperlinks (`p.Hyperlink(text, url)`), page breaks (`doc.AddPageBreak()`), different first-page headers/footers (`doc.FirstPageHeader`), and landscape/Letter/Legal page setups.
 
+## Character formatting, scripts and breaks
+
+`TextFormat` covers the full run-property set: fonts per script slot, complex-script bold/italic/size, language, every underline style, caps/small caps, hidden, outline/shadow/emboss/engrave, superscript/subscript, baseline shift, character spacing and scaling, kerning, theme colors and arbitrary shading.
+
+```csharp
+// Indic text: set the complex-script slot — Word's Font box (and TextFormat.Font) only sets Latin.
+var tamil = new TextFormat { FontForAllScripts = "Nirmala UI", SizePt = 12, Bold = true, ComplexScriptLanguage = "ta-IN" };
+doc.AddParagraph().Text("நோயாளி அறிக்கை — Patient report", tamil);
+
+doc.AddParagraph().Text("H").Text("2", TextFormat.SubscriptText).Text("O, E = mc").Text("2", TextFormat.SuperscriptText);
+doc.AddParagraph().Text("Ref:").Tab().Text("APL/2026/0042");
+doc.AddParagraph("Apulki Medical Center\nBaner, Pune");        // \n → line break
+doc.AddParagraph().Text("Part 1").Break(BreakType.Page).Text("Part 2");
+```
+
+Toggles added in 1.2 are tri-state (`bool?`): `null` inherits, `false` switches an inherited effect off.
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:
@@ -63,7 +80,7 @@ DocxTemplate.Fill("invoice-template.docx", "invoice-0042.docx", new Dictionary<s
 });
 ```
 
-Everything in the template is preserved byte-for-byte except the replaced text — images, styles, themes, tables. Placeholders are replaced in the body, headers, footers, footnotes, and endnotes. Word frequently splits typed text across runs; spanning placeholders are detected and consolidated automatically (such a paragraph takes its first run's formatting). Unmatched placeholders are left as-is so they're visible during review.
+Everything in the template is preserved byte-for-byte except the replaced text — images, styles, themes, tables. Line feeds and tabs inside a value become line breaks and tabs in the same run. Placeholders are replaced in the body, headers, footers, footnotes, and endnotes. Word frequently splits typed text across runs; spanning placeholders are detected and consolidated automatically (such a paragraph takes its first run's formatting). Unmatched placeholders are left as-is so they're visible during review.
 
 Encrypted templates and encrypted output both work:
 
