@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 namespace Chuvadi.Internal.Crypto;
 
@@ -23,10 +24,19 @@ internal static class EncryptedPackageWriter
     /// buffered once for CFB container assembly.
     /// </summary>
     public static void WriteEncrypted(Stream output, Stream plaintextPackage, long length, string password, int spinCount = 100_000)
+        => WriteEncrypted(output, plaintextPackage, length, password, spinCount, CancellationToken.None);
+
+    /// <summary>
+    /// As <see cref="WriteEncrypted(Stream, Stream, long, string, int)"/>, observing
+    /// <paramref name="cancellationToken"/> inside the key-derivation loop. Nothing is
+    /// written to <paramref name="output"/> before key derivation completes.
+    /// </summary>
+    public static void WriteEncrypted(Stream output, Stream plaintextPackage, long length, string password, int spinCount,
+        CancellationToken cancellationToken)
     {
         // 1. Encrypt the package, honoring the caller's spin count (KDF iteration count).
         using var encryptedPackageStream = new MemoryStream();
-        var encParams = AgileEncryption.Encrypt(plaintextPackage, length, password, encryptedPackageStream, spinCount);
+        var encParams = AgileEncryption.Encrypt(plaintextPackage, length, password, encryptedPackageStream, spinCount, cancellationToken);
         var encryptedPackageBytes = encryptedPackageStream.ToArray();
 
         // 2. Build the EncryptionInfo XML stream.

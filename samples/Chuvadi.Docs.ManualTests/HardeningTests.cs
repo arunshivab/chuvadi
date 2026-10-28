@@ -343,6 +343,37 @@ public static class HardeningTests
             using var r = DocxReader.Open(path, "pw");
             AssertContains(r.ExtractText(), "spin guarded", "decrypted text");
         });
+        // The encrypted file is read into memory BEFORE any timing starts: on Windows, antivirus
+        // real-time scanning of a freshly written OLE (encrypted) file can hold the first read for
+        // ~13 s. That stall is in the OS, outside the library; these checks time the key derivation.
+        var slowPath = Path.Combine(outDir, "hard-spin-slow.docx");
+        var slowDoc = new Document();
+        slowDoc.AddParagraph("slow");
+        slowDoc.SaveTo(slowPath, new EncryptionOptions { Password = "pw", SpinCount = 3_000_000 });
+        var slowBytes = File.ReadAllBytes(slowPath);
+
+        Check("shared crypto: key derivation observes cancellation within ~1 s, never reported as a wrong password", () =>
+        {
+            var opts = new DocxReaderOptions { MaxSpinCount = null };
+            using var cts = new CancellationTokenSource();
+            var sw = new Stopwatch();
+            using var timer = new Timer(_ => { sw.Start(); cts.Cancel(); }, null, 150, Timeout.Infinite);
+            var total = Stopwatch.StartNew();
+            AssertThrows<OperationCanceledException>(() => DocxReader.Open(new MemoryStream(slowBytes), "pw", opts, cts.Token).Dispose(), "Open during KDF");
+            sw.Stop();
+            AssertTrue(sw.ElapsedMilliseconds < 1_000, $"KDF cancellation latency {sw.ElapsedMilliseconds} ms");
+            AssertTrue(total.ElapsedMilliseconds < 5_000, $"Open ran {total.ElapsedMilliseconds} ms before stopping");
+        });
+        Check("shared crypto: cancellation also stops Document.Load and DocxTemplate.Fill key derivation", () =>
+        {
+            var slow = slowPath; // already read once above, so the OS no longer holds it
+            var opts = new DocxReaderOptions { MaxSpinCount = null };
+            using var cts = new CancellationTokenSource(200);
+            AssertThrows<OperationCanceledException>(() => Document.Load(new MemoryStream(slowBytes), "pw", opts, cts.Token), "Load during KDF");
+            using var cts2 = new CancellationTokenSource(200);
+            AssertThrows<OperationCanceledException>(() => DocxTemplate.Fill(slow, Path.Combine(outDir, "hard-spin-fill.docx"),
+                new System.Collections.Generic.Dictionary<string, string>(), null, "pw", null, opts, cts2.Token), "Fill during KDF");
+        });
     }
 
     // ---- B3 ------------------------------------------------------------------------

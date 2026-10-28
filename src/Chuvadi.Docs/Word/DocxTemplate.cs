@@ -124,15 +124,7 @@ public static class DocxTemplate
         byte[] packageBytes;
         if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(input))
         {
-            PackageGuard.CheckSpinCount(input, limits);
-            try
-            {
-                packageBytes = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(input, password);
-            }
-            catch (Chuvadi.Internal.Crypto.PackagePasswordException ex)
-            {
-                throw new DocxPasswordRequiredException(ex.Message, ex);
-            }
+            packageBytes = PackageGuard.Decrypt(input, password, limits, ct);
         }
         else
         {

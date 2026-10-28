@@ -106,17 +106,7 @@ public sealed partial class DocxReader : IDisposable
 
             if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(source))
             {
-                PackageGuard.CheckSpinCount(source, options);
-                ct.ThrowIfCancellationRequested();
-                byte[] plaintext;
-                try
-                {
-                    plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(source, password);
-                }
-                catch (Chuvadi.Internal.Crypto.PackagePasswordException ex)
-                {
-                    throw new DocxPasswordRequiredException(ex.Message, ex);
-                }
+                byte[] plaintext = PackageGuard.Decrypt(source, password, options, ct);
                 ct.ThrowIfCancellationRequested();
                 decrypted = new MemoryStream(plaintext);
                 packageStream = decrypted;
