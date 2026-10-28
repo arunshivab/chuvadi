@@ -28,6 +28,14 @@ binary-compatible.
   `DiagonalUp`, `DiagonalDown`, `Indent`, `TextRotation`, `ShrinkToFit`, `ReadingOrder`,
   `JustifyLastLine`, `Locked`, `FormulaHidden`, `QuotePrefix`, `NumberFormatId`,
   `StyleName`. They sit outside the positional constructor, so existing code is unaffected.
+- **Vertical "top" alignment is now written.** New init-only `CellStyle.VerticalAlignment`
+  (`VerticalAlign?`) records an explicit vertical alignment and is always written.
+  `CellStyleBuilder.VAlign(...)` and loaded styles set it. Previously `VerticalAlign.Top`
+  (the enum's default value) was indistinguishable from "not set" and was silently dropped,
+  so Excel showed Bottom. Styles that never set vertical alignment, including positional
+  `new CellStyle(..., VAlign: Top, ...)`, write exactly what they did before. Note: a
+  builder style with `.VAlign(x)` now carries `VerticalAlignment = x`, so it no longer
+  compares equal to the same positional `CellStyle` without it.
 - **`BorderStyle` covers all 14 Excel styles.** Added `MediumDashed`, `DashDot`,
   `MediumDashDot`, `DashDotDot`, `MediumDashDotDot`, `SlantDashDot`. Existing values are
   unchanged, and the writer emits the new ones.
@@ -60,7 +68,7 @@ binary-compatible.
 ### Known limitations (write side)
 - **Extended properties are read-only.** The extended `CellStyle` properties are not yet
   written. Load → save keeps fonts, colours, solid fills, all border styles, number formats
-  with a code, alignment and wrap. It drops underline kind (double becomes single),
+  with a code, horizontal and vertical alignment, and wrap. It drops underline kind (double becomes single),
   strikethrough, super/subscript, non-solid pattern and gradient fills, diagonals, indent,
   rotation, shrink, reading order, protection, quote prefix, and locale-dependent number
   formats.
@@ -71,13 +79,14 @@ binary-compatible.
 - **cellXfs detection.** Replaced a heuristic that told cellXfs from cellStyleXfs by the
   presence of xfId. styles.xml is now parsed by section, so date detection uses the right
   list.
+- **Vertical "top" alignment.** It was dropped by the writer; see Features.
 - **Malformed s=.** A non-numeric cell s= attribute is treated as absent, not as xf 0.
 - **Absolute relationship targets.** Workbook relationship targets starting with "/" now
   resolve correctly. Styles and theme are now located through the workbook relationships,
   with the previous filename search as fallback.
 
 ### Tests
-- **New `StyleApiTest` group: 36 checks.** It runs against Excel-shaped fixtures assembled
+- **New `StyleApiTest` group: 37 checks.** It runs against Excel-shaped fixtures assembled
   from raw parts. It is wired into the manual runner as `styleapi` and into xUnit as
   `StyleApi`.
 - **Cross-checks against other tools.** Results were cross-checked against openpyxl-written

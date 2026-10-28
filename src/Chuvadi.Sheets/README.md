@@ -144,7 +144,8 @@ emit everything it reads. On load → save, the extended `CellStyle` properties 
 diagonal borders, indent, rotation, shrink-to-fit, reading order, protection, quote prefix),
 locale-dependent built-in number formats (e.g. id 44), row heights/visibility/grouping and
 column visibility/grouping/styles are not written back. Fonts, colours, solid fills, all
-border styles, number formats with a code, alignment, wrap, merges and column widths are.
+border styles, number formats with a code, horizontal and vertical alignment, wrap, merges
+and column widths are.
 
 ## Out of scope
 

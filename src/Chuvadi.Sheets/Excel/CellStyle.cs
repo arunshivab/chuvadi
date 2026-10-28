@@ -118,6 +118,23 @@ public readonly record struct CellStyle(
     // round-trip keeps only the positional properties above. See CHANGELOG 1.2.0.
     // -----------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Explicit vertical alignment. When set, it overrides <see cref="VAlign"/> and is always
+    /// written. It exists because <see cref="VerticalAlign.Top"/> is the enum's default value,
+    /// which the positional <see cref="VAlign"/> cannot tell apart from "not set": a style
+    /// with <c>VAlign == Top</c> and this property null writes no vertical alignment (Excel
+    /// then shows Bottom), exactly as in earlier versions. <see cref="CellStyleBuilder.VAlign"/>
+    /// and loaded styles set it, so top alignment is written. Null = use <see cref="VAlign"/>.
+    /// </summary>
+    public VerticalAlign? VerticalAlignment { get; init; }
+
+    /// <summary>
+    /// The vertical alignment the writer emits, or null for none (Excel's default, Bottom):
+    /// <see cref="VerticalAlignment"/> if set, else <see cref="VAlign"/> unless it is Top.
+    /// </summary>
+    internal VerticalAlign? EffectiveWriteVAlign
+        => VerticalAlignment ?? (VAlign != VerticalAlign.Top ? VAlign : null);
+
     /// <summary>Kind of underline. <see cref="Underline"/> is true whenever this is not None.</summary>
     public UnderlineStyle UnderlineKind { get; init; }
 

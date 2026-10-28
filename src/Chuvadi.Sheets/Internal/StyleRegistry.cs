@@ -107,7 +107,7 @@ internal sealed class StyleRegistry
             NumFmtId: 0,
             ApplyAlignment: false,
             HAlign: HorizontalAlign.General,
-            VAlign: VerticalAlign.Top,
+            VAlign: null,
             WrapText: false);
         AddCellXf(defaultXf);
     }
@@ -129,8 +129,9 @@ internal sealed class StyleRegistry
         var borderId = GetOrAddBorder(style);
         var numFmtId = GetOrAddNumFmt(style.NumberFormat);
 
+        var vAlign = style.EffectiveWriteVAlign;   // null = write no vertical attribute
         var hasAlignment = style.HAlign != HorizontalAlign.General
-                        || style.VAlign != VerticalAlign.Top
+                        || vAlign is not null
                         || style.WrapText;
 
         var xf = new CellXfKey(
@@ -140,7 +141,7 @@ internal sealed class StyleRegistry
             NumFmtId: numFmtId,
             ApplyAlignment: hasAlignment,
             HAlign: style.HAlign,
-            VAlign: style.VAlign,
+            VAlign: vAlign,
             WrapText: style.WrapText);
 
         return GetOrAddCellXf(xf);
@@ -430,8 +431,8 @@ internal sealed class StyleRegistry
                 w.WriteStartElement("alignment", SsNs);
                 if (xf.HAlign != HorizontalAlign.General)
                     w.WriteAttributeString("horizontal", HAlignToString(xf.HAlign));
-                if (xf.VAlign != VerticalAlign.Top)
-                    w.WriteAttributeString("vertical", VAlignToString(xf.VAlign));
+                if (xf.VAlign is VerticalAlign v)
+                    w.WriteAttributeString("vertical", VAlignToString(v));
                 if (xf.WrapText)
                     w.WriteAttributeString("wrapText", "1");
                 w.WriteEndElement();
@@ -500,7 +501,7 @@ internal sealed class StyleRegistry
     /// <summary>Value-equality key for a cellXf entry (the actual style record cells reference).</summary>
     private readonly record struct CellXfKey(
         int FontId, int FillId, int BorderId, int NumFmtId,
-        bool ApplyAlignment, HorizontalAlign HAlign, VerticalAlign VAlign, bool WrapText);
+        bool ApplyAlignment, HorizontalAlign HAlign, VerticalAlign? VAlign, bool WrapText);
 
     // ---- Constants -----------------------------------------------------------------
 

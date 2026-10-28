@@ -564,6 +564,39 @@ internal static class StyleApiTest
             Expect.Eq(BorderStyle.SlantDashDot, s.BorderBottom.Style, "new border style survives save");
             Expect.Eq("dd/mm/yyyy;@", s.NumberFormat, "number format");
             Expect.Eq(HorizontalAlign.CenterContinuous, s.HAlign, "alignment");
+            Expect.Eq(VerticalAlign.Top, s.VAlign, "vertical top survives save");
+            Expect.Eq(VerticalAlign.Top, s.VerticalAlignment, "VerticalAlignment top");
+        });
+
+        Check("valign: builder VAlign(Top) is written; unset/positional Top writes nothing (as before)", () =>
+        {
+            var p = Path.Combine(outputDir, "styleapi_valign.xlsx");
+            var wb = new Workbook();
+            var sh = wb.AddSheet("V");
+            sh.Cell("A1").Value = "builder top";
+            sh.Cell("A1").Style = new CellStyleBuilder().Bold().VAlign(VerticalAlign.Top).Build();
+            sh.Cell("B1").Value = "builder unset";
+            sh.Cell("B1").Style = new CellStyleBuilder().Italic().Build();
+            sh.Cell("C1").Value = "positional top";
+            sh.Cell("C1").Style = new CellStyle(null, null, false, false, true, null, null,
+                Border.None, Border.None, Border.None, Border.None, null,
+                HorizontalAlign.General, VerticalAlign.Top, false);
+            sh.Cell("D1").Value = "builder center";
+            sh.Cell("D1").Style = new CellStyleBuilder().Underline().VAlign(VerticalAlign.Center).Build();
+            wb.SaveTo(p);
+
+            string styles;
+            using (var z = ZipFile.OpenRead(p))
+            using (var rd = new StreamReader(z.GetEntry("xl/styles.xml")!.Open()))
+                styles = rd.ReadToEnd();
+            Expect.Eq(1, CountOf(styles, "vertical=\"top\""), "exactly one vertical=top (A1)");
+            Expect.Eq(1, CountOf(styles, "vertical=\"center\""), "one vertical=center (D1)");
+
+            var back = Workbook.Load(p).Sheets[0];
+            Expect.Eq(VerticalAlign.Top, back.Cell("A1").Style!.Value.VAlign, "A1 top");
+            Expect.Eq(VerticalAlign.Bottom, back.Cell("B1").Style!.Value.VAlign, "B1 default bottom");
+            Expect.Eq(VerticalAlign.Bottom, back.Cell("C1").Style!.Value.VAlign, "C1 positional Top unchanged (not written)");
+            Expect.Eq(VerticalAlign.Center, back.Cell("D1").Style!.Value.VAlign, "D1 center");
         });
 
         Console.WriteLine();
@@ -648,6 +681,13 @@ internal static class StyleApiTest
         "<a:minorFont><a:latin typeface=\"Calibri\"/><a:ea typeface=\"\"/><a:cs typeface=\"\"/>" +
         "<a:font script=\"Taml\" typeface=\"Latha\"/><a:font script=\"Mlym\" typeface=\"Kartika\"/></a:minorFont>" +
         "</a:fontScheme></a:themeElements></a:theme>";
+
+    private static int CountOf(string haystack, string needle)
+    {
+        int n = 0, i = 0;
+        while ((i = haystack.IndexOf(needle, i, StringComparison.Ordinal)) >= 0) { n++; i += needle.Length; }
+        return n;
+    }
 
     /// <summary>Tiny assertion helpers that throw with a readable message.</summary>
     internal static class Expect

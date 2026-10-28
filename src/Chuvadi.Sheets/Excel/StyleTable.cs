@@ -523,6 +523,7 @@ public sealed class CellStyleTable
             Locked = protection?.Locked ?? true,
             FormulaHidden = protection?.Hidden ?? false,
             QuotePrefix = xf.QuotePrefix,
+            VerticalAlignment = alignment?.Vertical ?? VerticalAlign.Bottom,
             NumberFormatId = numFmtId,
             StyleName = styleName,
         };

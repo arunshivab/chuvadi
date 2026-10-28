@@ -35,6 +35,7 @@ public sealed class CellStyleBuilder
     private string? _numberFormat;
     private HorizontalAlign _hAlign;
     private VerticalAlign _vAlign;
+    private bool _vAlignSet;
     private bool _wrapText;
 
     /// <summary>Sets font name and size in a single call.</summary>
@@ -82,7 +83,11 @@ public sealed class CellStyleBuilder
         { _borderRight = new Border(style, NormalizeHex(color)); return this; }
 
     public CellStyleBuilder HAlign(HorizontalAlign align) { _hAlign = align; return this; }
-    public CellStyleBuilder VAlign(VerticalAlign align) { _vAlign = align; return this; }
+    /// <summary>
+    /// Sets vertical alignment explicitly; it is always written, including
+    /// <see cref="VerticalAlign.Top"/> (since 1.2.0; earlier versions silently dropped Top).
+    /// </summary>
+    public CellStyleBuilder VAlign(VerticalAlign align) { _vAlign = align; _vAlignSet = true; return this; }
     public CellStyleBuilder WrapText(bool value = true) { _wrapText = value; return this; }
 
     /// <summary>Materializes the immutable CellStyle.</summary>
@@ -101,7 +106,10 @@ public sealed class CellStyleBuilder
         NumberFormat: _numberFormat,
         HAlign: _hAlign,
         VAlign: _vAlign,
-        WrapText: _wrapText);
+        WrapText: _wrapText)
+    {
+        VerticalAlignment = _vAlignSet ? _vAlign : null,
+    };
 
     // ---- Helpers -------------------------------------------------------------------
 
