@@ -15,6 +15,11 @@
 - **Schema order fix**: `w:highlight` is now written before `w:u`, as CT_RPr requires (previously reversed).
 - `DocxReader` text extraction maps non-breaking and soft hyphens to U+2011 and U+00AD.
 
+### Shared crypto (shared/Chuvadi.Internal — additive)
+
+- Key derivation observes a `CancellationToken` (checked every 4,096 rounds, ~10 ms) and the decryptor takes an optional spin-count cap, checked after EncryptionInfo is parsed and before any derivation. Chuvadi.Docs now passes `MaxSpinCount` and the caller's token straight through: cancelling `DocxReader.Open`, `Document.Load` or `DocxTemplate.Fill` on an encrypted file stops key derivation too. Existing internal signatures are unchanged (Sheets is unaffected until it opts in).
+- The iterated hash is computed once per open/save instead of three times (the verifier keys and key-encryption key share it): opening an encrypted file is ~3.4× faster (1,000,000 spins: 2.4 s → 0.7 s), with byte-identical results. Cross-checked with msoffcrypto-tool (HMAC verified).
+
 ### Hardening for untrusted input
 
 - **Resource limits** on `DocxReaderOptions`, applied by `DocxReader.Open`, `Document.Load` and `DocxTemplate.Fill`: `MaxEntries` (10,000), `MaxTotalUncompressedBytes` (1 GiB), `MaxCompressionRatio` (1,000:1 above `CompressionRatioThresholdBytes`, 1 MiB), `MaxXmlDepth` (256) and `MaxSpinCount` (500,000). Package limits are checked from the zip central directory before any part is inflated; the declared sizes are a hard ceiling because the runtime never inflates an entry past them. The spin count is read from EncryptionInfo before key derivation starts. Every limit is nullable; `DocxReaderOptions.CreateUnrestricted()` disables them all.

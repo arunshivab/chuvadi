@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace Chuvadi.Internal.Crypto;
 
@@ -77,6 +78,16 @@ internal static class AgileEncryption
     /// seekable.
     /// </summary>
     public static Params Encrypt(Stream plaintext, long length, string password, Stream output, int spinCount = DefaultSpinCount)
+        => Encrypt(plaintext, length, password, output, spinCount, CancellationToken.None);
+
+    /// <summary>
+    /// As <see cref="Encrypt(Stream, long, string, Stream, int)"/>, observing
+    /// <paramref name="cancellationToken"/> inside the key-derivation loop (checked every
+    /// <see cref="CancellationCheckInterval"/> iterations). Content encryption itself is
+    /// linear in the package size and not interrupted.
+    /// </summary>
+    public static Params Encrypt(Stream plaintext, long length, string password, Stream output, int spinCount,
+        CancellationToken cancellationToken)
     {
         if (spinCount < 1) throw new ArgumentOutOfRangeException(nameof(spinCount));
         if (length < 0 || length > int.MaxValue)
@@ -93,10 +104,15 @@ internal static class AgileEncryption
         //    Per spec, this uses the VERIFIER salt (the salt from the password keyEncryptor element),
         //    NOT the keyData salt. The verifier salt is used for both the password→key derivation
         //    and the IV.
-        var encryptedKeyValue = EncryptKeyValue(password, verifierSalt, spinCount, contentKey);
+        //    The iterated hash depends only on (password, verifier salt, spin count), so it is
+        //    computed ONCE and finalised per block key — identical output to deriving each
+        //    key separately, at a third of the cost.
+        var baseHash = DeriveBaseHash(password, verifierSalt, spinCount, cancellationToken);
+        var encryptedKeyValue = AesCbcEncrypt(contentKey, FinalizeKey(baseHash, BlockKey_EncryptedKeyValue), verifierSalt);
 
         // 3. Encrypt the verifier blocks (used to validate password without decrypting content).
-        var (encVerHashInput, encVerHashValue) = EncryptVerifier(password, verifierSalt, spinCount, verifierHashInput);
+        var (encVerHashInput, encVerHashValue) = EncryptVerifier(baseHash, verifierSalt, verifierHashInput);
+        cancellationToken.ThrowIfCancellationRequested();
 
         // 4. Stream-encrypt the package, prefixed by an 8-byte little-endian length, while
         //    feeding every written byte into the integrity HMAC ([MS-OFFCRYPTO] §2.3.4.14
@@ -137,14 +153,27 @@ internal static class AgileEncryption
     /// Throws <see cref="UnauthorizedAccessException"/> if the password is wrong.
     /// </summary>
     public static byte[] Decrypt(Stream input, string password, Params p)
+        => Decrypt(input, password, p, CancellationToken.None);
+
+    /// <summary>
+    /// As <see cref="Decrypt(Stream, string, Params)"/>, observing <paramref name="cancellationToken"/>
+    /// inside the key-derivation loop (checked every <see cref="CancellationCheckInterval"/>
+    /// iterations). Throws <see cref="OperationCanceledException"/> when cancelled.
+    /// </summary>
+    public static byte[] Decrypt(Stream input, string password, Params p, CancellationToken cancellationToken)
     {
+        // The verifier keys and the key-encryption key all derive from the same iterated hash
+        // of (password, verifier salt, spin count): compute it once, finalise per block key.
+        var baseHash = DeriveBaseHash(password, p.VerifierSalt, p.SpinCount, cancellationToken);
+
         // 1. Verify the password by decrypting the verifier blocks.
-        if (!VerifyPassword(password, p))
+        if (!VerifyPasswordWithBase(baseHash, p))
             throw new UnauthorizedAccessException("Incorrect password.");
 
         // 2. Re-derive the content key from the password, honoring the file's spin count.
         //    Uses the VERIFIER salt (not key salt) — see EncryptKeyValue for the explanation.
-        var contentKey = DecryptKeyValue(password, p.VerifierSalt, p.SpinCount, p.EncryptedKeyValue);
+        var contentKey = DecryptKeyValue(FinalizeKey(baseHash, BlockKey_EncryptedKeyValue), p.VerifierSalt, p.EncryptedKeyValue);
+        cancellationToken.ThrowIfCancellationRequested();
 
         // 3. Read the encrypted segment (8-byte length prefix + encrypted blocks) so we can
         //    HMAC it exactly as written before decrypting anything.
@@ -199,11 +228,21 @@ internal static class AgileEncryption
 
     /// <summary>Returns true iff the password can decrypt the verifier hash.</summary>
     public static bool VerifyPassword(string password, Params p)
+        => VerifyPassword(password, p, CancellationToken.None);
+
+    /// <summary>
+    /// As <see cref="VerifyPassword(string, Params)"/>, observing <paramref name="cancellationToken"/>.
+    /// Cancellation surfaces as <see cref="OperationCanceledException"/> — never as "wrong password".
+    /// </summary>
+    public static bool VerifyPassword(string password, Params p, CancellationToken cancellationToken)
+        => VerifyPasswordWithBase(DeriveBaseHash(password, p.VerifierSalt, p.SpinCount, cancellationToken), p);
+
+    private static bool VerifyPasswordWithBase(byte[] baseHash, Params p)
     {
         try
         {
-            var verifierKeyForHashInput  = DeriveKey(password, p.VerifierSalt, p.SpinCount, BlockKey_VerifierHashInput);
-            var verifierKeyForHashValue  = DeriveKey(password, p.VerifierSalt, p.SpinCount, BlockKey_VerifierHashValue);
+            var verifierKeyForHashInput  = FinalizeKey(baseHash, BlockKey_VerifierHashInput);
+            var verifierKeyForHashValue  = FinalizeKey(baseHash, BlockKey_VerifierHashValue);
 
             // Decrypt the verifier hash input (a 16-byte random value).
             var hashInput = AesCbcDecrypt(p.EncryptedVerifierHashInput, verifierKeyForHashInput, p.VerifierSalt);
@@ -235,11 +274,27 @@ internal static class AgileEncryption
     // ---- Internal: key derivation --------------------------------------------------
 
     /// <summary>
+    /// Key-derivation loop iterations between cancellation checks. A check is a volatile read;
+    /// at ~400,000 SHA-512 rounds per second this bounds cancellation latency to ~10 ms.
+    /// </summary>
+    public const int CancellationCheckInterval = 4096;
+
+    /// <summary>
     /// Derives a key per [MS-OFFCRYPTO] §2.3.4.11. The base hash is PBKDF2-style iterated
     /// SHA-512 over salt+password, then one final round mixes in the block key.
     /// </summary>
     private static byte[] DeriveKey(string password, byte[] salt, int spinCount, byte[] blockKey)
+        => FinalizeKey(DeriveBaseHash(password, salt, spinCount, CancellationToken.None), blockKey);
+
+    /// <summary>
+    /// Steps 1–2 of §2.3.4.11: H_0 = SHA-512(salt || password), then spinCount rounds of
+    /// H_n = SHA-512(n_LE || H_{n-1}). Independent of the block key, so callers deriving
+    /// several keys from one password+salt compute it once. Observes
+    /// <paramref name="ct"/> every <see cref="CancellationCheckInterval"/> rounds.
+    /// </summary>
+    private static byte[] DeriveBaseHash(string password, byte[] salt, int spinCount, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         using var sha = SHA512.Create();
 
         // Step 1: H_0 = SHA-512(salt || password_utf16le)
@@ -255,6 +310,7 @@ internal static class AgileEncryption
         var buf = new byte[4 + hash.Length];
         for (int i = 0; i < spinCount; i++)
         {
+            if ((i & (CancellationCheckInterval - 1)) == 0) ct.ThrowIfCancellationRequested();
             buf[0] = (byte)(i & 0xFF);
             buf[1] = (byte)((i >> 8) & 0xFF);
             buf[2] = (byte)((i >> 16) & 0xFF);
@@ -262,11 +318,16 @@ internal static class AgileEncryption
             Buffer.BlockCopy(hash, 0, buf, 4, hash.Length);
             hash = sha.ComputeHash(buf);
         }
+        return hash;
+    }
 
-        // Step 3: H_final = SHA-512(H_spinCount || blockKey)
-        var combined = new byte[hash.Length + blockKey.Length];
-        Buffer.BlockCopy(hash, 0, combined, 0, hash.Length);
-        Buffer.BlockCopy(blockKey, 0, combined, hash.Length, blockKey.Length);
+    /// <summary>Steps 3–4 of §2.3.4.11: SHA-512(H_spinCount || blockKey), truncated/padded to <see cref="KeySize"/>.</summary>
+    private static byte[] FinalizeKey(byte[] baseHash, byte[] blockKey)
+    {
+        using var sha = SHA512.Create();
+        var combined = new byte[baseHash.Length + blockKey.Length];
+        Buffer.BlockCopy(baseHash, 0, combined, 0, baseHash.Length);
+        Buffer.BlockCopy(blockKey, 0, combined, baseHash.Length, blockKey.Length);
         var keyMaterial = sha.ComputeHash(combined);
 
         // Step 4: truncate or pad to KeySize bytes.
@@ -280,10 +341,10 @@ internal static class AgileEncryption
 
     // ---- Internal: verifier ------------------------------------------------------
 
-    private static (byte[] encInput, byte[] encValue) EncryptVerifier(string password, byte[] verifierSalt, int spinCount, byte[] hashInput)
+    private static (byte[] encInput, byte[] encValue) EncryptVerifier(byte[] baseHash, byte[] verifierSalt, byte[] hashInput)
     {
-        var keyForInput = DeriveKey(password, verifierSalt, spinCount, BlockKey_VerifierHashInput);
-        var keyForValue = DeriveKey(password, verifierSalt, spinCount, BlockKey_VerifierHashValue);
+        var keyForInput = FinalizeKey(baseHash, BlockKey_VerifierHashInput);
+        var keyForValue = FinalizeKey(baseHash, BlockKey_VerifierHashValue);
 
         using var sha = SHA512.Create();
         var hashValue = sha.ComputeHash(hashInput);
@@ -300,15 +361,9 @@ internal static class AgileEncryption
     /// Per [MS-OFFCRYPTO] §2.3.4.15, the EncryptedKey block uses the salt from the
     /// password keyEncryptor (which is the verifier salt), NOT the keyData salt.
     /// </summary>
-    private static byte[] EncryptKeyValue(string password, byte[] verifierSalt, int spinCount, byte[] contentKey)
+    private static byte[] DecryptKeyValue(byte[] keyEncryptionKey, byte[] verifierSalt, byte[] encryptedContentKey)
     {
-        var key = DeriveKey(password, verifierSalt, spinCount, BlockKey_EncryptedKeyValue);
-        return AesCbcEncrypt(contentKey, key, verifierSalt);
-    }
-
-    private static byte[] DecryptKeyValue(string password, byte[] verifierSalt, int spinCount, byte[] encryptedContentKey)
-    {
-        var key = DeriveKey(password, verifierSalt, spinCount, BlockKey_EncryptedKeyValue);
+        var key = keyEncryptionKey;
         var result = AesCbcDecrypt(encryptedContentKey, key, verifierSalt);
         // Trim/pad to KeySize.
         var contentKey = new byte[KeySize];

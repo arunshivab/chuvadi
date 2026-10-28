@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 namespace Chuvadi.Internal.Crypto;
 
@@ -14,6 +15,33 @@ internal sealed class PackagePasswordException : Exception
 {
     public PackagePasswordException(string message) : base(message) { }
     public PackagePasswordException(string message, Exception innerException) : base(message, innerException) { }
+}
+
+/// <summary>Which decryption limit a <see cref="PackageLimitException"/> reports.</summary>
+internal enum PackageLimit
+{
+    /// <summary>The file's declared key-derivation spin count exceeds the caller's cap.</summary>
+    SpinCount,
+}
+
+/// <summary>
+/// Thrown by the shared crypto plumbing when an encrypted file exceeds a caller-supplied
+/// limit, BEFORE any expensive work starts. Like <see cref="PackagePasswordException"/>, each
+/// format package translates it into its own public exception type.
+/// </summary>
+internal sealed class PackageLimitException : Exception
+{
+    public PackageLimit Limit { get; }
+    public long Actual { get; }
+    public long Allowed { get; }
+
+    public PackageLimitException(PackageLimit limit, long actual, long allowed)
+        : base($"Encrypted file exceeds the {limit} limit: {actual:N0} > {allowed:N0}.")
+    {
+        Limit = limit;
+        Actual = actual;
+        Allowed = allowed;
+    }
 }
 
 /// <summary>
@@ -46,7 +74,20 @@ internal static class EncryptedPackageReader
     /// Throws <see cref="PackagePasswordException"/> if the password is missing or wrong.
     /// </summary>
     public static byte[] DecryptToPlaintextPackage(Stream cfbInput, string? password)
+        => DecryptToPlaintextPackage(cfbInput, password, maxSpinCount: null, CancellationToken.None);
+
+    /// <summary>
+    /// As <see cref="DecryptToPlaintextPackage(Stream, string?)"/>, with a spin-count cap and
+    /// cancellation. When <paramref name="maxSpinCount"/> is set and the file declares more,
+    /// <see cref="PackageLimitException"/> is thrown after EncryptionInfo is parsed and before
+    /// any key derivation (a hostile spin count is otherwise an uninterruptible CPU stall).
+    /// <paramref name="cancellationToken"/> is observed inside the key-derivation loop;
+    /// cancellation throws <see cref="OperationCanceledException"/>.
+    /// </summary>
+    public static byte[] DecryptToPlaintextPackage(Stream cfbInput, string? password, int? maxSpinCount,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrEmpty(password))
             throw new PackagePasswordException(
                 "This file is encrypted; supply a password to read it.");
@@ -75,11 +116,15 @@ internal static class EncryptedPackageReader
             encParams = EncryptionInfoXml.Read(ms);
         }
 
+        // 2b. Caller's cap on the declared spin count — checked before any derivation.
+        if (maxSpinCount is int maxSpin && (encParams.SpinCount > maxSpin || encParams.SpinCount < 0))
+            throw new PackageLimitException(PackageLimit.SpinCount, encParams.SpinCount, maxSpin);
+
         // 3. Decrypt.
         try
         {
             using var pkgMs = new MemoryStream(encPackageBytes);
-            return AgileEncryption.Decrypt(pkgMs, password, encParams);
+            return AgileEncryption.Decrypt(pkgMs, password, encParams, cancellationToken);
         }
         catch (UnauthorizedAccessException)
         {

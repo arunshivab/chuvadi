@@ -25,8 +25,8 @@ internal sealed class PackageScanResult
 /// ratio — read from the central directory without inflating anything. Declared sizes are
 /// a hard ceiling because <see cref="ZipArchive"/> never inflates an entry past its declared
 /// length (verified empirically on .NET 10), so a forged header cannot smuggle extra bytes;</item>
-/// <item>encrypted container: the declared key-derivation spin count, read from
-/// EncryptionInfo before the shared decryptor starts its uninterruptible key derivation.</item>
+/// <item>encrypted container: decryption through the shared decryptor with the spin-count
+/// cap and a cancellable key-derivation loop (see <see cref="Decrypt"/>).</item>
 /// </list>
 /// </summary>
 internal static class PackageGuard
@@ -133,32 +133,24 @@ internal static class PackageGuard
     }
 
     /// <summary>
-    /// For an ENCRYPTED (CFB) input: reads the declared spin count from EncryptionInfo and
-    /// rejects it when above <see cref="DocxReaderOptions.MaxSpinCount"/>. If the container
-    /// can't be parsed here, nothing is thrown — the decryptor reports its own, more specific
-    /// error. The stream position is restored.
+    /// Decrypts an ENCRYPTED (CFB) input through the shared decryptor with the spin-count cap
+    /// (<see cref="DocxReaderOptions.MaxSpinCount"/>, checked before any key derivation) and
+    /// cancellation observed inside the key-derivation loop, translating the shared internal
+    /// exceptions into Chuvadi.Docs' public ones.
     /// </summary>
-    public static void CheckSpinCount(Stream cfb, DocxReaderOptions o)
+    public static byte[] Decrypt(Stream cfb, string? password, DocxReaderOptions o, CancellationToken ct)
     {
-        if (o.MaxSpinCount is not int max) return;
-        long start = cfb.Position;
-        int spin;
         try
         {
-            var streams = CfbContainer.Read(cfb);
-            if (!streams.TryGetValue("EncryptionInfo", out var info)) return;
-            using var ms = new MemoryStream(info);
-            spin = EncryptionInfoXml.Read(ms).SpinCount;
+            return EncryptedPackageReader.DecryptToPlaintextPackage(cfb, password, o.MaxSpinCount, ct);
         }
-        catch
+        catch (PackageLimitException ex) when (ex.Limit == PackageLimit.SpinCount)
         {
-            return;
+            throw new DocxSecurityLimitException(DocxLimit.SpinCount, ex.Actual, ex.Allowed);
         }
-        finally
+        catch (PackagePasswordException ex)
         {
-            cfb.Position = start;
+            throw new DocxPasswordRequiredException(ex.Message, ex);
         }
-        if (spin > max || spin < 0)
-            throw new DocxSecurityLimitException(DocxLimit.SpinCount, spin, max);
     }
 }

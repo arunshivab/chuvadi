@@ -260,17 +260,7 @@ public sealed class Document
 
         if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(source))
         {
-            PackageGuard.CheckSpinCount(source, options);
-            cancellationToken.ThrowIfCancellationRequested();
-            byte[] plaintext;
-            try
-            {
-                plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(source, password);
-            }
-            catch (Chuvadi.Internal.Crypto.PackagePasswordException ex)
-            {
-                throw new DocxPasswordRequiredException(ex.Message, ex);
-            }
+            byte[] plaintext = PackageGuard.Decrypt(source, password, options, cancellationToken);
             using var ms = new MemoryStream(plaintext);
             return DocumentLoader.Load(ms, options, cancellationToken);
         }
