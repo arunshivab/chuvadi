@@ -458,6 +458,16 @@ public sealed class Sheet
         return this;
     }
 
+    /// <summary>The cell at the 1-based row and column, or null when the sheet holds none. Does not create cells.</summary>
+    public Cell? FindCell(int row, int column) => _cells.TryGetValue((row, column), out var c) ? c : null;
+
+    /// <summary>The cell at the A1 address, or null when the sheet holds none. Does not create cells.</summary>
+    public Cell? FindCell(string address)
+    {
+        var (row, col) = CellAddress.ParseA1(address);
+        return FindCell(row, col);
+    }
+
     /// <summary>Gets or creates a cell at the given A1 address.</summary>
     public Cell Cell(string address)
     {
@@ -804,6 +814,13 @@ public sealed class Column
             _sheet.SetColumnWidthInternal(_column, value);
         }
     }
+
+    /// <summary>
+    /// The width the column renders at, in &lt;col width&gt; units: <see cref="Width"/> when set,
+    /// else the sheet's default (<see cref="SheetFormat.DefaultWidth"/>). Hidden columns report
+    /// their width too; check <see cref="Hidden"/>.
+    /// </summary>
+    public double EffectiveWidth { get { var w = Width; return w > 0 ? w : _sheet.Format.DefaultWidth(); } }
 
     /// <summary>The loaded &lt;col&gt; span covering this column, or null if the file defines none.</summary>
     public ColumnRange? Range => _sheet.FindColumnRange(_column);

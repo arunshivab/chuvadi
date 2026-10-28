@@ -85,6 +85,20 @@ public sealed class SheetFormat
     /// <summary>Outline summary columns sit right of their detail columns (&lt;outlinePr summaryRight&gt;). Default true.</summary>
     public bool OutlineSummaryRight { get; set; } = true;
 
+    /// <summary>
+    /// The width of a column without its own width, in &lt;col width&gt; units:
+    /// <see cref="DefaultColumnWidth"/> when stated, else the ECMA-376 default derived from
+    /// <see cref="BaseColumnWidth"/> (base × digit width + 5 px, rounded up to a multiple of
+    /// 8 px) for Calibri 11 (7 px digits): 9.140625 (64 px) for the default base of 8.
+    /// </summary>
+    public double DefaultWidth()
+    {
+        if (DefaultColumnWidth is double d && d > 0) return d;
+        const int mdw = 7;
+        int px = (BaseColumnWidth * mdw + 5 + 7) / 8 * 8;
+        return Math.Truncate((double)px / mdw * 256) / 256;
+    }
+
     /// <summary>Load path: values as stored, without validation.</summary>
     internal void Load(double defaultRowHeight, double? defaultColumnWidth, int baseColumnWidth, bool customHeight,
                        bool zeroHeight, bool thickTop, bool thickBottom, int outlineRow, int outlineColumn)

@@ -72,6 +72,9 @@ public static class Program
             if (testName is "all" or "fidelity")
                 LayoutFidelityTest.Run(outputDir);
 
+            if (testName is "all" or "charts")
+                ChartMetadataTest.Run(outputDir);
+
             Console.WriteLine();
             Console.WriteLine(new string('-', 70));
             Console.WriteLine("All tests completed successfully.");

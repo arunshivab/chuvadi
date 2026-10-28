@@ -14,7 +14,7 @@ public enum DrawingKind
     Connector,
     /// <summary>A group of objects (&lt;xdr:grpSp&gt;); see <see cref="DrawingObject.Children"/>.</summary>
     Group,
-    /// <summary>A chart (graphic frame); only its part name is reported.</summary>
+    /// <summary>A chart (graphic frame); its metadata is in <see cref="DrawingObject.Chart"/>.</summary>
     Chart,
     /// <summary>Another graphic frame (SmartArt, slicer, ...) or an unrecognised object.</summary>
     Other,
@@ -179,8 +179,14 @@ public sealed class DrawingObject
 
     // ---- Charts ----------------------------------------------------------------------
 
-    /// <summary>The chart part's name, e.g. "/xl/charts/chart1.xml", or null.</summary>
+    /// <summary>The chart part's name, e.g. "/xl/charts/chart1.xml" (or "/xl/charts/chartEx1.xml" for Excel 2016 charts), or null.</summary>
     public string? ChartPartName { get; internal set; }
+
+    /// <summary>
+    /// The chart's metadata (type, title, series references and cached values, axis titles,
+    /// legend), or null when the object is not a chart or its part is missing. Metadata only.
+    /// </summary>
+    public ChartInfo? Chart { get; internal set; }
 
     public override string ToString() => $"{Kind} '{Name}'";
 }

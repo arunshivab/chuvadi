@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.6.1 (unreleased)
+
+Chart metadata on sheets, plus two small helpers for the Layout importer. Read-side and
+additive; writer output is unchanged.
+
+### Features
+- **Chart metadata.** `DrawingObject.Chart` (`ChartInfo`) is filled for chart frames, both in
+  `Sheet.Drawings` and in `SheetReader.ReadDrawings()`.
+  - `ChartInfo` gives:
+    - `Type` (`ChartType`) and `Plots`, of which combo charts have several (`ChartPlot`:
+      type, 3-D, grouping, scatter style);
+    - `Title` (rich text as plain text, or the cached text of a title cell), `TitleFormula`
+      and `AutoTitleDeleted`;
+    - `AxisTitles`, `LegendPosition` and `Style`.
+  - Each `ChartSeries` has `Name` and `NameFormula`, `Categories`, `Values`, `XValues`,
+    `YValues`, `BubbleSizes` and an explicit `Color`.
+  - Each data reference (`ChartDataReference`) has its `Formula`, `IsNumeric`, `FormatCode`,
+    `PointCount` and `CachedValues`, kept as stored text (with gaps as null), plus
+    `CachedNumbers`.
+  - Excel 2016 charts (chartex: waterfall, funnel, treemap, sunburst, histogram, box and
+    whisker, map) come back as `ChartType.Extended` with `ExtendedType`, the title and the
+    series data.
+  - In `mc:AlternateContent`, the chart frame now wins over Excel's "chart not available"
+    fallback text box.
+  - Metadata only: charts are not rendered or written. `Chart` is null when the chart part is
+    missing.
+- **`Sheet.FindCell(row, col)` / `FindCell(address)`** look up a cell without creating it.
+- **Default column width.** New `Column.EffectiveWidth` and `SheetFormat.DefaultWidth()`, which
+  `SheetLayoutInfo.ColumnWidth` now shares.
+
+### Docs
+- **New `docs/Chuvadi.Sheets/LAYOUT-INTEGRATION.md`.** It lists the exact APIs Layout should
+  call for display text, effective styles, dimensions, merges, page setup, conditional
+  formats, drawings and charts.
+
+### Tests
+- **New `charts` group: 6 checks.** It covers:
+  - a combo bar+line chart with a rich title, caches with gaps, axis titles, legend, style
+    and series colour;
+  - a pie chart with a cell-reference title;
+  - a 3-D bar chart together with a scatter plot;
+  - a chartex waterfall chart inside mc:AlternateContent;
+  - the streaming path;
+  - a missing chart part;
+  - the new helpers.
+- **Cross-check.** Charts written by openpyxl, and the same file re-saved by LibreOffice, read
+  correctly.
+
 ## 1.6.0 (unreleased)
 
 Sheet fidelity for the Layout engine: the rest of a loaded sheet round-trips (rows, columns,

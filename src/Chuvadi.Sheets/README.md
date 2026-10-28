@@ -40,7 +40,8 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Conditional formatting | `ConditionalFormat.ColorScale/DataBar/CellIs`* |
 | Row/column settings, views, panes, tab colour, visibility (read and write) | `sheet.Rows[n]`, `sheet.Columns[n]`, `sheet.View`, `RowFormat`, `SetColumns`, `SheetWriter.View`, `TabColor`, `Visibility`, `ActiveSheet` |
 | Conditional formats and validation (read, write, evaluate per cell) | `sheet.ConditionalFormats`, `ConditionalRule`, `sheet.EvaluateConditionalFormats()`, `ConditionalFormatEvaluator`, `sheet.DataValidations` |
-| Pictures, shapes, charts on sheets (read: anchors, image bytes) | `sheet.Drawings`, `sheetReader.ReadDrawings()`, `DrawingObject`, `Emu` |
+| Pictures, shapes, charts on sheets (read: anchors, image bytes, chart metadata) | `sheet.Drawings`, `sheetReader.ReadDrawings()`, `DrawingObject`, `drawing.Chart` (`ChartInfo`), `Emu` |
+| Integration guide for renderers | `docs/Chuvadi.Sheets/LAYOUT-INTEGRATION.md` |
 | Defined names (workbook and sheet scope; read and write) | `wb.DefinedNames.Add(...)`, `XlsxWriter.AddDefinedName(...)`, `reader.DefinedNames` |
 | Sheet protection | `sheet.Protect(password, options)` |
 | Workbook structure protection | `wb.Protect(password, lockStructure)` |

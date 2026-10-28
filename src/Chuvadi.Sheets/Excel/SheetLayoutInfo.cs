@@ -91,10 +91,7 @@ public sealed class SheetLayoutInfo
     {
         var r = FindColumn(column1Based);
         if (r is not null && r.Width > 0) return r.Width;
-        if (Format.DefaultColumnWidth is double d && d > 0) return d;
-        const int mdw = 7;
-        int px = (Format.BaseColumnWidth * mdw + 5 + 7) / 8 * 8;
-        return Math.Truncate((double)px / mdw * 256) / 256;
+        return Format.DefaultWidth();
     }
 
     /// <summary>True if the 1-based column is hidden.</summary>

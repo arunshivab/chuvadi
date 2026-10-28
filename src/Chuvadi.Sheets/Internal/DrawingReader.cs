@@ -21,6 +21,7 @@ internal static class DrawingReader
     private const string RNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private const string McNs = "http://schemas.openxmlformats.org/markup-compatibility/2006";
     private const string ChartUri = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+    private const string ChartExUri = "http://schemas.microsoft.com/office/drawing/2014/chartex";
 
     private static readonly XNamespace Xdr = XdrNs, A = ANs, R = RNs, Mc = McNs;
 
@@ -70,8 +71,12 @@ internal static class DrawingReader
         {
             if (e.Name == Mc + "AlternateContent")
             {
-                // Prefer the fallback (plain DrawingML), else the first choice.
-                var branch = e.Element(Mc + "Fallback") ?? e.Element(Mc + "Choice");
+                // A choice holding a chart frame (Excel 2016 charts: the fallback is only a
+                // "chart not available" text box) wins; otherwise prefer the plain fallback.
+                var choice = e.Element(Mc + "Choice");
+                bool chartChoice = choice is not null && choice.Descendants(A + "graphicData")
+                    .Any(g => (string?)g.Attribute("uri") is ChartUri or ChartExUri);
+                var branch = chartChoice ? choice : e.Element(Mc + "Fallback") ?? choice;
                 if (branch is null) continue;
                 foreach (var inner in branch.Elements())
                     if (IsObject(inner)) yield return inner;
@@ -169,12 +174,15 @@ internal static class DrawingReader
                 break;
             case "graphicFrame":
                 var gd = e.Descendants(A + "graphicData").FirstOrDefault();
-                if ((string?)gd?.Attribute("uri") == ChartUri)
+                if ((string?)gd?.Attribute("uri") is ChartUri or ChartExUri)
                 {
                     o.Kind = DrawingKind.Chart;
                     var rid = gd!.Elements().FirstOrDefault()?.Attribute(R + "id")?.Value;
                     if (rid is not null && ctx.Rels.TryGetValue(rid, out var rel) && !rel.IsExternal)
+                    {
                         o.ChartPartName = ResolveTarget(ctx.DrawingUri, rel.Target);
+                        o.Chart = ChartReader.Read(ctx.Book, o.ChartPartName);
+                    }
                 }
                 else o.Kind = DrawingKind.Other;
                 break;
