@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 (unreleased)
+## 1.2.0 (2026-10-28)
 
 Read-side style API ("option c": raw index, pre-resolved style, and the full style table),
 closing Reader gaps SHEETS-01, SHEETS-02 and SHEETS-03. All additions are source- and
