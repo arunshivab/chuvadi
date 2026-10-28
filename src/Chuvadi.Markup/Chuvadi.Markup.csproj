@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Markup</RootNamespace>
+    <AssemblyName>Chuvadi.Markup</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Markup</Product>
+    <Description>Pure-BCL markup library for .NET: a CommonMark Markdown parser with GFM tables, task lists, strikethrough and autolinks, a public Markdown AST with HTML renderer and Markdown writer, a WHATWG HTML5 tokenizer and tree builder with charset sniffing, a CSS syntax parser, an allowlist HTML sanitizer with strict (mail) and standard (viewer) policies, and plain text to safe HTML. Built for untrusted input: limits, documented exceptions and cancellation everywhere. No NuGet dependencies.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>1.0.0</Version>
+    <!-- Culture-sensitive string operations are bugs in a parser/sanitizer: the globalization analyzers
+         (CA1304, CA1305, CA1309, CA1310, CA1311) are errors. CA1307 (already-ordinal char/Replace overloads)
+         and CA1308 (markup is lowercase-normalized by specification) do not apply. -->
+    <AnalysisModeGlobalization>All</AnalysisModeGlobalization>
+    <NoWarn>$(NoWarn);CA1307;CA1308</NoWarn>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>markdown;commonmark;gfm;html;html5;parser;sanitizer;xss;css;email</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Markup.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Markup.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
