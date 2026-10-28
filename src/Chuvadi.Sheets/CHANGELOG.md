@@ -1,5 +1,145 @@
 # Changelog
 
+## 1.5.0 (unreleased)
+
+Formulas with cached results on read and write, page setup on the streaming reader and on
+write, defined names on read and write, for the Layout engine. Additive and
+source-compatible, apart from the behaviour changes listed below. A sheet that sets no new
+option writes the same bytes as 1.4.0, except where the schema-order fix applies.
+
+### Features
+- **Formulas on read.**
+  - Streaming: `RowReader.GetFormula(col)`, `GetFormulaInfo(col)` (a `CellFormula` record
+    with `Text`, `Kind` and `Range`) and `HasCachedValue(col)`. The indexer keeps returning
+    the cached result.
+  - `FormulaKind` is Normal, Shared, Array or DataTable.
+  - Shared formulas: each child cell gets its own text. Relative references are shifted by
+    the child's offset, `$` parts are kept, and a reference shifted off the sheet becomes
+    `#REF!`. The text is expanded only when it is asked for.
+  - Model: `Cell.Formula` is filled on load. New `Cell.CachedValue` (settable only on
+    formula cells), `Cell.HasCachedValue` and `Cell.ArrayFormulaRange`.
+  - `Cell.Value` on a formula cell returns the cached result, so existing readers and
+    `DisplayText` work unchanged. Setting `Value` clears the formula; setting `Formula`
+    clears the cached result.
+- **Formulas on write.**
+  - `RowBuilder.Formula(formula, cachedValue)` and `Formula(formula, cachedValue, style)`.
+  - `RowBuilder.ArrayFormula(range, formula, cachedValue)`, plus a styled overload.
+  - A cached value is written as a number, string, bool, date serial (with the default date
+    style when unstyled), duration, or error. A string is written as an error only when it
+    equals one of Excel's error literals (`#N/A`, `#DIV/0!`, `#VALUE!`, `#REF!`, `#NAME?`,
+    `#NUM!`, `#NULL!`, `#SPILL!`, `#CALC!`, ...).
+  - `XlsxWriterOptions.FullCalculationOnLoad` writes `<calcPr fullCalcOnLoad="1"/>`.
+  - Auto-fit now measures a formula cell by its cached result, when it has one.
+- **Page setup on the streaming reader.**
+  - `SheetReader.ReadLayout()` returns `SheetLayoutInfo`:
+    - `PageSetup`, including print areas and titles;
+    - `Format`, `ColumnRanges`, `MergeRanges` and the stored `UsedRange`;
+    - `ShowGridLines`, `RightToLeft`, `ViewMode` and `ZoomScale`;
+    - the helpers `FindColumn`, `ColumnWidth`, `IsColumnHidden`, `ColumnStyleIndex` and
+      `ColumnStyle`.
+  - `ReadLayout()` makes one pass over the sheet part and skips the cell data without parsing
+    it. The result is cached. Read limits and the cancellation token apply.
+  - Per row: `RowReader.Attributes` (the existing `Row` type: height, hidden, outline level,
+    row style).
+  - Per cell: `RowReader.HasCell(col)` and `RowReader.GetStyle(col)`, which resolves and caches
+    the style.
+  - `RowReader.GetEffectiveStyleIndex(col, layout)` applies Excel's order: the cell's own
+    format, then the row style (customFormat), then the column style.
+  - Model equivalent: `Sheet.GetEffectiveStyle(row, col)`, which does not create cells.
+- **Page setup on write.** `PageSetup` is now read-write, and the same class is used on load
+  and save.
+  - Validated public setters cover paper, orientation, scale (10–400), `FitToPage`,
+    `FitToWidth` and `FitToHeight` (0–32767), first page number, page order,
+    black-and-white, draft, comments, errors, DPI and copies.
+  - Also settable: `Margins.*` (plus `Margins.Set`), every part of `HeaderFooter` (odd, even
+    and first page, with their flags), `PrintGridlines`, `PrintHeadings`,
+    `CenterHorizontally` and `CenterVertically`.
+  - New methods: `FitTo(wide, tall)`, `SetPrintArea(params ranges)`, `ClearPrintArea()`,
+    `AddRowBreak`, `AddColumnBreak`, `RemoveRowBreak`, `RemoveColumnBreak`,
+    `ClearRowBreaks()`, `ClearColumnBreaks()` and `CopyFrom(other)`. `PrintTitleRows` and
+    `PrintTitleColumns` are now settable, and `PageSetup` has a public constructor.
+  - Where it applies:
+    - `SheetWriter.PageSetup` can be changed until save. `<sheetPr>` is inserted at save, so
+      fit-to-page can be set after the rows.
+    - `Sheet.PageSetup` is saved with the workbook.
+    - `cfg.PageSetup(p => ...)` works on both export configurations.
+  - Only values that are set are written.
+  - Print area and titles are written as `_xlnm.Print_Area` / `_xlnm.Print_Titles` scoped
+    with `localSheetId`. Sheet names are quoted when needed.
+  - `SheetWriter.SetHeaderFooter`, `Sheet.SetHeaderFooter`, `Sheet.PageHeader` and
+    `Sheet.PageFooter` are now shortcuts to the odd-page header/footer.
+- **Defined names on write.**
+  - Streaming: `XlsxWriter.AddDefinedName(name, formula, scopeSheetName, hidden, comment)`.
+  - Model: new `DefinedName` type (Name, Formula, Scope, Hidden, Comment).
+    `DefinedNameCollection` gains `Entries`, `Add(name, formula, scope, hidden, comment)`,
+    `Find(name, scope)` and `Remove(name, scope)`. The existing members keep their
+    workbook-scope meaning.
+  - Adding `_xlnm.Print_Area` or `_xlnm.Print_Titles` by hand throws and points you to
+    `PageSetup`. A sheet scope that does not exist at save time throws.
+- **Defined names on read.**
+  - `DefinedNameInfo` gains `Comment`.
+  - `Workbook.Load` fills `Workbook.DefinedNames`, with the scope mapped to the sheet name.
+  - Not filled: the print names, which go to `PageSetup`; names that refer to other workbooks
+    or to tables; and names scoped to sheets the model does not load. These remain in
+    `LoadedDefinedNames`.
+
+### Fixes
+- **Formula cells without a cached value were lost on load.** `Workbook.Load` skipped any
+  formula cell that had no stored result, which is common in files from tools that do not
+  calculate, so load → save deleted those formulas. They now load and save.
+- **Worksheet element order.**
+  - `<hyperlinks>` was written before `<conditionalFormatting>` and `<dataValidations>`.
+  - `<tableParts>` was written before `<legacyDrawing>`.
+  - Both broke the CT_Worksheet order whenever a sheet combined these features. The writer
+    now follows ECMA-376 order, and a test checks every child element.
+
+### Behaviour changes
+- **Load → save keeps formulas.** Until now it wrote cached values only; now formulas and
+  their cached results are saved. Two exceptions keep the saved values identical:
+  - Formulas that refer to other workbooks (`[1]Sheet!A1`), to tables (`Table1[Col]`), or to
+    a loaded defined name the model could not keep, are saved as their cached value, because
+    those targets are not in the saved file.
+  - Data-table (`TABLE()`) cells load and save as values.
+- **Load → save keeps defined names and the full page setup.** Previously only the odd-page
+  header/footer was kept.
+- **Element order.** Sheets that combine hyperlinks with conditional formats or data
+  validations, or tables with comments, write their elements in a different (now valid)
+  order.
+- **Cancellation during decryption.** The token is now checked while an encrypted file is
+  read, per 512-byte sector. The in-memory decryption that follows (key derivation, AES,
+  HMAC) still cannot be interrupted; it measured about 0.4 s for a 3 MB file, mostly key
+  derivation. Interrupting it too needs a token in `shared/Chuvadi.Internal/Crypto`.
+
+### Findings
+- **A zip that lies about its sizes cannot inflate more than it declares.** .NET's zip
+  reader stops at the declared uncompressed size, so the part arrives truncated and fails as
+  malformed XML (`XmlException`). The declared-size checks and the inflate counters stay as
+  defence in depth.
+
+### Tests
+- **New `formulaprint` group: 20 checks.** It covers:
+  - reference shifting (14 cases);
+  - Excel-shaped shared, array, data-table, string, error and bool formulas, read both
+    streaming and through the model;
+  - Value/Formula/CachedValue rules;
+  - cached values by type, read back, and LibreOffice recalculating them to the same
+    values;
+  - auto-fit by cached value;
+  - `ReadLayout` before rows, with row attributes and effective styles;
+  - cancellation and read limits in `ReadLayout`;
+  - every page-setup setting written and read back through both read paths, and
+    `<sheetPr>` inserted together with auto-fit `<cols>`;
+  - validation;
+  - model round-trip with edits, and the export-config hook;
+  - CT_Worksheet order;
+  - defined names, both writer and model;
+  - a lying-size zip;
+  - cancellation while an encrypted file is read.
+- **Cross-checks.**
+  - The written page setup survives a LibreOffice re-save (paper, orientation, fit,
+    print area, titles, header, margins).
+  - Streaming read speed is unchanged (200,000 rows × 10 columns).
+
 ## 1.4.0 (unreleased)
 
 Read-side additions for Anjal Mail and the Layout engine: display text, password on the

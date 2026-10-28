@@ -39,7 +39,7 @@ public sealed class Workbook
     /// <summary>The sheets in the workbook, in tab order.</summary>
     public IReadOnlyList<Sheet> Sheets => _sheets;
 
-    /// <summary>Workbook-level defined names (named ranges and named scalars).</summary>
+    /// <summary>Defined names (named ranges, constants and formulas), workbook-level or sheet-scoped. Loaded and saved.</summary>
     public DefinedNameCollection DefinedNames { get; } = new();
 
     /// <summary>
@@ -65,9 +65,9 @@ public sealed class Workbook
     public bool HasMacros { get; internal set; }
 
     /// <summary>
-    /// The defined names of a loaded file, as stored (including _xlnm.Print_Area and
-    /// _xlnm.Print_Titles). Read-only and not written back on save; use
-    /// <see cref="DefinedNames"/> to add names for saving.
+    /// The defined names of a loaded file, exactly as stored (including _xlnm.Print_Area and
+    /// _xlnm.Print_Titles, and names the model cannot keep). Read-only; what is saved is
+    /// <see cref="DefinedNames"/> plus each sheet's <see cref="Sheet.PageSetup"/>.
     /// </summary>
     public IReadOnlyList<DefinedNameInfo> LoadedDefinedNames { get; internal set; } = Array.Empty<DefinedNameInfo>();
 
@@ -79,6 +79,9 @@ public sealed class Workbook
     public System.Globalization.CultureInfo DisplayCulture { get; set; } = System.Globalization.CultureInfo.InvariantCulture;
 
     internal NumberFormatOptions DisplayOptions => new() { Culture = DisplayCulture, Date1904 = Date1904 };
+
+    /// <summary>Loaded names the model could not keep; formulas using them are saved as their cached values.</summary>
+    internal HashSet<string> UnkeptNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     internal bool IsStructureProtected { get; private set; }
     internal string? StructureProtectionPassword { get; private set; }
@@ -186,16 +189,19 @@ public sealed class Workbook
 
     /// <summary>
     /// Loads an existing xlsx file into a Workbook: cell values (strings, numbers, dates,
-    /// booleans; formula cells load as their cached values), and, since 1.2.0, the read-side
+    /// booleans), formulas with their cached results (since 1.5.0), defined names, page setup,
+    /// and, since 1.2.0, the read-side
     /// style data: <see cref="StyleTable"/>, each cell's <see cref="Cell.StyleIndex"/> and
     /// resolved <see cref="Cell.Style"/>, merged ranges, column spans, row attributes and the
     /// sheet format defaults.
     ///
-    /// Round-trip (load → save) keeps values, merges, column widths and the style properties
-    /// the writer supports. It does NOT keep: freeze panes, defined names, tables, charts,
-    /// pivots, drawings, comments, conditional formats, row heights/visibility/grouping,
-    /// column visibility/grouping/styles, formulas (cached values are written instead), or
-    /// the extended <see cref="CellStyle"/> properties added in 1.2.0.
+    /// Round-trip (load → save) keeps values, formulas with their cached results, defined names,
+    /// page setup (print area and titles, margins, header/footer, breaks), merges, column widths
+    /// and the style properties the writer supports. Formulas that refer to other workbooks, to
+    /// tables or to defined names the model could not keep, and data-table (TABLE()) cells, are
+    /// saved as their cached values, since those targets are not saved. It does NOT keep: freeze panes, tables, charts, pivots, drawings,
+    /// comments, conditional formats, row heights/visibility/grouping, column
+    /// visibility/grouping/styles, or the extended <see cref="CellStyle"/> properties added in 1.2.0.
     ///
     /// For read-only access to large files, prefer <see cref="XlsxReader"/> directly.
     /// </summary>
@@ -313,7 +319,12 @@ public sealed class Sheet
     /// </summary>
     public SheetFormat Format { get; } = new();
 
-    /// <summary>Print settings of a loaded file (Excel defaults for a sheet built in memory). Read-only.</summary>
+    /// <summary>
+    /// Print settings: paper, orientation, scale or fit-to, margins, header/footer, gridlines
+    /// and headings, centring, page breaks, print area and print titles. A loaded file's
+    /// settings; Excel's defaults for a sheet built in memory. Saved with the workbook (values
+    /// left at their defaults are not written).
+    /// </summary>
     public PageSetup PageSetup { get; private set; } = new();
 
     /// <summary>Visible, hidden or very hidden (from workbook.xml). Read-only; new sheets are visible.</summary>
@@ -338,9 +349,6 @@ public sealed class Sheet
         RightToLeft = rightToLeft;
         ViewMode = mode;
         ZoomScale = zoom;
-        // Round-trip the odd-page header/footer through the writer's existing API.
-        if (page.HeaderFooter.OddHeader is not null || page.HeaderFooter.OddFooter is not null)
-            SetHeaderFooter(page.HeaderFooter.OddHeader, page.HeaderFooter.OddFooter);
     }
 
     /// <summary>
@@ -429,11 +437,11 @@ public sealed class Sheet
         return this;
     }
 
-    /// <summary>The page header shown when printing (Excel header/footer codes). Null = none.</summary>
-    public string? PageHeader { get; private set; }
+    /// <summary>The page header shown when printing (Excel header/footer codes). Null = none. Same as <c>PageSetup.HeaderFooter.OddHeader</c>.</summary>
+    public string? PageHeader => PageSetup.HeaderFooter.OddHeader;
 
-    /// <summary>The page footer shown when printing (Excel header/footer codes). Null = none.</summary>
-    public string? PageFooter { get; private set; }
+    /// <summary>The page footer shown when printing (Excel header/footer codes). Null = none. Same as <c>PageSetup.HeaderFooter.OddFooter</c>.</summary>
+    public string? PageFooter => PageSetup.HeaderFooter.OddFooter;
 
     /// <summary>
     /// Sets the page header and/or footer for printing and Page Layout view. Text uses Excel's
@@ -443,9 +451,23 @@ public sealed class Sheet
     /// </summary>
     public Sheet SetHeaderFooter(string? header, string? footer)
     {
-        PageHeader = header;
-        PageFooter = footer;
+        PageSetup.HeaderFooter.OddHeader = header;
+        PageSetup.HeaderFooter.OddFooter = footer;
         return this;
+    }
+
+    /// <summary>
+    /// The style Excel renders a cell with, without creating the cell: a cell that exists uses
+    /// its own <see cref="Cell.Style"/> (null = workbook default); a cell the sheet does not hold
+    /// uses the row style (when the row has customFormat), else the column style, else null.
+    /// </summary>
+    public CellStyle? GetEffectiveStyle(int row, int column)
+    {
+        if (_cells.TryGetValue((row, column), out var cell)) return cell.Style;
+        if (_rows.TryGetValue(row, out var rd) && rd.CustomFormat && rd.StyleIndex > 0)
+            return StyleTable.ResolveCellFormat(rd.StyleIndex);
+        var span = FindColumnRange(column);
+        return span is not null && span.StyleIndex > 0 ? StyleTable.ResolveCellFormat(span.StyleIndex) : null;
     }
 
     /// <summary>Adds a data validation rule over the given range.</summary>
@@ -475,7 +497,8 @@ public sealed class Sheet
     /// <summary>
     /// Sizes every column that has data to its content when the workbook is saved (cells as
     /// displayed: number format, font, size, bold). Widths set with <c>Columns[n].Width</c>
-    /// win. Wrapped, merged, rotated and formula cells are not measured. Computed at save, so
+    /// win. Wrapped, merged and rotated cells are not measured; formula cells are measured by
+    /// their cached result when they have one. Computed at save, so
     /// cells added after this call count. See <see cref="AutoFitOptions"/>.
     /// </summary>
     public Sheet AutoFitColumns(AutoFitOptions? options = null)
@@ -683,18 +706,67 @@ public sealed class Cell
     public int Column { get; }
     public string Address => CellAddress.ToA1(Row, Column);
 
-    /// <summary>The cell's value. Setting <see cref="Value"/> clears <see cref="Formula"/> and vice versa.</summary>
+    /// <summary>
+    /// The cell's value. For a formula cell this is the formula's cached result
+    /// (<see cref="CachedValue"/>), so code that reads loaded values sees results as before.
+    /// Setting a value makes the cell a constant: it clears <see cref="Formula"/>.
+    /// </summary>
     public object? Value
     {
         get => _value;
-        set { _value = value; _formula = null; }
+        set { _value = value; _formula = null; _arrayRange = null; }
     }
 
-    /// <summary>An Excel formula (without leading '='). Setting clears Value.</summary>
+    /// <summary>
+    /// The cell's formula as written in Excel, without the leading '=' (e.g. "SUM(B2:B9)"), or
+    /// null for a constant. Loaded from the file (a shared formula's cells each get their own,
+    /// shifted text). Setting a formula clears the value and the cached result; setting null
+    /// makes the cell empty.
+    /// </summary>
     public string? Formula
     {
         get => _formula;
-        set { _formula = value; _value = null; }
+        set { _formula = value; _value = null; _arrayRange = null; }
+    }
+
+    /// <summary>
+    /// The formula's last computed result as stored in the file, or null when the file has none
+    /// (tools that do not calculate often write formulas without results). Saved with the
+    /// formula, so readers that do not calculate show it. Settable only on a formula cell.
+    /// Always null for a constant.
+    /// </summary>
+    public object? CachedValue
+    {
+        get => _formula is null ? null : _value;
+        set
+        {
+            if (_formula is null) throw new InvalidOperationException("CachedValue can only be set on a formula cell; set Formula first.");
+            _value = value;
+        }
+    }
+
+    /// <summary>True if the cell has a formula and a cached result.</summary>
+    public bool HasCachedValue => _formula is not null && _value is not null;
+
+    /// <summary>
+    /// For the top-left cell of an array (Ctrl+Shift+Enter) formula, the range it fills (e.g.
+    /// "C2:C10"); otherwise null. Settable only on a formula cell. The other cells of the range
+    /// hold the results as values.
+    /// </summary>
+    public string? ArrayFormulaRange
+    {
+        get => _arrayRange;
+        set
+        {
+            if (value is not null && _formula is null) throw new InvalidOperationException("ArrayFormulaRange can only be set on a formula cell; set Formula first.");
+            _arrayRange = value;
+        }
+    }
+
+    /// <summary>Load path: formula, cached result and array range together.</summary>
+    internal void SetLoadedFormula(string formula, object? cached, string? arrayRange)
+    {
+        _formula = formula; _value = cached; _arrayRange = arrayRange;
     }
 
     /// <summary>
@@ -727,6 +799,7 @@ public sealed class Cell
     private CellStyle? _style;
     private object? _value;
     private string? _formula;
+    private string? _arrayRange;
 
     internal Cell(int row, int column) { Row = row; Column = column; }
 
@@ -780,6 +853,7 @@ public sealed class Cell
 
     internal bool IsFormula => _formula is not null;
     internal bool IsEmpty => _value is null && _formula is null;
+    internal string? ArrayRangeInternal => _arrayRange;
 }
 
 /// <summary>
@@ -806,37 +880,130 @@ public readonly struct Range
 }
 
 /// <summary>
-/// Workbook-level defined names — named ranges and named scalars usable in formulas.
-/// Example: after <c>wb.DefinedNames.Add("TaxRate", "0.18")</c>, a formula
-/// <c>"Subtotal * TaxRate"</c> resolves correctly when Excel opens the file.
+/// A defined name: a named range, constant or formula, at workbook level or scoped to one sheet.
+/// </summary>
+public sealed class DefinedName
+{
+    internal DefinedName(string name, string formula, string? scope, bool hidden, string? comment)
+    {
+        Name = name; Formula = formula; Scope = scope; Hidden = hidden; Comment = comment;
+    }
+
+    /// <summary>The name, e.g. "TaxRate".</summary>
+    public string Name { get; }
+
+    /// <summary>The reference or formula without '=', e.g. "Data!$A$1:$A$100" or "0.18".</summary>
+    public string Formula { get; }
+
+    /// <summary>The sheet the name is scoped to, or null for a workbook-level name.</summary>
+    public string? Scope { get; }
+
+    /// <summary>True if the name is hidden from Excel's Name Manager.</summary>
+    public bool Hidden { get; }
+
+    /// <summary>The name's comment, or null.</summary>
+    public string? Comment { get; }
+}
+
+/// <summary>
+/// The workbook's defined names — named ranges, constants and formulas, at workbook level or
+/// scoped to a sheet. Example: after <c>wb.DefinedNames.Add("TaxRate", "0.18")</c>, a formula
+/// <c>"Subtotal * TaxRate"</c> resolves when Excel opens the file. A loaded workbook's names are
+/// filled in and saved back, except the print area and print titles, which live in
+/// <see cref="Sheet.PageSetup"/>, and names that refer to other workbooks or to tables, which the
+/// model cannot keep (they stay visible in <see cref="Workbook.LoadedDefinedNames"/>).
 /// </summary>
 public sealed class DefinedNameCollection
 {
-    private readonly Dictionary<string, string> _names = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<DefinedName> _names = new();
 
-    public IEnumerable<KeyValuePair<string, string>> All => _names;
+    /// <summary>Workbook-level names as name → formula pairs (sheet-scoped names are in <see cref="Entries"/>).</summary>
+    public IEnumerable<KeyValuePair<string, string>> All
+    {
+        get
+        {
+            foreach (var n in _names)
+                if (n.Scope is null) yield return new KeyValuePair<string, string>(n.Name, n.Formula);
+        }
+    }
+
+    /// <summary>Every name, workbook-level and sheet-scoped, in the order added (or loaded).</summary>
+    public IReadOnlyList<DefinedName> Entries => _names;
+
+    /// <summary>Number of names, of all scopes.</summary>
     public int Count => _names.Count;
 
-    /// <summary>Adds or replaces a defined name.</summary>
-    public void Add(string name, string formulaOrReference)
+    /// <summary>Adds or replaces a workbook-level defined name.</summary>
+    public void Add(string name, string formulaOrReference) => Add(name, formulaOrReference, null);
+
+    /// <summary>
+    /// Adds or replaces a defined name. <paramref name="scopeSheetName"/> null = workbook level;
+    /// otherwise the name belongs to that sheet (which must exist when the workbook is saved).
+    /// _xlnm.Print_Area and _xlnm.Print_Titles cannot be added: use <see cref="Sheet.PageSetup"/>.
+    /// </summary>
+    public DefinedName Add(string name, string formulaOrReference, string? scopeSheetName, bool hidden = false, string? comment = null)
+    {
+        DefinedNameRules.Validate(name, formulaOrReference);
+        Remove(name, scopeSheetName);
+        var dn = new DefinedName(name, formulaOrReference, scopeSheetName, hidden, comment);
+        _names.Add(dn);
+        return dn;
+    }
+
+    /// <summary>Removes a workbook-level name.</summary>
+    public bool Remove(string name) => Remove(name, null);
+
+    /// <summary>Removes a name with the given scope (null = workbook level).</summary>
+    public bool Remove(string name, string? scopeSheetName)
+        => _names.RemoveAll(n => Matches(n, name, scopeSheetName)) > 0;
+
+    /// <summary>Looks up a workbook-level name's formula.</summary>
+    public bool TryGet(string name, out string value)
+    {
+        var n = Find(name, null);
+        value = n?.Formula!;
+        return n is not null;
+    }
+
+    /// <summary>The name with the given scope (null = workbook level), or null.</summary>
+    public DefinedName? Find(string name, string? scopeSheetName = null)
+    {
+        foreach (var n in _names) if (Matches(n, name, scopeSheetName)) return n;
+        return null;
+    }
+
+    private static bool Matches(DefinedName n, string name, string? scope)
+        => string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(n.Scope, scope, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Load path: adds without the print-name check (callers filter those).</summary>
+    internal void AddLoaded(string name, string formula, string? scope, bool hidden, string? comment)
+    {
+        Remove(name, scope);
+        _names.Add(new DefinedName(name, formula, scope, hidden, comment));
+    }
+}
+
+/// <summary>Validation shared by the model's and the streaming writer's defined names.</summary>
+internal static class DefinedNameRules
+{
+    public static void Validate(string name, string formula)
     {
         if (string.IsNullOrEmpty(name)) throw new ArgumentException("Name required.", nameof(name));
-        if (string.IsNullOrEmpty(formulaOrReference)) throw new ArgumentException("Reference required.", nameof(formulaOrReference));
+        if (string.IsNullOrEmpty(formula)) throw new ArgumentException("Reference required.", nameof(formula));
+        if (PrintNames.IsPrintName(name))
+            throw new ArgumentException($"'{name}' is written from the sheet's PageSetup (SetPrintArea, PrintTitleRows/PrintTitleColumns); set it there.", nameof(name));
         // Excel name rules (simplified): must start with letter or underscore; no spaces; reserved names disallowed.
         if (!IsValidName(name))
             throw new ArgumentException($"'{name}' is not a valid defined name. Names must start with a letter or '_' and contain no spaces or special characters.", nameof(name));
-        _names[name] = formulaOrReference;
     }
-
-    public bool Remove(string name) => _names.Remove(name);
-    public bool TryGet(string name, out string value) => _names.TryGetValue(name, out value!);
 
     private static bool IsValidName(string n)
     {
         if (n.Length == 0) return false;
-        if (n[0] != '_' && !char.IsLetter(n[0])) return false;
+        if (n[0] != '_' && n[0] != '\\' && !char.IsLetter(n[0])) return false;
         foreach (var c in n)
-            if (c != '_' && c != '.' && !char.IsLetterOrDigit(c)) return false;
+            if (c != '_' && c != '.' && c != '\\' && !char.IsLetterOrDigit(c)) return false;
         return true;
     }
 }

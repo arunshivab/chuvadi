@@ -47,12 +47,13 @@ public sealed class RowBuilder
     /// <summary>
     /// Appends a formula cell. The formula is the Excel expression WITHOUT a leading '=' —
     /// e.g. <c>"SUM(A2:B2)"</c>, not <c>"=SUM(A2:B2)"</c>. Excel will compute the value when
-    /// the file is opened; the file itself stores no cached result.
+    /// the file is opened; the file itself stores no cached result. To store one for readers
+    /// that do not calculate, use <see cref="Formula(string, object?)"/>.
     /// </summary>
     public RowBuilder Formula(string formula)
     {
         if (formula is null) throw new ArgumentNullException(nameof(formula));
-        Sink.AppendFormula(formula, styleId: null);
+        Sink.AppendFormula(formula, styleId: null, cachedValue: null, arrayRange: null);
         return this;
     }
 
@@ -60,7 +61,54 @@ public sealed class RowBuilder
     public RowBuilder Formula(string formula, CellStyle style)
     {
         if (formula is null) throw new ArgumentNullException(nameof(formula));
-        Sink.AppendFormula(formula, styleId: Sink.RegisterStyle(style));
+        Sink.AppendFormula(formula, styleId: Sink.RegisterStyle(style), cachedValue: null, arrayRange: null);
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a formula cell together with its last computed result, so readers that do not
+    /// calculate (viewers, converters, this library's reader) show a value. Excel recalculates
+    /// on open; see <see cref="XlsxWriterOptions.FullCalculationOnLoad"/>. The cached value may be
+    /// a number, string, bool, DateTime/DateOnly/DateTimeOffset (written as a date serial with the
+    /// default date style unless a style is given), TimeSpan, or null for none. A string equal
+    /// to an Excel error literal (#N/A, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #NULL!, #SPILL!,
+    /// #CALC!, ...) is written as that error.
+    /// </summary>
+    public RowBuilder Formula(string formula, object? cachedValue)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        Sink.AppendFormula(formula, styleId: null, cachedValue, arrayRange: null);
+        return this;
+    }
+
+    /// <summary>Appends a styled formula cell with its cached result. See <see cref="Formula(string, object?)"/>.</summary>
+    public RowBuilder Formula(string formula, object? cachedValue, CellStyle style)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        Sink.AppendFormula(formula, styleId: Sink.RegisterStyle(style), cachedValue, arrayRange: null);
+        return this;
+    }
+
+    /// <summary>
+    /// Appends the top-left cell of an array (Ctrl+Shift+Enter) formula that fills
+    /// <paramref name="range"/> (e.g. "C2:C10", which must start at this cell). Write the other
+    /// cells of the range as plain values (their cached results) or leave them empty.
+    /// <paramref name="cachedValue"/> is this cell's result, as for <see cref="Formula(string, object?)"/>.
+    /// </summary>
+    public RowBuilder ArrayFormula(string range, string formula, object? cachedValue = null)
+    {
+        if (string.IsNullOrEmpty(range)) throw new ArgumentException("Range required.", nameof(range));
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        Sink.AppendFormula(formula, styleId: null, cachedValue, arrayRange: range);
+        return this;
+    }
+
+    /// <summary>Appends a styled array formula. See <see cref="ArrayFormula(string, string, object?)"/>.</summary>
+    public RowBuilder ArrayFormula(string range, string formula, object? cachedValue, CellStyle style)
+    {
+        if (string.IsNullOrEmpty(range)) throw new ArgumentException("Range required.", nameof(range));
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        Sink.AppendFormula(formula, styleId: Sink.RegisterStyle(style), cachedValue, arrayRange: range);
         return this;
     }
 
@@ -128,7 +176,7 @@ public sealed class RowBuilder
 internal interface IRowSink
 {
     void AppendCell(object? value, int? styleId);
-    void AppendFormula(string formula, int? styleId);
+    void AppendFormula(string formula, int? styleId, object? cachedValue, string? arrayRange);
     void AppendHyperlink(string url, string display, int? styleId, string? tooltip);
     void AppendComment(object? cellValue, int? styleId, string author, string text);
 

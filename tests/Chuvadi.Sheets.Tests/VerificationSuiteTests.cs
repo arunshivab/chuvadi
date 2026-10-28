@@ -72,6 +72,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void ReadSafety() => ReadSafetyTest.Run(_dir);
+
+    [Fact]
+    public void FormulaPrint() => FormulaPrintTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

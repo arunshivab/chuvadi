@@ -25,7 +25,11 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Column auto-fit | `sheet.AutoFitColumns()`, `SheetWriter.AutoFitColumns()`, `cfg.AutoFitColumns()` |
 | Number format rendering (display text) | `NumberFormatter.Format(value, formatCode)` |
 | Cell display text on read | `cell.DisplayText`, `row.GetDisplayString(col)` |
-| Page setup on read (print area, titles, paper, margins, breaks, header/footer) | `sheet.PageSetup` |
+| Page setup on read (print area, titles, paper, margins, breaks, header/footer) | `sheet.PageSetup`, streaming `sheetReader.ReadLayout().PageSetup` |
+| Page setup on write | `SheetWriter.PageSetup`, `sheet.PageSetup`, `cfg.PageSetup(p => ...)` |
+| Formulas on read (shared formulas expanded) with cached results | `row.GetFormula(col)`, `row.GetFormulaInfo(col)`, `cell.Formula`, `cell.CachedValue` |
+| Formulas on write with cached results, array formulas | `rb.Formula(f, cachedValue)`, `rb.ArrayFormula(range, f, cached)`, `XlsxWriterOptions.FullCalculationOnLoad` |
+| Layout for renderers (widths, merges, row attributes, effective styles) | `ReadLayout()`, `row.Attributes`, `row.GetStyle(col)`, `row.GetEffectiveStyleIndex(col, layout)`, `sheet.GetEffectiveStyle(r, c)` |
 | Encrypted streaming read | `XlsxReader.Open(path, password, options)` |
 | Hostile-input limits, cancellation | `XlsxReaderOptions.ForUntrustedInput()`, `MaxRowsPerSheet`, `CancellationToken` |
 | Macro detection (never executed) | `reader.HasMacros`, `wb.HasMacros` |
@@ -34,7 +38,7 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Page headers/footers (print) | `SheetWriter.SetHeaderFooter`, `Sheet.SetHeaderFooter`, `cfg.PageHeaderFooter` |
 | Data validation | `DataValidation.List/WholeNumber/...` |
 | Conditional formatting | `ConditionalFormat.ColorScale/DataBar/CellIs`* |
-| Defined names | `wb.DefinedNames.Add(...)` |
+| Defined names (workbook and sheet scope; read and write) | `wb.DefinedNames.Add(...)`, `XlsxWriter.AddDefinedName(...)`, `reader.DefinedNames` |
 | Sheet protection | `sheet.Protect(password, options)` |
 | Workbook structure protection | `wb.Protect(password, lockStructure)` |
 | Workbook encryption (open-password) | `wb.SaveTo(path, new EncryptionOptions {...})` |
@@ -108,6 +112,23 @@ using (var upload = XlsxReader.Open(uploadStream, password, opts))
     foreach (var row in upload.Sheet(1).Rows)
         Console.WriteLine(row.GetDisplayString(0));        // "15/03/2023", "1,234.50", ...
 
+// Formulas with cached results (1.5.0): readers that do not calculate still show values
+sheet.WriteRow(rb => rb.Cell(120).Cell(18).Formula("A2*B2/100", 21.6));
+foreach (var row in reader.Sheet(1).Rows)
+    Console.WriteLine($"{row.GetFormula(2)} = {row[2]}");   // "A2*B2/100 = 21.6" (shared formulas expanded)
+
+// Page setup on write and on the streaming reader (1.5.0)
+var page = sheet.PageSetup;                    // SheetWriter, or Workbook Sheet
+page.PaperSizeCode = 9;                        // A4
+page.Orientation = PageOrientation.Landscape;
+page.FitTo(1, 0);                              // one page wide, as many tall as needed
+page.Margins.Set(0.5, 0.5, 0.75, 0.75);
+page.PrintTitleRows = (1, 1);                  // repeat the header row
+page.SetPrintArea("A1:H200");
+page.AddRowBreak(50);
+var layout = reader.Sheet("Report").ReadLayout();   // before streaming rows
+double widthA = layout.ColumnWidth(1);  var area = layout.PageSetup.PrintAreas;
+
 // Render a value exactly as Excel displays it
 string shown = NumberFormatter.Format(1234.5, "#,##0.00");        // "1,234.50"
 
@@ -166,7 +187,9 @@ diagonal borders, indent, rotation, shrink-to-fit, reading order, protection, qu
 locale-dependent built-in number formats (e.g. id 44), row heights/visibility/grouping and
 column visibility/grouping/styles are not written back. Fonts, colours, solid fills, all
 border styles, number formats with a code, horizontal and vertical alignment, wrap, merges
-and column widths are.
+and column widths are. Since 1.5.0, formulas (with cached results), defined names and the
+full page setup round-trip too; formulas that refer to other workbooks or to tables, and
+data-table cells, are saved as their cached values.
 
 ## Out of scope
 

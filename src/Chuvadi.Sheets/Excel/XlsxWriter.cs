@@ -172,6 +172,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     public int SheetCount => _sheets.Count;
 
     private Dictionary<string, string>? _definedNames;
+    private readonly List<(string Name, string Formula, string? Scope, bool Hidden, string? Comment)> _scopedNames = new();
 
     private string? _workbookProtectionHashB64;
     private string? _workbookProtectionSaltB64;
@@ -211,6 +212,26 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         _definedNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var kv in names)
             _definedNames[kv.Key] = kv.Value;
+    }
+
+    /// <summary>
+    /// Adds a defined name to workbook.xml. <paramref name="scopeSheetName"/> null makes it a
+    /// workbook-level name; a sheet name scopes it to that sheet (the sheet must have been
+    /// added by save time). <paramref name="formula"/> is the reference or formula without '='
+    /// (e.g. "Data!$A$1:$A$100", "0.18", "Rates!$B$2*12"). Print areas and print titles are
+    /// written from each sheet's <see cref="SheetWriter.PageSetup"/>; adding _xlnm.Print_Area or
+    /// _xlnm.Print_Titles here throws. A name added twice with the same scope replaces the first.
+    /// </summary>
+    public XlsxWriter AddDefinedName(string name, string formula, string? scopeSheetName = null, bool hidden = false, string? comment = null)
+    {
+        EnsureNotDisposed();
+        EnsureNotSaved();
+        DefinedNameRules.Validate(name, formula);
+        _scopedNames.RemoveAll(n => string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase)
+                                    && string.Equals(n.Scope, scopeSheetName, StringComparison.OrdinalIgnoreCase));
+        if (scopeSheetName is null) _definedNames?.Remove(name);
+        _scopedNames.Add((name, formula, scopeSheetName, hidden, comment));
+        return this;
     }
 
     // ---- Save (sync) ---------------------------------------------------------------
@@ -311,11 +332,21 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
                 bufferSize: 64 * 1024,
                 options: FileOptions.SequentialScan | (useAsyncCopy ? FileOptions.Asynchronous : FileOptions.None)))
             {
-                // Auto-fit sheets: copy the prologue (no placeholders in it), insert the computed
-                // <cols>, then continue with the normal copy from that point.
+                // Insertions computed at finalization go into the prologue (which has no string
+                // placeholders): <sheetPr> right after the <worksheet> start tag, and, for
+                // auto-fit sheets, <cols> before <sheetData>. Then the normal copy continues.
+                long copied = 0;
+                if (sheet.SheetPrXml is { } sheetPr && sheet.PrologueInsertOffset >= 0)
+                {
+                    CopyExactly(src, dest, sheet.PrologueInsertOffset - copied);
+                    copied = sheet.PrologueInsertOffset;
+                    if (useAsyncCopy) await dest.WriteAsync(sheetPr, cancellation).ConfigureAwait(false);
+                    else dest.Write(sheetPr, 0, sheetPr.Length);
+                }
                 if (sheet.ColsInsertOffset >= 0)
                 {
-                    CopyExactly(src, dest, sheet.ColsInsertOffset);
+                    CopyExactly(src, dest, sheet.ColsInsertOffset - copied);
+                    copied = sheet.ColsInsertOffset;
                     var cols = sheet.ColsXml ?? Array.Empty<byte>();
                     if (useAsyncCopy) await dest.WriteAsync(cols, cancellation).ConfigureAwait(false);
                     else dest.Write(cols, 0, cols.Length);
@@ -461,17 +492,51 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         }
         w.WriteEndElement();
 
-        // <definedNames> — workbook-scoped named ranges/values.
-        if (_definedNames is not null && _definedNames.Count > 0)
+        // <definedNames> — names set through SetDefinedNames (workbook scope), names added with
+        // AddDefinedName, then each sheet's print area and print titles (sheet scope).
+        var names = new List<(string Name, string Formula, int? Local, bool Hidden, string? Comment)>();
+        if (_definedNames is not null)
+            foreach (var kv in _definedNames)
+                names.Add((kv.Key, kv.Value, null, false, null));
+        foreach (var n in _scopedNames)
+        {
+            int? local = null;
+            if (n.Scope is not null)
+            {
+                int idx = _sheets.FindIndex(sh => string.Equals(sh.Name, n.Scope, StringComparison.OrdinalIgnoreCase));
+                if (idx < 0) throw new InvalidOperationException($"Defined name '{n.Name}' is scoped to sheet '{n.Scope}', which was not added.");
+                local = idx;
+            }
+            names.Add((n.Name, n.Formula, local, n.Hidden, n.Comment));
+        }
+        for (int i = 0; i < _sheets.Count; i++)
+        {
+            var page = _sheets[i].PageSetup;
+            var area = page.PrintAreas.Count > 0 ? PrintNames.AreaFormula(_sheets[i].Name, page.PrintAreas) : page.PrintAreaFormula;
+            if (area is not null) names.Add(("_xlnm.Print_Area", area, i, false, null));
+            var titles = PrintNames.TitlesFormula(_sheets[i].Name, page.PrintTitleRows, page.PrintTitleColumns) ?? page.PrintTitlesFormula;
+            if (titles is not null) names.Add(("_xlnm.Print_Titles", titles, i, false, null));
+        }
+        if (names.Count > 0)
         {
             w.WriteStartElement("definedNames", SsNs);
-            foreach (var kv in _definedNames)
+            foreach (var n in names)
             {
                 w.WriteStartElement("definedName", SsNs);
-                w.WriteAttributeString("name", kv.Key);
-                w.WriteString(kv.Value);
+                w.WriteAttributeString("name", n.Name);
+                if (n.Comment is not null) w.WriteAttributeString("comment", n.Comment);
+                if (n.Local is int l) w.WriteAttributeString("localSheetId", l.ToString(CultureInfo.InvariantCulture));
+                if (n.Hidden) w.WriteAttributeString("hidden", "1");
+                w.WriteString(n.Formula);
                 w.WriteEndElement();
             }
+            w.WriteEndElement();
+        }
+
+        if (_options.FullCalculationOnLoad)
+        {
+            w.WriteStartElement("calcPr", SsNs);
+            w.WriteAttributeString("fullCalcOnLoad", "1");
             w.WriteEndElement();
         }
 

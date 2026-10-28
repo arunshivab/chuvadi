@@ -18,13 +18,13 @@ namespace Chuvadi.Sheets.Excel;
 /// be set after AddSheet but before the first row:
 ///
 ///   &lt;worksheet&gt;
+///     &lt;sheetPr&gt;...&lt;/sheetPr&gt;             — fit-to-page (inserted at save when set)
 ///     &lt;sheetViews&gt;...&lt;/sheetViews&gt;       — freeze panes (deferred until first row)
 ///     &lt;cols&gt;...&lt;/cols&gt;                    — column widths (deferred until first row)
 ///     &lt;sheetData&gt;...&lt;/sheetData&gt;           — rows (streamed)
-///     &lt;autoFilter ref="..."/&gt;             — emitted at sheet close
-///     &lt;mergeCells&gt;...&lt;/mergeCells&gt;         — emitted at sheet close
-///     &lt;hyperlinks&gt;...&lt;/hyperlinks&gt;         — emitted at sheet close
-///     &lt;legacyDrawing r:id="..."/&gt;         — emitted at sheet close (only when comments exist)
+///     sheetProtection, autoFilter, mergeCells, conditionalFormatting, dataValidations,
+///     hyperlinks, printOptions, pageMargins, pageSetup, headerFooter, rowBreaks, colBreaks,
+///     legacyDrawing (comments), tableParts                       — emitted at sheet close
 ///   &lt;/worksheet&gt;
 ///
 /// Cells are written to a per-sheet temporary file; strings get placeholders that the parent
@@ -72,8 +72,12 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     private readonly List<SheetTable> _tables = new();
     private readonly List<(string Range, DataValidation V)> _dataValidations = new();
     private readonly List<(string Range, ConditionalFormatRule Rule)> _conditionalFormats = new();
-    private string? _pageHeader;
-    private string? _pageFooter;
+
+    // Print settings — written at finalization; <sheetPr> (fit-to-page) is inserted at the
+    // prologue offset recorded when the worksheet opens.
+    private readonly PageSetup _pageSetup = new();
+    private long _prologueInsertOffset = -1;
+    private byte[]? _sheetPrXml;
 
     // Sheet protection — set via Protect().
     private bool _sheetProtected;
@@ -150,7 +154,8 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     /// Sizes columns to their content: every cell written afterwards is measured as displayed
     /// (number format, font, size, bold) and the widths are written when the sheet is saved.
     /// Widths set with <see cref="SetColumnWidth(int, double)"/> win over auto-fit. Wrapped,
-    /// merged, rotated and formula cells are not measured. Must be called before any rows are
+    /// merged and rotated cells are not measured; formula cells are measured by their cached
+    /// result (<see cref="RowBuilder.Formula(string, object?)"/>) when given. Must be called before any rows are
     /// written. See <see cref="AutoFitOptions"/> for caps, column selection and sampling.
     /// </summary>
     public SheetWriter AutoFitColumns(AutoFitOptions? options = null)
@@ -187,6 +192,14 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         _freezeCols = cols;
         return this;
     }
+
+    /// <summary>
+    /// The sheet's print settings: paper, orientation, scale or fit-to, margins, header/footer,
+    /// gridlines and headings, centring, page breaks, print area and print titles. Can be
+    /// changed at any time until the workbook is saved. Nothing is written for settings left at
+    /// their defaults.
+    /// </summary>
+    public PageSetup PageSetup => _pageSetup;
 
     // ---- Row API (sync) ------------------------------------------------------------
 
@@ -343,8 +356,8 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     public SheetWriter SetHeaderFooter(string? header, string? footer)
     {
         EnsureNotDisposed();
-        _pageHeader = header;
-        _pageFooter = footer;
+        _pageSetup.HeaderFooter.OddHeader = header;
+        _pageSetup.HeaderFooter.OddFooter = footer;
         return this;
     }
 
@@ -352,11 +365,13 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
     void IRowSink.AppendCell(object? value, int? styleId) => AppendCell(value, styleId);
 
-    void IRowSink.AppendFormula(string formula, int? styleId)
+    void IRowSink.AppendFormula(string formula, int? styleId, object? cachedValue, string? arrayRange)
     {
         if (!_rowInProgress) throw new InvalidOperationException("Cell appended outside of a row.");
-        _currentColumn++;   // formulas have no value to measure (no cached result is written)
-        WriteFormulaCell(_currentColumn, formula, styleId);
+        _currentColumn++;
+        int? sid = cachedValue is null ? styleId : EffectiveStyleId(cachedValue, styleId);
+        if (_measureRow && cachedValue is not null) Measure(_currentColumn, cachedValue, sid);
+        WriteFormulaCell(_currentColumn, formula, sid, cachedValue, arrayRange);
     }
 
     int IRowSink.RegisterStyle(CellStyle style) => _state.Styles.GetCellXfId(style);
@@ -417,6 +432,12 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         _xml.WriteStartDocument(standalone: true);
         _xml.WriteStartElement("worksheet", SsNs);
         _xml.WriteAttributeString("xmlns", "r", null, RelNs);
+
+        // Close the start tag, flush, and remember where <sheetPr> belongs (fit-to-page can be
+        // set until save). The bytes written are the same as before.
+        _xml.WriteString(string.Empty);
+        _xml.Flush();
+        _prologueInsertOffset = _tempStream.Position;
 
         WriteSheetViews();
         if (_autoFit is null)
@@ -651,13 +672,48 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         }
     }
 
-    private void WriteFormulaCell(int column, string formula, int? styleId)
+    private void WriteFormulaCell(int column, string formula, int? styleId, object? cachedValue, string? arrayRange)
     {
-        WriteCellOpen(column, styleId, null);
+        var (type, text) = CachedValueText(cachedValue);
+        WriteCellOpen(column, styleId, type);
         _xml.WriteStartElement("f", SsNs);
+        if (arrayRange is not null)
+        {
+            _xml.WriteAttributeString("t", "array");
+            _xml.WriteAttributeString("ref", arrayRange);
+        }
         _xml.WriteString(formula);
         _xml.WriteEndElement();
+        if (text is not null) WriteValue(text);
         _xml.WriteEndElement();
+    }
+
+    /// <summary>Excel's error literals: a cached string equal to one of these is written as an error (t="e").</summary>
+    private static readonly HashSet<string> ErrorLiterals = new(StringComparer.Ordinal)
+    {
+        "#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A", "#GETTING_DATA",
+        "#SPILL!", "#CALC!", "#FIELD!", "#BLOCKED!", "#CONNECT!", "#BUSY!", "#UNKNOWN!",
+    };
+
+    /// <summary>The cell type and &lt;v&gt; text for a formula's cached result (null text = none).</summary>
+    private static (string? Type, string? Text) CachedValueText(object? v)
+    {
+        switch (v)
+        {
+            case null: return (null, null);
+            case string s: return (ErrorLiterals.Contains(s) ? "e" : "str", s);
+            case bool b: return ("b", b ? "1" : "0");
+            case DateTime dt: return (null, dt.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            case DateOnly d: return (null, d.ToDateTime(TimeOnly.MinValue).ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            case DateTimeOffset dto: return (null, dto.DateTime.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            case TimeSpan ts: return (null, ts.TotalDays.ToString("R", CultureInfo.InvariantCulture));
+            case double dbl: return (null, dbl.ToString("R", CultureInfo.InvariantCulture));
+            case float fl: return (null, ((double)fl).ToString("R", CultureInfo.InvariantCulture));
+            case decimal dec: return (null, ((double)dec).ToString("R", CultureInfo.InvariantCulture));
+            case int or long or short or byte or uint or ulong or sbyte or ushort:
+                return (null, Convert.ToString(v, CultureInfo.InvariantCulture));
+            default: return ("str", v.ToString() ?? string.Empty);
+        }
     }
 
     private static bool HasSignificantWhitespace(string s)
@@ -697,6 +753,9 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         // If the user never wrote a row, we still need a valid empty worksheet.
         if (!_worksheetOpened) EnsureWorksheetOpen();
         if (_autoFit is not null) BuildAutoFitCols();
+        _sheetPrXml = _pageSetup.FitToPage
+            ? new UTF8Encoding(false).GetBytes("<sheetPr><pageSetUpPr fitToPage=\"1\" /></sheetPr>")
+            : null;
 
         _xml.WriteEndElement(); // </sheetData>
 
@@ -735,7 +794,8 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         }
 
         // After-sheetData elements in OOXML schema order:
-        //   autoFilter, mergeCells, hyperlinks, ..., tableParts, legacyDrawing (for comments)
+        //   autoFilter, mergeCells, conditionalFormatting, dataValidations, hyperlinks, print
+        //   settings, legacyDrawing (for comments), tableParts
         if (_autoFilterRange is not null)
         {
             _xml.WriteStartElement("autoFilter", SsNs);
@@ -753,6 +813,32 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
                 _xml.WriteAttributeString("ref", range);
                 _xml.WriteEndElement();
             }
+            _xml.WriteEndElement();
+        }
+
+        // Conditional formatting — one <conditionalFormatting> element per range we register.
+        // CT_Worksheet order: mergeCells, conditionalFormatting, dataValidations, hyperlinks,
+        // printOptions, pageMargins, pageSetup, headerFooter, rowBreaks, colBreaks, ...,
+        // legacyDrawing, tableParts.
+        if (_conditionalFormats.Count > 0)
+        {
+            foreach (var (range, rule) in _conditionalFormats)
+            {
+                _xml.WriteStartElement("conditionalFormatting", SsNs);
+                _xml.WriteAttributeString("sqref", range);
+                WriteConditionalFormatRule(rule);
+                _xml.WriteEndElement();
+            }
+        }
+
+        // Data validations.
+        if (_dataValidations.Count > 0)
+        {
+            _xml.WriteStartElement("dataValidations", SsNs);
+            _xml.WriteAttributeString("count",
+                _dataValidations.Count.ToString(CultureInfo.InvariantCulture));
+            foreach (var (range, v) in _dataValidations)
+                WriteDataValidation(range, v);
             _xml.WriteEndElement();
         }
 
@@ -776,48 +862,13 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             _xml.WriteEndElement();
         }
 
-        // Conditional formatting — one <conditionalFormatting> element per range we register.
-        // OOXML schema requires it AFTER hyperlinks and BEFORE dataValidations.
-        if (_conditionalFormats.Count > 0)
-        {
-            foreach (var (range, rule) in _conditionalFormats)
-            {
-                _xml.WriteStartElement("conditionalFormatting", SsNs);
-                _xml.WriteAttributeString("sqref", range);
-                WriteConditionalFormatRule(rule);
-                _xml.WriteEndElement();
-            }
-        }
+        WritePrintSettings();
 
-        // Data validations.
-        if (_dataValidations.Count > 0)
+        // legacyDrawing — links the sheet to the VML drawing that defines comment shapes.
+        if (_comments.Count > 0)
         {
-            _xml.WriteStartElement("dataValidations", SsNs);
-            _xml.WriteAttributeString("count",
-                _dataValidations.Count.ToString(CultureInfo.InvariantCulture));
-            foreach (var (range, v) in _dataValidations)
-                WriteDataValidation(range, v);
-            _xml.WriteEndElement();
-        }
-
-        // headerFooter — page header/footer for printing and Page Layout view. Emitted after
-        // dataValidations and before tableParts/legacyDrawing, matching CT_Worksheet's
-        // relative ordering for these members.
-        if (_pageHeader is not null || _pageFooter is not null)
-        {
-            _xml.WriteStartElement("headerFooter", SsNs);
-            if (_pageHeader is not null)
-            {
-                _xml.WriteStartElement("oddHeader", SsNs);
-                _xml.WriteString(_pageHeader);
-                _xml.WriteEndElement();
-            }
-            if (_pageFooter is not null)
-            {
-                _xml.WriteStartElement("oddFooter", SsNs);
-                _xml.WriteString(_pageFooter);
-                _xml.WriteEndElement();
-            }
+            _xml.WriteStartElement("legacyDrawing", SsNs);
+            _xml.WriteAttributeString("id", RelNs, "rIdVml");
             _xml.WriteEndElement();
         }
 
@@ -837,14 +888,6 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             _xml.WriteEndElement();
         }
 
-        // legacyDrawing — links the sheet to the VML drawing that defines comment shapes.
-        if (_comments.Count > 0)
-        {
-            _xml.WriteStartElement("legacyDrawing", SsNs);
-            _xml.WriteAttributeString("id", RelNs, "rIdVml");
-            _xml.WriteEndElement();
-        }
-
         _xml.WriteEndElement(); // </worksheet>
         _xml.WriteEndDocument();
         _xml.Flush();
@@ -854,6 +897,114 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
         _finalized = true;
     }
+
+    /// <summary>printOptions, pageMargins, pageSetup, headerFooter, rowBreaks, colBreaks — each only when set.</summary>
+    private void WritePrintSettings()
+    {
+        var p = _pageSetup;
+        string I(int v) => v.ToString(CultureInfo.InvariantCulture);
+        string D(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+        if (p.HasPrintOptions)
+        {
+            _xml.WriteStartElement("printOptions", SsNs);
+            if (p.CenterHorizontally) _xml.WriteAttributeString("horizontalCentered", "1");
+            if (p.CenterVertically) _xml.WriteAttributeString("verticalCentered", "1");
+            if (p.PrintHeadings) _xml.WriteAttributeString("headings", "1");
+            if (p.PrintGridlines) _xml.WriteAttributeString("gridLines", "1");
+            _xml.WriteEndElement();
+        }
+
+        if (p.Margins.IsDefined)
+        {
+            var m = p.Margins;
+            _xml.WriteStartElement("pageMargins", SsNs);
+            _xml.WriteAttributeString("left", D(m.Left));
+            _xml.WriteAttributeString("right", D(m.Right));
+            _xml.WriteAttributeString("top", D(m.Top));
+            _xml.WriteAttributeString("bottom", D(m.Bottom));
+            _xml.WriteAttributeString("header", D(m.Header));
+            _xml.WriteAttributeString("footer", D(m.Footer));
+            _xml.WriteEndElement();
+        }
+
+        if (p.IsDefined)
+        {
+            _xml.WriteStartElement("pageSetup", SsNs);
+            if (p.PaperSizeCode is int ps) _xml.WriteAttributeString("paperSize", I(ps));
+            if (p.Scale != 100) _xml.WriteAttributeString("scale", I(p.Scale));
+            if (p.FirstPageNumber != 1) _xml.WriteAttributeString("firstPageNumber", I(p.FirstPageNumber));
+            if (p.FitToWidth != 1) _xml.WriteAttributeString("fitToWidth", I(p.FitToWidth));
+            if (p.FitToHeight != 1) _xml.WriteAttributeString("fitToHeight", I(p.FitToHeight));
+            if (p.PageOrder == PageOrder.OverThenDown) _xml.WriteAttributeString("pageOrder", "overThenDown");
+            if (p.Orientation != PageOrientation.Default)
+                _xml.WriteAttributeString("orientation", p.Orientation == PageOrientation.Landscape ? "landscape" : "portrait");
+            if (p.BlackAndWhite) _xml.WriteAttributeString("blackAndWhite", "1");
+            if (p.Draft) _xml.WriteAttributeString("draft", "1");
+            if (p.CellComments != PrintCellComments.None)
+                _xml.WriteAttributeString("cellComments", p.CellComments == PrintCellComments.AtEnd ? "atEnd" : "asDisplayed");
+            if (p.UseFirstPageNumber) _xml.WriteAttributeString("useFirstPageNumber", "1");
+            if (p.Errors != PrintErrors.Displayed)
+                _xml.WriteAttributeString("errors", p.Errors switch { PrintErrors.Blank => "blank", PrintErrors.Dash => "dash", _ => "NA" });
+            if (p.HorizontalDpi is int hd) _xml.WriteAttributeString("horizontalDpi", I(hd));
+            if (p.VerticalDpi is int vd) _xml.WriteAttributeString("verticalDpi", I(vd));
+            if (p.Copies != 1) _xml.WriteAttributeString("copies", I(p.Copies));
+            _xml.WriteEndElement();
+        }
+
+        var h = p.HeaderFooter;
+        if (h.HasContent)
+        {
+            _xml.WriteStartElement("headerFooter", SsNs);
+            if (h.DifferentOddEven) _xml.WriteAttributeString("differentOddEven", "1");
+            if (h.DifferentFirst) _xml.WriteAttributeString("differentFirst", "1");
+            if (!h.ScaleWithDocument) _xml.WriteAttributeString("scaleWithDoc", "0");
+            if (!h.AlignWithMargins) _xml.WriteAttributeString("alignWithMargins", "0");
+            void Text(string element, string? text)
+            {
+                if (text is null) return;
+                _xml.WriteStartElement(element, SsNs);
+                _xml.WriteString(text);
+                _xml.WriteEndElement();
+            }
+            Text("oddHeader", h.OddHeader);
+            Text("oddFooter", h.OddFooter);
+            Text("evenHeader", h.EvenHeader);
+            Text("evenFooter", h.EvenFooter);
+            Text("firstHeader", h.FirstHeader);
+            Text("firstFooter", h.FirstFooter);
+            _xml.WriteEndElement();
+        }
+
+        WriteBreaks("rowBreaks", p.RowBreaks);
+        WriteBreaks("colBreaks", p.ColumnBreaks);
+
+        void WriteBreaks(string element, IReadOnlyList<PageBreak> breaks)
+        {
+            if (breaks.Count == 0) return;
+            int manual = 0;
+            foreach (var b in breaks) if (b.Manual) manual++;
+            _xml.WriteStartElement(element, SsNs);
+            _xml.WriteAttributeString("count", I(breaks.Count));
+            _xml.WriteAttributeString("manualBreakCount", I(manual));
+            foreach (var b in breaks)
+            {
+                _xml.WriteStartElement("brk", SsNs);
+                _xml.WriteAttributeString("id", I(b.Id));
+                if (b.Min != 0) _xml.WriteAttributeString("min", I(b.Min));
+                if (b.Max != 0) _xml.WriteAttributeString("max", I(b.Max));
+                if (b.Manual) _xml.WriteAttributeString("man", "1");
+                _xml.WriteEndElement();
+            }
+            _xml.WriteEndElement();
+        }
+    }
+
+    /// <summary>Byte offset just after the &lt;worksheet&gt; start tag, where <see cref="SheetPrXml"/> is inserted.</summary>
+    internal long PrologueInsertOffset => _prologueInsertOffset;
+
+    /// <summary>The &lt;sheetPr&gt; element (fit-to-page), or null when not needed.</summary>
+    internal byte[]? SheetPrXml => _sheetPrXml;
 
     // ---- Internal accessors used by XlsxWriter at save time ------------------------
 

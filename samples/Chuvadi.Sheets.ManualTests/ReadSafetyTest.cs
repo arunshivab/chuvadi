@@ -366,7 +366,8 @@ internal static class ReadSafetyTest
             True(hidden.PageSetup.PrintTitleRows is null, "no titles on second sheet");
             Eq(PageOrientation.Portrait, hidden.PageSetup.Orientation, "portrait");
             Eq(4, wb.LoadedDefinedNames.Count, "all names listed");
-            True(wb.DefinedNames.Count == 0, "model DefinedNames untouched (not re-written on save)");
+            // Since 1.5.0 names load into the model (print names stay in PageSetup).
+            True(wb.DefinedNames.Count == 1 && wb.DefinedNames.TryGet("TaxRate", out var tax) && tax == "0.18", "TaxRate loaded; print names not duplicated");
         });
 
         Check("page setup: in-memory sheet reports Excel defaults", () =>
@@ -454,7 +455,7 @@ internal static class ReadSafetyTest
     }
 
     /// <summary>Writes a raw SpreadsheetML package from part XML, the way Excel lays it out.</summary>
-    private static class Package
+    internal static class Package
     {
         public static void Write(string path,
             (string Name, string SheetXml, string? State)[] sheets,

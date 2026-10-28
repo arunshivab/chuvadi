@@ -31,7 +31,7 @@ internal sealed class SheetLayoutCollector
     public SheetFormatValues? Format { get; private set; }
 
     /// <summary>Print settings collected from sheetPr, printOptions, pageMargins, pageSetup, headerFooter and breaks.</summary>
-    public PageSetup Page { get; } = new();
+    public PageSetup Page { get; } = new() { Loading = true };
 
     public bool? ShowGridLines;
     public bool RightToLeft;
@@ -39,6 +39,7 @@ internal sealed class SheetLayoutCollector
     public int? ZoomScale;
     public bool SummaryBelow = true;
     public bool SummaryRight = true;
+    public string? UsedRange;
 
     private bool _sawSheetView;
     private string? _capture;                 // header/footer element whose text is being collected
@@ -86,6 +87,9 @@ internal sealed class SheetLayoutCollector
                 });
                 break;
             }
+            case "dimension":
+                UsedRange = x.GetAttribute("ref");
+                break;
             case "pageSetUpPr":
                 Page.FitToPage = ParseBool(x.GetAttribute("fitToPage"));
                 break;
@@ -242,9 +246,31 @@ internal sealed class SheetLayoutCollector
         }
     }
 
-    /// <summary>Handles the attributes of a &lt;row&gt; element the reader is positioned on.</summary>
-    public void OnRow(XmlReader x, int rowNumber)
+    /// <summary>Records a row's parsed attributes.</summary>
+    public void SetRow(int rowNumber, RowData data) => Rows[rowNumber] = data;
+
+    /// <summary>
+    /// Parses the attributes of a &lt;row&gt; element the reader is positioned on; null when the
+    /// row carries nothing beyond r/spans (keeps per-row storage sparse).
+    /// </summary>
+    public static RowData? ParseRow(XmlReader x)
     {
+        if (!x.HasAttributes) return null;
+
+        // Fast path: most rows carry only r= and spans= (one cheap pass over the attributes
+        // instead of ten lookups).
+        bool other = false;
+        if (x.MoveToFirstAttribute())
+        {
+            do
+            {
+                var n = x.LocalName;
+                if (n != "r" && n != "spans" && !n.StartsWith("dyDescent", StringComparison.Ordinal)) { other = true; break; }
+            }
+            while (x.MoveToNextAttribute());
+            x.MoveToElement();
+        }
+        if (!other) return null;
         var ht = x.GetAttribute("ht");
         var customHeight = x.GetAttribute("customHeight");
         var hidden = x.GetAttribute("hidden");
@@ -258,9 +284,9 @@ internal sealed class SheetLayoutCollector
 
         if (ht is null && customHeight is null && hidden is null && outline is null && collapsed is null
             && s is null && customFormat is null && thickTop is null && thickBot is null && ph is null)
-            return;   // nothing beyond r/spans: keep the dictionary sparse
+            return null;   // nothing beyond r/spans
 
-        Rows[rowNumber] = new RowData
+        return new RowData
         {
             Height = ParseDouble(ht, 0),
             CustomHeight = ParseBool(customHeight),
@@ -275,25 +301,45 @@ internal sealed class SheetLayoutCollector
         };
     }
 
-    /// <summary>Copies everything collected into the sheet model.</summary>
-    public void ApplyTo(Sheet sheet)
+    private void FillFormat(SheetFormat target)
     {
         if (Format is { } f)
         {
-            sheet.Format.DefaultRowHeight = f.DefaultRowHeight;
-            sheet.Format.DefaultColumnWidth = f.DefaultColumnWidth;
-            sheet.Format.BaseColumnWidth = f.BaseColumnWidth;
-            sheet.Format.CustomHeight = f.CustomHeight;
-            sheet.Format.ZeroHeight = f.ZeroHeight;
-            sheet.Format.ThickTop = f.ThickTop;
-            sheet.Format.ThickBottom = f.ThickBottom;
-            sheet.Format.OutlineLevelRow = f.OutlineLevelRow;
-            sheet.Format.OutlineLevelColumn = f.OutlineLevelColumn;
+            target.DefaultRowHeight = f.DefaultRowHeight;
+            target.DefaultColumnWidth = f.DefaultColumnWidth;
+            target.BaseColumnWidth = f.BaseColumnWidth;
+            target.CustomHeight = f.CustomHeight;
+            target.ZeroHeight = f.ZeroHeight;
+            target.ThickTop = f.ThickTop;
+            target.ThickBottom = f.ThickBottom;
+            target.OutlineLevelRow = f.OutlineLevelRow;
+            target.OutlineLevelColumn = f.OutlineLevelColumn;
         }
-        sheet.Format.OutlineSummaryBelow = SummaryBelow;
-        sheet.Format.OutlineSummaryRight = SummaryRight;
-        Page.RowBreaks = _rowBreaks.ToArray();
-        Page.ColumnBreaks = _colBreaks.ToArray();
+        target.OutlineSummaryBelow = SummaryBelow;
+        target.OutlineSummaryRight = SummaryRight;
+    }
+
+    private void FinishPage()
+    {
+        Page.SetLoadedBreaks(_rowBreaks, _colBreaks);
+        Page.Loading = false;
+    }
+
+    /// <summary>Builds the streaming reader's layout view from everything collected.</summary>
+    public SheetLayoutInfo ToLayoutInfo(CellStyleTable styles)
+    {
+        var format = new SheetFormat();
+        FillFormat(format);
+        FinishPage();
+        return new SheetLayoutInfo(Page, format, Columns.ToArray(), MergeRanges.ToArray(), UsedRange,
+            ShowGridLines ?? true, RightToLeft, ViewMode, ZoomScale ?? 100, styles);
+    }
+
+    /// <summary>Copies everything collected into the sheet model.</summary>
+    public void ApplyTo(Sheet sheet)
+    {
+        FillFormat(sheet.Format);
+        FinishPage();
         sheet.SetLoadedView(Page, ShowGridLines ?? true, RightToLeft, ViewMode, ZoomScale ?? 100);
         foreach (var c in Columns) sheet.AddColumnRange(c);
         foreach (var kv in Rows) sheet.SetRowData(kv.Key, kv.Value);

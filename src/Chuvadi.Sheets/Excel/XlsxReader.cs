@@ -73,6 +73,23 @@ public sealed class XlsxReader : IDisposable
     internal XlsxReaderOptions Options => _options;
 
     private string?[]? _displayCodes;
+    private CellStyle?[]? _resolvedStyles;
+    private bool[]? _resolvedSet;
+
+    /// <summary>The resolved style for a cellXf index (null for -1, 0 and out-of-range), cached per index.</summary>
+    internal CellStyle? ResolveStyle(int styleIndex)
+    {
+        var xfs = StyleTable.CellFormats;
+        if (styleIndex <= 0 || styleIndex >= xfs.Count) return null;
+        _resolvedStyles ??= new CellStyle?[xfs.Count];
+        _resolvedSet ??= new bool[xfs.Count];
+        if (!_resolvedSet[styleIndex])
+        {
+            _resolvedStyles[styleIndex] = StyleTable.ResolveCellFormat(styleIndex);
+            _resolvedSet[styleIndex] = true;
+        }
+        return _resolvedStyles[styleIndex];
+    }
     private NumberFormatOptions? _displayOptions;
 
     /// <summary>Format options for display text: the configured culture and this file's date system.</summary>
@@ -190,7 +207,20 @@ public sealed class XlsxReader : IDisposable
                     throw new XlsxLimitExceededException("MaxTotalUncompressedBytes", cap, input.Length - input.Position,
                         "the encrypted file is larger than the limit.");
                 byte[] plaintext;
-                try { plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(input, password); }
+                // The container is read through a stream that checks the token on every read, so a
+                // cancel lands while the file is being read; the in-memory decryption after that
+                // (key derivation, AES, HMAC) runs to completion.
+                try
+                {
+                    using var cancellable = new CancellableReadStream(input, ct);
+                    plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(cancellable, password);
+                }
+                catch (Chuvadi.Internal.Crypto.PackagePasswordException) when (ct.IsCancellationRequested)
+                {
+                    // The container reader wraps read errors; a cancel is not a password problem.
+                    ct.ThrowIfCancellationRequested();
+                    throw;
+                }
                 catch (Chuvadi.Internal.Crypto.PackagePasswordException ex) { throw new XlsxPasswordRequiredException(ex.Message, ex); }
                 owned = source = new MemoryStream(plaintext, writable: false);
                 ct.ThrowIfCancellationRequested();
@@ -420,6 +450,7 @@ public sealed class XlsxReader : IDisposable
                         int? local = int.TryParse(r.GetAttribute("localSheetId"), System.Globalization.NumberStyles.Integer,
                             System.Globalization.CultureInfo.InvariantCulture, out var l) ? l : null;
                         bool hidden = r.GetAttribute("hidden") is "1" or "true";
+                        var comment = r.GetAttribute("comment");
                         // Collect the text up to </definedName>, leaving the reader ON the end tag
                         // (ReadElementContentAsString would land on the next element, which the
                         // loop's Read() would then skip).
@@ -431,7 +462,7 @@ public sealed class XlsxReader : IDisposable
                                 if (r.NodeType is XmlNodeType.Text or XmlNodeType.CDATA) sb.Append(r.Value);
                         }
                         var formula = sb.ToString();
-                        info.DefinedNames.Add(new DefinedNameInfo(name, formula, local, hidden));
+                        info.DefinedNames.Add(new DefinedNameInfo(name, formula, local, hidden, comment));
                         break;
                     }
                 }
@@ -465,7 +496,8 @@ public enum SheetVisibility
 /// <param name="LocalSheetIndex">0-based position of the sheet the name is scoped to (among all
 /// sheets in workbook.xml, including chart sheets), or null for a workbook-level name.</param>
 /// <param name="Hidden">True if the name is hidden from Excel's Name Manager.</param>
-public sealed record DefinedNameInfo(string Name, string Formula, int? LocalSheetIndex, bool Hidden);
+/// <param name="Comment">The name's comment (shown in Excel's Name Manager), or null.</param>
+public sealed record DefinedNameInfo(string Name, string Formula, int? LocalSheetIndex, bool Hidden, string? Comment = null);
 
 /// <summary>
 /// Lightweight descriptor for a sheet — name + part URI. Available before opening the sheet's content.
@@ -509,6 +541,25 @@ internal sealed class NonClosingStream : Stream
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }
 
+/// <summary>A pass-through read stream that throws once the token is cancelled. Leaves the inner stream open.</summary>
+internal sealed class CancellableReadStream : Stream
+{
+    private readonly Stream _inner;
+    private readonly System.Threading.CancellationToken _ct;
+    public CancellableReadStream(Stream inner, System.Threading.CancellationToken ct) { _inner = inner; _ct = ct; }
+    public override bool CanRead => _inner.CanRead;
+    public override bool CanSeek => _inner.CanSeek;
+    public override bool CanWrite => false;
+    public override long Length => _inner.Length;
+    public override long Position { get => _inner.Position; set { _ct.ThrowIfCancellationRequested(); _inner.Position = value; } }
+    public override void Flush() { }
+    public override int Read(byte[] buffer, int offset, int count) { _ct.ThrowIfCancellationRequested(); return _inner.Read(buffer, offset, count); }
+    public override int Read(Span<byte> buffer) { _ct.ThrowIfCancellationRequested(); return _inner.Read(buffer); }
+    public override long Seek(long offset, SeekOrigin origin) { _ct.ThrowIfCancellationRequested(); return _inner.Seek(offset, origin); }
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+}
+
 /// <summary>
 /// Per-sheet reader. Iterate <see cref="Rows"/> to stream rows in order.
 /// </summary>
@@ -541,6 +592,65 @@ public sealed class SheetReader
     /// </summary>
     internal IEnumerable<RowReader> RowsWithLayout(SheetLayoutCollector layout)
         => new RowEnumerable(this, layout);
+
+    private SheetLayoutInfo? _layoutInfo;
+
+    /// <summary>
+    /// The sheet's layout and print settings: <see cref="SheetLayoutInfo.PageSetup"/> (with print
+    /// areas and titles), sheet format defaults, column spans (widths, hidden, outline, styles),
+    /// merged ranges, the stored used range and the sheet view. These elements sit before and
+    /// after the cell data in the file, so the first call makes one pass over the sheet part,
+    /// skipping the cell data without parsing it; the result is cached. Call it before or
+    /// between row enumerations (it opens its own stream). Read limits and the cancellation
+    /// token apply. Per-row settings come with each row: <see cref="RowReader.Attributes"/>.
+    /// </summary>
+    public SheetLayoutInfo ReadLayout()
+    {
+        if (_layoutInfo is not null) return _layoutInfo;
+        var collector = new SheetLayoutCollector();
+        var ct = _book.Options.CancellationToken;
+        ct.ThrowIfCancellationRequested();
+        using (var stream = _book.OpenSheetPart(_info))
+        using (var xml = XmlReader.Create(stream, new XmlReaderSettings { IgnoreWhitespace = false, IgnoreComments = true, CloseInput = false, DtdProcessing = DtdProcessing.Prohibit }))
+        {
+            int n = 0;
+            while (xml.Read())
+            {
+                if ((++n & 0xFFF) == 0) ct.ThrowIfCancellationRequested();
+                switch (xml.NodeType)
+                {
+                    case XmlNodeType.Element:
+                        if (xml.LocalName == "sheetData" && SheetLayoutCollector.IsMainNamespace(xml.NamespaceURI))
+                        {
+                            if (!xml.IsEmptyElement) SkipSubtree(xml, ct);
+                            continue;
+                        }
+                        collector.OnElement(xml);
+                        break;
+                    case XmlNodeType.Text: case XmlNodeType.CDATA: case XmlNodeType.Whitespace: case XmlNodeType.SignificantWhitespace:
+                        collector.OnText(xml.Value);
+                        break;
+                    case XmlNodeType.EndElement:
+                        collector.OnEndElement(xml.LocalName);
+                        break;
+                }
+            }
+        }
+        var info = collector.ToLayoutInfo(_book.StyleTable);
+        PrintNames.Apply(info.PageSetup, _book.DefinedNames, _info.WorkbookIndex);
+        return _layoutInfo = info;
+    }
+
+    /// <summary>Skips the current element's subtree, checking the token as it goes (sheetData can be huge).</summary>
+    private static void SkipSubtree(XmlReader xml, System.Threading.CancellationToken ct)
+    {
+        int depth = xml.Depth, n = 0;
+        while (xml.Read())
+        {
+            if ((++n & 0xFFFF) == 0) ct.ThrowIfCancellationRequested();
+            if (xml.NodeType == XmlNodeType.EndElement && xml.Depth == depth) return;
+        }
+    }
 
     internal Dictionary<string, int>? HeaderIndex => _headerIndex;
 
@@ -582,6 +692,11 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     // Row buffer — reused across all rows. _cellValues[col-1] holds the parsed value.
     private object?[] _cellValues = new object?[16];
     private int[] _cellStyles = NewStyleBuffer(16);   // parallel to _cellValues; -1 = no s= attribute
+    private bool[] _cellPresent = new bool[16];        // parallel: a <c> element exists for the column
+    private FormulaSlot[] _formulas = new FormulaSlot[16];   // parallel: formula of the cell, if any
+    private bool _rowHasFormula;
+    private RowData? _rowData;                          // the current <row>'s attributes (null = none)
+    private readonly Dictionary<int, SharedFormulaMaster> _sharedMasters = new();
     private int _maxColumnSeen;
     private int _currentRowNumber;
     private bool _hasCurrent;
@@ -606,7 +721,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
 
     public RowReader Current
         => _hasCurrent
-            ? new RowReader(_cellValues, _cellStyles, _maxColumnSeen, _currentRowNumber, _sheet)
+            ? new RowReader(_cellValues, _cellStyles, _maxColumnSeen, _currentRowNumber, _sheet, new RowExtras(_cellPresent, _rowHasFormula ? _formulas : null, _rowData, _sharedMasters))
             : throw new InvalidOperationException("Enumeration has not started or already ended.");
 
     object IEnumerator.Current => Current;
@@ -665,7 +780,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 ? rn
                 : _currentRowNumber + 1;
 
-            _layout?.OnRow(_xml, _currentRowNumber);
+            _rowData = SheetLayoutCollector.ParseRow(_xml);
+            if (_rowData is not null) _layout?.SetRow(_currentRowNumber, _rowData);
 
             // Read cells within this row.
             ReadCellsInRow();
@@ -712,15 +828,29 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 styleIndex = -1;   // malformed s=: treat as absent rather than as xf 0
 
             // Read the cell's contents.
+            _pending = default;
             var value = ReadCellValue(t, styleIndex);
 
             // Store in buffer; grow if needed.
             EnsureCapacity(col);
             _cellValues[col - 1] = value;
             _cellStyles[col - 1] = styleIndex;
+            _cellPresent[col - 1] = true;
+            if (_pending.Present)
+            {
+                var slot = _pending;
+                slot.Row = _currentRowNumber;
+                slot.Column = col;
+                if (slot.Kind == FormulaKind.Shared && slot.Text is not null && slot.Text.Length > 0 && slot.SharedIndex >= 0)
+                    _sharedMasters[slot.SharedIndex] = new SharedFormulaMaster(slot.Text, _currentRowNumber, col);
+                _formulas[col - 1] = slot;
+                _rowHasFormula = true;
+            }
             if (col > _maxColumnSeen) _maxColumnSeen = col;
         }
     }
+
+    private FormulaSlot _pending;   // formula of the cell being read
 
     private object? ReadCellValue(string? cellType, int styleIndex)
     {
@@ -745,14 +875,20 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 else if (_xml.LocalName == "f")
                 {
                     isFormula = true;
-                    // Skip the formula text — we return the cached value from the <v> sibling.
-                    // Read to </f> rather than XmlReader.Skip(): Skip lands ON the next sibling,
-                    // and this loop's Read() would then step past <v> (cached value lost).
-                    if (!_xml.IsEmptyElement)
+                    var ft = _xml.GetAttribute("t");
+                    _pending.Present = true;
+                    _pending.Kind = ft switch
                     {
-                        int fDepth = _xml.Depth;
-                        while (_xml.Read() && !(_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == fDepth)) { }
-                    }
+                        "shared" => FormulaKind.Shared,
+                        "array" => FormulaKind.Array,
+                        "dataTable" => FormulaKind.DataTable,
+                        _ => FormulaKind.Normal,
+                    };
+                    _pending.Range = _xml.GetAttribute("ref");
+                    _pending.SharedIndex = int.TryParse(_xml.GetAttribute("si"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var si) ? si : -1;
+                    // Read the text to </f> (not XmlReader.Skip(): Skip lands ON the next sibling,
+                    // and this loop's Read() would then step past <v>, losing the cached value).
+                    _pending.Text = ReadElementText();
                 }
                 else if (_xml.LocalName == "is")
                 {
@@ -878,7 +1014,11 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         {
             Array.Clear(_cellValues, 0, _maxColumnSeen);
             Array.Fill(_cellStyles, -1, 0, _maxColumnSeen);
+            Array.Clear(_cellPresent, 0, _maxColumnSeen);
+            if (_rowHasFormula) Array.Clear(_formulas, 0, _maxColumnSeen);
         }
+        _rowHasFormula = false;
+        _rowData = null;
         _maxColumnSeen = 0;
     }
 
@@ -890,6 +1030,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         while (newSize < column) newSize *= 2;
         Array.Resize(ref _cellValues, newSize);
         Array.Resize(ref _cellStyles, newSize);
+        Array.Resize(ref _cellPresent, newSize);
+        Array.Resize(ref _formulas, newSize);
         Array.Fill(_cellStyles, -1, oldSize, newSize - oldSize);
     }
 
@@ -945,14 +1087,112 @@ public readonly struct RowReader
     private readonly int _count;
     public readonly int RowNumber;
     private readonly SheetReader _sheet;
+    private readonly RowExtras _extras;
 
-    internal RowReader(object?[] buffer, int[] styles, int count, int rowNumber, SheetReader sheet)
+    internal RowReader(object?[] buffer, int[] styles, int count, int rowNumber, SheetReader sheet, RowExtras extras)
     {
         _buffer = buffer;
         _styles = styles;
         _count = count;
         RowNumber = rowNumber;
         _sheet = sheet;
+        _extras = extras;
+    }
+
+    /// <summary>
+    /// The row's stored settings (&lt;row&gt; attributes): height, custom height, hidden, outline
+    /// level, collapsed and row style. A row with no stored attributes reports defaults
+    /// (<see cref="Row.IsDefined"/> false; its height is the sheet's default row height).
+    /// </summary>
+    public Row Attributes => new(RowNumber, _extras.RowData, _sheet.Book.StyleTable);
+
+    /// <summary>
+    /// True if the file has a &lt;c&gt; element for this 0-based column (with or without a value).
+    /// A styled empty cell is present; a gap between cells is not.
+    /// </summary>
+    public bool HasCell(int column0Based)
+        => column0Based >= 0 && column0Based < _count && _extras.Present[column0Based];
+
+    /// <summary>
+    /// The resolved style of the cell's s= index (as <see cref="CellStyleTable.ResolveCellFormat"/>),
+    /// cached per index; null when the cell has no s= attribute, uses xf 0 (the workbook default,
+    /// see <see cref="CellStyleTable.DefaultCellStyle"/>), or is missing.
+    /// </summary>
+    public CellStyle? GetStyle(int column0Based) => _sheet.Book.ResolveStyle(GetStyleIndex(column0Based));
+
+    /// <summary>
+    /// The cellXf index Excel renders this cell with: the cell's own s= when the file has a
+    /// &lt;c&gt; element for it (0 when it has none); otherwise the row style when the row has
+    /// customFormat; otherwise the column style from <paramref name="layout"/>; otherwise 0.
+    /// Pass the result of <see cref="SheetReader.ReadLayout"/> for this sheet.
+    /// </summary>
+    public int GetEffectiveStyleIndex(int column0Based, SheetLayoutInfo layout)
+    {
+        if (layout is null) throw new ArgumentNullException(nameof(layout));
+        if (HasCell(column0Based)) return Math.Max(0, _styles[column0Based]);
+        var rd = _extras.RowData;
+        if (rd is not null && rd.CustomFormat && rd.StyleIndex >= 0) return rd.StyleIndex;
+        return layout.ColumnStyleIndex(column0Based + 1);
+    }
+
+    /// <summary>
+    /// The cell's formula as written in Excel without the leading '=', or null when the cell
+    /// has none. For a shared formula's child cell this is the child's own formula: the master's
+    /// relative references moved by the child's offset (absolute $ parts kept; a reference moved
+    /// off the sheet becomes #REF!). For an array formula only the top-left cell has the text;
+    /// a data-table cell (TABLE()) returns null. The indexer returns the cached result.
+    /// </summary>
+    public string? GetFormula(int column0Based)
+    {
+        var slot = Slot(column0Based);
+        if (slot is null) return null;
+        return Text(slot.Value);
+    }
+
+    /// <summary>Formula by header name (requires TreatFirstRowAsHeaders). See <see cref="GetFormula(int)"/>.</summary>
+    public string? GetFormula(string columnName) => GetFormula(HeaderColumn(columnName));
+
+    /// <summary>
+    /// The cell's formula with its kind and range (the shared or array range on the cell that
+    /// stores it, the data-table range for TABLE() cells), or null when the cell has no formula.
+    /// </summary>
+    public CellFormula? GetFormulaInfo(int column0Based)
+    {
+        var slot = Slot(column0Based);
+        if (slot is null) return null;
+        var f = slot.Value;
+        return new CellFormula(Text(f) ?? string.Empty, f.Kind, f.Range);
+    }
+
+    /// <summary>
+    /// True if the cell has a formula and the file stores its last computed result (a &lt;v&gt;
+    /// element). Files written by tools that do not calculate often have formulas without results.
+    /// </summary>
+    public bool HasCachedValue(int column0Based) => Slot(column0Based) is not null && this[column0Based] is not null;
+
+    private FormulaSlot? Slot(int column0Based)
+    {
+        var f = _extras.Formulas;
+        if (f is null || column0Based < 0 || column0Based >= _count || !f[column0Based].Present) return null;
+        return f[column0Based];
+    }
+
+    private string? Text(FormulaSlot f)
+    {
+        if (f.Kind == FormulaKind.DataTable) return null;
+        if (f.Kind == FormulaKind.Shared && string.IsNullOrEmpty(f.Text))
+        {
+            if (f.SharedIndex < 0 || !_extras.SharedMasters.TryGetValue(f.SharedIndex, out var m)) return null;
+            return FormulaText.Shift(m.Text, f.Row - m.Row, f.Column - m.Column);
+        }
+        return f.Text;
+    }
+
+    private int HeaderColumn(string columnName)
+    {
+        if (_sheet.HeaderIndex is null)
+            throw new InvalidOperationException("Header index not built; enable TreatFirstRowAsHeaders.");
+        return _sheet.HeaderIndex.TryGetValue(columnName, out var idx) ? idx : -1;
     }
 
     /// <summary>Number of cells in this row (the highest column index seen).</summary>
@@ -1101,3 +1341,32 @@ public readonly struct RowReader
         catch (Exception ex) { throw new InvalidCastException($"Cell '{name}' ({v.GetType().Name}) cannot be converted to {typeof(T).Name}.", ex); }
     }
 }
+
+/// <summary>Per-row side buffers handed to <see cref="RowReader"/> (reused across rows).</summary>
+internal readonly struct RowExtras
+{
+    public readonly bool[] Present;
+    public readonly FormulaSlot[]? Formulas;
+    public readonly RowData? RowData;
+    public readonly Dictionary<int, SharedFormulaMaster> SharedMasters;
+
+    public RowExtras(bool[] present, FormulaSlot[]? formulas, RowData? rowData, Dictionary<int, SharedFormulaMaster> masters)
+    {
+        Present = present; Formulas = formulas; RowData = rowData; SharedMasters = masters;
+    }
+}
+
+/// <summary>A cell's &lt;f&gt; element as read.</summary>
+internal struct FormulaSlot
+{
+    public bool Present;
+    public FormulaKind Kind;
+    public string? Text;
+    public string? Range;
+    public int SharedIndex;
+    public int Row;
+    public int Column;
+}
+
+/// <summary>The cell that stores a shared formula's text (si), with its position.</summary>
+internal readonly record struct SharedFormulaMaster(string Text, int Row, int Column);

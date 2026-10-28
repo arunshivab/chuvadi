@@ -13,19 +13,20 @@ internal static class WorkbookSerializer
 {
     public static void WriteWorkbook(XlsxWriter writer, Workbook wb)
     {
-        // Register workbook-level defined names first (must be set before Save).
-        if (wb.DefinedNames.Count > 0)
-            writer.SetDefinedNames(wb.DefinedNames.All);
+        // Defined names (workbook-level and sheet-scoped; must be set before Save). Print areas
+        // and titles are written from each sheet's PageSetup by the writer.
+        foreach (var n in wb.DefinedNames.Entries)
+            writer.AddDefinedName(n.Name, n.Formula, n.Scope, n.Hidden, n.Comment);
 
         // Workbook-level structure protection.
         if (wb.IsStructureProtected && wb.StructureProtectionPassword is not null)
             writer.ProtectWorkbook(wb.StructureProtectionPassword, wb.LockStructure, wb.LockWindows);
 
         foreach (var sheet in wb.Sheets)
-            WriteSheet(writer, sheet);
+            WriteSheet(writer, sheet, wb.UnkeptNames);
     }
 
-    private static void WriteSheet(XlsxWriter writer, Sheet sheet)
+    private static void WriteSheet(XlsxWriter writer, Sheet sheet, ISet<string> unkept)
     {
         using var sw = writer.AddSheet(sheet.Name);
 
@@ -47,9 +48,9 @@ internal static class WorkbookSerializer
         if (sheet.FreezeRowCount > 0) sw.FreezeRows(sheet.FreezeRowCount);
         if (sheet.FreezeColumnCount > 0) sw.FreezeColumns(sheet.FreezeColumnCount);
 
-        // Page header/footer — emitted by the sheet writer at finalization.
-        if (sheet.PageHeader is not null || sheet.PageFooter is not null)
-            sw.SetHeaderFooter(sheet.PageHeader, sheet.PageFooter);
+        // Print settings (header/footer, margins, page setup, breaks, print area and titles) —
+        // emitted by the sheet writer at finalization.
+        sw.PageSetup.CopyFrom(sheet.PageSetup);
 
         // If the sheet has no cells, we still need to emit an empty <sheetData>; the streaming
         // SheetWriter handles this automatically when FinalizeSheet runs with no rows.
@@ -85,10 +86,24 @@ internal static class WorkbookSerializer
                     {
                         if (byCol.TryGetValue(c, out var cell))
                         {
-                            if (cell.IsFormula)
+                            if (cell.IsFormula && (FormulaText.HasBracketReference(cell.Formula)
+                                                   || FormulaText.UsesAnyName(cell.Formula, unkept)))
                             {
-                                if (cell.Style.HasValue) rb.Formula(cell.Formula!, cell.Style.Value);
-                                else rb.Formula(cell.Formula!);
+                                // Refers to another workbook, a table, or a loaded name the model
+                                // could not keep: keep the result rather than a formula that
+                                // would evaluate differently.
+                                if (cell.Style.HasValue) rb.Cell(cell.CachedValue, cell.Style.Value);
+                                else rb.Cell(cell.CachedValue);
+                            }
+                            else if (cell.IsFormula && cell.ArrayRangeInternal is string arr)
+                            {
+                                if (cell.Style.HasValue) rb.ArrayFormula(arr, cell.Formula!, cell.CachedValue, cell.Style.Value);
+                                else rb.ArrayFormula(arr, cell.Formula!, cell.CachedValue);
+                            }
+                            else if (cell.IsFormula)
+                            {
+                                if (cell.Style.HasValue) rb.Formula(cell.Formula!, cell.CachedValue, cell.Style.Value);
+                                else rb.Formula(cell.Formula!, cell.CachedValue);
                             }
                             else
                             {
