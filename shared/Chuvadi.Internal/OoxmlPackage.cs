@@ -47,11 +47,23 @@ internal sealed class OoxmlPackage : IDisposable
     private bool _closed;
     private bool _disposed;
 
-    /// <summary>Parts written to the package (write mode) or discovered in it (read mode).</summary>
-    private readonly Dictionary<string, PackagePart> _parts = new(StringComparer.Ordinal);
+    /// <summary>
+    /// Parts written to the package (write mode) or discovered in it (read mode). Part names
+    /// are case-sensitive when writing; when reading they are matched case-insensitively, as
+    /// OPC requires (Part 2, 6.2.2.3) and as Excel, Word and POI do.
+    /// </summary>
+    private readonly Dictionary<string, PackagePart> _parts;
 
     /// <summary>Relationships keyed by their source part URI. The package root uses "/" as its source.</summary>
-    private readonly Dictionary<string, List<PackageRelationship>> _relationships = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<PackageRelationship>> _relationships;
+
+    /// <summary>
+    /// Read mode: every zip entry keyed by its normalised part name ("/" + the entry name with
+    /// '\' turned into '/'), matched case-insensitively. Some third-party writers store
+    /// "[content_types].xml" in lower case and use '\' as the separator ("xl\styles.xml").
+    /// When two entries differ only in case, the first one in the zip wins.
+    /// </summary>
+    private readonly Dictionary<string, ZipArchiveEntry>? _entries;
 
     // ---- Construction --------------------------------------------------------------
 
@@ -59,6 +71,28 @@ internal sealed class OoxmlPackage : IDisposable
     {
         _zip = zip;
         _writeMode = writeMode;
+        var comparer = writeMode ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        _parts = new Dictionary<string, PackagePart>(comparer);
+        _relationships = new Dictionary<string, List<PackageRelationship>>(comparer);
+        if (!writeMode)
+        {
+            _entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in zip.Entries)
+            {
+                var key = NormalizePartName(e.FullName);
+                if (key.Length > 1 && !_entries.ContainsKey(key)) _entries[key] = e;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Normalises a part name read from a package: '\' becomes '/', and the result starts
+    /// with exactly one '/'. "xl\styles.xml" → "/xl/styles.xml"; "/xl/a.xml" is unchanged.
+    /// </summary>
+    internal static string NormalizePartName(string name)
+    {
+        if (name.IndexOf('\\') >= 0) name = name.Replace('\\', '/');
+        return "/" + name.TrimStart('/');
     }
 
     /// <summary>
@@ -191,13 +225,34 @@ internal sealed class OoxmlPackage : IDisposable
     public Stream OpenPart(string uri)
     {
         EnsureReadMode();
-        if (!_parts.ContainsKey(uri))
+        var key = NormalizePartName(uri);
+        if (!_parts.ContainsKey(key))
             throw new FileNotFoundException($"Part '{uri}' not found in package.");
 
-        var entryName = uri.TrimStart('/');
-        var entry = _zip.GetEntry(entryName)
-            ?? throw new InvalidDataException($"Part '{uri}' is declared in [Content_Types].xml but missing from the zip.");
+        if (!_entries!.TryGetValue(key, out var entry))
+            throw new InvalidDataException($"Part '{uri}' is declared in [Content_Types].xml but missing from the zip.");
         return entry.Open();
+    }
+
+    /// <summary>
+    /// True if the package has the part. Part names are matched case-insensitively and '\'
+    /// is accepted as a separator, as in <see cref="OpenPart"/>.
+    /// </summary>
+    public bool HasPart(string uri)
+    {
+        EnsureReadMode();
+        return _parts.ContainsKey(NormalizePartName(uri));
+    }
+
+    /// <summary>
+    /// The part with the given name (matched as in <see cref="HasPart"/>), or null. Its
+    /// <see cref="PackagePart.Uri"/> is the name as the package declares it, which may differ
+    /// in case from <paramref name="uri"/>.
+    /// </summary>
+    public PackagePart? GetPart(string uri)
+    {
+        EnsureReadMode();
+        return _parts.TryGetValue(NormalizePartName(uri), out var p) ? p : null;
     }
 
     /// <summary>
@@ -207,6 +262,7 @@ internal sealed class OoxmlPackage : IDisposable
     public IEnumerable<PackageRelationship> GetRelationships(string sourceUri)
     {
         EnsureReadMode();
+        if (sourceUri.Length > 1) sourceUri = NormalizePartName(sourceUri);
         return _relationships.TryGetValue(sourceUri, out var list)
             ? (IEnumerable<PackageRelationship>)list
             : Array.Empty<PackageRelationship>();
@@ -375,8 +431,9 @@ internal sealed class OoxmlPackage : IDisposable
     /// </summary>
     private void LoadContentTypes()
     {
-        var entry = _zip.GetEntry(ContentTypesPath)
-            ?? throw new InvalidDataException("Package is missing [Content_Types].xml; not a valid OOXML package.");
+        // Matched case-insensitively: some writers store "[content_types].xml".
+        if (!_entries!.TryGetValue("/" + ContentTypesPath, out var entry))
+            throw new InvalidDataException("Package is missing [Content_Types].xml; not a valid OOXML package.");
 
         // A part's content type comes from an <Override PartName=.../> when present, otherwise
         // from the <Default Extension=.../> for its extension. Word writes media (images, fonts)
@@ -384,7 +441,7 @@ internal sealed class OoxmlPackage : IDisposable
         // the Overrides we ourselves emit. We collect both, then materialize a part for every
         // non-metadata zip entry, preferring its Override and falling back to its Default.
         var defaults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
+        var overrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         using (var stream = entry.Open())
         using (var reader = XmlReader.Create(stream, new XmlReaderSettings
@@ -407,24 +464,31 @@ internal sealed class OoxmlPackage : IDisposable
                 {
                     var partName = reader.GetAttribute("PartName");
                     var contentType = reader.GetAttribute("ContentType");
-                    if (partName is not null && contentType is not null) overrides[partName] = contentType;
+                    if (!string.IsNullOrEmpty(partName) && contentType is not null)
+                    {
+                        partName = NormalizePartName(partName);
+                        if (!overrides.ContainsKey(partName)) overrides[partName] = contentType;
+                    }
                 }
             }
         }
 
         // Register every Override part (these may not even correspond to a single extension rule).
         foreach (var (partName, contentType) in overrides)
+        {
+            if (contentType.Length == 0) continue;
             _parts[partName] = new PackagePart(partName, contentType);
+        }
 
         // Register parts covered only by a Default extension mapping (e.g. /word/media/image1.png).
         // The .rels and [Content_Types].xml metadata files are not parts.
         foreach (var zipEntry in _zip.Entries)
         {
-            var partName = "/" + zipEntry.FullName;
+            var partName = NormalizePartName(zipEntry.FullName);
             if (_parts.ContainsKey(partName)) continue;
-            if (partName.EndsWith(".rels", StringComparison.Ordinal)) continue;
-            if (partName == "/" + ContentTypesPath) continue;
-            if (zipEntry.FullName.Length == 0 || zipEntry.FullName.EndsWith("/", StringComparison.Ordinal)) continue;
+            if (partName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(partName, "/" + ContentTypesPath, StringComparison.OrdinalIgnoreCase)) continue;
+            if (partName.Length <= 1 || partName.EndsWith("/", StringComparison.Ordinal)) continue;
 
             var dot = partName.LastIndexOf('.');
             if (dot < 0) continue;
@@ -444,10 +508,11 @@ internal sealed class OoxmlPackage : IDisposable
     {
         foreach (var entry in _zip.Entries)
         {
-            var name = entry.FullName;
-            if (!name.EndsWith(".rels", StringComparison.Ordinal)) continue;
+            var name = NormalizePartName(entry.FullName).Substring(1);
+            if (!name.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)) continue;
 
             var sourceUri = RelsPathToSourceUri(name);
+            if (_relationships.ContainsKey(sourceUri)) continue;   // case-only duplicate: first wins
             using var stream = entry.Open();
             using var reader = XmlReader.Create(stream, new XmlReaderSettings
             {
@@ -469,6 +534,8 @@ internal sealed class OoxmlPackage : IDisposable
                 if (id is null || type is null || target is null) continue;
 
                 var isExternal = string.Equals(targetMode, "External", StringComparison.OrdinalIgnoreCase);
+                // An internal target is a part name: accept '\' as its separator.
+                if (!isExternal && target.IndexOf('\\') >= 0) target = target.Replace('\\', '/');
                 list.Add(new PackageRelationship(id, type, target, isExternal));
             }
 
@@ -483,20 +550,20 @@ internal sealed class OoxmlPackage : IDisposable
     /// </summary>
     private static string RelsPathToSourceUri(string relsZipEntry)
     {
-        if (relsZipEntry == "_rels/.rels")
+        if (string.Equals(relsZipEntry, "_rels/.rels", StringComparison.OrdinalIgnoreCase))
             return "/";
 
         // "xl/_rels/workbook.xml.rels"  →  "/xl/workbook.xml"
         // "xl/worksheets/_rels/sheet1.xml.rels"  →  "/xl/worksheets/sheet1.xml"
-        var lastRels = relsZipEntry.LastIndexOf("/_rels/", StringComparison.Ordinal);
+        var lastRels = relsZipEntry.LastIndexOf("/_rels/", StringComparison.OrdinalIgnoreCase);
         if (lastRels < 0)
         {
             // "_rels/foo.xml.rels" at top level → "/foo.xml"
             const string prefix = "_rels/";
-            if (relsZipEntry.StartsWith(prefix, StringComparison.Ordinal))
+            if (relsZipEntry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 var fileName = relsZipEntry.Substring(prefix.Length);
-                if (fileName.EndsWith(".rels", StringComparison.Ordinal))
+                if (fileName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase))
                     fileName = fileName.Substring(0, fileName.Length - 5);
                 return "/" + fileName;
             }
@@ -505,7 +572,7 @@ internal sealed class OoxmlPackage : IDisposable
 
         var dir = relsZipEntry.Substring(0, lastRels);
         var file = relsZipEntry.Substring(lastRels + "/_rels/".Length);
-        if (file.EndsWith(".rels", StringComparison.Ordinal))
+        if (file.EndsWith(".rels", StringComparison.OrdinalIgnoreCase))
             file = file.Substring(0, file.Length - 5);
         return "/" + dir + "/" + file;
     }
