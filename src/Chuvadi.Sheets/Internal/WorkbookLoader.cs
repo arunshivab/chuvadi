@@ -15,16 +15,26 @@ internal static class WorkbookLoader
     {
         var styles = reader.StyleTable;
         var includeStyledEmpty = reader.Options.IncludeStyledEmptyCells;
-        var wb = new Workbook { StyleTable = styles };
+        var ct = reader.Options.CancellationToken;
+        var wb = new Workbook
+        {
+            StyleTable = styles,
+            Date1904 = reader.Date1904,
+            HasMacros = reader.HasMacros,
+            LoadedDefinedNames = reader.DefinedNames,
+            DisplayCulture = reader.Options.DisplayCulture ?? System.Globalization.CultureInfo.InvariantCulture,
+        };
 
         foreach (var sheetInfo in reader.Sheets)
         {
             var sheet = wb.AddSheet(sheetInfo.Name);
+            sheet.Visibility = sheetInfo.Visibility;
             var sr = reader.Sheet(sheetInfo.Name);
             var layout = new SheetLayoutCollector();
 
             foreach (var row in sr.RowsWithLayout(layout))
             {
+                ct.ThrowIfCancellationRequested();
                 for (int colIdx = 0; colIdx < row.Count; colIdx++)
                 {
                     var v = row[colIdx];
@@ -45,6 +55,7 @@ internal static class WorkbookLoader
 
             // Enumeration has run to the end of the part, so the collector is complete.
             layout.ApplyTo(sheet);
+            PrintNames.Apply(sheet.PageSetup, reader.DefinedNames, sheetInfo.WorkbookIndex);
         }
         return wb;
     }

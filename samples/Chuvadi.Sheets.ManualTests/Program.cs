@@ -63,6 +63,9 @@ public static class Program
             if (testName is "all" or "autofit")
                 AutoFitTest.Run(outputDir);
 
+            if (testName is "all" or "readsafety")
+                ReadSafetyTest.Run(outputDir);
+
             Console.WriteLine();
             Console.WriteLine(new string('-', 70));
             Console.WriteLine("All tests completed successfully.");

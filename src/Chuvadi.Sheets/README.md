@@ -24,6 +24,11 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Cell styling | `CellStyle`, `CellStyleBuilder` |
 | Column auto-fit | `sheet.AutoFitColumns()`, `SheetWriter.AutoFitColumns()`, `cfg.AutoFitColumns()` |
 | Number format rendering (display text) | `NumberFormatter.Format(value, formatCode)` |
+| Cell display text on read | `cell.DisplayText`, `row.GetDisplayString(col)` |
+| Page setup on read (print area, titles, paper, margins, breaks, header/footer) | `sheet.PageSetup` |
+| Encrypted streaming read | `XlsxReader.Open(path, password, options)` |
+| Hostile-input limits, cancellation | `XlsxReaderOptions.ForUntrustedInput()`, `MaxRowsPerSheet`, `CancellationToken` |
+| Macro detection (never executed) | `reader.HasMacros`, `wb.HasMacros` |
 | Tables, hyperlinks, comments | `SheetWriter.AddTable/Hyperlink/Comment` |
 | Freeze panes, merges, autofilter | `SheetWriter.FreezeRows/MergeCells/AutoFilter` |
 | Page headers/footers (print) | `SheetWriter.SetHeaderFooter`, `Sheet.SetHeaderFooter`, `cfg.PageHeaderFooter` |
@@ -36,7 +41,7 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Streaming export + encryption | `XlsxWriter` with `XlsxWriterOptions.Encryption` |
 | Read encrypted xlsx | `Workbook.Load(path, password)` |
 | Zip create/extract | `Chuvadi.Sheets.Zip.*` |
-| Hostile-input caps | `ZipExtractionLimits`, `XlsxReaderOptions.MaxPartBytes` |
+| Hostile-input caps | `ZipExtractionLimits`, `XlsxReaderOptions.MaxPartBytes` and the 1.4.0 limits |
 
 \* `CellIs` rules are written schema-valid and evaluate, but the supplied style does not
 render visibly (no dxf records are emitted). `ColorScale` and `DataBar` render fully.
@@ -95,6 +100,13 @@ double widthB = sh.Columns[2].Width;  bool hidden5 = sh.Rows[5].Hidden;
 // Auto-fit columns to their content (explicit widths still win)
 patients.ToXlsx("fit.xlsx", cfg => cfg.AutoFilter().AutoFitColumns());
 sheet.AutoFitColumns(new AutoFitOptions { MaxWidth = 40 });     // Workbook model, computed at save
+
+// Untrusted upload: limits, cancellation, password, display text
+var opts = XlsxReaderOptions.ForUntrustedInput();
+opts.CancellationToken = requestAborted;
+using (var upload = XlsxReader.Open(uploadStream, password, opts))
+    foreach (var row in upload.Sheet(1).Rows)
+        Console.WriteLine(row.GetDisplayString(0));        // "15/03/2023", "1,234.50", ...
 
 // Render a value exactly as Excel displays it
 string shown = NumberFormatter.Format(1234.5, "#,##0.00");        // "1,234.50"

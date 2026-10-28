@@ -24,7 +24,7 @@ internal sealed class StyleEntry
 /// <summary>Parses sharedStrings.xml into a string array indexed by SST id.</summary>
 internal static class SharedStringReader
 {
-    public static string[] Read(Stream stream)
+    public static string[] Read(Stream stream, System.Threading.CancellationToken cancellation = default)
     {
         using var r = XmlReader.Create(stream, new XmlReaderSettings
         {
@@ -40,6 +40,7 @@ internal static class SharedStringReader
         {
             if (r.NodeType != XmlNodeType.Element || r.LocalName != "si") continue;
 
+            if ((result.Count & 255) == 0) cancellation.ThrowIfCancellationRequested();
             sb.Clear();
             ExtractStringFromSi(r, sb);
             result.Add(sb.ToString());

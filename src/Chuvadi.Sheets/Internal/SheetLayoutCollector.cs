@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Xml;
 using Chuvadi.Sheets.Excel;
 
@@ -28,6 +29,23 @@ internal sealed class SheetLayoutCollector
 
     /// <summary>The &lt;sheetFormatPr&gt; values, or null if the element was absent.</summary>
     public SheetFormatValues? Format { get; private set; }
+
+    /// <summary>Print settings collected from sheetPr, printOptions, pageMargins, pageSetup, headerFooter and breaks.</summary>
+    public PageSetup Page { get; } = new();
+
+    public bool? ShowGridLines;
+    public bool RightToLeft;
+    public SheetViewMode ViewMode;
+    public int? ZoomScale;
+    public bool SummaryBelow = true;
+    public bool SummaryRight = true;
+
+    private bool _sawSheetView;
+    private string? _capture;                 // header/footer element whose text is being collected
+    private readonly StringBuilder _text = new();
+    private List<PageBreak>? _breaks;         // rowBreaks / colBreaks being collected
+    private readonly List<PageBreak> _rowBreaks = new();
+    private readonly List<PageBreak> _colBreaks = new();
 
     /// <summary>
     /// True if the given element namespace is SpreadsheetML main (transitional or strict).
@@ -68,6 +86,108 @@ internal sealed class SheetLayoutCollector
                 });
                 break;
             }
+            case "pageSetUpPr":
+                Page.FitToPage = ParseBool(x.GetAttribute("fitToPage"));
+                break;
+            case "outlinePr":
+                SummaryBelow = x.GetAttribute("summaryBelow") is not ("0" or "false");
+                SummaryRight = x.GetAttribute("summaryRight") is not ("0" or "false");
+                break;
+            case "sheetView":
+                if (_sawSheetView) break;   // first view (workbookViewId 0) only
+                _sawSheetView = true;
+                if (x.GetAttribute("showGridLines") is string g) ShowGridLines = ParseBool(g);
+                RightToLeft = ParseBool(x.GetAttribute("rightToLeft"));
+                ViewMode = x.GetAttribute("view") switch
+                {
+                    "pageBreakPreview" => SheetViewMode.PageBreakPreview,
+                    "pageLayout" => SheetViewMode.PageLayout,
+                    _ => SheetViewMode.Normal,
+                };
+                if (x.GetAttribute("zoomScale") is string z) ZoomScale = ParseInt(z, 100);
+                break;
+            case "printOptions":
+                Page.PrintGridlines = ParseBool(x.GetAttribute("gridLines"));
+                Page.PrintHeadings = ParseBool(x.GetAttribute("headings"));
+                Page.CenterHorizontally = ParseBool(x.GetAttribute("horizontalCentered"));
+                Page.CenterVertically = ParseBool(x.GetAttribute("verticalCentered"));
+                break;
+            case "pageMargins":
+            {
+                var m = Page.Margins;
+                m.IsDefined = true;
+                m.Left = ParseDouble(x.GetAttribute("left"), m.Left);
+                m.Right = ParseDouble(x.GetAttribute("right"), m.Right);
+                m.Top = ParseDouble(x.GetAttribute("top"), m.Top);
+                m.Bottom = ParseDouble(x.GetAttribute("bottom"), m.Bottom);
+                m.Header = ParseDouble(x.GetAttribute("header"), m.Header);
+                m.Footer = ParseDouble(x.GetAttribute("footer"), m.Footer);
+                break;
+            }
+            case "pageSetup":
+            {
+                var p = Page;
+                p.IsDefined = true;
+                if (x.GetAttribute("paperSize") is string ps && int.TryParse(ps, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code))
+                    p.PaperSizeCode = code;
+                p.Orientation = x.GetAttribute("orientation") switch
+                {
+                    "portrait" => PageOrientation.Portrait,
+                    "landscape" => PageOrientation.Landscape,
+                    _ => PageOrientation.Default,
+                };
+                p.Scale = ParseInt(x.GetAttribute("scale"), 100);
+                p.FitToWidth = ParseInt(x.GetAttribute("fitToWidth"), 1);
+                p.FitToHeight = ParseInt(x.GetAttribute("fitToHeight"), 1);
+                p.FirstPageNumber = ParseInt(x.GetAttribute("firstPageNumber"), 1);
+                p.UseFirstPageNumber = ParseBool(x.GetAttribute("useFirstPageNumber"));
+                p.PageOrder = x.GetAttribute("pageOrder") == "overThenDown" ? PageOrder.OverThenDown : PageOrder.DownThenOver;
+                p.BlackAndWhite = ParseBool(x.GetAttribute("blackAndWhite"));
+                p.Draft = ParseBool(x.GetAttribute("draft"));
+                p.CellComments = x.GetAttribute("cellComments") switch
+                {
+                    "asDisplayed" => PrintCellComments.AsDisplayed,
+                    "atEnd" => PrintCellComments.AtEnd,
+                    _ => PrintCellComments.None,
+                };
+                p.Errors = x.GetAttribute("errors") switch
+                {
+                    "blank" => PrintErrors.Blank,
+                    "dash" => PrintErrors.Dash,
+                    "NA" => PrintErrors.NA,
+                    _ => PrintErrors.Displayed,
+                };
+                if (x.GetAttribute("horizontalDpi") is string hd) p.HorizontalDpi = ParseInt(hd, 0);
+                if (x.GetAttribute("verticalDpi") is string vd) p.VerticalDpi = ParseInt(vd, 0);
+                p.Copies = ParseInt(x.GetAttribute("copies"), 1);
+                break;
+            }
+            case "headerFooter":
+            {
+                var h = Page.HeaderFooter;
+                h.DifferentOddEven = ParseBool(x.GetAttribute("differentOddEven"));
+                h.DifferentFirst = ParseBool(x.GetAttribute("differentFirst"));
+                h.ScaleWithDocument = x.GetAttribute("scaleWithDoc") is not ("0" or "false");
+                h.AlignWithMargins = x.GetAttribute("alignWithMargins") is not ("0" or "false");
+                break;
+            }
+            case "oddHeader": case "oddFooter": case "evenHeader": case "evenFooter": case "firstHeader": case "firstFooter":
+                if (x.IsEmptyElement) StoreHeaderFooter(x.LocalName, string.Empty);
+                else { _capture = x.LocalName; _text.Clear(); }
+                break;
+            case "rowBreaks":
+                _breaks = x.IsEmptyElement ? null : _rowBreaks;
+                break;
+            case "colBreaks":
+                _breaks = x.IsEmptyElement ? null : _colBreaks;
+                break;
+            case "brk":
+                _breaks?.Add(new PageBreak(
+                    ParseInt(x.GetAttribute("id"), 0),
+                    ParseInt(x.GetAttribute("min"), 0),
+                    ParseInt(x.GetAttribute("max"), 0),
+                    ParseBool(x.GetAttribute("man"))));
+                break;
             case "sheetFormatPr":
             {
                 var dcw = x.GetAttribute("defaultColWidth");
@@ -85,6 +205,40 @@ internal sealed class SheetLayoutCollector
                 };
                 break;
             }
+        }
+    }
+
+    /// <summary>Text inside an element (only collected inside header/footer elements).</summary>
+    public void OnText(string text)
+    {
+        if (_capture is not null) _text.Append(text);
+    }
+
+    /// <summary>End of an element: closes header/footer capture and break lists.</summary>
+    public void OnEndElement(string localName)
+    {
+        if (_capture is not null && localName == _capture)
+        {
+            StoreHeaderFooter(_capture, _text.ToString());
+            _capture = null;
+        }
+        else if (localName is "rowBreaks" or "colBreaks")
+        {
+            _breaks = null;
+        }
+    }
+
+    private void StoreHeaderFooter(string element, string text)
+    {
+        var h = Page.HeaderFooter;
+        switch (element)
+        {
+            case "oddHeader": h.OddHeader = text; break;
+            case "oddFooter": h.OddFooter = text; break;
+            case "evenHeader": h.EvenHeader = text; break;
+            case "evenFooter": h.EvenFooter = text; break;
+            case "firstHeader": h.FirstHeader = text; break;
+            case "firstFooter": h.FirstFooter = text; break;
         }
     }
 
@@ -136,6 +290,11 @@ internal sealed class SheetLayoutCollector
             sheet.Format.OutlineLevelRow = f.OutlineLevelRow;
             sheet.Format.OutlineLevelColumn = f.OutlineLevelColumn;
         }
+        sheet.Format.OutlineSummaryBelow = SummaryBelow;
+        sheet.Format.OutlineSummaryRight = SummaryRight;
+        Page.RowBreaks = _rowBreaks.ToArray();
+        Page.ColumnBreaks = _colBreaks.ToArray();
+        sheet.SetLoadedView(Page, ShowGridLines ?? true, RightToLeft, ViewMode, ZoomScale ?? 100);
         foreach (var c in Columns) sheet.AddColumnRange(c);
         foreach (var kv in Rows) sheet.SetRowData(kv.Key, kv.Value);
         foreach (var range in MergeRanges) sheet.MergeCells(range);

@@ -44,6 +44,12 @@ public sealed class SheetFormat
 
     /// <summary>Highest column outline (grouping) level used on the sheet. 0 = no column grouping.</summary>
     public int OutlineLevelColumn { get; internal set; }
+
+    /// <summary>Outline summary rows sit below their detail rows (&lt;outlinePr summaryBelow&gt;). Default true.</summary>
+    public bool OutlineSummaryBelow { get; internal set; } = true;
+
+    /// <summary>Outline summary columns sit right of their detail columns (&lt;outlinePr summaryRight&gt;). Default true.</summary>
+    public bool OutlineSummaryRight { get; internal set; } = true;
 }
 
 /// <summary>

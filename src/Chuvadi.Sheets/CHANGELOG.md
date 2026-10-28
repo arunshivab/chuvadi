@@ -1,5 +1,105 @@
 # Changelog
 
+## 1.4.0 (unreleased)
+
+Read-side additions for Anjal Mail and the Layout engine: display text, password on the
+streaming reader, hostile-input limits and cancellation, macro detection, full page setup.
+Additive and source-compatible; writer output is unchanged.
+
+### Features
+- **C1: display text.** These return a cell's value rendered with its number format,
+  exactly as Excel shows it:
+  - `Cell.DisplayText`, plus `Cell.GetDisplayText(options)`.
+  - `RowReader.GetDisplayString(column)` and `RowReader.GetDisplayString(name)`.
+
+  Details:
+  - Rendering uses `NumberFormatter`, the culture in `XlsxReaderOptions.DisplayCulture` or
+    `Workbook.DisplayCulture`, and the file's date system.
+  - Formula cells show their cached result.
+  - Locale-dependent built-ins (currency ids 5–8, accounting ids 41–44) render as Excel
+    en-US does.
+  - Unstyled DateTime and TimeSpan values in in-memory workbooks use the writer's default
+    formats.
+- **C3: password on the streaming reader.** `XlsxReader.Open(path, password, options)` and
+  `XlsxReader.Open(stream, password, options)`.
+  - Decryption happens in memory.
+  - A missing or wrong password throws `XlsxPasswordRequiredException`; an unencrypted file
+    ignores the password.
+  - The old `Open` overloads now also throw `XlsxPasswordRequiredException` for an encrypted
+    file, instead of failing with a zip error.
+  - Also added: `Workbook.Load(stream, password, options)`, and password/options overloads
+    of `ReadXlsx`, `ReadXlsxSheet` and `ReadXlsx<T>`.
+- **C4: hostile-input limits.** New `XlsxReaderOptions` settings:
+  - `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio` and
+    `MaxPackageEntries`.
+  - A preset, `XlsxReaderOptions.ForUntrustedInput()`.
+
+  How they are enforced:
+  - The zip is checked before anything is parsed: entry count, declared sizes and ratios,
+    plus the actual inflated size of the manifest parts.
+  - Every part read is then counted as it inflates, because declared sizes can lie.
+  - The new limits throw `XlsxLimitExceededException` (an `IOException`, carrying
+    `LimitName`, `Limit` and `Actual`).
+  - `MaxPartBytes` keeps throwing `InvalidDataException`, as before.
+- **C4: cancellation.** `XlsxReaderOptions.CancellationToken` is checked:
+  - while the package is opened and shared strings are read;
+  - on every row while streaming;
+  - on every row in `Workbook.Load`.
+
+  Cancelling surfaces as `OperationCanceledException`, typically on the next row; the test
+  measures under 1 s. Decrypting an encrypted file is one step that cannot be interrupted;
+  bound it with `MaxTotalUncompressedBytes`.
+- **C5: macros.** `XlsxReader.HasMacros` and `Workbook.HasMacros` detect a VBA project or
+  Excel 4.0 macro sheets (.xlsm / .xltm / .xlam). Detection only: macros are never run, and
+  load → save writes a macro-free .xlsx.
+- **Page setup, for the Layout engine.** New `Sheet.PageSetup` (`PageSetup`) holds:
+  - paper size code, with name and millimetre size (`PaperSizeInfo`, ECMA codes 1–68);
+  - orientation, scale, and fit-to-page with width × height;
+  - first page number, page order, black-and-white, draft, comments and errors printing,
+    DPI and copies;
+  - margins;
+  - header/footer text for odd, even and first pages, kept verbatim with its codes, plus its
+    flags;
+  - print gridlines and headings, centring;
+  - manual row and column page breaks;
+  - print area(s) and print titles, from `_xlnm.Print_Area` / `_xlnm.Print_Titles` scoped to
+    the sheet.
+- **More sheet and workbook properties:**
+  - `Sheet.Visibility` (`SheetVisibility`) and `SheetInfo.Visibility` / `WorkbookIndex`.
+  - `Sheet.ShowGridLines`, `RightToLeft`, `ViewMode` and `ZoomScale`.
+  - `SheetFormat.OutlineSummaryBelow` / `OutlineSummaryRight`.
+  - `XlsxReader.DefinedNames`, and `Workbook.LoadedDefinedNames` (read-only, never written
+    back).
+  - Hidden rows and columns and outline levels were already readable (1.2.0).
+- **Date system.** `XlsxReader.Date1904` and `Workbook.Date1904`.
+- **Formatter types.** `NumberFormatter` now also accepts `DateOnly` and `TimeOnly`.
+
+### Fixes
+- **Formula cells lost their cached value on read.** Any formula written as
+  `<f>…</f><v>…</v>` with no whitespace between them, which is how Excel and LibreOffice
+  write it, loaded as null. `Workbook.Load` and `XlsxReader` now return the cached result.
+- **1904 workbooks.** Dates were 1,462 days early; they are now converted in the file's date
+  system.
+- **1900 workbooks before 1-Mar-1900.** Serials 1–59 were a day early (DateTime.FromOADate);
+  they are now exact. Serial 60, Excel's fictitious 29-Feb-1900, is returned as a number,
+  while its display text shows 29-Feb-1900, as in Excel.
+- **Caller-owned streams.** `XlsxReader.Open(stream)` and `Workbook.Load(stream)` no longer
+  close the caller's stream, as their documentation always said.
+
+### Behaviour changes
+- **Header/footer round-trip.** On load, `Sheet.PageHeader` and `PageFooter` are filled from
+  the file's odd-page header/footer, so load → save keeps them. Previously they were dropped.
+- **Value changes from the fixes.** The date and formula fixes above change the values
+  returned for affected files.
+
+### Tests
+- **New `readsafety` group: 20 checks.** It covers display text against Excel results and
+  the en-IN culture; encrypted streaming with stream ownership; row caps; zip-bomb guards;
+  non-seekable input; cancellation latency; macro detection; full page setup; 1904 and
+  pre-1900-03-01 dates.
+- **Cross-checks.** Page setup and formula cached values were also checked on
+  LibreOffice-saved files.
+
 ## 1.3.0 (unreleased)
 
 Column auto-fit and a public number-format renderer. All additions are source- and

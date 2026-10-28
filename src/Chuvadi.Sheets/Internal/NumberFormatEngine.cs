@@ -34,6 +34,10 @@ internal static class NumberFormatEngine
                 return FormatNumber(fmt, ToSerial(dto.DateTime, o.Date1904), o);
             case TimeSpan ts:
                 return FormatNumber(fmt, ts.TotalDays, o);
+            case DateOnly d:
+                return FormatNumber(fmt, ToSerial(d.ToDateTime(TimeOnly.MinValue), o.Date1904), o);
+            case TimeOnly t:
+                return FormatNumber(fmt, t.ToTimeSpan().TotalDays, o);
             case char c:
                 return FormatText(fmt, c.ToString(), o);
             case IConvertible conv when IsNumeric(value):

@@ -32,6 +32,8 @@ public sealed class XlsxReader : IDisposable
 {
     private readonly OoxmlPackage _package;
     private readonly XlsxReaderOptions _options;
+    private readonly ReadBudget _budget;
+    private readonly Stream? _ownedStream;   // decrypted / buffered copy we must dispose
 
     /// <summary>Shared strings, indexed by SST id. May be empty if the file uses only inline strings.</summary>
     internal string[] SharedStrings { get; }
@@ -49,17 +51,60 @@ public sealed class XlsxReader : IDisposable
     /// <summary>The sheets in the workbook, in tab order.</summary>
     public IReadOnlyList<SheetInfo> Sheets { get; }
 
+    /// <summary>
+    /// True if the workbook uses the 1904 date system (&lt;workbookPr date1904="1"/&gt;; common in
+    /// files from old Mac Excel). Date serials are converted accordingly.
+    /// </summary>
+    public bool Date1904 { get; }
+
+    /// <summary>
+    /// True if the package contains macros: a VBA project (vbaProject.bin, typical of .xlsm /
+    /// .xltm / .xlam) or Excel 4.0 macro sheets. Detection only; macros are never run, and
+    /// <see cref="Workbook"/> load → save does not carry them over.
+    /// </summary>
+    public bool HasMacros { get; }
+
+    /// <summary>
+    /// Every defined name in workbook.xml, as stored, including built-in ones such as
+    /// _xlnm.Print_Area and _xlnm.Print_Titles.
+    /// </summary>
+    public IReadOnlyList<DefinedNameInfo> DefinedNames { get; }
+
     internal XlsxReaderOptions Options => _options;
 
-    private XlsxReader(OoxmlPackage package, string[] sst, CellStyleTable styleTable,
-                       IReadOnlyList<SheetInfo> sheets, XlsxReaderOptions options)
+    private string?[]? _displayCodes;
+    private NumberFormatOptions? _displayOptions;
+
+    /// <summary>Format options for display text: the configured culture and this file's date system.</summary>
+    internal NumberFormatOptions DisplayOptions => _displayOptions ??= new NumberFormatOptions
+    {
+        Culture = _options.DisplayCulture ?? System.Globalization.CultureInfo.InvariantCulture,
+        Date1904 = Date1904,
+    };
+
+    /// <summary>The format code a cell with this style index displays with (null = General).</summary>
+    internal string? DisplayCode(int styleIndex)
+    {
+        var xfs = StyleTable.CellFormats;
+        if (styleIndex < 0 || styleIndex >= xfs.Count) return null;
+        _displayCodes ??= new string?[xfs.Count];
+        return _displayCodes[styleIndex] ??= SerialDate.DisplayCode(StyleTable, xfs[styleIndex].NumberFormatId) ?? string.Empty;
+    }
+
+    private XlsxReader(OoxmlPackage package, string[] sst, CellStyleTable styleTable, WorkbookPartInfo wb,
+                       bool hasMacros, XlsxReaderOptions options, ReadBudget budget, Stream? ownedStream)
     {
         _package = package;
         _options = options;
+        _budget = budget;
+        _ownedStream = ownedStream;
         SharedStrings = sst;
         StyleTable = styleTable;
         Styles = BuildStyleEntries(styleTable);
-        Sheets = sheets;
+        Sheets = wb.Sheets;
+        Date1904 = wb.Date1904;
+        DefinedNames = wb.DefinedNames;
+        HasMacros = hasMacros;
     }
 
     /// <summary>Per-cellXf date detection data, derived from the parsed style table.</summary>
@@ -83,13 +128,32 @@ public sealed class XlsxReader : IDisposable
 
     // ---- Open ---------------------------------------------------------------------
 
+    /// <summary>
+    /// Opens an xlsx file. An encrypted (password-protected) file throws
+    /// <see cref="XlsxPasswordRequiredException"/>; use <see cref="Open(string, string?, XlsxReaderOptions?)"/>.
+    /// </summary>
     public static XlsxReader Open(string path, XlsxReaderOptions? options = null)
+        => Open(path, null, options);
+
+    /// <summary>
+    /// Opens an xlsx stream. The stream is not closed. An encrypted stream throws
+    /// <see cref="XlsxPasswordRequiredException"/>; use <see cref="Open(Stream, string?, XlsxReaderOptions?)"/>.
+    /// </summary>
+    public static XlsxReader Open(Stream input, XlsxReaderOptions? options = null)
+        => Open(input, null, options);
+
+    /// <summary>
+    /// Opens a possibly encrypted xlsx file. If the file is encrypted the password is required
+    /// (missing or wrong → <see cref="XlsxPasswordRequiredException"/>); for an unencrypted file
+    /// the password is ignored. Decryption happens in memory.
+    /// </summary>
+    public static XlsxReader Open(string path, string? password, XlsxReaderOptions? options)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
         var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         try
         {
-            return OpenCore(stream, options ?? new XlsxReaderOptions(), ownsStream: true);
+            return OpenCore(stream, password, options ?? new XlsxReaderOptions(), ownsStream: true);
         }
         catch
         {
@@ -98,18 +162,49 @@ public sealed class XlsxReader : IDisposable
         }
     }
 
-    public static XlsxReader Open(Stream input, XlsxReaderOptions? options = null)
+    /// <summary>
+    /// Opens a possibly encrypted xlsx stream. The stream is not closed. If the stream is
+    /// encrypted the password is required (missing or wrong →
+    /// <see cref="XlsxPasswordRequiredException"/>); otherwise it is ignored.
+    /// </summary>
+    public static XlsxReader Open(Stream input, string? password, XlsxReaderOptions? options)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        return OpenCore(input, options ?? new XlsxReaderOptions(), ownsStream: false);
+        return OpenCore(input, password, options ?? new XlsxReaderOptions(), ownsStream: false);
     }
 
-    private static XlsxReader OpenCore(Stream input, XlsxReaderOptions options, bool ownsStream)
+    private static XlsxReader OpenCore(Stream input, string? password, XlsxReaderOptions options, bool ownsStream)
     {
         OoxmlPackage? pkg = null;
+        Stream? owned = null;
+        var ct = options.CancellationToken;
         try
         {
-            pkg = OoxmlPackage.Open(input);
+            ct.ThrowIfCancellationRequested();
+            Stream source = input;
+
+            // Encrypted (CFB) packages: decrypt to an in-memory plaintext zip first.
+            if (input.CanSeek && Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(input))
+            {
+                if (options.MaxTotalUncompressedBytes is long cap && input.Length - input.Position > cap)
+                    throw new XlsxLimitExceededException("MaxTotalUncompressedBytes", cap, input.Length - input.Position,
+                        "the encrypted file is larger than the limit.");
+                byte[] plaintext;
+                try { plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(input, password); }
+                catch (Chuvadi.Internal.Crypto.PackagePasswordException ex) { throw new XlsxPasswordRequiredException(ex.Message, ex); }
+                owned = source = new MemoryStream(plaintext, writable: false);
+                ct.ThrowIfCancellationRequested();
+            }
+
+            var budget = new ReadBudget(options.MaxTotalUncompressedBytes);
+            if (options.HasPackageLimits)
+            {
+                var checkedStream = PackageGuard.Check(source, options, budget);
+                if (!ReferenceEquals(checkedStream, source)) owned = source = checkedStream;
+            }
+
+            // The package layer closes the stream it is given: shield a caller-owned stream.
+            pkg = OoxmlPackage.Open(owned is null && !ownsStream ? new NonClosingStream(source) : source);
 
             // Find the workbook part via root relationships.
             string? workbookUri = null;
@@ -124,23 +219,36 @@ public sealed class XlsxReader : IDisposable
             if (workbookUri is null)
                 throw new XlsxFormatException("Package has no officeDocument relationship; not a valid xlsx.");
 
-            // Load shared strings (optional).
-            var sst = TryLoadSharedStrings(pkg, options);
+            var sst = TryLoadSharedStrings(pkg, options, budget);
+            var styleTable = TryLoadStyleTable(pkg, workbookUri, options, budget);
+            var wb = LoadWorkbookPart(pkg, workbookUri, options, budget);
+            bool macros = DetectMacros(pkg);
 
-            // Load styles and theme (optional but almost always present).
-            var styleTable = TryLoadStyleTable(pkg, workbookUri, options);
-
-            // Parse workbook.xml for the sheet list and definedNames.
-            var sheets = LoadWorkbookSheets(pkg, workbookUri, options);
-
-            return new XlsxReader(pkg, sst, styleTable, sheets, options);
+            return new XlsxReader(pkg, sst, styleTable, wb, macros, options, budget, owned);
         }
         catch
         {
             pkg?.Dispose();
+            owned?.Dispose();
             if (ownsStream) input.Dispose();
             throw;
         }
+    }
+
+    /// <summary>VBA project parts, Excel 4.0 macro sheets, or a macro-enabled main part.</summary>
+    private static bool DetectMacros(OoxmlPackage pkg)
+    {
+        foreach (var part in pkg.Parts)
+        {
+            var ct = part.ContentType ?? string.Empty;
+            var uri = part.Uri;
+            if (ct.IndexOf("vbaProject", StringComparison.OrdinalIgnoreCase) >= 0
+                || ct.IndexOf("macrosheet", StringComparison.OrdinalIgnoreCase) >= 0
+                || uri.EndsWith("/vbaProject.bin", StringComparison.OrdinalIgnoreCase)
+                || uri.IndexOf("/macrosheets/", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
     }
 
     // ---- Sheet access -------------------------------------------------------------
@@ -162,27 +270,24 @@ public sealed class XlsxReader : IDisposable
         throw new KeyNotFoundException($"No sheet named '{name}'.");
     }
 
-    /// <summary>Opens the sheet part's XML stream (decompression-capped when
-    /// <see cref="XlsxReaderOptions.MaxPartBytes"/> is set). Caller disposes.</summary>
+    /// <summary>Opens the sheet part's XML stream, counted against the configured limits. Caller disposes.</summary>
     internal Stream OpenSheetPart(SheetInfo info)
-        => Limit(_package.OpenPart(info.PartUri), info.PartUri, _options);
+        => Limit(_package.OpenPart(info.PartUri), info.PartUri, _options, _budget);
 
-    /// <summary>Wraps a part stream in a decompression-size guard when a cap is configured.</summary>
-    private static Stream Limit(Stream s, string partUri, XlsxReaderOptions options)
-        => options.MaxPartBytes is long max
-            ? new Chuvadi.Internal.LimitedReadStream(s, max, $"package part '{partUri}'")
-            : s;
+    /// <summary>Wraps a part stream in the decompression guards when limits are configured.</summary>
+    private static Stream Limit(Stream s, string partUri, XlsxReaderOptions options, ReadBudget budget)
+        => budget.Wrap(s, partUri, options.MaxPartBytes);
 
     // ---- Loading -----------------------------------------------------------------
 
-    private static string[] TryLoadSharedStrings(OoxmlPackage pkg, XlsxReaderOptions options)
+    private static string[] TryLoadSharedStrings(OoxmlPackage pkg, XlsxReaderOptions options, ReadBudget budget)
     {
         foreach (var part in pkg.Parts)
         {
             if (part.Uri.EndsWith("/sharedStrings.xml", StringComparison.Ordinal))
             {
-                using var s = Limit(pkg.OpenPart(part.Uri), part.Uri, options);
-                return SharedStringReader.Read(s);
+                using var s = Limit(pkg.OpenPart(part.Uri), part.Uri, options, budget);
+                return SharedStringReader.Read(s, options.CancellationToken);
             }
         }
         return Array.Empty<string>();
@@ -194,7 +299,7 @@ public sealed class XlsxReader : IDisposable
     /// A malformed styles part throws, as before. A malformed theme is ignored unless
     /// <see cref="XlsxReaderOptions.StrictXml"/> is set, since only colours depend on it.
     /// </summary>
-    private static CellStyleTable TryLoadStyleTable(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options)
+    private static CellStyleTable TryLoadStyleTable(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options, ReadBudget budget)
     {
         string? stylesUri = FindWorkbookRelatedPart(pkg, workbookUri, "/styles");
         if (stylesUri is null)
@@ -212,7 +317,7 @@ public sealed class XlsxReader : IDisposable
         }
         else
         {
-            using var s = Limit(pkg.OpenPart(stylesUri), stylesUri, options);
+            using var s = Limit(pkg.OpenPart(stylesUri), stylesUri, options, budget);
             table = StyleTableParser.ParseStyles(s);
         }
 
@@ -221,7 +326,7 @@ public sealed class XlsxReader : IDisposable
         {
             try
             {
-                using var s = Limit(pkg.OpenPart(themeUri), themeUri, options);
+                using var s = Limit(pkg.OpenPart(themeUri), themeUri, options, budget);
                 table.Theme = StyleTableParser.ParseTheme(s);
             }
             catch (Exception ex) when (!options.StrictXml && ex is XmlException or XlsxFormatException)
@@ -262,10 +367,16 @@ public sealed class XlsxReader : IDisposable
         return workbookDir + "/" + target;
     }
 
-    private static IReadOnlyList<SheetInfo> LoadWorkbookSheets(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options)
+    private sealed class WorkbookPartInfo
     {
-        // Read workbook.xml — list each <sheet> with its r:id, then resolve to a part URI
-        // via the workbook's relationships.
+        public readonly List<SheetInfo> Sheets = new();
+        public readonly List<DefinedNameInfo> DefinedNames = new();
+        public bool Date1904;
+    }
+
+    /// <summary>Reads workbook.xml: the sheet list (with visibility), workbookPr and definedNames.</summary>
+    private static WorkbookPartInfo LoadWorkbookPart(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options, ReadBudget budget)
+    {
         var rels = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var rel in pkg.GetRelationships(workbookUri))
         {
@@ -273,30 +384,88 @@ public sealed class XlsxReader : IDisposable
                 rels[rel.Id] = ResolveWorkbookTarget(workbookUri, rel.Target);
         }
 
-        var sheets = new List<SheetInfo>();
-        using (var s = Limit(pkg.OpenPart(workbookUri), workbookUri, options))
-        using (var r = XmlReader.Create(s, new XmlReaderSettings { IgnoreWhitespace = true, IgnoreComments = true, CloseInput = false }))
+        var info = new WorkbookPartInfo();
+        int sheetPosition = 0;   // position among ALL <sheet> elements (localSheetId refers to this)
+        using (var s = Limit(pkg.OpenPart(workbookUri), workbookUri, options, budget))
+        using (var r = XmlReader.Create(s, new XmlReaderSettings { IgnoreWhitespace = true, IgnoreComments = true, CloseInput = false, DtdProcessing = DtdProcessing.Prohibit }))
         {
             while (r.Read())
             {
-                if (r.NodeType != XmlNodeType.Element || r.LocalName != "sheet") continue;
-
-                var name = r.GetAttribute("name");
-                var sheetId = r.GetAttribute("sheetId");
-                var rId = r.GetAttribute("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
-                if (name is null || rId is null) continue;
-                if (!rels.TryGetValue(rId, out var partUri)) continue;
-
-                sheets.Add(new SheetInfo(name, sheetId ?? "1", partUri));
+                if (r.NodeType != XmlNodeType.Element) continue;
+                switch (r.LocalName)
+                {
+                    case "workbookPr":
+                        info.Date1904 = r.GetAttribute("date1904") is "1" or "true";
+                        break;
+                    case "sheet":
+                    {
+                        int position = sheetPosition++;
+                        var name = r.GetAttribute("name");
+                        var sheetId = r.GetAttribute("sheetId");
+                        var rId = r.GetAttribute("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+                        var state = r.GetAttribute("state") switch
+                        {
+                            "hidden" => SheetVisibility.Hidden,
+                            "veryHidden" => SheetVisibility.VeryHidden,
+                            _ => SheetVisibility.Visible,
+                        };
+                        if (name is null || rId is null) break;
+                        if (!rels.TryGetValue(rId, out var partUri)) break;   // chart sheets, macro sheets
+                        info.Sheets.Add(new SheetInfo(name, sheetId ?? "1", partUri, state, position));
+                        break;
+                    }
+                    case "definedName":
+                    {
+                        var name = r.GetAttribute("name") ?? string.Empty;
+                        int? local = int.TryParse(r.GetAttribute("localSheetId"), System.Globalization.NumberStyles.Integer,
+                            System.Globalization.CultureInfo.InvariantCulture, out var l) ? l : null;
+                        bool hidden = r.GetAttribute("hidden") is "1" or "true";
+                        // Collect the text up to </definedName>, leaving the reader ON the end tag
+                        // (ReadElementContentAsString would land on the next element, which the
+                        // loop's Read() would then skip).
+                        var sb = new System.Text.StringBuilder();
+                        if (!r.IsEmptyElement)
+                        {
+                            int depth = r.Depth;
+                            while (r.Read() && !(r.NodeType == XmlNodeType.EndElement && r.Depth == depth))
+                                if (r.NodeType is XmlNodeType.Text or XmlNodeType.CDATA) sb.Append(r.Value);
+                        }
+                        var formula = sb.ToString();
+                        info.DefinedNames.Add(new DefinedNameInfo(name, formula, local, hidden));
+                        break;
+                    }
+                }
             }
         }
-        return sheets;
+        return info;
     }
 
     // ---- Disposal -----------------------------------------------------------------
 
-    public void Dispose() => _package.Dispose();
+    public void Dispose()
+    {
+        _package.Dispose();
+        _ownedStream?.Dispose();
+    }
 }
+
+/// <summary>Sheet visibility from workbook.xml (&lt;sheet state&gt;).</summary>
+public enum SheetVisibility
+{
+    Visible = 0,
+    /// <summary>Hidden; the user can unhide it from Excel's UI.</summary>
+    Hidden,
+    /// <summary>Hidden and not listed in Excel's Unhide dialog (only VBA can show it).</summary>
+    VeryHidden,
+}
+
+/// <summary>A defined name from workbook.xml, exactly as stored.</summary>
+/// <param name="Name">The name, e.g. "TaxRate" or "_xlnm.Print_Area".</param>
+/// <param name="Formula">The formula or reference text, e.g. "Sheet1!$A$1:$D$20".</param>
+/// <param name="LocalSheetIndex">0-based position of the sheet the name is scoped to (among all
+/// sheets in workbook.xml, including chart sheets), or null for a workbook-level name.</param>
+/// <param name="Hidden">True if the name is hidden from Excel's Name Manager.</param>
+public sealed record DefinedNameInfo(string Name, string Formula, int? LocalSheetIndex, bool Hidden);
 
 /// <summary>
 /// Lightweight descriptor for a sheet — name + part URI. Available before opening the sheet's content.
@@ -307,10 +476,37 @@ public sealed class SheetInfo
     public string SheetId { get; }
     internal string PartUri { get; }
 
-    internal SheetInfo(string name, string sheetId, string partUri)
+    /// <summary>Visible, hidden or very hidden.</summary>
+    public SheetVisibility Visibility { get; }
+
+    /// <summary>
+    /// 0-based position among all &lt;sheet&gt; entries in workbook.xml (including chart and
+    /// macro sheets that this reader skips). Matches <see cref="DefinedNameInfo.LocalSheetIndex"/>.
+    /// </summary>
+    public int WorkbookIndex { get; }
+
+    internal SheetInfo(string name, string sheetId, string partUri, SheetVisibility visibility = SheetVisibility.Visible, int workbookIndex = 0)
     {
-        Name = name; SheetId = sheetId; PartUri = partUri;
+        Name = name; SheetId = sheetId; PartUri = partUri; Visibility = visibility; WorkbookIndex = workbookIndex;
     }
+}
+
+/// <summary>A pass-through stream whose Dispose leaves the inner stream open.</summary>
+internal sealed class NonClosingStream : Stream
+{
+    private readonly Stream _inner;
+    public NonClosingStream(Stream inner) { _inner = inner; }
+    public override bool CanRead => _inner.CanRead;
+    public override bool CanSeek => _inner.CanSeek;
+    public override bool CanWrite => false;
+    public override long Length => _inner.Length;
+    public override long Position { get => _inner.Position; set => _inner.Position = value; }
+    public override void Flush() { }
+    public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+    public override int Read(Span<byte> buffer) => _inner.Read(buffer);
+    public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }
 
 /// <summary>
@@ -377,6 +573,9 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     private readonly Stream _stream;
     private readonly XmlReader _xml;
     private readonly bool _autoDetectDates;
+    private readonly System.Threading.CancellationToken _ct;
+    private readonly long _maxRows;
+    private long _rowsRead;
     private readonly XlsxReader _book;
     private readonly SheetLayoutCollector? _layout;   // null on the public streaming path
 
@@ -401,6 +600,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             CloseInput = false,
         });
         _autoDetectDates = _book.Options.AutoDetectDates;
+        _ct = _book.Options.CancellationToken;
+        _maxRows = _book.Options.MaxRowsPerSheet ?? long.MaxValue;
     }
 
     public RowReader Current
@@ -437,12 +638,27 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         // Advance to the next <row> element.
         while (_xml.Read())
         {
-            if (_xml.NodeType != XmlNodeType.Element) continue;
+            if (_xml.NodeType != XmlNodeType.Element)
+            {
+                if (_layout is not null)
+                {
+                    if (_xml.NodeType is XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.Whitespace or XmlNodeType.SignificantWhitespace)
+                        _layout.OnText(_xml.Value);
+                    else if (_xml.NodeType == XmlNodeType.EndElement)
+                        _layout.OnEndElement(_xml.LocalName);
+                }
+                continue;
+            }
             if (_xml.LocalName != "row")
             {
                 _layout?.OnElement(_xml);
                 continue;
             }
+
+            _ct.ThrowIfCancellationRequested();
+            if (++_rowsRead > _maxRows)
+                throw new XlsxLimitExceededException("MaxRowsPerSheet", _maxRows, _rowsRead,
+                    $"sheet '{_sheet.Name}' has more rows than allowed.");
 
             var rAttr = _xml.GetAttribute("r");
             _currentRowNumber = int.TryParse(rAttr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rn)
@@ -529,8 +745,14 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 else if (_xml.LocalName == "f")
                 {
                     isFormula = true;
-                    // Skip the formula text — we return cached value via the <v> sibling.
-                    if (!_xml.IsEmptyElement) _xml.Skip();
+                    // Skip the formula text — we return the cached value from the <v> sibling.
+                    // Read to </f> rather than XmlReader.Skip(): Skip lands ON the next sibling,
+                    // and this loop's Read() would then step past <v> (cached value lost).
+                    if (!_xml.IsEmptyElement)
+                    {
+                        int fDepth = _xml.Depth;
+                        while (_xml.Read() && !(_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == fDepth)) { }
+                    }
                 }
                 else if (_xml.LocalName == "is")
                 {
@@ -629,8 +851,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 if (_autoDetectDates && styleIndex >= 0 && styleIndex < _book.Styles.Length
                     && _book.Styles[styleIndex].IsDateFormat)
                 {
-                    try { return DateTime.FromOADate(num); }
-                    catch { return num; }  // out-of-range serial — fall back to double
+                    return SerialDate.ToDateTime(num, _book.Date1904) is DateTime dt1 ? dt1 : num;   // unrepresentable → double
                 }
                 return num;
         }
@@ -746,6 +967,30 @@ public readonly struct RowReader
     public int GetStyleIndex(int column0Based)
         => column0Based >= 0 && column0Based < _count ? _styles[column0Based] : -1;
 
+    /// <summary>
+    /// The cell's text as Excel displays it: the value rendered with the cell's number format
+    /// (<see cref="NumberFormatter"/>), using <see cref="XlsxReaderOptions.DisplayCulture"/> and
+    /// the file's date system. Empty for a missing or empty cell; formula cells show their
+    /// cached result. Locale-dependent built-in formats (currency/accounting ids 5-8, 41-44)
+    /// render as Excel en-US does. Fill characters (*) are not expanded.
+    /// </summary>
+    public string GetDisplayString(int column0Based)
+    {
+        var v = this[column0Based];
+        if (v is null) return string.Empty;
+        var book = _sheet.Book;
+        var code = book.DisplayCode(GetStyleIndex(column0Based));
+        return NumberFormatter.Format(v, string.IsNullOrEmpty(code) ? null : code, book.DisplayOptions);
+    }
+
+    /// <summary>Display text by header name (requires TreatFirstRowAsHeaders). See <see cref="GetDisplayString(int)"/>.</summary>
+    public string GetDisplayString(string columnName)
+    {
+        if (_sheet.HeaderIndex is null)
+            throw new InvalidOperationException("Header index not built; enable TreatFirstRowAsHeaders.");
+        return _sheet.HeaderIndex.TryGetValue(columnName, out var idx) ? GetDisplayString(idx) : string.Empty;
+    }
+
     /// <summary>Raw value access by 0-based column index. Returns null for missing cells.</summary>
     public object? this[int column0Based]
         => column0Based >= 0 && column0Based < _count ? _buffer[column0Based] : null;
@@ -785,14 +1030,14 @@ public readonly struct RowReader
     {
         var v = this[col];
         if (v is DateTime dt) return dt;
-        if (v is double d) return DateTime.FromOADate(d);
+        if (v is double d && SerialDate.ToDateTime(d, _sheet.Book.Date1904) is DateTime fromSerial) return fromSerial;
         throw new InvalidCastException($"Cell at column {col + 1} is not a date.");
     }
     public DateTime GetDateTime(string name)
     {
         var v = this[name];
         if (v is DateTime dt) return dt;
-        if (v is double d) return DateTime.FromOADate(d);
+        if (v is double d && SerialDate.ToDateTime(d, _sheet.Book.Date1904) is DateTime fromSerial) return fromSerial;
         throw new InvalidCastException($"Cell '{name}' is not a date.");
     }
 

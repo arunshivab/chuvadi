@@ -52,6 +52,34 @@ public sealed class Workbook
     /// </summary>
     public CellStyleTable StyleTable { get; internal set; } = CellStyleTable.Empty;
 
+    /// <summary>
+    /// True if a loaded workbook uses the 1904 date system. Dates are converted correctly on
+    /// load; the writer always saves in the 1900 system (date values are unaffected).
+    /// </summary>
+    public bool Date1904 { get; internal set; }
+
+    /// <summary>
+    /// True if the loaded file contains macros (a VBA project or Excel 4.0 macro sheets).
+    /// Detection only: macros are never run, and saving writes a macro-free .xlsx.
+    /// </summary>
+    public bool HasMacros { get; internal set; }
+
+    /// <summary>
+    /// The defined names of a loaded file, as stored (including _xlnm.Print_Area and
+    /// _xlnm.Print_Titles). Read-only and not written back on save; use
+    /// <see cref="DefinedNames"/> to add names for saving.
+    /// </summary>
+    public IReadOnlyList<DefinedNameInfo> LoadedDefinedNames { get; internal set; } = Array.Empty<DefinedNameInfo>();
+
+    /// <summary>
+    /// Culture for <see cref="Cell.DisplayText"/>: decimal/group separators, group sizes,
+    /// date separators, month and day names. Defaults to the loading options'
+    /// <see cref="XlsxReaderOptions.DisplayCulture"/>, else invariant (Excel en-US).
+    /// </summary>
+    public System.Globalization.CultureInfo DisplayCulture { get; set; } = System.Globalization.CultureInfo.InvariantCulture;
+
+    internal NumberFormatOptions DisplayOptions => new() { Culture = DisplayCulture, Date1904 = Date1904 };
+
     internal bool IsStructureProtected { get; private set; }
     internal string? StructureProtectionPassword { get; private set; }
     internal bool LockStructure { get; private set; }
@@ -196,28 +224,8 @@ public sealed class Workbook
         var opts = ModelOptions(options);
 
         using var fileStream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
-
-        // Detect CFB (encrypted) vs. raw zip (unencrypted).
-        if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(fileStream))
-        {
-            byte[] plaintext;
-            try
-            {
-                plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(fileStream, password);
-            }
-            catch (Chuvadi.Internal.Crypto.PackagePasswordException ex)
-            {
-                throw new XlsxPasswordRequiredException(ex.Message, ex);
-            }
-            using var plaintextMs = new System.IO.MemoryStream(plaintext);
-            using var reader = XlsxReader.Open(plaintextMs, opts);
-            return WorkbookLoader.Load(reader);
-        }
-        else
-        {
-            using var reader = XlsxReader.Open(fileStream, opts);
-            return WorkbookLoader.Load(reader);
-        }
+        using var reader = XlsxReader.Open(fileStream, password, opts);   // decrypts when needed
+        return WorkbookLoader.Load(reader);
     }
 
     /// <summary>Loads a workbook from an open stream. The stream is not closed.</summary>
@@ -225,9 +233,16 @@ public sealed class Workbook
 
     /// <summary>Loads a workbook from an open stream with reader options. The stream is not closed.</summary>
     public static Workbook Load(System.IO.Stream input, XlsxReaderOptions? options)
+        => Load(input, null, options);
+
+    /// <summary>
+    /// Loads a possibly encrypted workbook from an open stream (the password is ignored when
+    /// the stream is not encrypted). The stream is not closed.
+    /// </summary>
+    public static Workbook Load(System.IO.Stream input, string? password, XlsxReaderOptions? options)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        using var reader = XlsxReader.Open(input, ModelOptions(options));
+        using var reader = XlsxReader.Open(input, password, ModelOptions(options));
         return WorkbookLoader.Load(reader);
     }
 
@@ -298,6 +313,36 @@ public sealed class Sheet
     /// </summary>
     public SheetFormat Format { get; } = new();
 
+    /// <summary>Print settings of a loaded file (Excel defaults for a sheet built in memory). Read-only.</summary>
+    public PageSetup PageSetup { get; private set; } = new();
+
+    /// <summary>Visible, hidden or very hidden (from workbook.xml). Read-only; new sheets are visible.</summary>
+    public SheetVisibility Visibility { get; internal set; }
+
+    /// <summary>Whether gridlines show on screen (&lt;sheetView showGridLines&gt;). Default true. Printing uses <see cref="PageSetup.PrintGridlines"/>.</summary>
+    public bool ShowGridLines { get; private set; } = true;
+
+    /// <summary>True if the sheet is laid out right-to-left (column A on the right).</summary>
+    public bool RightToLeft { get; private set; }
+
+    /// <summary>Excel view mode stored for the sheet.</summary>
+    public SheetViewMode ViewMode { get; private set; }
+
+    /// <summary>Zoom percentage stored for the sheet view. Default 100.</summary>
+    public int ZoomScale { get; private set; } = 100;
+
+    internal void SetLoadedView(PageSetup page, bool showGridLines, bool rightToLeft, SheetViewMode mode, int zoom)
+    {
+        PageSetup = page;
+        ShowGridLines = showGridLines;
+        RightToLeft = rightToLeft;
+        ViewMode = mode;
+        ZoomScale = zoom;
+        // Round-trip the odd-page header/footer through the writer's existing API.
+        if (page.HeaderFooter.OddHeader is not null || page.HeaderFooter.OddFooter is not null)
+            SetHeaderFooter(page.HeaderFooter.OddHeader, page.HeaderFooter.OddFooter);
+    }
+
     /// <summary>
     /// The &lt;col&gt; spans of a loaded file, in file order, exactly as stored (not expanded per
     /// column). Empty for a sheet built in memory. Use <see cref="Columns"/> for per-column lookup.
@@ -340,7 +385,7 @@ public sealed class Sheet
     {
         if (!_cells.TryGetValue((row, column), out var cell))
         {
-            cell = new Cell(row, column);
+            cell = new Cell(row, column) { Owner = this };
             _cells[(row, column)] = cell;
         }
         return cell;
@@ -684,6 +729,54 @@ public sealed class Cell
     private string? _formula;
 
     internal Cell(int row, int column) { Row = row; Column = column; }
+
+    /// <summary>The sheet that owns this cell (for display formatting).</summary>
+    internal Sheet? Owner { get; init; }
+
+    /// <summary>
+    /// The cell's text as Excel displays it: <see cref="Value"/> rendered with the cell's
+    /// number format (<see cref="NumberFormatter"/>), using the workbook's
+    /// <see cref="Workbook.DisplayCulture"/> and date system. Empty for an empty cell; a formula
+    /// cell shows its loaded cached result (empty if none). Cells without a style use General,
+    /// except DateTime/TimeSpan values, which use the writer's default date/time formats
+    /// (yyyy-mm-dd, yyyy-mm-dd hh:mm:ss, [h]:mm:ss). Locale-dependent built-in formats
+    /// (currency/accounting ids 5-8, 41-44) render as Excel en-US does.
+    /// </summary>
+    public string DisplayText => GetDisplayText(null);
+
+    /// <summary>As <see cref="DisplayText"/>, with explicit culture and date-system options.</summary>
+    public string GetDisplayText(NumberFormatOptions? options)
+    {
+        var v = _value;
+        if (v is null) return string.Empty;
+        var wb = Owner?.Owner;
+        var o = options ?? wb?.DisplayOptions ?? NumberFormatOptions.Default;
+        return NumberFormatter.Format(v, DisplayFormatCode(wb), o);
+    }
+
+    private string? DisplayFormatCode(Workbook? wb)
+    {
+        if (_style is CellStyle st)
+        {
+            if (st.NumberFormat is not null) return st.NumberFormat;
+            if (st.NumberFormatId is int id && wb is not null) return SerialDate.DisplayCode(wb.StyleTable, id);
+            if (_value is DateTime or DateTimeOffset or DateOnly or TimeSpan) return DefaultCodeFor(_value);
+            return null;
+        }
+        if (StyleIndex >= 0 && wb is not null && StyleIndex < wb.StyleTable.CellFormats.Count)
+            return SerialDate.DisplayCode(wb.StyleTable, wb.StyleTable.CellFormats[StyleIndex].NumberFormatId);
+        return DefaultCodeFor(_value);
+    }
+
+    /// <summary>The writer's default formats for unstyled date/time values (XlsxWriterOptions defaults).</summary>
+    private static string? DefaultCodeFor(object? v) => v switch
+    {
+        DateTime dt => dt.TimeOfDay == TimeSpan.Zero ? "yyyy-mm-dd" : "yyyy-mm-dd hh:mm:ss",
+        DateTimeOffset dto => dto.TimeOfDay == TimeSpan.Zero ? "yyyy-mm-dd" : "yyyy-mm-dd hh:mm:ss",
+        DateOnly => "yyyy-mm-dd",
+        TimeSpan => "[h]:mm:ss",
+        _ => null,
+    };
 
     internal bool IsFormula => _formula is not null;
     internal bool IsEmpty => _value is null && _formula is null;

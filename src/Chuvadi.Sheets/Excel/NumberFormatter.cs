@@ -55,7 +55,7 @@ public readonly record struct FormattedValue(string Text, string? Color, char? F
 public static class NumberFormatter
 {
     /// <summary>Formats <paramref name="value"/> with <paramref name="formatCode"/> and returns the display text.</summary>
-    /// <param name="value">A number (any numeric type), DateTime, DateTimeOffset, TimeSpan, bool, string, or null.</param>
+    /// <param name="value">A number (any numeric type), DateTime, DateTimeOffset, DateOnly, TimeOnly, TimeSpan, bool, string, or null.</param>
     /// <param name="formatCode">An Excel format code; null or empty means General.</param>
     /// <param name="options">Culture and date system; null for the defaults.</param>
     public static string Format(object? value, string? formatCode, NumberFormatOptions? options = null)

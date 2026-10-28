@@ -17,10 +17,16 @@ public static class XlsxReadExtensions
     // ---- xlsx → DataSet -----------------------------------------------------------
 
     /// <summary>Reads every sheet into a DataSet (one DataTable per sheet). All cell values are object?.</summary>
-    public static DataSet ReadXlsx(this string path)
+    public static DataSet ReadXlsx(this string path) => ReadXlsx(path, null, null);
+
+    /// <summary>
+    /// Reads every sheet into a DataSet, with a password (ignored for unencrypted files) and
+    /// reader options (limits, cancellation, culture). The first row is always the header row.
+    /// </summary>
+    public static DataSet ReadXlsx(this string path, string? password, XlsxReaderOptions? options)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        using var reader = XlsxReader.Open(path);
+        using var reader = XlsxReader.Open(path, password, WithHeaders(options));
         var ds = new DataSet();
         foreach (var sheet in reader.Sheets)
             ds.Tables.Add(ReadSheetIntoDataTable(reader.Sheet(sheet.Name), sheet.Name));
@@ -31,22 +37,27 @@ public static class XlsxReadExtensions
 
     /// <summary>Reads a specific sheet into a DataTable.</summary>
     public static DataTable ReadXlsxSheet(this string path, string sheetName)
+        => ReadXlsxSheet(path, sheetName, null, null);
+
+    /// <summary>
+    /// Reads a specific sheet (or the first sheet when <paramref name="sheetName"/> is null) into
+    /// a DataTable, with a password and reader options. The first row is always the header row.
+    /// </summary>
+    public static DataTable ReadXlsxSheet(this string path, string? sheetName, string? password, XlsxReaderOptions? options)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        if (string.IsNullOrEmpty(sheetName)) throw new ArgumentException("Sheet name required.", nameof(sheetName));
-        using var reader = XlsxReader.Open(path);
+        using var reader = XlsxReader.Open(path, password, WithHeaders(options));
+        if (sheetName is null)
+        {
+            if (reader.Sheets.Count == 0) throw new XlsxFormatException("Workbook has no sheets.");
+            sheetName = reader.Sheets[0].Name;
+        }
         var sheet = reader.Sheet(sheetName);
         return ReadSheetIntoDataTable(sheet, sheetName);
     }
 
     /// <summary>Reads the first sheet into a DataTable.</summary>
-    public static DataTable ReadXlsxSheet(this string path)
-    {
-        using var reader = XlsxReader.Open(path);
-        if (reader.Sheets.Count == 0) throw new XlsxFormatException("Workbook has no sheets.");
-        var first = reader.Sheets[0];
-        return ReadSheetIntoDataTable(reader.Sheet(first.Name), first.Name);
-    }
+    public static DataTable ReadXlsxSheet(this string path) => ReadXlsxSheet(path, null, null, null);
 
     // ---- xlsx → IEnumerable<T> ----------------------------------------------------
 
@@ -56,10 +67,17 @@ public static class XlsxReadExtensions
 
     /// <summary>Reads a specific sheet into a list of T.</summary>
     public static List<T> ReadXlsx<T>(this string path, string? sheetName) where T : new()
+        => ReadXlsx<T>(path, sheetName, null, null);
+
+    /// <summary>
+    /// Reads a sheet (the first when <paramref name="sheetName"/> is null) into a list of T, with a
+    /// password and reader options (limits, cancellation). The first row is always the header row.
+    /// </summary>
+    public static List<T> ReadXlsx<T>(this string path, string? sheetName, string? password, XlsxReaderOptions? options) where T : new()
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
 
-        using var reader = XlsxReader.Open(path);
+        using var reader = XlsxReader.Open(path, password, WithHeaders(options));
         SheetReader sheet;
         if (sheetName is null)
         {
@@ -75,6 +93,14 @@ public static class XlsxReadExtensions
     }
 
     // ---- Helpers ------------------------------------------------------------------
+
+    /// <summary>The caller's options (copied) with header mapping on, as these methods require.</summary>
+    private static XlsxReaderOptions WithHeaders(XlsxReaderOptions? options)
+    {
+        var o = options?.Clone() ?? new XlsxReaderOptions();
+        o.TreatFirstRowAsHeaders = true;
+        return o;
+    }
 
     private static DataTable ReadSheetIntoDataTable(SheetReader sheet, string tableName)
     {
