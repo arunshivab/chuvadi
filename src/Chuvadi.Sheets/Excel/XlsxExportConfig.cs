@@ -22,6 +22,7 @@ public abstract class ExportConfigBase
     internal TableStyle _tableStyle = TableStyle.Medium2;
     internal string? _pageHeader;
     internal string? _pageFooter;
+    internal AutoFitOptions? _autoFit;
 
     /// <summary>Per-column-name overrides (works for both T-property names and DataTable column names).</summary>
     internal Dictionary<string, ColumnOverride> _columnOverrides = new(StringComparer.Ordinal);
@@ -44,6 +45,7 @@ public abstract class ExportConfigBase
     protected void SetHeaderStyle(CellStyle style) => _headerStyle = style;
     protected void SetAutoFilter(bool on) => _autoFilter = on;
     protected void SetFreezeHeaderRow(bool on) => _freezeHeaderRow = on;
+    protected void SetAutoFit(AutoFitOptions? options) => _autoFit = options ?? AutoFitOptions.Default;
     protected void SetPageHeaderFooter(string? header, string? footer)
     {
         _pageHeader = header;
@@ -90,6 +92,12 @@ public sealed class XlsxExportConfig<T> : ExportConfigBase
 
     /// <summary>Freezes the header row so it stays visible while scrolling.</summary>
     public XlsxExportConfig<T> FreezeHeaderRow(bool on = true) { SetFreezeHeaderRow(on); return this; }
+
+    /// <summary>
+    /// Sizes each column to its content (header and values as displayed). A width set with
+    /// <c>Column(..., width)</c> or <c>[Column(Width = ...)]</c> wins. See <see cref="AutoFitOptions"/>.
+    /// </summary>
+    public XlsxExportConfig<T> AutoFitColumns(AutoFitOptions? options = null) { SetAutoFit(options); return this; }
 
     /// <summary>
     /// Wraps the data range in an Excel structured table with the given name and style.
@@ -155,6 +163,12 @@ public sealed class DataTableExportConfig : ExportConfigBase
     public DataTableExportConfig HeaderStyle(CellStyle style) { SetHeaderStyle(style); return this; }
     public DataTableExportConfig AutoFilter(bool on = true) { SetAutoFilter(on); return this; }
     public DataTableExportConfig FreezeHeaderRow(bool on = true) { SetFreezeHeaderRow(on); return this; }
+
+    /// <summary>
+    /// Sizes each column to its content (header and values as displayed). A width set with
+    /// <c>Column(..., width)</c> wins. See <see cref="AutoFitOptions"/>.
+    /// </summary>
+    public DataTableExportConfig AutoFitColumns(AutoFitOptions? options = null) { SetAutoFit(options); return this; }
 
     public DataTableExportConfig AsTable(string name, TableStyle style = TableStyle.Medium2)
     { SetAsTable(name, style); return this; }

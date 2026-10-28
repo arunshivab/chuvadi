@@ -63,6 +63,12 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void StyleApi() => StyleApiTest.Run(_dir);
+
+    [Fact]
+    public void NumberFormat() => NumberFormatTest.Run(_dir);
+
+    [Fact]
+    public void AutoFit() => AutoFitTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

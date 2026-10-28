@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.3.0 (unreleased)
+
+Column auto-fit and a public number-format renderer. All additions are source- and
+binary-compatible; output of code that does not use auto-fit is byte-identical to 1.2.0.
+
+### Features
+- **Column auto-fit** sizes columns to their content, as displayed. It works in all three
+  ways of writing a workbook:
+  - `Sheet.AutoFitColumns(options)` and `sheet.Columns[n].AutoFit()` on the Workbook model.
+  - `SheetWriter.AutoFitColumns(options)` on the streaming writer. Call it before the first
+    row.
+  - `cfg.AutoFitColumns()` on the `.ToXlsx()` / `XlsxExport` configurations, for both
+    `IEnumerable<T>` and `DataTable` sources.
+
+  Each cell is rendered with its number format and measured with its font, size and
+  boldness. The rules:
+  - A width you set explicitly always wins (`Columns[n].Width`, `SetColumnWidth`,
+    `Column(..., width)`, `[Column(Width = ...)]`).
+  - Wrapped, merged, rotated and formula cells are not measured.
+  - Header cells of an autofilter or table get room for the filter button.
+  - Widths are clamped to `AutoFitOptions.MinWidth` (default 8.43, Excel's standard width)
+    and `MaxWidth` (default 60).
+  - Columns that have no measurable cell keep their default width.
+
+  `AutoFitOptions` also controls which columns are fitted (`Columns`), extra width
+  (`ExtraWidth`), the culture used for rendering (`Format`), and streaming sampling
+  (`MaxRowsToMeasure`). When a loaded workbook is auto-fitted, its stored column widths are
+  replaced only for fitted columns that have data. `Sheet.ClearAutoFit()` turns auto-fit
+  off; `Column.IsAutoFit` reports it.
+- **`NumberFormatter`** is new and public. It renders a value with an Excel format code to
+  the text Excel displays: `Format(value, code, options)`, plus `FormatDetailed`, which also
+  returns the colour, the fill character and whether the value rendered as a date.
+  - Covered: General; the digit placeholders 0, # and ?; decimals; grouping and scaling
+    commas; percent; scientific and engineering notation; fractions; up to four sections
+    with conditions; colours; literals, escapes, `_x` and `*x`; currency tags; text
+    sections.
+  - Dates and times: elapsed time ([h] [mm] [ss]), AM/PM, fractional seconds, and the 1900
+    system (including the fictitious 29-Feb-1900) or the 1904 system.
+  - Culture-aware separators, group sizes (e.g. en-IN 1,00,000) and month/day names come
+    from `NumberFormatOptions`.
+  - `NumberFormatter.ToSerial(DateTime)` converts a date to an Excel serial.
+
+### Implementation notes
+- **Text widths.** Widths come from embedded advance-width tables generated from the
+  metric-compatible fonts: Carlito (Calibri), Caladea (Cambria), and Liberation Sans, Serif
+  and Mono (Arial, Times New Roman, Courier New).
+  - Other common fonts map to the nearest table with a scale factor.
+  - Against real rendering, Latin text measures within about 2%, erring wide.
+  - Indic, Arabic, CJK and other scripts use per-script estimates.
+  - Kerning and ligatures are ignored.
+- **Streaming writes `<cols>` late.** The streaming writer leaves `<cols>` out of the temp
+  file and records its byte offset. At save time the measured widths are inserted there, so
+  the sheet data is not passed over a second time.
+- **Number-format checks.** The renderer was diffed against LibreOffice over a 26 × 60
+  value/format grid. The remaining differences are all places where LibreOffice itself
+  departs from Excel: dates before 1-Mar-1900, negative dates, built-ins 14/22/47, General
+  digit limits, the trailing point in `#.##`, rounding times to the second, and fraction
+  padding.
+
+### Tests
+- **`numfmt` group: 109 checks.** Excel-known renderings for every feature above, plus all
+  ECMA-376 built-in formats.
+- **`autofit` group: 9 checks.** They cover the model, streaming (shared and inline strings,
+  encryption, sampling) and export. Expected widths come from real font rendering, not from
+  the library's own tables.
+
 ## 1.2.0 (2026-10-28)
 
 Read-side style API ("option c": raw index, pre-resolved style, and the full style table),

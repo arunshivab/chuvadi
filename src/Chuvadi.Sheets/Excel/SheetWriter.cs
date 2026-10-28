@@ -57,6 +57,13 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     private int _freezeRows = 0;
     private int _freezeCols = 0;
 
+    // Auto-fit: when enabled, <cols> is not written at open; its byte offset in the temp file
+    // is recorded and XlsxWriter inserts the computed <cols> there at save time.
+    private ColumnAutoFitter? _autoFit;
+    private bool _measureRow;
+    private long _colsInsertOffset = -1;
+    private byte[]? _colsXml;
+
     // "After sheetData" features — emitted at sheet finalization.
     private readonly List<string> _mergeRanges = new();
     private string? _autoFilterRange;
@@ -138,6 +145,22 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     /// <summary>Convenience overload for a single column.</summary>
     public SheetWriter SetColumnWidth(int column, double width)
         => SetColumnWidth(column, column, width);
+
+    /// <summary>
+    /// Sizes columns to their content: every cell written afterwards is measured as displayed
+    /// (number format, font, size, bold) and the widths are written when the sheet is saved.
+    /// Widths set with <see cref="SetColumnWidth(int, double)"/> win over auto-fit. Wrapped,
+    /// merged, rotated and formula cells are not measured. Must be called before any rows are
+    /// written. See <see cref="AutoFitOptions"/> for caps, column selection and sampling.
+    /// </summary>
+    public SheetWriter AutoFitColumns(AutoFitOptions? options = null)
+    {
+        EnsureNotDisposed();
+        EnsureShapeMutable();
+        _autoFit = new ColumnAutoFitter(options);
+        foreach (var m in _mergeRanges) _autoFit.AddMerge(m);
+        return this;
+    }
 
     /// <summary>
     /// Freezes the first <paramref name="rows"/> rows so they remain visible while scrolling.
@@ -228,6 +251,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         EnsureNotDisposed();
         if (string.IsNullOrEmpty(range)) throw new ArgumentException("Range required.", nameof(range));
         _mergeRanges.Add(range);
+        _autoFit?.AddMerge(range);
         return this;
     }
 
@@ -331,7 +355,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     void IRowSink.AppendFormula(string formula, int? styleId)
     {
         if (!_rowInProgress) throw new InvalidOperationException("Cell appended outside of a row.");
-        _currentColumn++;
+        _currentColumn++;   // formulas have no value to measure (no cached result is written)
         WriteFormulaCell(_currentColumn, formula, styleId);
     }
 
@@ -344,6 +368,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         var address = CellAddress.ToA1(_rowsWritten, _currentColumn);
         // Apply the default hyperlink style (blue + underline) if user didn't supply one.
         var effectiveStyle = styleId ?? _state.DefaultHyperlinkStyleId;
+        if (_measureRow) Measure(_currentColumn, display, effectiveStyle);
         WriteStringCell(_currentColumn, display, effectiveStyle);
         _hyperlinks.Add(new SheetHyperlink(address, url, tooltip));
     }
@@ -366,6 +391,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         _rowsWritten++;
         _currentColumn = 0;
         _rowInProgress = true;
+        _measureRow = _autoFit?.BeginRow() ?? false;
 
         _xml.WriteStartElement("row", SsNs);
         _xml.WriteAttributeString("r", _rowsWritten.ToString(CultureInfo.InvariantCulture));
@@ -393,7 +419,17 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         _xml.WriteAttributeString("xmlns", "r", null, RelNs);
 
         WriteSheetViews();
-        WriteCols();
+        if (_autoFit is null)
+        {
+            WriteCols();
+        }
+        else
+        {
+            // Close any open start tag, flush, and remember where <cols> belongs.
+            _xml.WriteString(string.Empty);
+            _xml.Flush();
+            _colsInsertOffset = _tempStream.Position;
+        }
 
         _xml.WriteStartElement("sheetData", SsNs);
         _worksheetOpened = true;
@@ -447,6 +483,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         if (!_rowInProgress) throw new InvalidOperationException("Cell appended outside of a row.");
         _currentColumn++;
         var column = _currentColumn;
+        if (_measureRow && value is not null) Measure(column, value, EffectiveStyleId(value, styleId));
 
         if (value is null)
         {
@@ -503,6 +540,65 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         if (value is ushort us)     { WriteNumericCell(column, us.ToString(CultureInfo.InvariantCulture), styleId); return; }
 
         WriteStringCell(column, value.ToString() ?? string.Empty, styleId);
+    }
+
+    /// <summary>The style id a value is written with (type defaults for dates and times).</summary>
+    private int? EffectiveStyleId(object value, int? styleId) => styleId ?? value switch
+    {
+        DateTime dt => dt.TimeOfDay != TimeSpan.Zero ? _state.DefaultDateTimeStyleId : _state.DefaultDateStyleId,
+        DateTimeOffset dto => dto.TimeOfDay != TimeSpan.Zero ? _state.DefaultDateTimeStyleId : _state.DefaultDateStyleId,
+        DateOnly => _state.DefaultDateStyleId,
+        TimeSpan => _state.DefaultTimeSpanStyleId,
+        _ => null,
+    };
+
+    private void Measure(int column, object value, int? styleId)
+    {
+        CellStyle? style = styleId is int id && _state.Styles.TryGetStyle(id, out var st) ? st : null;
+        if (value is DateOnly d) value = d.ToDateTime(TimeOnly.MinValue);
+        _autoFit!.Observe(_rowsWritten, column, value, style);
+    }
+
+    /// <summary>Byte offset in the temp file where XlsxWriter inserts <see cref="ColsXml"/>; -1 when not auto-fitting.</summary>
+    internal long ColsInsertOffset => _colsInsertOffset;
+
+    /// <summary>The &lt;cols&gt; element computed at finalization (auto-fit mode), or null.</summary>
+    internal byte[]? ColsXml => _colsXml;
+
+    /// <summary>Auto-fit mode: combine explicit widths and fitted widths into the &lt;cols&gt; bytes.</summary>
+    private void BuildAutoFitCols()
+    {
+        var headers = new List<(int Row, int C1, int C2)>();
+        if (_autoFilterRange is not null && ColumnAutoFitter.TryParseRange(_autoFilterRange, out var af))
+            headers.Add((af.R1, af.C1, af.C2));
+        foreach (var t in _tables)
+            if (ColumnAutoFitter.TryParseRange(t.Range, out var tr)) headers.Add((tr.R1, tr.C1, tr.C2));
+
+        var fitted = _autoFit!.ComputeWidths(headers);
+        var cols = new List<(int Min, int Max, double Width)>(_columnWidths);
+        foreach (var kv in fitted)
+        {
+            bool explicitWidth = false;
+            foreach (var (min, max, _) in _columnWidths)
+                if (kv.Key >= min && kv.Key <= max) { explicitWidth = true; break; }
+            if (!explicitWidth) cols.Add((kv.Key, kv.Key, kv.Value));
+        }
+        cols.Sort((a, b) => a.Min.CompareTo(b.Min));
+
+        var sb = new StringBuilder();
+        if (cols.Count > 0)
+        {
+            sb.Append("<cols>");
+            foreach (var (min, max, width) in cols)
+            {
+                sb.Append("<col min=\"").Append(min.ToString(CultureInfo.InvariantCulture))
+                  .Append("\" max=\"").Append(max.ToString(CultureInfo.InvariantCulture))
+                  .Append("\" width=\"").Append(width.ToString(CultureInfo.InvariantCulture))
+                  .Append("\" customWidth=\"1\" />");
+            }
+            sb.Append("</cols>");
+        }
+        _colsXml = new UTF8Encoding(false).GetBytes(sb.ToString());
     }
 
     private void WriteCellOpen(int column, int? styleId, string? type)
@@ -600,6 +696,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
         // If the user never wrote a row, we still need a valid empty worksheet.
         if (!_worksheetOpened) EnsureWorksheetOpen();
+        if (_autoFit is not null) BuildAutoFitCols();
 
         _xml.WriteEndElement(); // </sheetData>
 

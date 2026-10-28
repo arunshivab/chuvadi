@@ -311,6 +311,16 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
                 bufferSize: 64 * 1024,
                 options: FileOptions.SequentialScan | (useAsyncCopy ? FileOptions.Asynchronous : FileOptions.None)))
             {
+                // Auto-fit sheets: copy the prologue (no placeholders in it), insert the computed
+                // <cols>, then continue with the normal copy from that point.
+                if (sheet.ColsInsertOffset >= 0)
+                {
+                    CopyExactly(src, dest, sheet.ColsInsertOffset);
+                    var cols = sheet.ColsXml ?? Array.Empty<byte>();
+                    if (useAsyncCopy) await dest.WriteAsync(cols, cancellation).ConfigureAwait(false);
+                    else dest.Write(cols, 0, cols.Length);
+                }
+
                 if (_options.UseInlineStrings)
                 {
                     if (useAsyncCopy)
@@ -537,6 +547,20 @@ $@"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>
         sb.Append("</Properties>");
         var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
         output.Write(bytes, 0, bytes.Length);
+    }
+
+    /// <summary>Copies exactly <paramref name="count"/> bytes (the small sheet prologue).</summary>
+    private static void CopyExactly(Stream src, Stream dest, long count)
+    {
+        var buffer = new byte[(int)Math.Min(count, 64 * 1024)];
+        long left = count;
+        while (left > 0)
+        {
+            int read = src.Read(buffer, 0, (int)Math.Min(buffer.Length, left));
+            if (read <= 0) throw new InvalidOperationException("Sheet temp file ended before the <cols> insertion point.");
+            dest.Write(buffer, 0, read);
+            left -= read;
+        }
     }
 
     // ---- Placeholder replacement (sync and async) ----------------------------------

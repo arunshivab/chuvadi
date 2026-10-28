@@ -123,6 +123,22 @@ internal sealed class StyleRegistry
     {
         // The default style always returns 0; we registered it in the constructor.
         if (style.IsDefault) return 0;
+        var id = GetCellXfIdCore(style);
+        // Remember the first CellStyle behind each cellXf so auto-fit can measure cells by id.
+        if (!_styleById.ContainsKey(id)) _styleById[id] = style;
+        return id;
+    }
+
+    /// <summary>
+    /// The CellStyle that produced a cellXf id (the first one registered; any style mapping to
+    /// the same id renders identically). False for id 0, the workbook default.
+    /// </summary>
+    public bool TryGetStyle(int cellXfId, out CellStyle style) => _styleById.TryGetValue(cellXfId, out style);
+
+    private readonly Dictionary<int, CellStyle> _styleById = new();
+
+    private int GetCellXfIdCore(CellStyle style)
+    {
 
         var fontId   = GetOrAddFont(style);
         var fillId   = GetOrAddFill(style);

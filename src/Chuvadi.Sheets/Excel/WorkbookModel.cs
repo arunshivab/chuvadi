@@ -421,6 +421,62 @@ public sealed class Sheet
         return this;
     }
 
+    // ---- Auto-fit ----------------------------------------------------------------------
+
+    private AutoFitOptions? _autoFitAll;
+    private AutoFitOptions? _autoFitColumnsOptions;
+    private readonly SortedSet<int> _autoFitColumns = new();
+
+    /// <summary>
+    /// Sizes every column that has data to its content when the workbook is saved (cells as
+    /// displayed: number format, font, size, bold). Widths set with <c>Columns[n].Width</c>
+    /// win. Wrapped, merged, rotated and formula cells are not measured. Computed at save, so
+    /// cells added after this call count. See <see cref="AutoFitOptions"/>.
+    /// </summary>
+    public Sheet AutoFitColumns(AutoFitOptions? options = null)
+    {
+        _autoFitAll = options ?? AutoFitOptions.Default;
+        return this;
+    }
+
+    /// <summary>Turns off auto-fit set by <see cref="AutoFitColumns"/> or <see cref="Column.AutoFit"/>.</summary>
+    public Sheet ClearAutoFit()
+    {
+        _autoFitAll = null;
+        _autoFitColumns.Clear();
+        return this;
+    }
+
+    internal void AddAutoFitColumn(int column, AutoFitOptions? options)
+    {
+        _autoFitColumns.Add(column);
+        if (options is not null) _autoFitColumnsOptions = options;
+    }
+
+    internal bool IsAutoFitColumn(int column)
+        => _autoFitAll is { } all ? (all.Columns is null || ContainsColumn(all.Columns, column))
+                                  : _autoFitColumns.Contains(column);
+
+    private static bool ContainsColumn(IReadOnlyCollection<int> cols, int c)
+    {
+        foreach (var x in cols) if (x == c) return true;
+        return false;
+    }
+
+    /// <summary>The options the writer should auto-fit with, or null when auto-fit is off.</summary>
+    internal AutoFitOptions? EffectiveAutoFit()
+    {
+        if (_autoFitAll is not null) return _autoFitAll;
+        if (_autoFitColumns.Count == 0) return null;
+        var o = _autoFitColumnsOptions ?? AutoFitOptions.Default;
+        return new AutoFitOptions
+        {
+            MaxWidth = o.MaxWidth, MinWidth = o.MinWidth, MaxRowsToMeasure = o.MaxRowsToMeasure,
+            ExtraWidth = o.ExtraWidth, AllowForFilterButton = o.AllowForFilterButton, Format = o.Format,
+            Columns = new List<int>(_autoFitColumns),
+        };
+    }
+
     /// <summary>Width set through <c>Columns[n].Width</c> wins; otherwise the loaded span's width; otherwise 0.</summary>
     internal double GetColumnWidth(int column)
     {
@@ -462,11 +518,18 @@ public sealed class Sheet
         var overrides = new List<int>(_columnWidths.Keys);
         overrides.Sort();
 
+        // Auto-fitted columns that have data drop their loaded span width (auto-fit decides);
+        // a width set through Columns[n].Width still wins. Spans are split around both.
+        var cut = new SortedSet<int>(overrides);
+        if (_autoFitAll is not null || _autoFitColumns.Count > 0)
+            foreach (var key in _cells.Keys)
+                if (IsAutoFitColumn(key.Col)) cut.Add(key.Col);
+
         foreach (var span in _columnRanges)
         {
             if (span.Width <= 0) continue;
             int start = span.Min;
-            foreach (var o in overrides)
+            foreach (var o in cut)
             {
                 if (o < start || o > span.Max) continue;
                 if (o > start) result.Add((start, o - 1, span.Width));
@@ -543,6 +606,20 @@ public sealed class Column
 
     /// <summary>Default cell-format (xf) index for the column's empty cells, or -1 when none.</summary>
     public int StyleIndex => Range?.StyleIndex ?? -1;
+
+    /// <summary>
+    /// Sizes this column to its content when the workbook is saved. A width set through
+    /// <see cref="Width"/> wins. Options (caps, culture) apply to all individually auto-fitted
+    /// columns of the sheet; the last options passed are used.
+    /// </summary>
+    public Column AutoFit(AutoFitOptions? options = null)
+    {
+        _sheet.AddAutoFitColumn(_column, options);
+        return this;
+    }
+
+    /// <summary>True if this column will be auto-fitted on save.</summary>
+    public bool IsAutoFit => _sheet.IsAutoFitColumn(_column);
 
     /// <summary>
     /// The resolved default style for the column's empty cells (from <see cref="StyleIndex"/>),

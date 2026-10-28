@@ -22,6 +22,8 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Read merges, column spans, row attributes | `sheet.MergeRanges`, `sheet.ColumnRanges`, `sheet.Columns[n]`, `sheet.Rows[n]`, `sheet.Format` |
 | Read xlsx (typed/ergonomic) | `.ReadXlsx<T>()`, `.ReadXlsxSheet()` |
 | Cell styling | `CellStyle`, `CellStyleBuilder` |
+| Column auto-fit | `sheet.AutoFitColumns()`, `SheetWriter.AutoFitColumns()`, `cfg.AutoFitColumns()` |
+| Number format rendering (display text) | `NumberFormatter.Format(value, formatCode)` |
 | Tables, hyperlinks, comments | `SheetWriter.AddTable/Hyperlink/Comment` |
 | Freeze panes, merges, autofilter | `SheetWriter.FreezeRows/MergeCells/AutoFilter` |
 | Page headers/footers (print) | `SheetWriter.SetHeaderFooter`, `Sheet.SetHeaderFooter`, `cfg.PageHeaderFooter` |
@@ -89,6 +91,13 @@ var font = book.StyleTable.Fonts[book.StyleTable.CellFormats[xf].FontId];   // w
 string? rgb = book.StyleTable.ResolveColor(font.Color);      // theme / indexed / tint → "RRGGBB"
 foreach (var m in sh.MergeRanges) { /* "A1:C2" */ }
 double widthB = sh.Columns[2].Width;  bool hidden5 = sh.Rows[5].Hidden;
+
+// Auto-fit columns to their content (explicit widths still win)
+patients.ToXlsx("fit.xlsx", cfg => cfg.AutoFilter().AutoFitColumns());
+sheet.AutoFitColumns(new AutoFitOptions { MaxWidth = 40 });     // Workbook model, computed at save
+
+// Render a value exactly as Excel displays it
+string shown = NumberFormatter.Format(1234.5, "#,##0.00");        // "1,234.50"
 
 // Zip a set of files
 using (var zip = ZipWriter.Create("bundle.zip"))

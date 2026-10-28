@@ -34,6 +34,15 @@ internal static class WorkbookSerializer
         foreach (var (min, max, width) in sheet.GetColumnWidthsForWrite())
             sw.SetColumnWidth(min, max, width);
 
+        // Auto-fit: enabled before rows; merges registered up front so merged cells are skipped
+        // while measuring (the writer emits merges at finalization either way, in this order).
+        if (sheet.EffectiveAutoFit() is { } autoFit)
+        {
+            sw.AutoFitColumns(autoFit);
+            foreach (var mr in sheet.MergeRanges)
+                sw.MergeCells(mr);
+        }
+
         // Freeze panes — must also come before any row.
         if (sheet.FreezeRowCount > 0) sw.FreezeRows(sheet.FreezeRowCount);
         if (sheet.FreezeColumnCount > 0) sw.FreezeColumns(sheet.FreezeColumnCount);
@@ -98,8 +107,9 @@ internal static class WorkbookSerializer
         }
 
         // Now the "after-sheetData" elements.
-        foreach (var mr in sheet.MergeRanges)
-            sw.MergeCells(mr);
+        if (sheet.EffectiveAutoFit() is null)
+            foreach (var mr in sheet.MergeRanges)
+                sw.MergeCells(mr);
         if (sheet.AutoFilterRange is not null)
             sw.AutoFilter(sheet.AutoFilterRange);
         foreach (var (range, v) in sheet.Validations)
