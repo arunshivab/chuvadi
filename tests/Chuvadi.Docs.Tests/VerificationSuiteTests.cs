@@ -29,6 +29,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_Template() => TemplateTest.Run(FreshOutDir());
     [Fact] public void Suite_ProtectionEncryption() => ProtectionEncryptionTest.Run(FreshOutDir());
     [Fact] public void Suite_Hardening() => HardeningTests.Run(FreshOutDir());
+    [Fact] public void Suite_TextModel() => TextModelTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 

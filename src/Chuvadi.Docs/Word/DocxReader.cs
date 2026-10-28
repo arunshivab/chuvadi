@@ -530,6 +530,11 @@ public sealed partial class DocxReader : IDisposable
         if (!sub.Read()) return new ParagraphInfo(string.Empty, style);
         while (!sub.EOF)
         {
+            if (DocumentLoader.IsAlternateRepresentation(sub) || IsRemovedContent(sub))
+            {
+                sub.Skip(); // duplicate (mc:Fallback) or moved-away/deleted content
+                continue;
+            }
             if (sub.NodeType == XmlNodeType.Element && sub.NamespaceURI == DocumentSerializer.W)
             {
                 switch (sub.LocalName)
@@ -546,6 +551,12 @@ public sealed partial class DocxReader : IDisposable
                         break;
                     case "tab":
                         sb.Append('\t');
+                        break;
+                    case "noBreakHyphen":
+                        sb.Append('\u2011');
+                        break;
+                    case "softHyphen":
+                        sb.Append('\u00AD');
                         break;
                 }
             }
@@ -570,6 +581,11 @@ public sealed partial class DocxReader : IDisposable
         if (!sub.Read()) return Array.Empty<string[]>();
         while (!sub.EOF)
         {
+            if (DocumentLoader.IsAlternateRepresentation(sub) || IsRemovedContent(sub))
+            {
+                sub.Skip();
+                continue;
+            }
             if (sub.NodeType == XmlNodeType.Element && sub.NamespaceURI == DocumentSerializer.W)
             {
                 bool isEmpty = sub.IsEmptyElement;
@@ -621,6 +637,11 @@ public sealed partial class DocxReader : IDisposable
     }
 
     // ---- Helpers --------------------------------------------------------------------
+
+    /// <summary><c>w:moveFrom</c> / <c>w:del</c>: content that is no longer in the current text.</summary>
+    private static bool IsRemovedContent(XmlReader r)
+        => r.NodeType == XmlNodeType.Element && r.NamespaceURI == DocumentSerializer.W
+           && (r.LocalName == "moveFrom" || r.LocalName == "del");
 
     /// <summary>
     /// Opens a part with the per-part size cap and the cancellation check applied. Returns

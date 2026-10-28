@@ -30,6 +30,7 @@ public static class Program
             ("Template", TemplateTest.Run),
             ("ProtectionEncryption", ProtectionEncryptionTest.Run),
             ("Hardening", HardeningTests.Run),
+            ("TextModel", TextModelTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;
