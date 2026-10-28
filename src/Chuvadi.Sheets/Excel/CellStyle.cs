@@ -31,7 +31,8 @@ public enum VerticalAlign
 }
 
 /// <summary>
-/// Visual style of a border line.
+/// Visual style of a border line. Covers all 14 SpreadsheetML border styles (ST_BorderStyle).
+/// Members after <see cref="Hair"/> were added in 1.2.0; existing values are unchanged.
 /// </summary>
 public enum BorderStyle
 {
@@ -43,6 +44,12 @@ public enum BorderStyle
     Thick,
     Double,
     Hair,
+    MediumDashed,
+    DashDot,
+    MediumDashDot,
+    DashDotDot,
+    MediumDashDotDot,
+    SlantDashDot,
 }
 
 /// <summary>
@@ -103,4 +110,111 @@ public readonly record struct CellStyle(
 
     /// <summary>True if every field is at its default value — i.e. no styling applied.</summary>
     public bool IsDefault => this == Default;
+
+    // -----------------------------------------------------------------------------------------
+    // Extended properties (1.2.0). Init-only, outside the positional list, so existing
+    // constructor calls keep compiling and binding. The read side populates them from a loaded
+    // file. The WRITER DOES NOT YET EMIT THEM (except the new BorderStyle values): a load → save
+    // round-trip keeps only the positional properties above. See CHANGELOG 1.2.0.
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Explicit vertical alignment. When set, it overrides <see cref="VAlign"/> and is always
+    /// written. It exists because <see cref="VerticalAlign.Top"/> is the enum's default value,
+    /// which the positional <see cref="VAlign"/> cannot tell apart from "not set": a style
+    /// with <c>VAlign == Top</c> and this property null writes no vertical alignment (Excel
+    /// then shows Bottom), exactly as in earlier versions. <see cref="CellStyleBuilder.VAlign"/>
+    /// and loaded styles set it, so top alignment is written. Null = use <see cref="VAlign"/>.
+    /// </summary>
+    public VerticalAlign? VerticalAlignment { get; init; }
+
+    /// <summary>
+    /// The vertical alignment the writer emits, or null for none (Excel's default, Bottom):
+    /// <see cref="VerticalAlignment"/> if set, else <see cref="VAlign"/> unless it is Top.
+    /// </summary>
+    internal VerticalAlign? EffectiveWriteVAlign
+        => VerticalAlignment ?? (VAlign != VerticalAlign.Top ? VAlign : null);
+
+    /// <summary>Kind of underline. <see cref="Underline"/> is true whenever this is not None.</summary>
+    public UnderlineStyle UnderlineKind { get; init; }
+
+    /// <summary>Strikethrough text.</summary>
+    public bool Strikethrough { get; init; }
+
+    /// <summary>Superscript / subscript position.</summary>
+    public FontVerticalAlign FontVerticalPosition { get; init; }
+
+    /// <summary>Font family class (1 Roman, 2 Swiss, 3 Modern, 4 Script, 5 Decorative), or null.</summary>
+    public int? FontFamily { get; init; }
+
+    /// <summary>Font character set, or null.</summary>
+    public int? FontCharset { get; init; }
+
+    /// <summary>Theme font scheme the face follows (major/minor), or None.</summary>
+    public FontScheme FontScheme { get; init; }
+
+    /// <summary>
+    /// Fill pattern, or null when unspecified. <see cref="FillColor"/> is set only for
+    /// <see cref="FillPattern.Solid"/>; other patterns are described by
+    /// <see cref="FillForegroundColor"/> (pattern lines) over <see cref="FillBackgroundColor"/>.
+    /// </summary>
+    public FillPattern? FillPattern { get; init; }
+
+    /// <summary>Pattern foreground colour (6-digit RGB hex), or null.</summary>
+    public string? FillForegroundColor { get; init; }
+
+    /// <summary>Pattern background colour (6-digit RGB hex), or null.</summary>
+    public string? FillBackgroundColor { get; init; }
+
+    /// <summary>
+    /// Gradient fill as stored, or null. Stop colours are raw <see cref="ColorRef"/> values;
+    /// resolve them with <see cref="CellStyleTable.ResolveColor"/>.
+    /// </summary>
+    public GradientFill? FillGradient { get; init; }
+
+    /// <summary>Diagonal border line; drawn per <see cref="DiagonalUp"/> / <see cref="DiagonalDown"/>.</summary>
+    public Border BorderDiagonal { get; init; }
+
+    /// <summary>Diagonal runs bottom-left to top-right.</summary>
+    public bool DiagonalUp { get; init; }
+
+    /// <summary>Diagonal runs top-left to bottom-right.</summary>
+    public bool DiagonalDown { get; init; }
+
+    /// <summary>Indent level (each level is about three spaces of the default font).</summary>
+    public int Indent { get; init; }
+
+    /// <summary>Text rotation as stored: 0..90 counter-clockwise, 91..180 = 1..90 clockwise, 255 = vertical stacked.</summary>
+    public int TextRotation { get; init; }
+
+    /// <summary>Shrink text to fit the cell width.</summary>
+    public bool ShrinkToFit { get; init; }
+
+    /// <summary>Text reading order.</summary>
+    public ReadingOrder ReadingOrder { get; init; }
+
+    /// <summary>Justify the last line of distributed text.</summary>
+    public bool JustifyLastLine { get; init; }
+
+    /// <summary>
+    /// Cell lock state when the sheet is protected, or null when unspecified (Excel's default
+    /// is locked). Populated as true/false for loaded styles.
+    /// </summary>
+    public bool? Locked { get; init; }
+
+    /// <summary>Hide the formula when the sheet is protected.</summary>
+    public bool FormulaHidden { get; init; }
+
+    /// <summary>The value was entered with a leading apostrophe and is shown as text.</summary>
+    public bool QuotePrefix { get; init; }
+
+    /// <summary>
+    /// The numFmtId behind <see cref="NumberFormat"/>, or null for a style built in code. For
+    /// built-in ids whose code depends on Excel's UI language (e.g. 5-8, 41-44),
+    /// <see cref="NumberFormat"/> is null and this id is the only information.
+    /// </summary>
+    public int? NumberFormatId { get; init; }
+
+    /// <summary>Name of the named cell style this format derives from (e.g. "Normal", "Heading 1"), or null.</summary>
+    public string? StyleName { get; init; }
 }

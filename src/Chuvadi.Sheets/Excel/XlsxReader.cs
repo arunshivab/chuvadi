@@ -39,19 +39,46 @@ public sealed class XlsxReader : IDisposable
     /// <summary>Style entries, indexed by cellXf id. May be empty for files with no styles.xml.</summary>
     internal StyleEntry[] Styles { get; }
 
+    /// <summary>
+    /// The workbook's complete style table (styles.xml plus theme), exactly as stored. A cell's
+    /// s= attribute indexes <see cref="CellStyleTable.CellFormats"/>.
+    /// <see cref="CellStyleTable.Empty"/> when the file has no styles part.
+    /// </summary>
+    public CellStyleTable StyleTable { get; }
+
     /// <summary>The sheets in the workbook, in tab order.</summary>
     public IReadOnlyList<SheetInfo> Sheets { get; }
 
     internal XlsxReaderOptions Options => _options;
 
-    private XlsxReader(OoxmlPackage package, string[] sst, StyleEntry[] styles,
+    private XlsxReader(OoxmlPackage package, string[] sst, CellStyleTable styleTable,
                        IReadOnlyList<SheetInfo> sheets, XlsxReaderOptions options)
     {
         _package = package;
         _options = options;
         SharedStrings = sst;
-        Styles = styles;
+        StyleTable = styleTable;
+        Styles = BuildStyleEntries(styleTable);
         Sheets = sheets;
+    }
+
+    /// <summary>Per-cellXf date detection data, derived from the parsed style table.</summary>
+    private static StyleEntry[] BuildStyleEntries(CellStyleTable table)
+    {
+        var xfs = table.CellFormats;
+        var entries = new StyleEntry[xfs.Count];
+        for (int i = 0; i < xfs.Count; i++)
+        {
+            var id = xfs[i].NumberFormatId;
+            table.CustomNumberFormats.TryGetValue(id, out var code);
+            entries[i] = new StyleEntry
+            {
+                NumFmtId = id,
+                FormatCode = code,
+                IsDateFormat = DateFormatDetector.IsDateFormat(id, code),
+            };
+        }
+        return entries;
     }
 
     // ---- Open ---------------------------------------------------------------------
@@ -100,13 +127,13 @@ public sealed class XlsxReader : IDisposable
             // Load shared strings (optional).
             var sst = TryLoadSharedStrings(pkg, options);
 
-            // Load styles (optional but almost always present).
-            var styles = TryLoadStyles(pkg, options);
+            // Load styles and theme (optional but almost always present).
+            var styleTable = TryLoadStyleTable(pkg, workbookUri, options);
 
             // Parse workbook.xml for the sheet list and definedNames.
             var sheets = LoadWorkbookSheets(pkg, workbookUri, options);
 
-            return new XlsxReader(pkg, sst, styles, sheets, options);
+            return new XlsxReader(pkg, sst, styleTable, sheets, options);
         }
         catch
         {
@@ -161,17 +188,78 @@ public sealed class XlsxReader : IDisposable
         return Array.Empty<string>();
     }
 
-    private static StyleEntry[] TryLoadStyles(OoxmlPackage pkg, XlsxReaderOptions options)
+    /// <summary>
+    /// Loads styles.xml (located through the workbook's styles relationship, falling back to
+    /// any part named styles.xml) and the theme part, into one <see cref="CellStyleTable"/>.
+    /// A malformed styles part throws, as before. A malformed theme is ignored unless
+    /// <see cref="XlsxReaderOptions.StrictXml"/> is set, since only colours depend on it.
+    /// </summary>
+    private static CellStyleTable TryLoadStyleTable(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options)
     {
-        foreach (var part in pkg.Parts)
+        string? stylesUri = FindWorkbookRelatedPart(pkg, workbookUri, "/styles");
+        if (stylesUri is null)
         {
-            if (part.Uri.EndsWith("/styles.xml", StringComparison.Ordinal))
+            foreach (var part in pkg.Parts)
             {
-                using var s = Limit(pkg.OpenPart(part.Uri), part.Uri, options);
-                return StyleSheetReader.Read(s);
+                if (part.Uri.EndsWith("/styles.xml", StringComparison.Ordinal)) { stylesUri = part.Uri; break; }
             }
         }
-        return Array.Empty<StyleEntry>();
+
+        CellStyleTable table;
+        if (stylesUri is null)
+        {
+            table = new CellStyleTable();
+        }
+        else
+        {
+            using var s = Limit(pkg.OpenPart(stylesUri), stylesUri, options);
+            table = StyleTableParser.ParseStyles(s);
+        }
+
+        var themeUri = FindWorkbookRelatedPart(pkg, workbookUri, "/theme");
+        if (themeUri is not null)
+        {
+            try
+            {
+                using var s = Limit(pkg.OpenPart(themeUri), themeUri, options);
+                table.Theme = StyleTableParser.ParseTheme(s);
+            }
+            catch (Exception ex) when (!options.StrictXml && ex is XmlException or XlsxFormatException)
+            {
+                // Leave Theme.IsPresent = false; theme colours then resolve to null.
+            }
+        }
+        return table;
+    }
+
+    /// <summary>The absolute URI of the first existing part the workbook relates to with the given type suffix.</summary>
+    private static string? FindWorkbookRelatedPart(OoxmlPackage pkg, string workbookUri, string typeSuffix)
+    {
+        foreach (var rel in pkg.GetRelationships(workbookUri))
+        {
+            if (!rel.Type.EndsWith(typeSuffix, StringComparison.Ordinal)) continue;
+            var uri = ResolveWorkbookTarget(workbookUri, rel.Target);
+            foreach (var part in pkg.Parts)
+                if (string.Equals(part.Uri, uri, StringComparison.Ordinal)) return uri;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a relationship target from workbook.xml's .rels to an absolute part URI.
+    /// Relative targets are relative to the workbook part's directory ("worksheets/sheet1.xml"
+    /// → "/xl/worksheets/sheet1.xml"); "../" climbs one level; a leading '/' is already absolute.
+    /// </summary>
+    private static string ResolveWorkbookTarget(string workbookUri, string target)
+    {
+        if (target.StartsWith("/", StringComparison.Ordinal)) return target;
+        var workbookDir = workbookUri.Substring(0, workbookUri.LastIndexOf('/'));  // "/xl"
+        if (target.StartsWith("../", StringComparison.Ordinal))
+        {
+            var parentDir = workbookDir.Substring(0, workbookDir.LastIndexOf('/'));
+            return parentDir + "/" + target.Substring(3);
+        }
+        return workbookDir + "/" + target;
     }
 
     private static IReadOnlyList<SheetInfo> LoadWorkbookSheets(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options)
@@ -182,25 +270,7 @@ public sealed class XlsxReader : IDisposable
         foreach (var rel in pkg.GetRelationships(workbookUri))
         {
             if (rel.Type.EndsWith("/worksheet", StringComparison.Ordinal))
-            {
-                // Resolve relative target to absolute URI.
-                // Targets are relative to the workbook part's directory ("xl/"), e.g.
-                // "worksheets/sheet1.xml" → "/xl/worksheets/sheet1.xml".
-                var workbookDir = workbookUri.Substring(0, workbookUri.LastIndexOf('/'));  // "/xl"
-                var target = rel.Target.TrimStart('/');
-                // Handle "../" prefixes (sometimes seen in foreign files).
-                string absolute;
-                if (target.StartsWith("../", StringComparison.Ordinal))
-                {
-                    var parentDir = workbookDir.Substring(0, workbookDir.LastIndexOf('/'));
-                    absolute = parentDir + "/" + target.Substring(3);
-                }
-                else
-                {
-                    absolute = workbookDir + "/" + target;
-                }
-                rels[rel.Id] = absolute;
-            }
+                rels[rel.Id] = ResolveWorkbookTarget(workbookUri, rel.Target);
         }
 
         var sheets = new List<SheetInfo>();
@@ -266,7 +336,15 @@ public sealed class SheetReader
     /// Streaming row enumeration. Each <see cref="RowReader"/> yielded is a transient struct
     /// over a reused buffer — do NOT retain across iterations.
     /// </summary>
-    public IEnumerable<RowReader> Rows => new RowEnumerable(this);
+    public IEnumerable<RowReader> Rows => new RowEnumerable(this, null);
+
+    /// <summary>
+    /// Same row stream as <see cref="Rows"/>, but also feeds sheet layout metadata (merges,
+    /// dimensions) into <paramref name="layout"/> during the same single pass. The collector
+    /// is complete only once enumeration has run to the end.
+    /// </summary>
+    internal IEnumerable<RowReader> RowsWithLayout(SheetLayoutCollector layout)
+        => new RowEnumerable(this, layout);
 
     internal Dictionary<string, int>? HeaderIndex => _headerIndex;
 
@@ -283,8 +361,9 @@ public sealed class SheetReader
 internal sealed class RowEnumerable : IEnumerable<RowReader>
 {
     private readonly SheetReader _sheet;
-    public RowEnumerable(SheetReader sheet) { _sheet = sheet; }
-    public IEnumerator<RowReader> GetEnumerator() => new RowEnumerator(_sheet);
+    private readonly SheetLayoutCollector? _layout;
+    public RowEnumerable(SheetReader sheet, SheetLayoutCollector? layout) { _sheet = sheet; _layout = layout; }
+    public IEnumerator<RowReader> GetEnumerator() => new RowEnumerator(_sheet, _layout);
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
@@ -299,17 +378,20 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     private readonly XmlReader _xml;
     private readonly bool _autoDetectDates;
     private readonly XlsxReader _book;
+    private readonly SheetLayoutCollector? _layout;   // null on the public streaming path
 
     // Row buffer — reused across all rows. _cellValues[col-1] holds the parsed value.
     private object?[] _cellValues = new object?[16];
+    private int[] _cellStyles = NewStyleBuffer(16);   // parallel to _cellValues; -1 = no s= attribute
     private int _maxColumnSeen;
     private int _currentRowNumber;
     private bool _hasCurrent;
     private bool _headersConsumed;
 
-    public RowEnumerator(SheetReader sheet)
+    public RowEnumerator(SheetReader sheet, SheetLayoutCollector? layout)
     {
         _sheet = sheet;
+        _layout = layout;
         _book = sheet.Book;
         _stream = _book.OpenSheetPart(sheet.Info);
         _xml = XmlReader.Create(_stream, new XmlReaderSettings
@@ -323,7 +405,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
 
     public RowReader Current
         => _hasCurrent
-            ? new RowReader(_cellValues, _maxColumnSeen, _currentRowNumber, _sheet)
+            ? new RowReader(_cellValues, _cellStyles, _maxColumnSeen, _currentRowNumber, _sheet)
             : throw new InvalidOperationException("Enumeration has not started or already ended.");
 
     object IEnumerator.Current => Current;
@@ -356,12 +438,18 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         while (_xml.Read())
         {
             if (_xml.NodeType != XmlNodeType.Element) continue;
-            if (_xml.LocalName != "row") continue;
+            if (_xml.LocalName != "row")
+            {
+                _layout?.OnElement(_xml);
+                continue;
+            }
 
             var rAttr = _xml.GetAttribute("r");
             _currentRowNumber = int.TryParse(rAttr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rn)
                 ? rn
                 : _currentRowNumber + 1;
+
+            _layout?.OnRow(_xml, _currentRowNumber);
 
             // Read cells within this row.
             ReadCellsInRow();
@@ -404,8 +492,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             var t = _xml.GetAttribute("t");
             var s = _xml.GetAttribute("s");
             int styleIndex = -1;
-            if (s is not null)
-                int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out styleIndex);
+            if (s is not null && !int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out styleIndex))
+                styleIndex = -1;   // malformed s=: treat as absent rather than as xf 0
 
             // Read the cell's contents.
             var value = ReadCellValue(t, styleIndex);
@@ -413,6 +501,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             // Store in buffer; grow if needed.
             EnsureCapacity(col);
             _cellValues[col - 1] = value;
+            _cellStyles[col - 1] = styleIndex;
             if (col > _maxColumnSeen) _maxColumnSeen = col;
         }
     }
@@ -565,16 +654,29 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     private void ClearRowBuffer()
     {
         if (_maxColumnSeen > 0)
+        {
             Array.Clear(_cellValues, 0, _maxColumnSeen);
+            Array.Fill(_cellStyles, -1, 0, _maxColumnSeen);
+        }
         _maxColumnSeen = 0;
     }
 
     private void EnsureCapacity(int column)
     {
         if (column <= _cellValues.Length) return;
-        int newSize = _cellValues.Length;
+        int oldSize = _cellValues.Length;
+        int newSize = oldSize;
         while (newSize < column) newSize *= 2;
         Array.Resize(ref _cellValues, newSize);
+        Array.Resize(ref _cellStyles, newSize);
+        Array.Fill(_cellStyles, -1, oldSize, newSize - oldSize);
+    }
+
+    private static int[] NewStyleBuffer(int size)
+    {
+        var a = new int[size];
+        Array.Fill(a, -1);
+        return a;
     }
 
     private void BuildHeaderIndex()
@@ -618,13 +720,15 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
 public readonly struct RowReader
 {
     private readonly object?[] _buffer;
+    private readonly int[] _styles;
     private readonly int _count;
     public readonly int RowNumber;
     private readonly SheetReader _sheet;
 
-    internal RowReader(object?[] buffer, int count, int rowNumber, SheetReader sheet)
+    internal RowReader(object?[] buffer, int[] styles, int count, int rowNumber, SheetReader sheet)
     {
         _buffer = buffer;
+        _styles = styles;
         _count = count;
         RowNumber = rowNumber;
         _sheet = sheet;
@@ -632,6 +736,15 @@ public readonly struct RowReader
 
     /// <summary>Number of cells in this row (the highest column index seen).</summary>
     public int Count => _count;
+
+    /// <summary>
+    /// The cell's style index (its s= attribute) by 0-based column, or -1 when the cell has no
+    /// s= attribute or is missing. Index into <see cref="XlsxReader.StyleTable"/>'s
+    /// <see cref="CellStyleTable.CellFormats"/>; resolve it with
+    /// <see cref="CellStyleTable.ResolveCellFormat"/>.
+    /// </summary>
+    public int GetStyleIndex(int column0Based)
+        => column0Based >= 0 && column0Based < _count ? _styles[column0Based] : -1;
 
     /// <summary>Raw value access by 0-based column index. Returns null for missing cells.</summary>
     public object? this[int column0Based]

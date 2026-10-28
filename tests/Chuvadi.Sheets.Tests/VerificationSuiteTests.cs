@@ -60,6 +60,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void Hardening() => HardeningTest.Run(_dir);
+
+    [Fact]
+    public void StyleApi() => StyleApiTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

@@ -11,8 +11,8 @@ namespace Chuvadi.Sheets.Internal;
 using Chuvadi.Internal;
 
 /// <summary>
-/// One entry from the styles.xml cellXfs list. Cells reference this by integer index via
-/// their s= attribute.
+/// Date-detection data for one entry of the styles.xml cellXfs list, derived from the parsed
+/// <see cref="CellStyleTable"/>. Cells reference this by integer index via their s= attribute.
 /// </summary>
 internal sealed class StyleEntry
 {
@@ -114,77 +114,3 @@ internal static class SharedStringReader
     }
 }
 
-/// <summary>
-/// Parses styles.xml into a StyleEntry[] indexed by cellXf id. Also extracts the numFmts
-/// table for resolving custom format codes.
-/// </summary>
-internal static class StyleSheetReader
-{
-    public static StyleEntry[] Read(Stream stream)
-    {
-        using var r = XmlReader.Create(stream, new XmlReaderSettings
-        {
-            IgnoreWhitespace = true,
-            IgnoreComments = true,
-            CloseInput = false,
-        });
-
-        // First pass: numFmts (custom format codes).
-        var numFmts = new Dictionary<int, string>();
-        // Second pass: cellXfs (the entries we return).
-        var cellXfs = new List<(int numFmtId, bool applyNumberFormat)>();
-
-        while (r.Read())
-        {
-            if (r.NodeType != XmlNodeType.Element) continue;
-
-            if (r.LocalName == "numFmt")
-            {
-                var id = ParseInt(r.GetAttribute("numFmtId"));
-                var code = r.GetAttribute("formatCode");
-                if (id >= 0 && code is not null) numFmts[id] = code;
-            }
-            else if (r.LocalName == "xf" && IsInCellXfs(r))
-            {
-                var nfId = ParseInt(r.GetAttribute("numFmtId"));
-                cellXfs.Add((nfId, true));
-            }
-        }
-
-        // Build StyleEntry[] with resolved format codes and date detection.
-        var entries = new StyleEntry[cellXfs.Count];
-        for (int i = 0; i < cellXfs.Count; i++)
-        {
-            var (id, _) = cellXfs[i];
-            numFmts.TryGetValue(id, out var code);
-            entries[i] = new StyleEntry
-            {
-                NumFmtId = id,
-                FormatCode = code,
-                IsDateFormat = DateFormatDetector.IsDateFormat(id, code),
-            };
-        }
-        return entries;
-    }
-
-    /// <summary>
-    /// Determines whether the current &lt;xf&gt; is the cellXf flavor (vs cellStyleXf). The
-    /// reader can't easily look at parent element via XmlReader's stack, so we maintain
-    /// context via a stateful parse instead. This static helper relies on the calling code
-    /// having tracked which section we're in; for simplicity we assume any &lt;xf&gt; reachable
-    /// while scanning is a cellXf entry — Excel ALWAYS writes cellStyleXfs first (one entry,
-    /// the default) then cellXfs (the real list). So we drop the first one we see (it's the
-    /// shared default) and treat the rest as cellXfs.
-    /// </summary>
-    private static bool IsInCellXfs(XmlReader r)
-    {
-        // Heuristic: cellXf entries have xfId="0" attribute referring to the cellStyleXf parent.
-        // cellStyleXf entries don't. This isn't perfectly reliable, but works for files
-        // produced by Excel, LibreOffice, and our own writer.
-        var xfId = r.GetAttribute("xfId");
-        return xfId is not null;
-    }
-
-    private static int ParseInt(string? s)
-        => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : -1;
-}

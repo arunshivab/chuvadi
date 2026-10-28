@@ -42,6 +42,16 @@ public sealed class Workbook
     /// <summary>Workbook-level defined names (named ranges and named scalars).</summary>
     public DefinedNameCollection DefinedNames { get; } = new();
 
+    /// <summary>
+    /// The complete style table of a loaded workbook (styles.xml plus theme), exactly as stored:
+    /// fonts, fills, borders, number formats, cell and named-style formats, named styles,
+    /// differential formats, the indexed palette and the theme. A cell's style index (the s=
+    /// attribute) indexes <see cref="CellStyleTable.CellFormats"/>.
+    /// <see cref="CellStyleTable.Empty"/> for a workbook built in memory (the writer builds its
+    /// own table at save time). Read-only: changes are made through <see cref="Cell.Style"/>.
+    /// </summary>
+    public CellStyleTable StyleTable { get; internal set; } = CellStyleTable.Empty;
+
     internal bool IsStructureProtected { get; private set; }
     internal string? StructureProtectionPassword { get; private set; }
     internal bool LockStructure { get; private set; }
@@ -69,7 +79,7 @@ public sealed class Workbook
         foreach (var existing in _sheets)
             if (string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"A sheet named '{name}' already exists.");
-        var sheet = new Sheet(name);
+        var sheet = new Sheet(name) { Owner = this };
         _sheets.Add(sheet);
         return sheet;
     }
@@ -147,18 +157,24 @@ public sealed class Workbook
     }
 
     /// <summary>
-    /// Loads an existing xlsx file into a Workbook. Preserves cell VALUES only (strings,
-    /// numbers, dates, booleans; formula cells load as their cached values). Styles, column
-    /// widths, freeze panes, merge ranges, defined names, tables, charts, pivots, drawings,
-    /// comments and conditional formats are NOT carried through a load → save round-trip.
+    /// Loads an existing xlsx file into a Workbook: cell values (strings, numbers, dates,
+    /// booleans; formula cells load as their cached values), and, since 1.2.0, the read-side
+    /// style data: <see cref="StyleTable"/>, each cell's <see cref="Cell.StyleIndex"/> and
+    /// resolved <see cref="Cell.Style"/>, merged ranges, column spans, row attributes and the
+    /// sheet format defaults.
     ///
-    /// Use this for "load values, mutate, save" workflows. For read-only access to large
-    /// files, prefer <see cref="XlsxReader"/> directly.
+    /// Round-trip (load → save) keeps values, merges, column widths and the style properties
+    /// the writer supports. It does NOT keep: freeze panes, defined names, tables, charts,
+    /// pivots, drawings, comments, conditional formats, row heights/visibility/grouping,
+    /// column visibility/grouping/styles, formulas (cached values are written instead), or
+    /// the extended <see cref="CellStyle"/> properties added in 1.2.0.
+    ///
+    /// For read-only access to large files, prefer <see cref="XlsxReader"/> directly.
     /// </summary>
     public static Workbook Load(string path)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        return Load(path, password: null);
+        return Load(path, password: null, options: null);
     }
 
     /// <summary>
@@ -166,8 +182,18 @@ public sealed class Workbook
     /// if not encrypted, the password is ignored.
     /// </summary>
     public static Workbook Load(string path, string? password)
+        => Load(path, password, options: null);
+
+    /// <summary>
+    /// Loads a possibly-encrypted xlsx with reader options (e.g.
+    /// <see cref="XlsxReaderOptions.IncludeStyledEmptyCells"/>, <see cref="XlsxReaderOptions.MaxPartBytes"/>).
+    /// Pass null for <paramref name="password"/> when the file is not encrypted.
+    /// <see cref="XlsxReaderOptions.TreatFirstRowAsHeaders"/> is ignored: the model always loads row 1 as data.
+    /// </summary>
+    public static Workbook Load(string path, string? password, XlsxReaderOptions? options)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
+        var opts = ModelOptions(options);
 
         using var fileStream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
 
@@ -184,22 +210,33 @@ public sealed class Workbook
                 throw new XlsxPasswordRequiredException(ex.Message, ex);
             }
             using var plaintextMs = new System.IO.MemoryStream(plaintext);
-            using var reader = XlsxReader.Open(plaintextMs, new XlsxReaderOptions { TreatFirstRowAsHeaders = false });
+            using var reader = XlsxReader.Open(plaintextMs, opts);
             return WorkbookLoader.Load(reader);
         }
         else
         {
-            using var reader = XlsxReader.Open(fileStream, new XlsxReaderOptions { TreatFirstRowAsHeaders = false });
+            using var reader = XlsxReader.Open(fileStream, opts);
             return WorkbookLoader.Load(reader);
         }
     }
 
     /// <summary>Loads a workbook from an open stream. The stream is not closed.</summary>
-    public static Workbook Load(System.IO.Stream input)
+    public static Workbook Load(System.IO.Stream input) => Load(input, options: null);
+
+    /// <summary>Loads a workbook from an open stream with reader options. The stream is not closed.</summary>
+    public static Workbook Load(System.IO.Stream input, XlsxReaderOptions? options)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        using var reader = XlsxReader.Open(input, new XlsxReaderOptions { TreatFirstRowAsHeaders = false });
+        using var reader = XlsxReader.Open(input, ModelOptions(options));
         return WorkbookLoader.Load(reader);
+    }
+
+    /// <summary>The caller's options (copied, never mutated) with headers off for the model loader.</summary>
+    private static XlsxReaderOptions ModelOptions(XlsxReaderOptions? options)
+    {
+        var o = options?.Clone() ?? new XlsxReaderOptions();
+        o.TreatFirstRowAsHeaders = false;
+        return o;
     }
 }
 
@@ -210,12 +247,19 @@ public sealed class Workbook
 public sealed class Sheet
 {
     private readonly Dictionary<(int Row, int Col), Cell> _cells = new();
-    private readonly Dictionary<int, double> _columnWidths = new();      // 1-based column → width
+    private readonly Dictionary<int, double> _columnWidths = new();      // 1-based column → width set via Columns[n].Width
+    private readonly List<ColumnRange> _columnRanges = new();            // <col> spans as loaded from a file
+    private readonly Dictionary<int, RowData> _rows = new();             // 1-based row → stored <row> attributes
     private readonly List<string> _mergeRanges = new();
     private readonly List<(string Range, DataValidation Validation)> _validations = new();
     private readonly List<(string Range, ConditionalFormatRule Rule)> _conditionalFormats = new();
 
     internal Sheet(string name) { Name = name; }
+
+    /// <summary>The workbook this sheet belongs to (for style-table lookups).</summary>
+    internal Workbook? Owner { get; init; }
+
+    internal CellStyleTable StyleTable => Owner?.StyleTable ?? CellStyleTable.Empty;
 
     public string Name { get; }
     public int FreezeRowCount { get; private set; }
@@ -239,15 +283,48 @@ public sealed class Sheet
         return this;
     }
 
-    /// <summary>Per-column width accessor: <c>sheet.Columns[3].Width = 20</c>.</summary>
+    /// <summary>Per-column accessor: <c>sheet.Columns[3].Width = 20</c>.</summary>
     public ColumnIndexer Columns => new(this);
+
+    /// <summary>
+    /// Per-row accessor: <c>sheet.Rows[5].Height</c>. Read-only in this release; reports the
+    /// row attributes of a loaded file (height, hidden, grouping, row style).
+    /// </summary>
+    public RowIndexer Rows => new(this);
+
+    /// <summary>
+    /// Sheet-wide row and column defaults (&lt;sheetFormatPr&gt;). For a loaded file these are the
+    /// file's values; for a sheet built in memory they hold Excel's defaults.
+    /// </summary>
+    public SheetFormat Format { get; } = new();
+
+    /// <summary>
+    /// The &lt;col&gt; spans of a loaded file, in file order, exactly as stored (not expanded per
+    /// column). Empty for a sheet built in memory. Use <see cref="Columns"/> for per-column lookup.
+    /// </summary>
+    public IReadOnlyList<ColumnRange> ColumnRanges => _columnRanges;
+
+    /// <summary>Rows for which the file stored attributes (height, hidden, style, ...), in row order.</summary>
+    public IEnumerable<Row> DefinedRows
+    {
+        get
+        {
+            var keys = new List<int>(_rows.Keys);
+            keys.Sort();
+            foreach (var k in keys) yield return new Row(k, _rows[k], StyleTable);
+        }
+    }
 
     /// <summary>Iteration over only the populated cells.</summary>
     public IEnumerable<Cell> PopulatedCells => _cells.Values;
 
     internal IReadOnlyDictionary<(int Row, int Col), Cell> CellMap => _cells;
-    internal IReadOnlyDictionary<int, double> ColumnWidths => _columnWidths;
-    internal IReadOnlyList<string> MergeRanges => _mergeRanges;
+    /// <summary>
+    /// Merged cell ranges as A1 range strings (e.g. "A1:C2"), in the order they were added or,
+    /// for a loaded workbook, in file order. The top-left cell of each range holds the value.
+    /// Populated by <see cref="Workbook.Load(string)"/>; add ranges with <see cref="MergeCells"/>.
+    /// </summary>
+    public IReadOnlyList<string> MergeRanges => _mergeRanges;
     internal IReadOnlyList<(string Range, DataValidation Validation)> Validations => _validations;
     internal IReadOnlyList<(string Range, ConditionalFormatRule Rule)> ConditionalFormats => _conditionalFormats;
 
@@ -344,11 +421,65 @@ public sealed class Sheet
         return this;
     }
 
-    internal double GetColumnWidth(int column) =>
-        _columnWidths.TryGetValue(column, out var w) ? w : 0;
+    /// <summary>Width set through <c>Columns[n].Width</c> wins; otherwise the loaded span's width; otherwise 0.</summary>
+    internal double GetColumnWidth(int column)
+    {
+        if (_columnWidths.TryGetValue(column, out var w)) return w;
+        return FindColumnRange(column)?.Width ?? 0;
+    }
+
+    internal bool HasColumnWidthOverride(int column) => _columnWidths.ContainsKey(column);
 
     internal void SetColumnWidthInternal(int column, double width) =>
         _columnWidths[column] = width;
+
+    /// <summary>The loaded span covering <paramref name="column"/>; the last one wins if a malformed file overlaps spans.</summary>
+    internal ColumnRange? FindColumnRange(int column)
+    {
+        for (int i = _columnRanges.Count - 1; i >= 0; i--)
+        {
+            var r = _columnRanges[i];
+            if (column >= r.Min && column <= r.Max) return r;
+        }
+        return null;
+    }
+
+    internal void AddColumnRange(ColumnRange range) => _columnRanges.Add(range);
+
+    internal void SetRowData(int row, RowData data) => _rows[row] = data;
+
+    internal Row GetRow(int row) => new(row, _rows.TryGetValue(row, out var d) ? d : null, StyleTable);
+
+    /// <summary>
+    /// The column widths the writer should emit: loaded spans that carry a width, split around
+    /// columns whose width was set through <c>Columns[n].Width</c>, plus those set columns —
+    /// sorted and non-overlapping, as Excel requires. A sheet built in memory yields exactly its
+    /// set columns, as before.
+    /// </summary>
+    internal List<(int Min, int Max, double Width)> GetColumnWidthsForWrite()
+    {
+        var result = new List<(int Min, int Max, double Width)>();
+        var overrides = new List<int>(_columnWidths.Keys);
+        overrides.Sort();
+
+        foreach (var span in _columnRanges)
+        {
+            if (span.Width <= 0) continue;
+            int start = span.Min;
+            foreach (var o in overrides)
+            {
+                if (o < start || o > span.Max) continue;
+                if (o > start) result.Add((start, o - 1, span.Width));
+                start = o + 1;
+            }
+            if (start <= span.Max) result.Add((start, span.Max, span.Width));
+        }
+        foreach (var o in overrides)
+            result.Add((o, o, _columnWidths[o]));
+
+        result.Sort((a, b) => a.Min.CompareTo(b.Min));
+        return result;
+    }
 }
 
 /// <summary>
@@ -363,6 +494,8 @@ public readonly struct ColumnIndexer
 
 /// <summary>
 /// Per-column settings accessor. Class (not struct) so property setters work via the indexer.
+/// <see cref="Width"/> is settable; the other properties report what a loaded file stores for
+/// the &lt;col&gt; span covering this column and are read-only in this release.
 /// </summary>
 public sealed class Column
 {
@@ -370,7 +503,13 @@ public sealed class Column
     private readonly int _column;
     internal Column(Sheet sheet, int column) { _sheet = sheet; _column = column; }
 
-    /// <summary>The column width in Excel column-width units. Set to 0 for default (auto) width.</summary>
+    /// <summary>The 1-based column number.</summary>
+    public int Number => _column;
+
+    /// <summary>
+    /// The column width in Excel character units. 0 means default width (see
+    /// <see cref="SheetFormat.DefaultColumnWidth"/>). A width set here overrides a loaded value.
+    /// </summary>
     public double Width
     {
         get => _sheet.GetColumnWidth(_column);
@@ -380,6 +519,36 @@ public sealed class Column
             _sheet.SetColumnWidthInternal(_column, value);
         }
     }
+
+    /// <summary>The loaded &lt;col&gt; span covering this column, or null if the file defines none.</summary>
+    public ColumnRange? Range => _sheet.FindColumnRange(_column);
+
+    /// <summary>True if the width is user-set: set through <see cref="Width"/>, or customWidth in the file.</summary>
+    public bool CustomWidth => _sheet.HasColumnWidthOverride(_column) || (Range?.CustomWidth ?? false);
+
+    /// <summary>True if the file marks the width as best-fit (auto-fit).</summary>
+    public bool BestFit => Range?.BestFit ?? false;
+
+    /// <summary>True if the column is hidden.</summary>
+    public bool Hidden => Range?.Hidden ?? false;
+
+    /// <summary>True if phonetic (furigana) information is shown for the column.</summary>
+    public bool Phonetic => Range?.Phonetic ?? false;
+
+    /// <summary>Outline (grouping) level, 0..7. 0 = not grouped.</summary>
+    public int OutlineLevel => Range?.OutlineLevel ?? 0;
+
+    /// <summary>True if the outline group this column belongs to is collapsed.</summary>
+    public bool Collapsed => Range?.Collapsed ?? false;
+
+    /// <summary>Default cell-format (xf) index for the column's empty cells, or -1 when none.</summary>
+    public int StyleIndex => Range?.StyleIndex ?? -1;
+
+    /// <summary>
+    /// The resolved default style for the column's empty cells (from <see cref="StyleIndex"/>),
+    /// or null when the column has none.
+    /// </summary>
+    public CellStyle? Style => StyleIndex < 0 ? null : _sheet.StyleTable.ResolveCellFormat(StyleIndex);
 }
 
 /// <summary>
@@ -406,9 +575,34 @@ public sealed class Cell
         set { _formula = value; _value = null; }
     }
 
-    /// <summary>Per-cell style. Null means "use default".</summary>
-    public CellStyle? Style { get; set; }
+    /// <summary>
+    /// Per-cell style. Null means "use default". For a loaded workbook this is the effective,
+    /// fully resolved style of the cell's format (font, fill, border, number format, alignment,
+    /// protection; theme and tint colours as RGB). It is null for cells whose format is the
+    /// workbook default (no s= or s="0"): see <see cref="CellStyleTable.DefaultCellStyle"/>.
+    /// Setting it marks the cell's style as set in code (<see cref="StyleIndex"/> becomes -1).
+    /// </summary>
+    public CellStyle? Style
+    {
+        get => _style;
+        set { _style = value; StyleIndex = -1; }
+    }
 
+    /// <summary>
+    /// The raw style index read from the file (the cell's s= attribute), indexing
+    /// <see cref="Workbook.StyleTable"/>'s <see cref="CellStyleTable.CellFormats"/>.
+    /// -1 when the file gave none, or once <see cref="Style"/> has been set in code.
+    /// </summary>
+    public int StyleIndex { get; private set; } = -1;
+
+    /// <summary>Load path: record the file's style index and its resolved style together.</summary>
+    internal void SetLoadedStyle(int styleIndex, CellStyle? style)
+    {
+        _style = style;
+        StyleIndex = styleIndex;
+    }
+
+    private CellStyle? _style;
     private object? _value;
     private string? _formula;
 
