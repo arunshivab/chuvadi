@@ -86,7 +86,34 @@ foreach (string[][] table in r.Tables())
 string everything = r.ExtractText();
 ```
 
-For untrusted files, cap decompression: `DocxReader.Open(path, options: new DocxReaderOptions { MaxPartBytes = 50_000_000 })`.
+## Untrusted input (mail attachments, uploads)
+
+Every open applies resource limits **before anything is decompressed**, and the same limits guard `Document.Load` and `DocxTemplate.Fill`:
+
+| Limit (`DocxReaderOptions`) | Default | Checked |
+|---|---|---|
+| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | at open |
+| `MaxEntries` | 10,000 zip entries | at open |
+| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | at open |
+| `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | at open |
+| `MaxSpinCount` | 500,000 (encrypted files; key derivation can't be interrupted) | at open |
+| `MaxXmlDepth` | 256 nested elements | while reading |
+| `MaxPartBytes` | none | while reading |
+
+`DocxTemplate.Fill` applies the same defaults; its options overload takes `DocxReaderOptions` and a `CancellationToken`. A breach throws `DocxSecurityLimitException` (a `DocxFormatException`) with `Limit`, `Actual`, `Allowed` and `PartName`. Set any limit to `null` to disable it, or start from `DocxReaderOptions.CreateUnrestricted()` for trusted input.
+
+**Active content is detected, never executed or fetched:**
+
+```csharp
+using var r = DocxReader.Open(attachment, password: null, options, cancellationToken);
+if (r.HasMacros) Warn("This document contains macros.");   // .docm/.dotm or vbaProject.bin
+var a = r.GetActiveContent();
+// a.HasActiveXControls, a.HasEmbeddedObjects, a.HasAltChunks, a.HasDdeFields,
+// a.HasRemoteTemplate, a.HasExternalResources, a.ExternalReferences (verbatim targets)
+```
+
+**Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
+
 
 `Document.Load(path)` instead builds an **editable** model — paragraphs with basic run formatting (bold/italic/underline/strikethrough, font, size, color, highlight), styles, alignment, lists, and tables as text — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
 
@@ -103,7 +130,7 @@ doc.AddImage(ImageSpec.FromFile("chart.png"));
 // Inline with an explicit display size, inside a paragraph:
 var p = new Paragraph();
 p.Text("Logo: ").Image(ImageSpec.Inline(File.ReadAllBytes("logo.png"), "image/png", 80, 40));
-doc.AddBlock(p);
+doc.AddParagraph(p);
 
 // Inside a table cell:
 table.Rows[0].Cell(1).SetImage(ImageSpec.FromFile("seal.jpg", widthPt: 48, heightPt: 48));
@@ -168,7 +195,7 @@ There is also cooperative "restrict editing" protection — `doc.Protect("pass",
 
 Included: paragraphs and rich run formatting, styles, lists, tables, hyperlinks, headers/footers, page setup, **images (inline and floating, read and write, in templates)**, encryption, and restrict-editing protection.
 
-Deliberately not included yet: legacy `.doc` (pre-2007 binary format), macros (`.docm`), comments, tracked changes, footnote authoring, and multi-section documents. Page-to-image rendering is intentionally out of scope for a pure-BCL library and is planned via a future Word→PDF pipeline (the reader already exposes all image bytes and geometry that pipeline needs).
+Deliberately not included yet: legacy `.doc` (pre-2007 binary format), writing or running macros (`.docm` files are opened and flagged, never executed), comments, tracked changes, footnote authoring, and multi-section documents. Page-to-image rendering is intentionally out of scope for a pure-BCL library and is planned via a future Word→PDF pipeline (the reader already exposes all image bytes and geometry that pipeline needs).
 
 ## License
 

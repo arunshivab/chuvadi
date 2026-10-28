@@ -72,8 +72,11 @@ public sealed class DocxPasswordRequiredException : Exception
     public DocxPasswordRequiredException(string message, Exception innerException) : base(message, innerException) { }
 }
 
-/// <summary>Thrown when a file is not a structurally valid docx.</summary>
-public sealed class DocxFormatException : Exception
+/// <summary>
+/// Thrown when a file is not a structurally valid docx. <see cref="DocxSecurityLimitException"/>
+/// derives from it, so one handler covers both malformed and resource-limit-breaching input.
+/// </summary>
+public class DocxFormatException : Exception
 {
     public DocxFormatException(string message) : base(message) { }
     public DocxFormatException(string message, Exception innerException) : base(message, innerException) { }

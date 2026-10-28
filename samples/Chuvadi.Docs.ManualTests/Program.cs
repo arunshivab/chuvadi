@@ -29,6 +29,7 @@ public static class Program
             ("Images", ImageTests.Run),
             ("Template", TemplateTest.Run),
             ("ProtectionEncryption", ProtectionEncryptionTest.Run),
+            ("Hardening", HardeningTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

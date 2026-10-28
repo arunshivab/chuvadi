@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Xml;
 using Chuvadi.Docs.Word;
 using Chuvadi.Internal;
@@ -17,35 +18,37 @@ internal static class DocumentLoader
 {
     private const string W = DocumentSerializer.W;
 
-    public static Document Load(Stream packageStream)
+    public static Document Load(Stream packageStream) => Load(packageStream, new DocxReaderOptions(), CancellationToken.None);
+
+    public static Document Load(Stream packageStream, DocxReaderOptions options, CancellationToken ct)
     {
         // Buffer once: we read the package twice — for the editable model and (via DocxReader)
         // for image extraction — and OoxmlPackage.Open closes the stream it is given.
         byte[] bytes;
-        using (var ms = new MemoryStream())
-        {
-            packageStream.CopyTo(ms);
+        using (var ms = PackageGuard.CopyBounded(packageStream, options, ct))
             bytes = ms.ToArray();
-        }
 
-        var doc = BuildModel(new MemoryStream(bytes));
+        using (var scanStream = new MemoryStream(bytes, writable: false))
+            PackageGuard.Scan(scanStream, options, ct);
+        var doc = BuildModel(new MemoryStream(bytes, writable: false), options, ct);
 
         // Populate the Images collection from body, headers, and footers.
         try
         {
-            using var reader = DocxReader.Open(new MemoryStream(bytes));
-            foreach (var img in reader.Images())
+            using var reader = DocxReader.Open(new MemoryStream(bytes, writable: false), null, options, ct);
+            foreach (var img in reader.Images(ct))
                 doc.AddLoadedImage(img);
         }
-        catch
+        catch (Exception ex) when (ex is not (DocxSecurityLimitException or OperationCanceledException))
         {
             // Image extraction is best-effort; a malformed drawing must not fail document load.
+            // Security-limit breaches and cancellation are never swallowed.
         }
 
         return doc;
     }
 
-    private static Document BuildModel(Stream packageStream)
+    private static Document BuildModel(Stream packageStream, DocxReaderOptions options, CancellationToken ct)
     {
         using var pkg = OoxmlPackage.Open(packageStream);
 
@@ -62,13 +65,9 @@ internal static class DocumentLoader
             throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
 
         var doc = new Document();
-        using var s = pkg.OpenPart(documentUri);
-        using var r = XmlReader.Create(s, new XmlReaderSettings
-        {
-            IgnoreWhitespace = true,
-            IgnoreComments = true,
-            CloseInput = false,
-        });
+        using var raw = pkg.OpenPart(documentUri);
+        using var s = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, documentUri);
+        using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, ct, documentUri);
 
         if (!r.Read()) return doc;
         while (!r.EOF)

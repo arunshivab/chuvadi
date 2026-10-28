@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using Chuvadi.Docs.Internal;
 
 namespace Chuvadi.Docs.Word;
@@ -227,24 +228,53 @@ public sealed class Document
 
     /// <summary>Loads from an open stream (not closed). Password as in <see cref="Load(string, string?)"/>.</summary>
     public static Document Load(Stream input, string? password = null)
+        => Load(input, password, options: null, CancellationToken.None);
+
+    /// <summary>
+    /// Loads a possibly-encrypted .docx with explicit read options (resource limits for
+    /// untrusted input) and cancellation. Limit breaches throw
+    /// <see cref="DocxSecurityLimitException"/>; cancellation throws
+    /// <see cref="OperationCanceledException"/>.
+    /// </summary>
+    public static Document Load(string path, string? password, DocxReaderOptions? options,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return Load(fs, password, options, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads from an open stream (not closed) with explicit read options and cancellation.
+    /// See <see cref="Load(string, string?, DocxReaderOptions?, CancellationToken)"/>.
+    /// </summary>
+    public static Document Load(Stream input, string? password, DocxReaderOptions? options,
+        CancellationToken cancellationToken = default)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
+        options ??= new DocxReaderOptions();
+        cancellationToken.ThrowIfCancellationRequested();
 
-        if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(input))
+        var source = PackageGuard.EnsureSeekable(input, options, cancellationToken, out var buffered);
+        using var _ = buffered;
+
+        if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(source))
         {
+            PackageGuard.CheckSpinCount(source, options);
+            cancellationToken.ThrowIfCancellationRequested();
             byte[] plaintext;
             try
             {
-                plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(input, password);
+                plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(source, password);
             }
             catch (Chuvadi.Internal.Crypto.PackagePasswordException ex)
             {
                 throw new DocxPasswordRequiredException(ex.Message, ex);
             }
             using var ms = new MemoryStream(plaintext);
-            return DocumentLoader.Load(ms);
+            return DocumentLoader.Load(ms, options, cancellationToken);
         }
-        return DocumentLoader.Load(input);
+        return DocumentLoader.Load(source, options, cancellationToken);
     }
 
     /// <summary>All document text: paragraphs and table cells, newline-separated.</summary>
