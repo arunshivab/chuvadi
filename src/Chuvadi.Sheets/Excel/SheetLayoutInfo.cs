@@ -13,13 +13,31 @@ namespace Chuvadi.Sheets.Excel;
 public sealed class SheetLayoutInfo
 {
     internal SheetLayoutInfo(PageSetup page, SheetFormat format, IReadOnlyList<ColumnRange> columns,
-                             IReadOnlyList<string> merges, string? usedRange, bool showGridLines,
-                             bool rightToLeft, SheetViewMode viewMode, int zoomScale, CellStyleTable styles)
+                             IReadOnlyList<string> merges, string? usedRange, SheetView view, string? tabColor,
+                             IReadOnlyList<ConditionalFormatting> conditionalFormats,
+                             IReadOnlyList<(string Range, DataValidation Validation)> validations, CellStyleTable styles)
     {
         PageSetup = page; Format = format; ColumnRanges = columns; MergeRanges = merges; UsedRange = usedRange;
-        ShowGridLines = showGridLines; RightToLeft = rightToLeft; ViewMode = viewMode; ZoomScale = zoomScale;
+        View = view; TabColor = tabColor; ConditionalFormats = conditionalFormats; DataValidations = validations;
         _styles = styles;
     }
+
+    /// <summary>The sheet view: gridlines, headings, zoom, view mode, frozen/split panes, selection.</summary>
+    public SheetView View { get; }
+
+    /// <summary>The sheet tab colour, "RRGGBB", or null.</summary>
+    public string? TabColor { get; }
+
+    /// <summary>Conditional formatting blocks in file order (including Excel 2010 extension rules).</summary>
+    public IReadOnlyList<ConditionalFormatting> ConditionalFormats { get; }
+
+    /// <summary>Data validation rules with their ranges, in file order.</summary>
+    public IReadOnlyList<(string Range, DataValidation Validation)> DataValidations { get; }
+
+    internal CellStyleTable Styles => _styles;
+
+    /// <summary>The &lt;drawing r:id&gt; of the sheet, or null.</summary>
+    internal string? DrawingRelId { get; init; }
 
     private readonly CellStyleTable _styles;
 
@@ -38,17 +56,17 @@ public sealed class SheetLayoutInfo
     /// <summary>The used range the file states in &lt;dimension ref&gt; (e.g. "A1:H200"), or null. Written by the producing tool; not verified.</summary>
     public string? UsedRange { get; }
 
-    /// <summary>Whether gridlines show on screen. Printing uses <see cref="PageSetup.PrintGridlines"/>.</summary>
-    public bool ShowGridLines { get; }
+    /// <summary>Whether gridlines show on screen (<c>View.ShowGridLines</c>). Printing uses <see cref="PageSetup.PrintGridlines"/>.</summary>
+    public bool ShowGridLines => View.ShowGridLines;
 
-    /// <summary>True if the sheet is laid out right-to-left.</summary>
-    public bool RightToLeft { get; }
+    /// <summary>True if the sheet is laid out right-to-left (<c>View.RightToLeft</c>).</summary>
+    public bool RightToLeft => View.RightToLeft;
 
-    /// <summary>Excel view mode stored for the sheet.</summary>
-    public SheetViewMode ViewMode { get; }
+    /// <summary>Excel view mode stored for the sheet (<c>View.ViewMode</c>).</summary>
+    public SheetViewMode ViewMode => View.ViewMode;
 
-    /// <summary>Zoom percentage of the sheet view. Default 100.</summary>
-    public int ZoomScale { get; }
+    /// <summary>Zoom percentage of the sheet view (<c>View.ZoomScale</c>). Default 100.</summary>
+    public int ZoomScale => View.ZoomScale;
 
     /// <summary>The span covering a 1-based column (the last one wins if a malformed file overlaps spans), or null.</summary>
     public ColumnRange? FindColumn(int column1Based)

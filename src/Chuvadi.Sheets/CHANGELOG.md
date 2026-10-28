@@ -1,5 +1,167 @@
 # Changelog
 
+## 1.6.0 (unreleased)
+
+Sheet fidelity for the Layout engine: the rest of a loaded sheet round-trips (rows, columns,
+views, panes, tab colour, visibility), conditional formatting and data validation are read,
+preserved and evaluated per cell, and pictures and shapes on sheets are read. Additive and
+source-compatible, apart from the behaviour changes listed below. A sheet that uses none of
+the new options writes the same bytes as 1.5.0.
+
+### Features
+- **Rows.**
+  - `sheet.Rows[n]` is settable: `Height`, `CustomHeight`, `Hidden`, `OutlineLevel` (0–7),
+    `Collapsed`, `Style`, `ThickTop` and `ThickBottom`.
+  - Rows that have settings but no cells are written too.
+  - Streaming writer: `RowFormat` with `WriteRow(RowFormat, values)` and
+    `WriteRow(RowFormat, Action<RowBuilder>)`.
+  - A `Row` from the streaming reader (`RowReader.Attributes`) stays read-only.
+- **Columns.**
+  - `sheet.Columns[n]` gains settable `Hidden`, `OutlineLevel`, `Collapsed`, `BestFit` and
+    `Style`.
+  - Loaded `<col>` spans that are hidden, grouped or styled are kept even without a width.
+  - Streaming writer: `SetColumns(from, to, ColumnFormat)` covers width, hidden, outline,
+    collapsed, best-fit and style.
+- **Sheet format.** `SheetFormat` is settable: default row height and column width, base
+  width, zero/custom height, thick borders, outline summary positions. It is written when set
+  or loaded. `outlineLevelRow` and `outlineLevelCol` are computed at save. Exposed as
+  `Sheet.Format` and `SheetWriter.Format`.
+- **Sheet view.** New `SheetView` class, exposed as `Sheet.View` and `SheetWriter.View`.
+  - Settings: gridlines, headings, zeros, ruler, formulas, outline symbols and white space;
+    right-to-left; tab selected; view mode; top-left cell; zoom for each view.
+  - Panes: frozen, split or frozen-from-split (`SheetPane`), with `Freeze(rows, cols)` and
+    `Split(xTwips, yTwips, topLeft)`.
+  - `Selections` per pane, plus `Select(cell)`.
+  - The 1.4.0 `Sheet.ShowGridLines`, `RightToLeft`, `ViewMode` and `ZoomScale` become
+    settable shortcuts into `View`. `FreezeRows`, `FreezeColumns`, `FreezeRowCount` and
+    `FreezeColumnCount` now use `View`, so loaded frozen panes are kept.
+- **Tab colour, visibility, active sheet.**
+  - `Sheet.TabColor` and `SheetWriter.TabColor` (RGB; a loaded theme or indexed colour is
+    resolved).
+  - Settable `Sheet.Visibility` and `SheetWriter.Visibility`.
+  - `Workbook.ActiveSheet`, `XlsxWriter.ActiveSheetIndex` and `XlsxReader.ActiveTab`.
+  - Saving checks that at least one sheet is visible and that the active sheet is visible.
+- **Streaming writer prologue.** `sheetPr`, `sheetViews`, `sheetFormatPr` and `cols` are built at
+  save and inserted after `<worksheet>`. View, format, columns, tab colour and fit-to-page can
+  therefore be set at any time until save. `AutoFitColumns` still has to come before the first
+  row, so that every row is measured.
+- **Conditional formatting, read.**
+  - `Sheet.ConditionalFormats` and `SheetLayoutInfo.ConditionalFormats` hold
+    `ConditionalFormatting` objects: `Ranges`, `Rules`, `Pivot`.
+  - Each `ConditionalRule` has a type: cellIs, expression, colorScale, dataBar, iconSet, top10,
+    aboveAverage, duplicate/unique, the four text rules, blanks, errors or timePeriod.
+  - Rule fields: priority, stopIfTrue, operator, formulas, text, period, rank/percent/bottom,
+    above/equal/stdDev.
+  - Styling: the stored `DifferentialFormat` (`DxfId`, `LoadedFormat`), plus `Style`, a
+    resolved `DifferentialStyle` with RGB colours.
+  - Scale details: `ColorScaleInfo`, `DataBarInfo` and `IconSetInfo`, with `ConditionalValue`
+    thresholds.
+  - Excel 2010 (x14) extension blocks are read. Data-bar details (solid or gradient, border,
+    negative colours, axis, automatic min/max, lengths) are merged into the rule they extend.
+  - Rules stored only in the extension (e.g. one referring to another sheet) come back with
+    `FromExtension` set.
+- **Conditional formatting, write.**
+  - Every rule is written back: loaded rules, `new ConditionalRule(...)` and the existing
+    helpers.
+  - `AddConditionalFormatting(ConditionalFormatting)` is new on `Sheet` and `SheetWriter`.
+  - The writer now emits `<dxfs>`.
+  - Priorities left at 0 are numbered after the highest priority in use.
+  - Text and time-period rules built in code get the formulas Excel itself writes for them.
+  - Extension rules and data-bar details are written to the x14 `extLst`.
+  - New helpers: `ConditionalFormat.Expression(formula, style)` and a two-colour
+    `ColorScale.Custom`.
+- **Conditional formatting, evaluate.** `sheet.EvaluateConditionalFormats(options)` builds a
+  `ConditionalFormatEvaluator`; for streaming, use
+  `new ConditionalFormatEvaluator(formats, styles, ICellValueSource, options)`.
+  - `Evaluate(row, col)` returns a `ConditionalFormatResult`:
+    - effective fill, pattern, font colour, bold, italic, underline, strikethrough, number
+      format and borders;
+    - `DataBar` (fraction, length, min, max, negative, colour) and `Icon` (set, index,
+      count);
+    - `ApplyTo(CellStyle)`, `MatchedRules` and `NotEvaluated`.
+  - Precedence follows Excel: priority order, the higher-priority property wins, and
+    stopIfTrue stops lower-priority rules.
+  - Evaluated:
+    - cellIs, with literals, references or expressions as operands;
+    - expressions through a small evaluator, with comparisons, arithmetic, `&`, `%` and about
+      50 functions (listed on `ConditionalFormatEvaluator`);
+    - 2- and 3-colour scales;
+    - data bars and icon sets, as metadata;
+    - top/bottom N and N%;
+    - above/below average, with sample standard deviation;
+    - duplicate and unique values;
+    - the text rules, blanks and errors;
+    - time periods against an injectable today (`ConditionalFormatOptions.Today`).
+  - Not evaluated, and reported in `NotEvaluated`: other functions, references to other sheets
+    or workbooks, defined names, structured references, and table styles.
+- **Data validation.**
+  - Read and written back: `Sheet.DataValidations` and `SheetLayoutInfo.DataValidations`.
+  - `DataValidation` gains public `Kind` (`DataValidationType`), `Comparison`, `Formula1` and
+    `Formula2`.
+  - New settable options: `ErrorStyle` (`DataValidationErrorStyle`), `ShowErrorMessage`,
+    `ShowInputMessage` and `ImeMode`. The two show flags are nullable; null keeps the 1.5.0
+    behaviour.
+  - New factories: `Custom(formula)`, `Time(min, max)` and `Create(kind, comparison, f1, f2)`.
+  - Lists stored in the Excel 2010 extension (cross-sheet lists) are read too, and written back
+    in the main element.
+- **Drawings, read.** `Sheet.Drawings` and `SheetReader.ReadDrawings()` return
+  `DrawingObject` items. Each has:
+  - `Kind`: Picture, Shape, Connector, Group (with `Children`), Chart or Other;
+  - name, alt text and title, hidden, rotation, flips, own transform and a group's child
+    space;
+  - `Anchor` (`DrawingAnchor`): two-cell (with `EditAs`), one-cell or absolute;
+    `DrawingPoint` From/To with 1-based column and row plus EMU offsets; size and position in
+    EMU.
+  - Pictures: content type, part name, crop, `GetImageBytes()` and linked target.
+  - Shapes: preset geometry, plain text, fill and line colour (srgb, sys, preset and theme
+    colours with lumMod/lumOff/tint/shade, and colours from the shape style), and line width.
+  - Charts: the chart part name.
+
+  `mc:AlternateContent` is unwrapped. The model loads image bytes up front;
+  `XlsxReaderOptions.LoadImageData = false` skips them. The streaming reader reads them on
+  demand while it is open. Read limits apply to every part. `Emu` helpers are included.
+- **Streaming layout.** `SheetLayoutInfo` adds `View`, `TabColor`, `ConditionalFormats` and
+  `DataValidations`. `ShowGridLines`, `RightToLeft`, `ViewMode` and `ZoomScale` now read from
+  `View`.
+
+### Behaviour changes
+- **`ConditionalFormat.CellIs` styles now show.** The style is written as a dxf, and the
+  rule points at it. The writer no longer adds an unused cell format for it, so `styles.xml`
+  changes for code that uses CellIs.
+- **Load → save keeps more.** Row and column settings, the sheet format, the sheet view
+  (including frozen panes), tab colour, sheet visibility, the active sheet, conditional
+  formats and data validation are now kept. Before, they were dropped and every sheet came
+  back visible. A loaded file whose active tab is a hidden sheet saves with the first visible
+  sheet active.
+- **Streaming writer shape rules relaxed.** `SetColumnWidth`, `FreezeRows` and
+  `FreezeColumns` no longer throw after the first row. Column spans are written sorted by
+  column.
+- **`ConditionalFormatRule` can no longer be subclassed outside the library.** The writer
+  never wrote such rules anyway. Every rule is now a `ConditionalRule`.
+- **`Sheet.ConditionalFormats` and `Sheet.DataValidations` are public.** They were internal
+  in 1.5.0.
+
+### Not in 1.6.0
+- Drawings are not written: load → save drops pictures and shapes, as before.
+- Header/footer images, comment shapes, form controls and in-cell pictures are not read.
+- Cancellable decryption waits for the shared-crypto change from the Docs chat.
+
+### Tests
+- **New `fidelity` group: 17 checks.** It runs on an Excel-shaped fixture with x14 blocks,
+  a picture, a text box, a chart frame and a group. It covers:
+  - row, column, view, pane, selection, tab colour and visibility, read and round-trip;
+  - model setters and validation;
+  - every writer shape option in schema order, and save validation;
+  - LibreOffice re-save keeping panes, hidden rows and columns, tab colour and height;
+  - conditional formats read with all details, round-trip, and kept by LibreOffice;
+  - CellIs dxf bytes;
+  - the evaluator on the fixture and on every evaluated rule type, including stopIfTrue and
+    not-evaluated reporting;
+  - every rule type written and read back;
+  - data validation factories and options;
+  - streaming `ReadLayout` extras;
+  - drawings in the model and streaming.
+
 ## 1.5.0 (unreleased)
 
 Formulas with cached results on read and write, page setup on the streaming reader and on

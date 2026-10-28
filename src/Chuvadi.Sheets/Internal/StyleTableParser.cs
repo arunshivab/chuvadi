@@ -301,7 +301,7 @@ internal static class StyleTableParser
         CustomBuiltin = Bool(s, "customBuiltin", false),
     };
 
-    private static DifferentialFormat ParseDxf(XElement d, XNamespace ns)
+    internal static DifferentialFormat ParseDxf(XElement d, XNamespace ns)
     {
         var dxf = new DifferentialFormat();
         if (d.Element(ns + "font") is { } f) dxf.Font = ParseFont(f, ns);

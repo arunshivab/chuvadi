@@ -70,6 +70,12 @@ public sealed class XlsxReader : IDisposable
     /// </summary>
     public IReadOnlyList<DefinedNameInfo> DefinedNames { get; }
 
+    /// <summary>
+    /// The 0-based position (among all &lt;sheet&gt; entries, matching <see cref="SheetInfo.WorkbookIndex"/>)
+    /// of the sheet Excel opens on (&lt;workbookView activeTab&gt;); 0 when not stated.
+    /// </summary>
+    public int ActiveTab { get; }
+
     internal XlsxReaderOptions Options => _options;
 
     private string?[]? _displayCodes;
@@ -122,6 +128,7 @@ public sealed class XlsxReader : IDisposable
         Date1904 = wb.Date1904;
         DefinedNames = wb.DefinedNames;
         HasMacros = hasMacros;
+        ActiveTab = wb.ActiveTab ?? 0;
     }
 
     /// <summary>Per-cellXf date detection data, derived from the parsed style table.</summary>
@@ -304,6 +311,24 @@ public sealed class XlsxReader : IDisposable
     internal Stream OpenSheetPart(SheetInfo info)
         => Limit(_package.OpenPart(info.PartUri), info.PartUri, _options, _budget);
 
+    /// <summary>Opens any part, counted against the configured limits. Caller disposes.</summary>
+    internal Stream OpenPartLimited(string partUri) => Limit(_package.OpenPart(partUri), partUri, _options, _budget);
+
+    /// <summary>The relationships of a part (targets as stored, relative to the part).</summary>
+    internal IEnumerable<PackageRelationship> PartRelationships(string partUri) => _package.GetRelationships(partUri);
+
+    internal bool HasPart(string partUri)
+    {
+        foreach (var p in _package.Parts) if (string.Equals(p.Uri, partUri, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    internal string? PartContentType(string partUri)
+    {
+        foreach (var p in _package.Parts) if (string.Equals(p.Uri, partUri, StringComparison.Ordinal)) return p.ContentType;
+        return null;
+    }
+
     /// <summary>Wraps a part stream in the decompression guards when limits are configured.</summary>
     private static Stream Limit(Stream s, string partUri, XlsxReaderOptions options, ReadBudget budget)
         => budget.Wrap(s, partUri, options.MaxPartBytes);
@@ -402,6 +427,7 @@ public sealed class XlsxReader : IDisposable
         public readonly List<SheetInfo> Sheets = new();
         public readonly List<DefinedNameInfo> DefinedNames = new();
         public bool Date1904;
+        public int? ActiveTab;
     }
 
     /// <summary>Reads workbook.xml: the sheet list (with visibility), workbookPr and definedNames.</summary>
@@ -424,6 +450,12 @@ public sealed class XlsxReader : IDisposable
                 if (r.NodeType != XmlNodeType.Element) continue;
                 switch (r.LocalName)
                 {
+                    case "workbookView":
+                        if (info.ActiveTab is null && int.TryParse(r.GetAttribute("activeTab"), System.Globalization.NumberStyles.Integer,
+                                System.Globalization.CultureInfo.InvariantCulture, out var tab))
+                            info.ActiveTab = tab;
+                        info.ActiveTab ??= 0;
+                        break;
                     case "workbookPr":
                         info.Date1904 = r.GetAttribute("date1904") is "1" or "true";
                         break;
@@ -607,7 +639,7 @@ public sealed class SheetReader
     public SheetLayoutInfo ReadLayout()
     {
         if (_layoutInfo is not null) return _layoutInfo;
-        var collector = new SheetLayoutCollector();
+        var collector = new SheetLayoutCollector(_book.StyleTable);
         var ct = _book.Options.CancellationToken;
         ct.ThrowIfCancellationRequested();
         using (var stream = _book.OpenSheetPart(_info))
@@ -639,6 +671,22 @@ public sealed class SheetReader
         var info = collector.ToLayoutInfo(_book.StyleTable);
         PrintNames.Apply(info.PageSetup, _book.DefinedNames, _info.WorkbookIndex);
         return _layoutInfo = info;
+    }
+
+    private IReadOnlyList<DrawingObject>? _drawings;
+
+    /// <summary>
+    /// The pictures, shapes, connectors, groups and charts anchored on the sheet (its drawing
+    /// part), in file order; empty when there are none. Uses <see cref="ReadLayout"/> to find the
+    /// drawing. Picture bytes are read on demand by <see cref="DrawingObject.GetImageBytes"/>
+    /// while the reader is open. Cached.
+    /// </summary>
+    public IReadOnlyList<DrawingObject> ReadDrawings()
+    {
+        if (_drawings is not null) return _drawings;
+        var layout = ReadLayout();
+        _book.Options.CancellationToken.ThrowIfCancellationRequested();
+        return _drawings = DrawingReader.Read(_book, _info.PartUri, layout.DrawingRelId, eager: false, loadImages: true);
     }
 
     /// <summary>Skips the current element's subtree, checking the token as it goes (sheetData can be huge).</summary>

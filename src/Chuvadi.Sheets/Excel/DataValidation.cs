@@ -16,8 +16,11 @@ public sealed class DataValidation
 {
     internal string Type { get; private init; } = "any";
     internal string? Operator { get; private init; }
-    internal string? Formula1 { get; private init; }
-    internal string? Formula2 { get; private init; }
+    /// <summary>The first formula as stored, without '=' (a list in quotes, a range, a bound, or a custom formula), or null.</summary>
+    public string? Formula1 { get; private init; }
+
+    /// <summary>The second bound for Between/NotBetween, as stored, or null.</summary>
+    public string? Formula2 { get; private init; }
 
     /// <summary>If true, blank cells are allowed regardless of the rule. Default: true.</summary>
     public bool AllowBlank { get; set; } = true;
@@ -37,7 +40,106 @@ public sealed class DataValidation
     /// <summary>If non-null, the body text of the info popup shown on cell selection.</summary>
     public string? PromptMessage { get; set; }
 
+    /// <summary>The kind of rule (&lt;dataValidation type&gt;).</summary>
+    public DataValidationType Kind => Type switch
+    {
+        "whole" => DataValidationType.WholeNumber,
+        "decimal" => DataValidationType.Decimal,
+        "list" => DataValidationType.List,
+        "date" => DataValidationType.Date,
+        "time" => DataValidationType.Time,
+        "textLength" => DataValidationType.TextLength,
+        "custom" => DataValidationType.Custom,
+        _ => DataValidationType.Any,
+    };
+
+    /// <summary>The comparison for number, date, time and text-length rules, or null (lists, custom, any).</summary>
+    public ComparisonOp? Comparison => Operator switch
+    {
+        null => Kind is DataValidationType.List or DataValidationType.Custom or DataValidationType.Any ? null : ComparisonOp.Between,
+        "between" => ComparisonOp.Between,
+        "notBetween" => ComparisonOp.NotBetween,
+        "equal" => ComparisonOp.Equal,
+        "notEqual" => ComparisonOp.NotEqual,
+        "lessThan" => ComparisonOp.LessThan,
+        "lessThanOrEqual" => ComparisonOp.LessThanOrEqual,
+        "greaterThan" => ComparisonOp.GreaterThan,
+        "greaterThanOrEqual" => ComparisonOp.GreaterThanOrEqual,
+        _ => null,
+    };
+
+    /// <summary>Error dialog style when a value is rejected (Stop blocks it; Warning and Information let the user keep it).</summary>
+    public DataValidationErrorStyle ErrorStyle { get; set; }
+
+    /// <summary>
+    /// Show the error dialog for invalid input. Null (default) = shown when an error title or
+    /// message is set, as before 1.6.0. A loaded rule carries the file's value.
+    /// </summary>
+    public bool? ShowErrorMessage { get; set; }
+
+    /// <summary>
+    /// Show the input prompt when the cell is selected. Null (default) = shown when a prompt
+    /// title or message is set, as before 1.6.0. A loaded rule carries the file's value.
+    /// </summary>
+    public bool? ShowInputMessage { get; set; }
+
+    /// <summary>Input method (IME) mode for East Asian input, as stored (e.g. "hiragana"), or null.</summary>
+    public string? ImeMode { get; set; }
+
     private DataValidation() { }
+
+    /// <summary>Load path: a rule exactly as stored.</summary>
+    internal static DataValidation Loaded(string type, string? op, string? f1, string? f2) => new()
+    {
+        Type = type, Operator = op, Formula1 = f1, Formula2 = f2,
+    };
+
+    /// <summary>A rule whose formula must be true for the value to be accepted (relative to the range's top-left cell), e.g. "COUNTIF($A:$A,A2)=1".</summary>
+    public static DataValidation Custom(string formula)
+    {
+        if (string.IsNullOrEmpty(formula)) throw new ArgumentException("Formula required.", nameof(formula));
+        return new DataValidation { Type = "custom", Formula1 = formula };
+    }
+
+    /// <summary>Time of day between the bounds (inclusive; either may be null).</summary>
+    public static DataValidation Time(TimeSpan? min = null, TimeSpan? max = null)
+    {
+        var (op, f1, f2) = ResolveBounds(
+            min?.TotalDays.ToString("R", CultureInfo.InvariantCulture),
+            max?.TotalDays.ToString("R", CultureInfo.InvariantCulture));
+        return new DataValidation { Type = "time", Operator = op, Formula1 = f1, Formula2 = f2 };
+    }
+
+    /// <summary>A rule of any kind with an explicit comparison and formulas (bounds as Excel formulas, e.g. "10", "$B$1", "TODAY()").</summary>
+    public static DataValidation Create(DataValidationType kind, ComparisonOp comparison, string formula1, string? formula2 = null)
+    {
+        if (string.IsNullOrEmpty(formula1)) throw new ArgumentException("Formula required.", nameof(formula1));
+        if (comparison is ComparisonOp.Between or ComparisonOp.NotBetween && string.IsNullOrEmpty(formula2))
+            throw new ArgumentException("Between and NotBetween need a second formula.", nameof(formula2));
+        var type = kind switch
+        {
+            DataValidationType.WholeNumber => "whole",
+            DataValidationType.Decimal => "decimal",
+            DataValidationType.List => "list",
+            DataValidationType.Date => "date",
+            DataValidationType.Time => "time",
+            DataValidationType.TextLength => "textLength",
+            DataValidationType.Custom => "custom",
+            _ => throw new ArgumentException("Use a kind other than Any.", nameof(kind)),
+        };
+        string? op = kind is DataValidationType.List or DataValidationType.Custom ? null : comparison switch
+        {
+            ComparisonOp.Between => "between",
+            ComparisonOp.NotBetween => "notBetween",
+            ComparisonOp.Equal => "equal",
+            ComparisonOp.NotEqual => "notEqual",
+            ComparisonOp.LessThan => "lessThan",
+            ComparisonOp.LessThanOrEqual => "lessThanOrEqual",
+            ComparisonOp.GreaterThan => "greaterThan",
+            _ => "greaterThanOrEqual",
+        };
+        return new DataValidation { Type = type, Operator = op, Formula1 = formula1, Formula2 = formula2 };
+    }
 
     /// <summary>
     /// Dropdown list of fixed string values. Excel limits the inline-list form to a total of
@@ -113,3 +215,9 @@ public sealed class DataValidation
         return ("between", "0", "0");  // shouldn't be reachable with sensible input
     }
 }
+
+/// <summary>Data validation kinds (&lt;dataValidation type&gt;).</summary>
+public enum DataValidationType { Any = 0, WholeNumber, Decimal, List, Date, Time, TextLength, Custom }
+
+/// <summary>Error dialog style for rejected input (&lt;dataValidation errorStyle&gt;).</summary>
+public enum DataValidationErrorStyle { Stop = 0, Warning, Information }

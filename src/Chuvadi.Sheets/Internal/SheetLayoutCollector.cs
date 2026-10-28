@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Xml;
+using System.Xml.Linq;
 using Chuvadi.Sheets.Excel;
 
 namespace Chuvadi.Sheets.Internal;
@@ -33,15 +34,19 @@ internal sealed class SheetLayoutCollector
     /// <summary>Print settings collected from sheetPr, printOptions, pageMargins, pageSetup, headerFooter and breaks.</summary>
     public PageSetup Page { get; } = new() { Loading = true };
 
-    public bool? ShowGridLines;
-    public bool RightToLeft;
-    public SheetViewMode ViewMode;
-    public int? ZoomScale;
+    public SheetView View { get; private set; } = new();
+    public string? TabColor;
     public bool SummaryBelow = true;
     public bool SummaryRight = true;
     public string? UsedRange;
+    public string? DrawingRelId;
+    public List<ConditionalFormatting> ConditionalFormats { get; } = new();
+    public List<(string Range, DataValidation Validation)> DataValidations { get; } = new();
 
-    private bool _sawSheetView;
+    private readonly CellStyleTable _styles;
+    private readonly Dictionary<string, ConditionalRule> _rulesByExtId = new(StringComparer.Ordinal);
+
+    public SheetLayoutCollector(CellStyleTable? styles = null) { _styles = styles ?? CellStyleTable.Empty; }
     private string? _capture;                 // header/footer element whose text is being collected
     private readonly StringBuilder _text = new();
     private List<PageBreak>? _breaks;         // rowBreaks / colBreaks being collected
@@ -63,6 +68,31 @@ internal sealed class SheetLayoutCollector
         if (!IsMainNamespace(x.NamespaceURI)) return;
         switch (x.LocalName)
         {
+            // Structured elements: consumed whole. After ReadSubtree's reader is closed the
+            // caller's reader sits on the element's end tag, so its next Read() is correct.
+            case "sheetViews":
+                if (Subtree(x) is { } sv && SheetExtrasParser.ParseSheetViews(sv) is { } view) View = view;
+                break;
+            case "conditionalFormatting":
+                if (Subtree(x) is { } cf)
+                {
+                    var fmt = SheetExtrasParser.ParseConditionalFormatting(cf, _styles, _rulesByExtId);
+                    if (fmt.Rules.Count > 0) ConditionalFormats.Add(fmt);
+                }
+                break;
+            case "dataValidations":
+                if (Subtree(x) is { } dv) DataValidations.AddRange(SheetExtrasParser.ParseDataValidations(dv));
+                break;
+            case "extLst":
+                if (x.Depth == 1 && Subtree(x) is { } ext)
+                    SheetExtrasParser.ParseExtLst(ext, _styles, _rulesByExtId, ConditionalFormats, DataValidations);
+                break;
+            case "drawing":
+                DrawingRelId ??= x.GetAttribute("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+                break;
+            case "tabColor":
+                TabColor = _styles.ResolveColor(ColorFrom(x));
+                break;
             case "mergeCell":
             {
                 var reference = x.GetAttribute("ref");
@@ -96,19 +126,6 @@ internal sealed class SheetLayoutCollector
             case "outlinePr":
                 SummaryBelow = x.GetAttribute("summaryBelow") is not ("0" or "false");
                 SummaryRight = x.GetAttribute("summaryRight") is not ("0" or "false");
-                break;
-            case "sheetView":
-                if (_sawSheetView) break;   // first view (workbookViewId 0) only
-                _sawSheetView = true;
-                if (x.GetAttribute("showGridLines") is string g) ShowGridLines = ParseBool(g);
-                RightToLeft = ParseBool(x.GetAttribute("rightToLeft"));
-                ViewMode = x.GetAttribute("view") switch
-                {
-                    "pageBreakPreview" => SheetViewMode.PageBreakPreview,
-                    "pageLayout" => SheetViewMode.PageLayout,
-                    _ => SheetViewMode.Normal,
-                };
-                if (x.GetAttribute("zoomScale") is string z) ZoomScale = ParseInt(z, 100);
                 break;
             case "printOptions":
                 Page.PrintGridlines = ParseBool(x.GetAttribute("gridLines"));
@@ -301,20 +318,26 @@ internal sealed class SheetLayoutCollector
         };
     }
 
+    private static XElement? Subtree(XmlReader x)
+    {
+        using var sub = x.ReadSubtree();
+        return XElement.Load(sub);
+    }
+
+    /// <summary>A &lt;color&gt;-like element's attributes as a <see cref="ColorRef"/>.</summary>
+    private static ColorRef? ColorFrom(XmlReader x)
+    {
+        var c = new XElement("c");
+        foreach (var name in new[] { "rgb", "theme", "indexed", "tint", "auto" })
+            if (x.GetAttribute(name) is string v) c.SetAttributeValue(name, v);
+        return c.HasAttributes ? StyleTableParser.ParseColor(c) : null;
+    }
+
     private void FillFormat(SheetFormat target)
     {
         if (Format is { } f)
-        {
-            target.DefaultRowHeight = f.DefaultRowHeight;
-            target.DefaultColumnWidth = f.DefaultColumnWidth;
-            target.BaseColumnWidth = f.BaseColumnWidth;
-            target.CustomHeight = f.CustomHeight;
-            target.ZeroHeight = f.ZeroHeight;
-            target.ThickTop = f.ThickTop;
-            target.ThickBottom = f.ThickBottom;
-            target.OutlineLevelRow = f.OutlineLevelRow;
-            target.OutlineLevelColumn = f.OutlineLevelColumn;
-        }
+            target.Load(f.DefaultRowHeight, f.DefaultColumnWidth, f.BaseColumnWidth, f.CustomHeight, f.ZeroHeight,
+                        f.ThickTop, f.ThickBottom, f.OutlineLevelRow, f.OutlineLevelColumn);
         target.OutlineSummaryBelow = SummaryBelow;
         target.OutlineSummaryRight = SummaryRight;
     }
@@ -332,7 +355,7 @@ internal sealed class SheetLayoutCollector
         FillFormat(format);
         FinishPage();
         return new SheetLayoutInfo(Page, format, Columns.ToArray(), MergeRanges.ToArray(), UsedRange,
-            ShowGridLines ?? true, RightToLeft, ViewMode, ZoomScale ?? 100, styles);
+            View, TabColor, ConditionalFormats.ToArray(), DataValidations.ToArray(), styles) { DrawingRelId = DrawingRelId };
     }
 
     /// <summary>Copies everything collected into the sheet model.</summary>
@@ -340,7 +363,7 @@ internal sealed class SheetLayoutCollector
     {
         FillFormat(sheet.Format);
         FinishPage();
-        sheet.SetLoadedView(Page, ShowGridLines ?? true, RightToLeft, ViewMode, ZoomScale ?? 100);
+        sheet.SetLoaded(Page, View, TabColor, ConditionalFormats, DataValidations);
         foreach (var c in Columns) sheet.AddColumnRange(c);
         foreach (var kv in Rows) sheet.SetRowData(kv.Key, kv.Value);
         foreach (var range in MergeRanges) sheet.MergeCells(range);

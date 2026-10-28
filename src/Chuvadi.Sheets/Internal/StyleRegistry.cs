@@ -185,6 +185,7 @@ internal sealed class StyleRegistry
         WriteCellStyleXfs(writer);  // The "named style" XFs — we keep this minimal (just the default).
         WriteCellXfs(writer);       // The actual cell-level XFs.
         WriteCellStyles(writer);    // Maps "Normal" → cellStyleXf 0.
+        WriteDxfs(writer);          // Differential formats for conditional formatting (only when used).
 
         writer.WriteEndElement(); // </styleSheet>
         writer.WriteEndDocument();
@@ -493,6 +494,149 @@ internal sealed class StyleRegistry
         w.WriteAttributeString("builtinId", "0");
         w.WriteEndElement();
         w.WriteEndElement();
+    }
+
+    // ---- Differential formats (dxfs) ------------------------------------------------
+
+    private readonly List<DifferentialStyle> _dxfs = new();
+    private readonly Dictionary<string, int> _dxfIndex = new(StringComparer.Ordinal);
+
+    /// <summary>The &lt;dxf&gt; index for a differential style (identical styles share one entry).</summary>
+    public int GetDxfId(DifferentialStyle style)
+    {
+        var key = DxfKey(style);
+        if (_dxfIndex.TryGetValue(key, out var id)) return id;
+        // Number formats in a dxf need an id; custom codes share the workbook's numFmt ids.
+        if (style.NumberFormat is { Length: > 0 } code) GetOrAddNumFmt(code);
+        id = _dxfs.Count;
+        _dxfs.Add(style);
+        _dxfIndex[key] = id;
+        return id;
+    }
+
+    private static string DxfKey(DifferentialStyle s) => string.Join("|",
+        s.FontColor, s.Bold, s.Italic, s.Underline, s.Strikethrough, s.FillColor, s.FillPattern, s.PatternColor,
+        s.NumberFormat, s.BorderTop, s.BorderBottom, s.BorderLeft, s.BorderRight);
+
+    private void WriteDxfs(XmlWriter w)
+    {
+        if (_dxfs.Count == 0) return;
+        w.WriteStartElement("dxfs", SsNs);
+        w.WriteAttributeString("count", _dxfs.Count.ToString(CultureInfo.InvariantCulture));
+        foreach (var d in _dxfs) WriteDxf(w, d, SsNs, NumFmtIdFor);
+        w.WriteEndElement();
+    }
+
+    private int NumFmtIdFor(string code) => GetOrAddNumFmt(code);
+
+    /// <summary>The numFmtId for a format code (built-in id, or a registered custom id).</summary>
+    public int NumberFormatId(string code) => GetOrAddNumFmt(code);
+
+    /// <summary>
+    /// Writes one &lt;dxf&gt; (font, numFmt, fill, border, in schema order). Also used for the
+    /// inline &lt;x14:dxf&gt; content of Excel 2010 extension rules (<paramref name="ns"/> = main).
+    /// </summary>
+    internal static void WriteDxf(XmlWriter w, DifferentialStyle d, string ns, Func<string, int> numFmtId, string? elementPrefix = null, string? elementNs = null)
+    {
+        if (elementNs is null) w.WriteStartElement("dxf", ns);
+        else w.WriteStartElement(elementPrefix, "dxf", elementNs);
+
+        if (d.Bold is not null || d.Italic is not null || d.Strikethrough is not null || d.Underline is not null || d.FontColor is not null)
+        {
+            w.WriteStartElement("font", ns);
+            void Flag(string name, bool? v)
+            {
+                if (v is null) return;
+                w.WriteStartElement(name, ns);
+                if (v == false) w.WriteAttributeString("val", "0");
+                w.WriteEndElement();
+            }
+            Flag("b", d.Bold);
+            Flag("i", d.Italic);
+            Flag("strike", d.Strikethrough);
+            if (d.Underline is UnderlineStyle u)
+            {
+                w.WriteStartElement("u", ns);
+                var val = u switch
+                {
+                    UnderlineStyle.None => "none",
+                    UnderlineStyle.Double => "double",
+                    UnderlineStyle.SingleAccounting => "singleAccounting",
+                    UnderlineStyle.DoubleAccounting => "doubleAccounting",
+                    _ => null,
+                };
+                if (val is not null) w.WriteAttributeString("val", val);
+                w.WriteEndElement();
+            }
+            if (d.FontColor is not null)
+            {
+                w.WriteStartElement("color", ns);
+                w.WriteAttributeString("rgb", "FF" + d.FontColor);
+                w.WriteEndElement();
+            }
+            w.WriteEndElement();
+        }
+        if (d.NumberFormat is { Length: > 0 } code)
+        {
+            w.WriteStartElement("numFmt", ns);
+            w.WriteAttributeString("numFmtId", numFmtId(code).ToString(CultureInfo.InvariantCulture));
+            w.WriteAttributeString("formatCode", code);
+            w.WriteEndElement();
+        }
+        if (d.FillColor is not null || d.FillPattern is not null || d.PatternColor is not null)
+        {
+            w.WriteStartElement("fill", ns);
+            w.WriteStartElement("patternFill", ns);
+            if (d.FillPattern is FillPattern fp && fp != FillPattern.Solid)
+                w.WriteAttributeString("patternType", PatternName(fp));
+            if (d.PatternColor is not null)
+            {
+                w.WriteStartElement("fgColor", ns);
+                w.WriteAttributeString("rgb", "FF" + d.PatternColor);
+                w.WriteEndElement();
+            }
+            if (d.FillColor is not null)
+            {
+                // A dxf's solid fill colour goes in bgColor (Excel's convention).
+                w.WriteStartElement("bgColor", ns);
+                w.WriteAttributeString("rgb", "FF" + d.FillColor);
+                w.WriteEndElement();
+            }
+            w.WriteEndElement();
+            w.WriteEndElement();
+        }
+        if (d.BorderLeft is not null || d.BorderRight is not null || d.BorderTop is not null || d.BorderBottom is not null)
+        {
+            w.WriteStartElement("border", ns);
+            void Edge(string name, Border? b)
+            {
+                if (b is null) return;
+                w.WriteStartElement(name, ns);
+                if (!b.Value.IsNone)
+                {
+                    w.WriteAttributeString("style", BorderStyleToString(b.Value.Style));
+                    if (b.Value.Color is not null)
+                    {
+                        w.WriteStartElement("color", ns);
+                        w.WriteAttributeString("rgb", "FF" + b.Value.Color);
+                        w.WriteEndElement();
+                    }
+                }
+                w.WriteEndElement();
+            }
+            Edge("left", d.BorderLeft);
+            Edge("right", d.BorderRight);
+            Edge("top", d.BorderTop);
+            Edge("bottom", d.BorderBottom);
+            w.WriteEndElement();
+        }
+        w.WriteEndElement();
+    }
+
+    internal static string PatternName(FillPattern p)
+    {
+        var n = p.ToString();
+        return char.ToLowerInvariant(n[0]) + n.Substring(1);
     }
 
     // ---- Internal key types --------------------------------------------------------

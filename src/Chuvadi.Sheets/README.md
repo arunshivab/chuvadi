@@ -38,6 +38,9 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Page headers/footers (print) | `SheetWriter.SetHeaderFooter`, `Sheet.SetHeaderFooter`, `cfg.PageHeaderFooter` |
 | Data validation | `DataValidation.List/WholeNumber/...` |
 | Conditional formatting | `ConditionalFormat.ColorScale/DataBar/CellIs`* |
+| Row/column settings, views, panes, tab colour, visibility (read and write) | `sheet.Rows[n]`, `sheet.Columns[n]`, `sheet.View`, `RowFormat`, `SetColumns`, `SheetWriter.View`, `TabColor`, `Visibility`, `ActiveSheet` |
+| Conditional formats and validation (read, write, evaluate per cell) | `sheet.ConditionalFormats`, `ConditionalRule`, `sheet.EvaluateConditionalFormats()`, `ConditionalFormatEvaluator`, `sheet.DataValidations` |
+| Pictures, shapes, charts on sheets (read: anchors, image bytes) | `sheet.Drawings`, `sheetReader.ReadDrawings()`, `DrawingObject`, `Emu` |
 | Defined names (workbook and sheet scope; read and write) | `wb.DefinedNames.Add(...)`, `XlsxWriter.AddDefinedName(...)`, `reader.DefinedNames` |
 | Sheet protection | `sheet.Protect(password, options)` |
 | Workbook structure protection | `wb.Protect(password, lockStructure)` |
@@ -47,8 +50,8 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Zip create/extract | `Chuvadi.Sheets.Zip.*` |
 | Hostile-input caps | `ZipExtractionLimits`, `XlsxReaderOptions.MaxPartBytes` and the 1.4.0 limits |
 
-\* `CellIs` rules are written schema-valid and evaluate, but the supplied style does not
-render visibly (no dxf records are emitted). `ColorScale` and `DataBar` render fully.
+\* Since 1.6.0 the style of a `CellIs` rule is written as a differential format and shows in
+Excel (earlier versions wrote none).
 
 ## Quick examples
 
@@ -129,6 +132,16 @@ page.AddRowBreak(50);
 var layout = reader.Sheet("Report").ReadLayout();   // before streaming rows
 double widthA = layout.ColumnWidth(1);  var area = layout.PageSetup.PrintAreas;
 
+// Conditional formats as Excel shows them, per cell (1.6.0), for renderers
+var cf = book.Sheets[0].EvaluateConditionalFormats();
+var cfStyle = cf.Evaluate(5, 2)?.ApplyTo(cell.Style ?? default);   // fill, font, number format, borders
+// cf.Evaluate(r, c)?.DataBar / .Icon → draw them; .NotEvaluated → rules this library cannot evaluate
+
+// Row, column, view and drawing round-trip (1.6.0)
+sh.Rows[3].Height = 30;  sh.Columns[5].Hidden = true;  sh.View.Freeze(1, 1).ZoomScale = 90;
+foreach (var d in sh.Drawings)
+    if (d.Kind == DrawingKind.Picture) File.WriteAllBytes(d.Name + ".png", d.GetImageBytes()!);
+
 // Render a value exactly as Excel displays it
 string shown = NumberFormatter.Format(1234.5, "#,##0.00");        // "1,234.50"
 
@@ -184,12 +197,14 @@ open-password (`EncryptionOptions`).
 emit everything it reads. On load → save, the extended `CellStyle` properties added in 1.2.0
 (underline kind, strikethrough, super/subscript, non-solid pattern and gradient fills,
 diagonal borders, indent, rotation, shrink-to-fit, reading order, protection, quote prefix),
-locale-dependent built-in number formats (e.g. id 44), row heights/visibility/grouping and
-column visibility/grouping/styles are not written back. Fonts, colours, solid fills, all
-border styles, number formats with a code, horizontal and vertical alignment, wrap, merges
-and column widths are. Since 1.5.0, formulas (with cached results), defined names and the
-full page setup round-trip too; formulas that refer to other workbooks or to tables, and
-data-table cells, are saved as their cached values.
+and locale-dependent built-in number formats (e.g. id 44) are not written back. Fonts,
+colours, solid fills, all border styles, number formats with a code, horizontal and vertical
+alignment, wrap, merges and column widths are. Since 1.5.0, formulas (with cached results),
+defined names and the full page setup round-trip too; formulas that refer to other workbooks
+or to tables, and data-table cells, are saved as their cached values. Since 1.6.0, row and
+column settings (height, width, hidden, outline, styles), the sheet view (panes, zoom,
+gridlines, selection), tab colour, visibility, the active sheet, conditional formats and data
+validation round-trip as well. Drawings are read (`sheet.Drawings`) but not written.
 
 ## Out of scope
 

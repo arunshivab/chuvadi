@@ -7,6 +7,14 @@ namespace Chuvadi.Sheets.Excel;
 public sealed class XlsxReaderOptions
 {
     /// <summary>
+    /// For <see cref="Workbook.Load(string)"/>: read the bytes of pictures on sheets into memory
+    /// (<see cref="DrawingObject.GetImageBytes"/>). Default true. Set false to keep anchors and
+    /// metadata only. Read limits apply to the image parts. The streaming reader always reads
+    /// image bytes on demand.
+    /// </summary>
+    public bool LoadImageData { get; set; } = true;
+
+    /// <summary>
     /// If true (default), the first row of each sheet is treated as headers and used for
     /// name-based cell lookup (<c>row.GetString("Name")</c>).
     /// If false, only index-based access works.

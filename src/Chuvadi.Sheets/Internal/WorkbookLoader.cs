@@ -31,7 +31,7 @@ internal static class WorkbookLoader
             var sheet = wb.AddSheet(sheetInfo.Name);
             sheet.Visibility = sheetInfo.Visibility;
             var sr = reader.Sheet(sheetInfo.Name);
-            var layout = new SheetLayoutCollector();
+            var layout = new SheetLayoutCollector(styles);
 
             foreach (var row in sr.RowsWithLayout(layout))
             {
@@ -62,8 +62,13 @@ internal static class WorkbookLoader
 
             // Enumeration has run to the end of the part, so the collector is complete.
             layout.ApplyTo(sheet);
+            if (layout.DrawingRelId is not null)
+                sheet.SetLoadedDrawings(DrawingReader.Read(reader, sheetInfo.PartUri, layout.DrawingRelId, eager: true, reader.Options.LoadImageData));
             PrintNames.Apply(sheet.PageSetup, reader.DefinedNames, sheetInfo.WorkbookIndex);
         }
+
+        foreach (var si in reader.Sheets)
+            if (si.WorkbookIndex == reader.ActiveTab) { wb.ActiveSheet = wb[si.Name]; break; }
 
         LoadDefinedNames(wb, reader);
         return wb;

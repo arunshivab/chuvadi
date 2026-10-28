@@ -103,6 +103,22 @@ public sealed class Workbook
         return this;
     }
 
+    private Sheet? _activeSheet;
+
+    /// <summary>
+    /// The sheet Excel opens on (workbook.xml &lt;workbookView activeTab&gt;). Defaults to the first
+    /// sheet. Must be a sheet of this workbook and visible when saving.
+    /// </summary>
+    public Sheet? ActiveSheet
+    {
+        get => _activeSheet is not null && _sheets.Contains(_activeSheet) ? _activeSheet : _sheets.Count > 0 ? _sheets[0] : null;
+        set
+        {
+            if (value is not null && !_sheets.Contains(value)) throw new ArgumentException("The sheet does not belong to this workbook.", nameof(value));
+            _activeSheet = value;
+        }
+    }
+
     /// <summary>Adds a new sheet at the end of the tab order.</summary>
     public Sheet AddSheet(string name)
     {
@@ -196,12 +212,16 @@ public sealed class Workbook
     /// sheet format defaults.
     ///
     /// Round-trip (load → save) keeps values, formulas with their cached results, defined names,
-    /// page setup (print area and titles, margins, header/footer, breaks), merges, column widths
-    /// and the style properties the writer supports. Formulas that refer to other workbooks, to
-    /// tables or to defined names the model could not keep, and data-table (TABLE()) cells, are
-    /// saved as their cached values, since those targets are not saved. It does NOT keep: freeze panes, tables, charts, pivots, drawings,
-    /// comments, conditional formats, row heights/visibility/grouping, column
-    /// visibility/grouping/styles, or the extended <see cref="CellStyle"/> properties added in 1.2.0.
+    /// page setup (print area and titles, margins, header/footer, breaks), merges, and (since
+    /// 1.6.0) row heights/visibility/grouping/styles, column widths/visibility/grouping/styles,
+    /// the sheet format defaults, the sheet view (frozen and split panes, zoom, gridlines,
+    /// selection), tab colour, sheet visibility, the active sheet, conditional formats (including
+    /// Excel 2010 extension rules) and data validation, plus the style properties the writer
+    /// supports. Formulas that refer to other workbooks, to tables or to defined names the model
+    /// could not keep, and data-table (TABLE()) cells, are saved as their cached values, since
+    /// those targets are not saved. It does NOT keep: tables, charts, pivots, drawings (read into
+    /// <see cref="Sheet.Drawings"/> but not written), comments, or the extended
+    /// <see cref="CellStyle"/> properties added in 1.2.0.
     ///
     /// For read-only access to large files, prefer <see cref="XlsxReader"/> directly.
     /// </summary>
@@ -273,7 +293,9 @@ public sealed class Sheet
     private readonly Dictionary<int, RowData> _rows = new();             // 1-based row → stored <row> attributes
     private readonly List<string> _mergeRanges = new();
     private readonly List<(string Range, DataValidation Validation)> _validations = new();
-    private readonly List<(string Range, ConditionalFormatRule Rule)> _conditionalFormats = new();
+    private readonly List<ConditionalFormatting> _conditionalFormats = new();
+    private readonly Dictionary<int, ColumnOverride> _columnOverrides = new();   // per-column settings set in code
+    private List<DrawingObject> _drawings = new();
 
     internal Sheet(string name) { Name = name; }
 
@@ -283,8 +305,12 @@ public sealed class Sheet
     internal CellStyleTable StyleTable => Owner?.StyleTable ?? CellStyleTable.Empty;
 
     public string Name { get; }
-    public int FreezeRowCount { get; private set; }
-    public int FreezeColumnCount { get; private set; }
+
+    /// <summary>Rows frozen at the top (from <see cref="View"/>; 0 when not frozen).</summary>
+    public int FreezeRowCount => View.FrozenRows;
+
+    /// <summary>Columns frozen at the left (from <see cref="View"/>; 0 when not frozen).</summary>
+    public int FreezeColumnCount => View.FrozenColumns;
     public string? AutoFilterRange { get; private set; }
 
     internal bool IsProtected { get; private set; }
@@ -308,8 +334,8 @@ public sealed class Sheet
     public ColumnIndexer Columns => new(this);
 
     /// <summary>
-    /// Per-row accessor: <c>sheet.Rows[5].Height</c>. Read-only in this release; reports the
-    /// row attributes of a loaded file (height, hidden, grouping, row style).
+    /// Per-row accessor: <c>sheet.Rows[5].Height = 30</c>, <c>.Hidden</c>, <c>.OutlineLevel</c>,
+    /// <c>.Style</c>. Reports a loaded file's row attributes; settable and saved since 1.6.0.
     /// </summary>
     public RowIndexer Rows => new(this);
 
@@ -327,28 +353,59 @@ public sealed class Sheet
     /// </summary>
     public PageSetup PageSetup { get; private set; } = new();
 
-    /// <summary>Visible, hidden or very hidden (from workbook.xml). Read-only; new sheets are visible.</summary>
-    public SheetVisibility Visibility { get; internal set; }
+    /// <summary>
+    /// Visible, hidden or very hidden (workbook.xml). Settable since 1.6.0; saving needs at
+    /// least one visible sheet, and the <see cref="Workbook.ActiveSheet"/> must be visible.
+    /// </summary>
+    public SheetVisibility Visibility { get; set; }
 
-    /// <summary>Whether gridlines show on screen (&lt;sheetView showGridLines&gt;). Default true. Printing uses <see cref="PageSetup.PrintGridlines"/>.</summary>
-    public bool ShowGridLines { get; private set; } = true;
+    /// <summary>
+    /// How the sheet shows in Excel's window: gridlines, headings, zeros, zoom, view mode,
+    /// frozen or split panes, selection. Loaded and saved.
+    /// </summary>
+    public SheetView View { get; private set; } = new();
 
-    /// <summary>True if the sheet is laid out right-to-left (column A on the right).</summary>
-    public bool RightToLeft { get; private set; }
+    /// <summary>Whether gridlines show on screen (<c>View.ShowGridLines</c>). Default true. Printing uses <see cref="PageSetup.PrintGridlines"/>.</summary>
+    public bool ShowGridLines { get => View.ShowGridLines; set => View.ShowGridLines = value; }
 
-    /// <summary>Excel view mode stored for the sheet.</summary>
-    public SheetViewMode ViewMode { get; private set; }
+    /// <summary>True if the sheet is laid out right-to-left, column A on the right (<c>View.RightToLeft</c>).</summary>
+    public bool RightToLeft { get => View.RightToLeft; set => View.RightToLeft = value; }
 
-    /// <summary>Zoom percentage stored for the sheet view. Default 100.</summary>
-    public int ZoomScale { get; private set; } = 100;
+    /// <summary>Excel view mode stored for the sheet (<c>View.ViewMode</c>).</summary>
+    public SheetViewMode ViewMode { get => View.ViewMode; set => View.ViewMode = value; }
 
-    internal void SetLoadedView(PageSetup page, bool showGridLines, bool rightToLeft, SheetViewMode mode, int zoom)
+    /// <summary>Zoom percentage of the sheet view, 10–400 (<c>View.ZoomScale</c>). Default 100.</summary>
+    public int ZoomScale { get => View.ZoomScale; set => View.ZoomScale = value; }
+
+    private string? _tabColor;
+
+    /// <summary>
+    /// The sheet tab colour, "RRGGBB" (a leading '#' or an alpha byte is accepted when setting),
+    /// or null for none. A loaded theme or indexed colour is resolved to RGB.
+    /// </summary>
+    public string? TabColor
+    {
+        get => _tabColor;
+        set => _tabColor = value is null ? null : CellStyleBuilder.NormalizeHex(value)
+            ?? throw new ArgumentException($"'{value}' is not an RGB colour (\"RRGGBB\").", nameof(value));
+    }
+
+    /// <summary>
+    /// Pictures, shapes, connectors, groups and charts anchored on the sheet, from its drawing
+    /// part, in file order. Read-only and not written on save in this release.
+    /// </summary>
+    public IReadOnlyList<DrawingObject> Drawings => _drawings;
+
+    internal void SetLoadedDrawings(List<DrawingObject> drawings) => _drawings = drawings;
+
+    internal void SetLoaded(PageSetup page, SheetView view, string? tabColor,
+                            List<ConditionalFormatting> conditionalFormats, List<(string Range, DataValidation Validation)> validations)
     {
         PageSetup = page;
-        ShowGridLines = showGridLines;
-        RightToLeft = rightToLeft;
-        ViewMode = mode;
-        ZoomScale = zoom;
+        View = view;
+        _tabColor = tabColor;
+        _conditionalFormats.AddRange(conditionalFormats);
+        _validations.AddRange(validations);
     }
 
     /// <summary>
@@ -364,7 +421,7 @@ public sealed class Sheet
         {
             var keys = new List<int>(_rows.Keys);
             keys.Sort();
-            foreach (var k in keys) yield return new Row(k, _rows[k], StyleTable);
+            foreach (var k in keys) yield return new Row(k, _rows[k], StyleTable, this);
         }
     }
 
@@ -378,8 +435,28 @@ public sealed class Sheet
     /// Populated by <see cref="Workbook.Load(string)"/>; add ranges with <see cref="MergeCells"/>.
     /// </summary>
     public IReadOnlyList<string> MergeRanges => _mergeRanges;
-    internal IReadOnlyList<(string Range, DataValidation Validation)> Validations => _validations;
-    internal IReadOnlyList<(string Range, ConditionalFormatRule Rule)> ConditionalFormats => _conditionalFormats;
+    /// <summary>Data validation rules with their ranges (sqref, e.g. "B2:B100 D2"): loaded ones, then added ones. Saved.</summary>
+    public IReadOnlyList<(string Range, DataValidation Validation)> DataValidations => _validations;
+
+    /// <summary>Conditional formatting blocks: loaded ones (including Excel 2010 extension rules), then added ones. Saved.</summary>
+    public IReadOnlyList<ConditionalFormatting> ConditionalFormats => _conditionalFormats;
+
+    /// <summary>
+    /// An evaluator that tells, per cell, what the sheet's conditional formats change (fill,
+    /// font, number format, borders) and the data bar or icon to draw, as Excel shows them, from
+    /// the cells' values (cached results for formulas). See <see cref="ConditionalFormatEvaluator"/>.
+    /// Build it after the sheet's values are final.
+    /// </summary>
+    public ConditionalFormatEvaluator EvaluateConditionalFormats(ConditionalFormatOptions? options = null)
+        => new(_conditionalFormats, StyleTable, new SheetValueSource(this), options);
+
+    /// <summary>Removes every conditional format and data validation (loaded or added).</summary>
+    public Sheet ClearConditionalFormatsAndValidations()
+    {
+        _conditionalFormats.Clear();
+        _validations.Clear();
+        return this;
+    }
 
     /// <summary>Gets or creates a cell at the given A1 address.</summary>
     public Cell Cell(string address)
@@ -421,19 +498,19 @@ public sealed class Sheet
         return this;
     }
 
-    /// <summary>Freezes the first <paramref name="rows"/> rows.</summary>
+    /// <summary>Freezes the first <paramref name="rows"/> rows (keeps frozen columns). Same as <c>View.Freeze</c>.</summary>
     public Sheet FreezeRows(int rows)
     {
         if (rows < 0) throw new ArgumentOutOfRangeException(nameof(rows));
-        FreezeRowCount = rows;
+        View.Freeze(rows, FreezeColumnCount);
         return this;
     }
 
-    /// <summary>Freezes the first <paramref name="cols"/> columns.</summary>
+    /// <summary>Freezes the first <paramref name="cols"/> columns (keeps frozen rows). Same as <c>View.Freeze</c>.</summary>
     public Sheet FreezeColumns(int cols)
     {
         if (cols < 0) throw new ArgumentOutOfRangeException(nameof(cols));
-        FreezeColumnCount = cols;
+        View.Freeze(FreezeRowCount, cols);
         return this;
     }
 
@@ -479,12 +556,19 @@ public sealed class Sheet
         return this;
     }
 
-    /// <summary>Adds a conditional formatting rule over the given range.</summary>
+    /// <summary>Adds a conditional formatting rule over the given range (or space-separated ranges).</summary>
     public Sheet AddConditionalFormat(string range, ConditionalFormatRule rule)
     {
         if (string.IsNullOrEmpty(range)) throw new ArgumentException("Range required.", nameof(range));
         if (rule is null) throw new ArgumentNullException(nameof(rule));
-        _conditionalFormats.Add((range, rule));
+        _conditionalFormats.Add(new ConditionalFormatting(SheetExtrasParser.SplitRanges(range), new[] { (ConditionalRule)rule }));
+        return this;
+    }
+
+    /// <summary>Adds a conditional formatting block (several ranges and rules).</summary>
+    public Sheet AddConditionalFormatting(ConditionalFormatting formatting)
+    {
+        _conditionalFormats.Add(formatting ?? throw new ArgumentNullException(nameof(formatting)));
         return this;
     }
 
@@ -572,45 +656,115 @@ public sealed class Sheet
 
     internal void SetRowData(int row, RowData data) => _rows[row] = data;
 
-    internal Row GetRow(int row) => new(row, _rows.TryGetValue(row, out var d) ? d : null, StyleTable);
+    internal Row GetRow(int row) => new(row, _rows.TryGetValue(row, out var d) ? d : null, StyleTable, this);
+
+    internal RowData GetOrCreateRowData(int row)
+    {
+        if (!_rows.TryGetValue(row, out var d)) _rows[row] = d = new RowData();
+        return d;
+    }
+
+    internal IReadOnlyDictionary<int, RowData> RowDataMap => _rows;
+
+    internal ColumnOverride? GetColumnOverride(int column) => _columnOverrides.TryGetValue(column, out var o) ? o : null;
+
+    internal ColumnOverride EditColumn(int column)
+    {
+        if (!_columnOverrides.TryGetValue(column, out var o)) _columnOverrides[column] = o = new ColumnOverride();
+        return o;
+    }
 
     /// <summary>
-    /// The column widths the writer should emit: loaded spans that carry a width, split around
-    /// columns whose width was set through <c>Columns[n].Width</c>, plus those set columns —
-    /// sorted and non-overlapping, as Excel requires. A sheet built in memory yields exactly its
-    /// set columns, as before.
+    /// The &lt;col&gt; spans the writer should emit: loaded spans that carry anything (width,
+    /// hidden, outline, style), split around columns set in code (width or any setting), plus
+    /// those columns individually — sorted and non-overlapping, as Excel requires. A sheet built
+    /// in memory yields exactly its set columns, as before.
     /// </summary>
-    internal List<(int Min, int Max, double Width)> GetColumnWidthsForWrite()
+    internal List<ColumnSpec> GetColumnsForWrite()
     {
-        var result = new List<(int Min, int Max, double Width)>();
-        var overrides = new List<int>(_columnWidths.Keys);
-        overrides.Sort();
+        var result = new List<ColumnSpec>();
+        var set = new SortedSet<int>(_columnWidths.Keys);
+        foreach (var k in _columnOverrides.Keys) set.Add(k);
 
         // Auto-fitted columns that have data drop their loaded span width (auto-fit decides);
         // a width set through Columns[n].Width still wins. Spans are split around both.
-        var cut = new SortedSet<int>(overrides);
+        var cut = new SortedSet<int>(set);
+        var widthCut = new SortedSet<int>();
         if (_autoFitAll is not null || _autoFitColumns.Count > 0)
             foreach (var key in _cells.Keys)
-                if (IsAutoFitColumn(key.Col)) cut.Add(key.Col);
+                if (IsAutoFitColumn(key.Col) && !_columnWidths.ContainsKey(key.Col)) { cut.Add(key.Col); widthCut.Add(key.Col); }
 
         foreach (var span in _columnRanges)
         {
-            if (span.Width <= 0) continue;
+            bool carries = span.Width > 0 || span.Hidden || span.OutlineLevel > 0 || span.Collapsed || span.StyleIndex > 0;
+            if (!carries) continue;
             int start = span.Min;
             foreach (var o in cut)
             {
                 if (o < start || o > span.Max) continue;
-                if (o > start) result.Add((start, o - 1, span.Width));
+                if (o > start) result.Add(SpecFromSpan(span, start, o - 1));
                 start = o + 1;
             }
-            if (start <= span.Max) result.Add((start, span.Max, span.Width));
+            if (start <= span.Max) result.Add(SpecFromSpan(span, start, span.Max));
         }
-        foreach (var o in overrides)
-            result.Add((o, o, _columnWidths[o]));
+        // Columns set in code, and auto-fitted columns that had loaded attributes besides width.
+        var individual = new SortedSet<int>(set);
+        foreach (var c in widthCut)
+            if (FindColumnRange(c) is { } r && (r.Hidden || r.OutlineLevel > 0 || r.Collapsed || r.StyleIndex > 0)) individual.Add(c);
+        foreach (var c in individual)
+        {
+            var span = FindColumnRange(c);
+            var o = GetColumnOverride(c);
+            double width = _columnWidths.TryGetValue(c, out var w) ? w : widthCut.Contains(c) ? 0 : span?.Width ?? 0;
+            var spec = new ColumnSpec(c, c, width)
+            {
+                Hidden = o?.Hidden ?? span?.Hidden ?? false,
+                OutlineLevel = o?.OutlineLevel ?? span?.OutlineLevel ?? 0,
+                Collapsed = o?.Collapsed ?? span?.Collapsed ?? false,
+                BestFit = o?.BestFit ?? span?.BestFit ?? false,
+                Style = o is { StyleSet: true } ? o.Style : span is { StyleIndex: > 0 } ? StyleTable.ResolveCellFormat(span.StyleIndex) : null,
+            };
+            if (spec.Width > 0 || spec.Hidden || spec.OutlineLevel > 0 || spec.Collapsed || spec.Style is not null)
+                result.Add(spec);
+        }
 
         result.Sort((a, b) => a.Min.CompareTo(b.Min));
         return result;
     }
+
+    private ColumnSpec SpecFromSpan(ColumnRange span, int min, int max) => new(min, max, span.Width)
+    {
+        Hidden = span.Hidden,
+        OutlineLevel = span.OutlineLevel,
+        Collapsed = span.Collapsed,
+        BestFit = span.BestFit,
+        Style = span.StyleIndex > 0 ? StyleTable.ResolveCellFormat(span.StyleIndex) : null,
+    };
+}
+
+/// <summary>Column settings made in code (null = not set; the loaded span's value applies).</summary>
+internal sealed class ColumnOverride
+{
+    public bool? Hidden;
+    public int? OutlineLevel;
+    public bool? Collapsed;
+    public bool? BestFit;
+    public CellStyle? Style;
+    public bool StyleSet;
+}
+
+/// <summary>One &lt;col&gt; span to write.</summary>
+internal sealed class ColumnSpec
+{
+    public ColumnSpec(int min, int max, double width) { Min = min; Max = max; Width = width; }
+    public int Min { get; }
+    public int Max { get; }
+    public double Width { get; }
+    public bool Hidden { get; init; }
+    public int OutlineLevel { get; init; }
+    public bool Collapsed { get; init; }
+    public bool BestFit { get; init; }
+    public CellStyle? Style { get; init; }
 }
 
 /// <summary>
@@ -625,8 +779,8 @@ public readonly struct ColumnIndexer
 
 /// <summary>
 /// Per-column settings accessor. Class (not struct) so property setters work via the indexer.
-/// <see cref="Width"/> is settable; the other properties report what a loaded file stores for
-/// the &lt;col&gt; span covering this column and are read-only in this release.
+/// Properties report what a loaded file stores for the &lt;col&gt; span covering this column;
+/// since 1.6.0 width, hidden, outline level, collapsed, best-fit and style are settable and saved.
 /// </summary>
 public sealed class Column
 {
@@ -657,23 +811,45 @@ public sealed class Column
     /// <summary>True if the width is user-set: set through <see cref="Width"/>, or customWidth in the file.</summary>
     public bool CustomWidth => _sheet.HasColumnWidthOverride(_column) || (Range?.CustomWidth ?? false);
 
-    /// <summary>True if the file marks the width as best-fit (auto-fit).</summary>
-    public bool BestFit => Range?.BestFit ?? false;
+    private ColumnOverride? Override => _sheet.GetColumnOverride(_column);
 
-    /// <summary>True if the column is hidden.</summary>
-    public bool Hidden => Range?.Hidden ?? false;
+    /// <summary>True if the width is marked best-fit (auto-fit). Settable.</summary>
+    public bool BestFit
+    {
+        get => Override?.BestFit ?? Range?.BestFit ?? false;
+        set => _sheet.EditColumn(_column).BestFit = value;
+    }
+
+    /// <summary>True if the column is hidden. Settable.</summary>
+    public bool Hidden
+    {
+        get => Override?.Hidden ?? Range?.Hidden ?? false;
+        set => _sheet.EditColumn(_column).Hidden = value;
+    }
 
     /// <summary>True if phonetic (furigana) information is shown for the column.</summary>
     public bool Phonetic => Range?.Phonetic ?? false;
 
-    /// <summary>Outline (grouping) level, 0..7. 0 = not grouped.</summary>
-    public int OutlineLevel => Range?.OutlineLevel ?? 0;
+    /// <summary>Outline (grouping) level, 0..7. 0 = not grouped. Settable.</summary>
+    public int OutlineLevel
+    {
+        get => Override?.OutlineLevel ?? Range?.OutlineLevel ?? 0;
+        set
+        {
+            if (value is < 0 or > 7) throw new ArgumentOutOfRangeException(nameof(value), value, "Outline levels are 0 to 7.");
+            _sheet.EditColumn(_column).OutlineLevel = value;
+        }
+    }
 
-    /// <summary>True if the outline group this column belongs to is collapsed.</summary>
-    public bool Collapsed => Range?.Collapsed ?? false;
+    /// <summary>True if the outline group this column belongs to is collapsed. Settable.</summary>
+    public bool Collapsed
+    {
+        get => Override?.Collapsed ?? Range?.Collapsed ?? false;
+        set => _sheet.EditColumn(_column).Collapsed = value;
+    }
 
-    /// <summary>Default cell-format (xf) index for the column's empty cells, or -1 when none.</summary>
-    public int StyleIndex => Range?.StyleIndex ?? -1;
+    /// <summary>Default cell-format (xf) index for the column's empty cells as loaded, or -1 when none (or once <see cref="Style"/> is set in code).</summary>
+    public int StyleIndex => Override is { StyleSet: true } ? -1 : Range?.StyleIndex ?? -1;
 
     /// <summary>
     /// Sizes this column to its content when the workbook is saved. A width set through
@@ -690,10 +866,18 @@ public sealed class Column
     public bool IsAutoFit => _sheet.IsAutoFitColumn(_column);
 
     /// <summary>
-    /// The resolved default style for the column's empty cells (from <see cref="StyleIndex"/>),
-    /// or null when the column has none.
+    /// The default style for the column's empty cells (resolved from <see cref="StyleIndex"/>
+    /// for a loaded file), or null when the column has none. Settable; null removes it.
     /// </summary>
-    public CellStyle? Style => StyleIndex < 0 ? null : _sheet.StyleTable.ResolveCellFormat(StyleIndex);
+    public CellStyle? Style
+    {
+        get
+        {
+            if (Override is { StyleSet: true } o) return o.Style;
+            return StyleIndex < 0 ? null : _sheet.StyleTable.ResolveCellFormat(StyleIndex);
+        }
+        set { var o = _sheet.EditColumn(_column); o.Style = value; o.StyleSet = true; }
+    }
 }
 
 /// <summary>

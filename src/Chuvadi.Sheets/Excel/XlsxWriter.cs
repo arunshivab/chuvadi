@@ -171,6 +171,12 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     /// <summary>Number of sheets added so far.</summary>
     public int SheetCount => _sheets.Count;
 
+    /// <summary>
+    /// 0-based index of the sheet Excel opens on (&lt;workbookView activeTab&gt;). Default 0. The
+    /// active sheet must be visible; save throws otherwise, or when every sheet is hidden.
+    /// </summary>
+    public int ActiveSheetIndex { get; set; }
+
     private Dictionary<string, string>? _definedNames;
     private readonly List<(string Name, string Formula, string? Scope, bool Hidden, string? Comment)> _scopedNames = new();
 
@@ -302,6 +308,12 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         EnsureNotSaved();
         if (_sheets.Count == 0)
             throw new InvalidOperationException("Cannot save a workbook with zero sheets.");
+        if (ActiveSheetIndex < 0 || ActiveSheetIndex >= _sheets.Count)
+            throw new InvalidOperationException($"ActiveSheetIndex {ActiveSheetIndex} is outside the {_sheets.Count} sheet(s).");
+        if (_sheets.TrueForAll(sh => sh.Visibility != SheetVisibility.Visible))
+            throw new InvalidOperationException("At least one sheet must be visible.");
+        if (_sheets[ActiveSheetIndex].Visibility != SheetVisibility.Visible)
+            throw new InvalidOperationException($"The active sheet '{_sheets[ActiveSheetIndex].Name}' is hidden; make it visible or choose another ActiveSheetIndex.");
         foreach (var sheet in _sheets) sheet.FinalizeSheet();
     }
 
@@ -332,24 +344,14 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
                 bufferSize: 64 * 1024,
                 options: FileOptions.SequentialScan | (useAsyncCopy ? FileOptions.Asynchronous : FileOptions.None)))
             {
-                // Insertions computed at finalization go into the prologue (which has no string
-                // placeholders): <sheetPr> right after the <worksheet> start tag, and, for
-                // auto-fit sheets, <cols> before <sheetData>. Then the normal copy continues.
-                long copied = 0;
-                if (sheet.SheetPrXml is { } sheetPr && sheet.PrologueInsertOffset >= 0)
+                // The prologue (sheetPr, sheetViews, sheetFormatPr, cols), built at finalization,
+                // goes right after the <worksheet> start tag; it has no string placeholders.
+                // Then the normal copy continues.
+                if (sheet.PrologueXml is { Length: > 0 } prologue && sheet.PrologueInsertOffset >= 0)
                 {
-                    CopyExactly(src, dest, sheet.PrologueInsertOffset - copied);
-                    copied = sheet.PrologueInsertOffset;
-                    if (useAsyncCopy) await dest.WriteAsync(sheetPr, cancellation).ConfigureAwait(false);
-                    else dest.Write(sheetPr, 0, sheetPr.Length);
-                }
-                if (sheet.ColsInsertOffset >= 0)
-                {
-                    CopyExactly(src, dest, sheet.ColsInsertOffset - copied);
-                    copied = sheet.ColsInsertOffset;
-                    var cols = sheet.ColsXml ?? Array.Empty<byte>();
-                    if (useAsyncCopy) await dest.WriteAsync(cols, cancellation).ConfigureAwait(false);
-                    else dest.Write(cols, 0, cols.Length);
+                    CopyExactly(src, dest, sheet.PrologueInsertOffset);
+                    if (useAsyncCopy) await dest.WriteAsync(prologue, cancellation).ConfigureAwait(false);
+                    else dest.Write(prologue, 0, prologue.Length);
                 }
 
                 if (_options.UseInlineStrings)
@@ -480,6 +482,16 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
             w.WriteEndElement();
         }
 
+        // bookViews: only when the active tab is not the first sheet.
+        if (ActiveSheetIndex > 0)
+        {
+            w.WriteStartElement("bookViews", SsNs);
+            w.WriteStartElement("workbookView", SsNs);
+            w.WriteAttributeString("activeTab", ActiveSheetIndex.ToString(CultureInfo.InvariantCulture));
+            w.WriteEndElement();
+            w.WriteEndElement();
+        }
+
         w.WriteStartElement("sheets", SsNs);
         for (int i = 0; i < _sheets.Count; i++)
         {
@@ -487,6 +499,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
             w.WriteStartElement("sheet", SsNs);
             w.WriteAttributeString("name", sheet.Name);
             w.WriteAttributeString("sheetId", (i + 1).ToString(CultureInfo.InvariantCulture));
+            if (sheet.StateAttribute is string state) w.WriteAttributeString("state", state);
             w.WriteAttributeString("id", RelNs, $"rId{i + 1}");
             w.WriteEndElement();
         }

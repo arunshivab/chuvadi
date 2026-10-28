@@ -75,6 +75,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void FormulaPrint() => FormulaPrintTest.Run(_dir);
+
+    [Fact]
+    public void LayoutFidelity() => LayoutFidelityTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>
