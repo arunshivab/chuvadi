@@ -1,5 +1,21 @@
 # Chuvadi.Docs — Changelog
 
+## Unreleased
+
+### Hardening for untrusted input
+
+- **Resource limits** on `DocxReaderOptions`, applied by `DocxReader.Open`, `Document.Load` and `DocxTemplate.Fill`: `MaxEntries` (10,000), `MaxTotalUncompressedBytes` (1 GiB), `MaxCompressionRatio` (1,000:1 above `CompressionRatioThresholdBytes`, 1 MiB), `MaxXmlDepth` (256) and `MaxSpinCount` (500,000). Package limits are checked from the zip central directory before any part is inflated; the declared sizes are a hard ceiling because the runtime never inflates an entry past them. The spin count is read from EncryptionInfo before key derivation starts. Every limit is nullable; `DocxReaderOptions.CreateUnrestricted()` disables them all.
+- **`DocxSecurityLimitException`** (derives from `DocxFormatException`) reports `Limit`, `Actual`, `Allowed` and `PartName`. `DocxFormatException` is no longer sealed.
+- **Active-content detection** (detect only, never execute or fetch): `DocxReader.HasMacros`, `ContainsVbaProject`, `IsMacroEnabledPackage`, `MainPartContentType`, and `GetActiveContent()` returning `DocxActiveContent` — ActiveX controls, embedded OLE objects, altChunks, DDE/DDEAUTO fields (including instructions split across runs), remote attached templates, other fetch-on-render external resources, and every external reference verbatim.
+- **Cancellation**: `CancellationToken` overloads on `DocxReader.Open` (path and stream), `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent`, and new `Document.Load(path|stream, password, options, cancellationToken)` overloads. Checked on every XML node and every decompression buffer fill; cancellation latency measured at under a millisecond.
+- `MaxPackageBytes` (1 GiB) bounds the input file/stream itself before it is buffered or decrypted.
+- **Behaviour change:** a `MaxPartBytes` breach now throws `DocxSecurityLimitException` (`Limit = PartBytes`) instead of `InvalidDataException`, from every reader path, and also caps embedded media read by `Images()`; `Document.Load` no longer swallows it while collecting images.
+- `DocxTemplate.Fill` gains an overload taking `DocxReaderOptions` and a `CancellationToken`; the existing overloads apply the default limits. A cancelled fill writes no output.
+- `DocxReader.Open(stream)` takes ownership of the stream on every path (disposed with the reader, or when opening fails), accepts non-seekable streams (buffered, bounded), and opening a file path that turns out to be encrypted no longer leaks the file handle.
+- Fix (pre-existing): an empty `<wp:inline/>`/`<wp:anchor/>` made `Images()` and `Document.Load` loop forever.
+- DDE detection scans every WordprocessingML part (comments, glossary…), and a linked (external) OLE object is reported as an external resource, not an embedded object.
+- README: fixed an image example that called the internal `AddBlock`.
+
 ## 1.1.0 (2026-06-12)
 
 Image support — read, write, and templates.

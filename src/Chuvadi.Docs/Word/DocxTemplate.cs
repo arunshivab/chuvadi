@@ -86,18 +86,45 @@ public static class DocxTemplate
         IReadOnlyDictionary<string, ImageSpec>? imageValues,
         string? password = null,
         EncryptionOptions? outputEncryption = null)
+        => Fill(inputPath, outputPath, textValues, imageValues, password, outputEncryption,
+            readOptions: null, System.Threading.CancellationToken.None);
+
+    /// <summary>
+    /// Fills a template with explicit resource limits for reading the template (see
+    /// <see cref="DocxReaderOptions"/>; null = defaults) and cancellation. Use
+    /// <see cref="DocxReaderOptions.CreateUnrestricted"/> for trusted templates that exceed the
+    /// defaults (e.g. very deep nesting). Limit breaches throw <see cref="DocxSecurityLimitException"/>;
+    /// cancellation throws <see cref="OperationCanceledException"/> and writes no output.
+    /// </summary>
+    public static void Fill(
+        string inputPath,
+        string outputPath,
+        IReadOnlyDictionary<string, string>? textValues,
+        IReadOnlyDictionary<string, ImageSpec>? imageValues,
+        string? password,
+        EncryptionOptions? outputEncryption,
+        DocxReaderOptions? readOptions,
+        System.Threading.CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(inputPath)) throw new ArgumentException("Input path required.", nameof(inputPath));
         if (string.IsNullOrEmpty(outputPath)) throw new ArgumentException("Output path required.", nameof(outputPath));
         textValues ??= new Dictionary<string, string>();
         imageValues ??= new Dictionary<string, ImageSpec>();
 
+        // Templates get the same resource limits as DocxReader (zip bomb, nesting depth, spin
+        // count, input size) — a template can arrive from an upload or a database too.
+        var limits = readOptions ?? new DocxReaderOptions();
+        var ct = cancellationToken;
+        ct.ThrowIfCancellationRequested();
+
         using var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        PackageGuard.EnsureSeekable(input, limits, ct, out _);
 
         // Obtain the plaintext package bytes (decrypting when needed).
         byte[] packageBytes;
         if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(input))
         {
+            PackageGuard.CheckSpinCount(input, limits);
             try
             {
                 packageBytes = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(input, password);
@@ -109,17 +136,20 @@ public static class DocxTemplate
         }
         else
         {
-            using var ms = new MemoryStream();
-            input.CopyTo(ms);
+            using var ms = PackageGuard.CopyBounded(input, limits, ct);
             packageBytes = ms.ToArray();
         }
+
+        using (var scan = new MemoryStream(packageBytes, writable: false))
+            PackageGuard.Scan(scan, limits, ct);
+        var fillLimits = new FillLimits(limits, ct);
 
         // Transform into a new package in memory.
         byte[] filled;
         using (var inPkg = new MemoryStream(packageBytes, writable: false))
         using (var outPkg = new MemoryStream())
         {
-            FillPackage(inPkg, outPkg, textValues, imageValues);
+            FillPackage(inPkg, outPkg, textValues, imageValues, fillLimits);
             filled = outPkg.ToArray();
         }
 
@@ -158,10 +188,14 @@ public static class DocxTemplate
         public required int DrawingId { get; init; }
     }
 
+    /// <summary>Read limits and cancellation for one Fill call, threaded to every part read.</summary>
+    private sealed record FillLimits(DocxReaderOptions Options, System.Threading.CancellationToken Ct);
+
     private static void FillPackage(
         Stream packageIn, Stream packageOut,
         IReadOnlyDictionary<string, string> textValues,
-        IReadOnlyDictionary<string, ImageSpec> imageValues)
+        IReadOnlyDictionary<string, ImageSpec> imageValues,
+        FillLimits lim)
     {
         // ---- PASS 1: read text-bearing parts + their .rels, compute all edits ----
 
@@ -191,9 +225,10 @@ public static class DocxTemplate
             if (!IsTextBearingPart(entry.FullName)) continue;
 
             var relsPath = RelsPathFor(entry.FullName);
-            var relTargets = ReadRelationshipTargets(zipIn, relsPath); // relId -> target media path (full)
+            lim.Ct.ThrowIfCancellationRequested();
+            var relTargets = ReadRelationshipTargets(zipIn, relsPath, lim); // relId -> target media path (full)
 
-            var xml = LoadXml(entry);
+            var xml = LoadXml(entry, lim);
 
             // Text replacement (existing behaviour).
             ReplaceText(xml, textValues);
@@ -233,6 +268,7 @@ public static class DocxTemplate
 
         foreach (var entry in zipIn.Entries)
         {
+            lim.Ct.ThrowIfCancellationRequested();
             var name = entry.FullName;
 
             // Replaced media bytes (alt-text path).
@@ -253,7 +289,7 @@ public static class DocxTemplate
             var ownerPart = OwnerPartForRels(name);
             if (ownerPart is not null && partInsertions.TryGetValue(ownerPart, out var inserts))
             {
-                var injected = InjectImageRelationships(entry, inserts);
+                var injected = InjectImageRelationships(entry, inserts, lim);
                 WriteEntry(zipOut, name, injected);
                 relsHandled.Add(ownerPart);
                 continue;
@@ -262,7 +298,7 @@ public static class DocxTemplate
             // [Content_Types].xml: ensure image extensions are declared.
             if (name == "[Content_Types].xml")
             {
-                var ct = EnsureContentTypeDefaults(entry, neededExtensions);
+                var ct = EnsureContentTypeDefaults(entry, neededExtensions, lim);
                 WriteEntry(zipOut, name, ct);
                 continue;
             }
@@ -575,12 +611,12 @@ public static class DocxTemplate
 
     // ---- Relationship + content-type injection ---------------------------------------
 
-    private static Dictionary<string, string> ReadRelationshipTargets(ZipArchive zip, string relsPath)
+    private static Dictionary<string, string> ReadRelationshipTargets(ZipArchive zip, string relsPath, FillLimits lim)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         var entry = zip.GetEntry(relsPath);
         if (entry is null) return map;
-        var xml = LoadXml(entry);
+        var xml = LoadXml(entry, lim);
         var ns = new XmlNamespaceManager(xml.NameTable);
         ns.AddNamespace("r", RelsNs);
         var rels = xml.SelectNodes("//r:Relationship", ns);
@@ -601,9 +637,9 @@ public static class DocxTemplate
         return map;
     }
 
-    private static byte[] InjectImageRelationships(ZipArchiveEntry relsEntry, List<ImageInsertion> inserts)
+    private static byte[] InjectImageRelationships(ZipArchiveEntry relsEntry, List<ImageInsertion> inserts, FillLimits lim)
     {
-        var xml = LoadXml(relsEntry);
+        var xml = LoadXml(relsEntry, lim);
         var root = xml.DocumentElement!;
         foreach (var ins in inserts)
         {
@@ -632,9 +668,9 @@ public static class DocxTemplate
         return SaveXml(xml);
     }
 
-    private static byte[] EnsureContentTypeDefaults(ZipArchiveEntry ctEntry, HashSet<string> extensions)
+    private static byte[] EnsureContentTypeDefaults(ZipArchiveEntry ctEntry, HashSet<string> extensions, FillLimits lim)
     {
-        var xml = LoadXml(ctEntry);
+        var xml = LoadXml(ctEntry, lim);
         var root = xml.DocumentElement!;
         var ns = new XmlNamespaceManager(xml.NameTable);
         ns.AddNamespace("ct", CtNs);
@@ -693,11 +729,13 @@ public static class DocxTemplate
         return dir + file;
     }
 
-    private static XmlDocument LoadXml(ZipArchiveEntry entry)
+    private static XmlDocument LoadXml(ZipArchiveEntry entry, FillLimits lim)
     {
         var xml = new XmlDocument { PreserveWhitespace = true };
-        using var s = entry.Open();
-        using var reader = XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
+        using var s = GuardedPartStream.Wrap(entry.Open(), lim.Options.MaxPartBytes, lim.Ct, entry.FullName);
+        // Whitespace and comments are preserved: rewritten parts must keep everything else intact.
+        using var reader = GuardedXmlReader.Create(s, lim.Options.MaxXmlDepth, lim.Ct, entry.FullName,
+            ignoreWhitespace: false, ignoreComments: false);
         xml.Load(reader);
         return xml;
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Xml;
 using Chuvadi.Docs.Internal;
 using Chuvadi.Internal;
@@ -19,16 +20,19 @@ public sealed partial class DocxReader
     /// <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/>) — with bytes, display size,
     /// placement, and table location. Returned in document order per part.
     /// </summary>
-    public IReadOnlyList<ImageInfo> Images()
+    public IReadOnlyList<ImageInfo> Images() => Images(CancellationToken.None);
+
+    /// <summary>As <see cref="Images()"/>, observing <paramref name="cancellationToken"/>.</summary>
+    public IReadOnlyList<ImageInfo> Images(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
         var result = new List<ImageInfo>();
 
-        CollectImagesFromPart(_documentUri, ImageHost.Body, result);
+        CollectImagesFromPart(_documentUri, ImageHost.Body, result, cancellationToken);
         if (_options.IncludeHeadersAndFooters)
         {
-            foreach (var uri in _headerUris) CollectImagesFromPart(uri, ImageHost.Header, result);
-            foreach (var uri in _footerUris) CollectImagesFromPart(uri, ImageHost.Footer, result);
+            foreach (var uri in _headerUris) CollectImagesFromPart(uri, ImageHost.Header, result, cancellationToken);
+            foreach (var uri in _footerUris) CollectImagesFromPart(uri, ImageHost.Footer, result, cancellationToken);
         }
         return result;
     }
@@ -38,15 +42,19 @@ public sealed partial class DocxReader
     /// image's package file name (image1.png, image2.jpeg, ...). Returns the full paths
     /// written, in order. Duplicate file names are de-collided with a numeric suffix.
     /// </summary>
-    public IReadOnlyList<string> SaveImages(string folderPath)
+    public IReadOnlyList<string> SaveImages(string folderPath) => SaveImages(folderPath, CancellationToken.None);
+
+    /// <summary>As <see cref="SaveImages(string)"/>, observing <paramref name="cancellationToken"/>.</summary>
+    public IReadOnlyList<string> SaveImages(string folderPath, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(folderPath)) throw new ArgumentException("Folder path required.", nameof(folderPath));
         Directory.CreateDirectory(folderPath);
 
         var written = new List<string>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var img in Images())
+        foreach (var img in Images(cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var name = img.FileName;
             var target = Path.Combine(folderPath, name);
             int n = 1;
@@ -66,7 +74,7 @@ public sealed partial class DocxReader
 
     // ---- Internal: scan one part for drawings ----------------------------------------
 
-    private void CollectImagesFromPart(string partUri, ImageHost host, List<ImageInfo> sink)
+    private void CollectImagesFromPart(string partUri, ImageHost host, List<ImageInfo> sink, CancellationToken ct)
     {
         // Resolve this part's image relationships: relId -> media part uri.
         var relToMedia = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -77,16 +85,10 @@ public sealed partial class DocxReader
         }
         if (relToMedia.Count == 0) return;
 
-        Stream? s = TryOpenPart(partUri);
+        Stream? s = TryOpenPart(partUri, ct);
         if (s is null) return;
         using var _ = s;
-        using var r = XmlReader.Create(s, new XmlReaderSettings
-        {
-            IgnoreWhitespace = true,
-            IgnoreComments = true,
-            CloseInput = false,
-            DtdProcessing = DtdProcessing.Prohibit,
-        });
+        using var r = CreateXml(s, partUri, ct);
 
         // Track table position as we scan, so an image inside a cell records its location.
         int tableIndex = -1;
@@ -129,12 +131,16 @@ public sealed partial class DocxReader
             else if (r.NodeType == XmlNodeType.Element && r.NamespaceURI == DocumentSerializer.WP
                      && (r.LocalName == "inline" || r.LocalName == "anchor"))
             {
-                var info = ParseDrawing(r, relToMedia, host,
+                // An empty <wp:inline/> leaves the cursor on itself after ReadSubtree; step past
+                // it explicitly or the loop would revisit it forever.
+                bool emptyDrawing = r.IsEmptyElement;
+                var info = ParseDrawing(r, relToMedia, host, ct,
                     tblDepth >= 1 ? tableIndex : (int?)null,
                     tblDepth >= 1 ? rowIndex : (int?)null,
                     tblDepth >= 1 ? colIndex : (int?)null,
                     paraText.Length > 0 ? paraText.ToString() : lastParagraphText);
                 if (info is not null) sink.Add(info);
+                if (emptyDrawing && !r.Read()) break;
                 continue; // ParseDrawing consumed the subtree
             }
             if (!r.Read()) break;
@@ -142,7 +148,7 @@ public sealed partial class DocxReader
     }
 
     /// <summary>Parses a wp:inline or wp:anchor element into an <see cref="ImageInfo"/>.</summary>
-    private ImageInfo? ParseDrawing(XmlReader r, Dictionary<string, string> relToMedia, ImageHost host,
+    private ImageInfo? ParseDrawing(XmlReader r, Dictionary<string, string> relToMedia, ImageHost host, CancellationToken ct,
         int? tableIndex, int? rowIndex, int? colIndex, string? anchorText)
     {
         bool floating = r.LocalName == "anchor";
@@ -215,16 +221,17 @@ public sealed partial class DocxReader
         if (embedRelId is null || !relToMedia.TryGetValue(embedRelId, out var mediaUri))
             return null;
 
+        // Media bytes go through the same per-part cap and cancellation check as XML parts.
+        // A missing or unreadable media part skips the image; limit breaches and
+        // cancellation propagate.
         byte[] bytes;
-        try
+        Stream? ps = TryOpenPart(mediaUri, ct);
+        if (ps is null) return null;
+        using (ps)
         {
             using var ms = new MemoryStream();
-            using (var ps = _package.OpenPart(mediaUri)) ps.CopyTo(ms);
+            ps.CopyTo(ms);
             bytes = ms.ToArray();
-        }
-        catch
-        {
-            return null;
         }
 
         var contentType = ImageMetadata.DetectContentType(bytes)
