@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.7.0 (unreleased)
+## 1.7.0 (2026-10-29)
 
 The Layout importer's requests from running it over the Apache POI corpus: rich text,
 hyperlinks, the fill position, files from other writers, Strict OOXML, cells outside the grid,
@@ -116,7 +116,7 @@ new features writes the same bytes as 1.6.1.
   comments, 52425, 57828, WithVariousData, chart_sheet and others. LibreOffice reads the
   saved rich-text runs, links and comments.
 
-## 1.6.1 (unreleased)
+## 1.6.1 (not released separately; included in 1.7.0)
 
 Chart metadata on sheets, plus two small helpers for the Layout importer. Read-side and
 additive; writer output is unchanged.
@@ -164,7 +164,7 @@ additive; writer output is unchanged.
 - **Cross-check.** Charts written by openpyxl, and the same file re-saved by LibreOffice, read
   correctly.
 
-## 1.6.0 (unreleased)
+## 1.6.0 (not released separately; included in 1.7.0)
 
 Sheet fidelity for the Layout engine: the rest of a loaded sheet round-trips (rows, columns,
 views, panes, tab colour, visibility), conditional formatting and data validation are read,
@@ -326,7 +326,7 @@ the new options writes the same bytes as 1.5.0.
   - streaming `ReadLayout` extras;
   - drawings in the model and streaming.
 
-## 1.5.0 (unreleased)
+## 1.5.0 (not released separately; included in 1.7.0)
 
 Formulas with cached results on read and write, page setup on the streaming reader and on
 write, defined names on read and write, for the Layout engine. Additive and
@@ -466,7 +466,7 @@ option writes the same bytes as 1.4.0, except where the schema-order fix applies
     print area, titles, header, margins).
   - Streaming read speed is unchanged (200,000 rows × 10 columns).
 
-## 1.4.0 (unreleased)
+## 1.4.0 (not released separately; included in 1.7.0)
 
 Read-side additions for Anjal Mail and the Layout engine: display text, password on the
 streaming reader, hostile-input limits and cancellation, macro detection, full page setup.
@@ -566,7 +566,7 @@ Additive and source-compatible; writer output is unchanged.
 - **Cross-checks.** Page setup and formula cached values were also checked on
   LibreOffice-saved files.
 
-## 1.3.0 (unreleased)
+## 1.3.0 (not released separately; included in 1.7.0)
 
 Column auto-fit and a public number-format renderer. All additions are source- and
 binary-compatible; output of code that does not use auto-fit is byte-identical to 1.2.0.
