@@ -101,8 +101,31 @@ public sealed class StyleDefinition
     /// <summary>A style's numbering reference (w:pPr/w:numPr) carried verbatim from a loaded file until lists are modelled.</summary>
     internal string? RawNumberingXml { get; set; }
 
-    /// <summary>Table-style elements (tblPr, trPr, tcPr, tblStylePr) carried verbatim from a loaded file until table styles are modelled.</summary>
-    internal List<string> RawTableXml { get; } = new();
+    // ---- Table styles ---------------------------------------------------------------------
+
+    /// <summary>Table-level formatting of a table style (w:tblPr): borders, cell margins, alignment, indent, banding sizes…</summary>
+    public TableFormat TableFormat { get; } = new();
+
+    /// <summary>Row formatting of a table style (w:trPr).</summary>
+    public TableRowFormat RowFormat { get; } = new();
+
+    /// <summary>Cell formatting of a table style (w:tcPr): shading, borders, margins, vertical alignment…</summary>
+    public TableCellFormat CellFormat { get; } = new();
+
+    private readonly SortedDictionary<TableRegion, TableConditionalFormat> _conditional = new();
+
+    /// <summary>Region-specific formatting of a table style (w:tblStylePr), applied in <see cref="TableRegion"/> order.</summary>
+    public IReadOnlyDictionary<TableRegion, TableConditionalFormat> ConditionalFormats => _conditional;
+
+    /// <summary>The conditional format for <paramref name="region"/>, created when absent.</summary>
+    public TableConditionalFormat Conditional(TableRegion region)
+    {
+        if (!_conditional.TryGetValue(region, out var f)) _conditional[region] = f = new TableConditionalFormat();
+        return f;
+    }
+
+    /// <summary>Removes a region's conditional format.</summary>
+    public bool RemoveConditional(TableRegion region) => _conditional.Remove(region);
 
     /// <summary>A deep copy under a new id.</summary>
     public StyleDefinition CloneAs(string newStyleId)
@@ -116,7 +139,18 @@ public sealed class StyleDefinition
         };
         c.ParagraphFormat.ApplyFrom(ParagraphFormat);
         c.RawNumberingXml = RawNumberingXml;
-        c.RawTableXml.AddRange(RawTableXml);
+        Internal.TableXml.CopyTableFormat(TableFormat, c.TableFormat);
+        Internal.TableXml.CopyRowFormat(RowFormat, c.RowFormat);
+        c.CellFormat.ApplyFrom(CellFormat);
+        foreach (var (region, cf) in _conditional)
+        {
+            var d = c.Conditional(region);
+            d.ParagraphFormat.ApplyFrom(cf.ParagraphFormat);
+            d.RunFormat = cf.RunFormat;
+            Internal.TableXml.CopyTableFormat(cf.TableFormat, d.TableFormat);
+            Internal.TableXml.CopyRowFormat(cf.RowFormat, d.RowFormat);
+            d.CellFormat.ApplyFrom(cf.CellFormat);
+        }
         return c;
     }
 
@@ -187,6 +221,13 @@ public sealed class StyleCollection : IEnumerable<StyleDefinition>
         => Add(new StyleDefinition(styleId, StyleType.Paragraph)
         {
             Name = name ?? styleId, BasedOn = basedOn, Next = styleId, IsCustom = true, QuickFormat = true,
+        });
+
+    /// <summary>Adds a custom table style (based on <paramref name="basedOn"/>, none by default). Configure <see cref="StyleDefinition.TableFormat"/>, <see cref="StyleDefinition.CellFormat"/> and <see cref="StyleDefinition.Conditional"/>.</summary>
+    public StyleDefinition AddTableStyle(string styleId, string? name = null, string? basedOn = null)
+        => Add(new StyleDefinition(styleId, StyleType.Table)
+        {
+            Name = name ?? styleId, BasedOn = basedOn, IsCustom = true, QuickFormat = true,
         });
 
     /// <summary>Adds a custom character style (based on Default Paragraph Font semantics: no base).</summary>

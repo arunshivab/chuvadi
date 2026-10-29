@@ -74,6 +74,52 @@ public sealed class Document
     }
 
     /// <summary>
+    /// As <see cref="GetEffectiveRunFormat(Paragraph, Run)"/> for a run inside a table cell:
+    /// the table style's run formatting — whole table, then the conditional regions that apply
+    /// to <paramref name="cell"/> (header row, banding, first column…) — forms the lowest style
+    /// level, below the paragraph and character styles, and takes part in the toggle rule.
+    /// </summary>
+    public TextFormat GetEffectiveRunFormat(Paragraph paragraph, Run run, TableCellRef cell)
+    {
+        if (paragraph is null) throw new ArgumentNullException(nameof(paragraph));
+        if (run is null) throw new ArgumentNullException(nameof(run));
+        if (cell.Table is null) throw new ArgumentNullException(nameof(cell));
+        return FormatResolver.ResolveRun(this, paragraph, run, cell);
+    }
+
+    /// <summary>As <see cref="GetEffectiveParagraphFormat(Paragraph)"/> for a paragraph inside a table cell (table style level included).</summary>
+    public ParagraphFormat GetEffectiveParagraphFormat(Paragraph paragraph, TableCellRef cell)
+    {
+        if (paragraph is null) throw new ArgumentNullException(nameof(paragraph));
+        if (cell.Table is null) throw new ArgumentNullException(nameof(cell));
+        return FormatResolver.ResolveParagraph(this, paragraph, cell);
+    }
+
+    /// <summary>
+    /// The EFFECTIVE table format: the table style chain, then the table's direct formatting
+    /// (borders and default cell margins merge per side). The legacy default grid
+    /// (<see cref="DocTable.Borders"/>) counts as direct borders.
+    /// </summary>
+    public TableFormat GetEffectiveTableFormat(DocTable table)
+    {
+        if (table is null) throw new ArgumentNullException(nameof(table));
+        return FormatResolver.ResolveTable(this, table);
+    }
+
+    /// <summary>
+    /// The EFFECTIVE formatting of one cell — shading, margins, vertical alignment, text
+    /// direction — with all four edges resolved: table borders mapped onto the cell (outer edge
+    /// or inside line), then the table style's cell format and each applicable conditional
+    /// region (header row, last row, banding, first/last column, corner cells, in Word's order),
+    /// then the cell's direct formatting. A null edge means no border.
+    /// </summary>
+    public TableCellFormat GetEffectiveCellFormat(TableCellRef cell)
+    {
+        if (cell.Table is null) throw new ArgumentNullException(nameof(cell));
+        return FormatResolver.ResolveCell(this, cell);
+    }
+
+    /// <summary>
     /// The EFFECTIVE paragraph formatting: document defaults, then the paragraph style chain,
     /// then the paragraph's direct formatting. Tab stops accumulate (a Clear stop removes an
     /// inherited one) and borders merge per side. Returns a new, independent object.

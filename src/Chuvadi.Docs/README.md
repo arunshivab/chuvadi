@@ -129,6 +129,48 @@ foreach (var p in loaded.Blocks.OfType<Paragraph>())
 }
 ```
 
+## Tables
+
+```csharp
+var t = doc.AddTable(4);
+t.ColumnWidthsPt = new double[] { 150, 70, 70, 110 };
+t.Format.Borders = TableBorders.Horizontal(BorderSpec.Single(0.75, "7F7F7F"));
+t.Format.CellMargins = new CellMargins { LeftPt = 5.4, RightPt = 5.4 };
+t.Format.Caption = "Lab results";                       // read by screen readers
+
+var head = t.HeaderRow("Test", "Result", "Unit", "Reference");   // repeats on every page
+head.CantSplit = true;
+
+var hb = t.AddRow("Haemoglobin", "13.2", "g/dL", "13.0–17.0");
+hb.Cell(0).VerticalMerge = VerticalMerge.Restart;        // merge down
+t.AddRow("", "4.8", "×10⁶/µL", "4.5–5.5").Cell(0).VerticalMerge = VerticalMerge.Continue;
+hb.Cell(1).Shading = Shading.Fill("FFC7CE");              // flag an abnormal value
+hb.Cell(2).VerticalAlignment = CellVerticalAlignment.Center;
+
+var notes = t.AddRow();
+notes.Cell(0).SetText("Remarks");
+notes.Cell(0).ColumnSpan = 3;
+var inner = notes.Cell(3).AddTable(2);                   // nested table
+```
+
+Table styles carry conditional formats for the header row, total row, first/last column, banding and corner cells:
+
+```csharp
+var st = doc.Styles.AddTableStyle("LabGrid", "Lab Grid");
+st.TableFormat.Borders = TableBorders.Horizontal(BorderSpec.Single(0.5, "BFBFBF"));
+st.Conditional(TableRegion.FirstRow).CellFormat.Shading = Shading.Fill("1F3864");
+st.Conditional(TableRegion.FirstRow).RunFormat = new TextFormat { Bold = true, ColorHex = "FFFFFF" };
+st.Conditional(TableRegion.OddRowBand).CellFormat.Shading = Shading.Fill("DEEAF6");
+t.Format.StyleId = "LabGrid";
+t.Format.Look = TableLook.FirstRow | TableLook.NoVerticalBand;
+
+// Renderers: resolve what Word would draw for a cell, and the text inside it.
+TableCellFormat cell = doc.GetEffectiveCellFormat(new TableCellRef(t, Row: 2, Column: 1));
+TextFormat text = doc.GetEffectiveRunFormat(paragraph, run, new TableCellRef(t, 2, 1));
+```
+
+Regions apply in the order Word uses (whole table, column bands, row bands, first/last row, first/last column, corner cells); with no `TableLook` set anywhere, Word's default look (header row, first column, banded rows) applies. Loaded tables are capped at Word's 63 columns.
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:
@@ -194,7 +236,7 @@ var a = r.GetActiveContent();
 **Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
 
 
-`Document.Load(path)` instead builds an **editable** model — paragraphs with basic run formatting (bold/italic/underline/strikethrough, font, size, color, highlight), styles, alignment, lists, and tables as text — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
+`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
 
 ## Images
 

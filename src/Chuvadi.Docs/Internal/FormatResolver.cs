@@ -26,20 +26,42 @@ internal static class FormatResolver
 {
     private const int MaxChainDepth = 32;
 
-    public static TextFormat ResolveRun(Document doc, Paragraph p, Run r)
+    public static TextFormat ResolveRun(Document doc, Paragraph p, Run r, TableCellRef? cell = null)
     {
         var bag = RunBag.From(doc.Defaults.RunFormat);
+
+        // Table style level (lowest style level, §17.7.2): whole-table run format, then the
+        // conditional regions that apply to the cell, root style first.
+        var tableStyle = new RunBag();
+        if (cell is TableCellRef c)
+        {
+            var chain = Chain(doc, c.Table.Format.StyleId, StyleType.Table);
+            foreach (var s in chain) tableStyle.Overlay(RunBag.From(s.RunFormat));
+            foreach (var region in ApplicableRegions(doc, c))
+                foreach (var s in chain)
+                    if (s.ConditionalFormats.TryGetValue(region, out var cf)) tableStyle.Overlay(RunBag.From(cf.RunFormat));
+        }
+
         var paragraphStyle = ChainRunBag(doc, ParagraphStyleId(doc, p), StyleType.Paragraph);
         var characterStyleId = r.CharacterStyleId ?? (r.HyperlinkUrl is not null ? "Hyperlink" : null);
         var characterStyle = ChainRunBag(doc, characterStyleId, StyleType.Character);
-        bag.Overlay(RunBag.CombineStyleLevels(paragraphStyle, characterStyle));
+        // Toggles XOR across all style levels (table, paragraph, character); others: later wins.
+        bag.Overlay(RunBag.CombineStyleLevels(RunBag.CombineStyleLevels(tableStyle, paragraphStyle), characterStyle));
         bag.Overlay(RunBag.From(r.Format));
         return bag.ToFormat();
     }
 
-    public static ParagraphFormat ResolveParagraph(Document doc, Paragraph p)
+    public static ParagraphFormat ResolveParagraph(Document doc, Paragraph p, TableCellRef? cell = null)
     {
         var levels = new List<ParagraphFormat> { doc.Defaults.ParagraphFormat };
+        if (cell is TableCellRef c)
+        {
+            var chain = Chain(doc, c.Table.Format.StyleId, StyleType.Table);
+            foreach (var s in chain) levels.Add(s.ParagraphFormat);
+            foreach (var region in ApplicableRegions(doc, c))
+                foreach (var s in chain)
+                    if (s.ConditionalFormats.TryGetValue(region, out var cf)) levels.Add(cf.ParagraphFormat);
+        }
         foreach (var s in Chain(doc, ParagraphStyleId(doc, p), StyleType.Paragraph)) levels.Add(s.ParagraphFormat);
         levels.Add(p.Format);
 
@@ -79,6 +101,181 @@ internal static class FormatResolver
         result.Borders = borders;
         return result;
     }
+
+    // ---- Tables ------------------------------------------------------------------------------
+
+    /// <summary>Effective table format: table style chain (root first), then the table's direct format. Borders/margins merge per side.</summary>
+    public static TableFormat ResolveTable(Document doc, DocTable t)
+    {
+        var result = new TableFormat();
+        TableBorders? borders = null;
+        CellMargins? margins = null;
+        void Apply(TableFormat f)
+        {
+            result.Look = f.Look ?? result.Look; result.Width = f.Width ?? result.Width;
+            result.Alignment = f.Alignment ?? result.Alignment; result.IndentPt = f.IndentPt ?? result.IndentPt;
+            result.Layout = f.Layout ?? result.Layout; result.CellSpacingPt = f.CellSpacingPt ?? result.CellSpacingPt;
+            result.Shading = f.Shading ?? result.Shading; result.RightToLeft = f.RightToLeft ?? result.RightToLeft;
+            result.RowBandSize = f.RowBandSize ?? result.RowBandSize; result.ColumnBandSize = f.ColumnBandSize ?? result.ColumnBandSize;
+            result.Caption = f.Caption ?? result.Caption; result.Description = f.Description ?? result.Description;
+            if (f.Borders is { } b) borders = MergeBorders(borders, b);
+            if (f.CellMargins is { } m) margins = MergeMargins(margins, m);
+        }
+        foreach (var s in Chain(doc, t.Format.StyleId, StyleType.Table)) Apply(s.TableFormat);
+        // The legacy default grid (DocTable.Borders, no explicit Format.Borders) is direct formatting too.
+        var direct = t.Format;
+        Apply(direct);
+        if (direct.Borders is null && t.Borders) borders = MergeBorders(borders, TableBorders.Grid(BorderSpec.Single(0.5)));
+        result.StyleId = t.Format.StyleId;
+        result.Borders = borders;
+        result.CellMargins = margins;
+        return result;
+    }
+
+    /// <summary>
+    /// Effective cell format: table-level default margins and outer/inside borders mapped onto
+    /// the cell's four edges, then the table style's cell format, then each applicable
+    /// conditional region (its table borders mapped onto the region, its cell format), then the
+    /// cell's direct formatting. Every edge of the result is resolved (null = no border).
+    /// </summary>
+    public static TableCellFormat ResolveCell(Document doc, TableCellRef c)
+    {
+        Validate(c);
+        var t = c.Table;
+        var cell = t.Rows[c.Row].Cells[c.Column];
+        int span = Math.Clamp(cell.ColumnSpan, 1, t.Columns - c.Column);
+        int lastRow = t.Rows.Count - 1, lastCol = t.Columns - 1;
+
+        var tableFormat = ResolveTable(doc, t);
+        var result = new TableCellFormat { Margins = tableFormat.CellMargins };
+        // One set of edges, overwritten level by level in priority order, so a later level's
+        // table borders beat an earlier level's cell borders and vice versa.
+        var edges = new CellBorders();
+        ApplyRegionBorders(edges, tableFormat.Borders, c.Row, c.Column, span, 0, lastRow, 0, lastCol);
+
+        var chain = Chain(doc, t.Format.StyleId, StyleType.Table);
+        foreach (var s in chain) ApplyCellLevel(result, edges, s.CellFormat);
+        foreach (var region in ApplicableRegions(doc, c))
+        {
+            var (r0, r1, c0, c1) = RegionBounds(region, c, lastRow, lastCol);
+            foreach (var s in chain)
+            {
+                if (!s.ConditionalFormats.TryGetValue(region, out var cf)) continue;
+                ApplyRegionBorders(edges, cf.TableFormat.Borders, c.Row, c.Column, span, r0, r1, c0, c1);
+                if (cf.TableFormat.CellMargins is { } m) result.Margins = MergeMargins(result.Margins, m);
+                // Region-level table shading (tblStylePr/tblPr/shd) shades the region's cells.
+                if (cf.TableFormat.Shading is { } sh) result.Shading = sh;
+                ApplyCellLevel(result, edges, cf.CellFormat);
+            }
+        }
+        ApplyCellLevel(result, edges, TableCellFormat.FromCell(cell));
+
+        result.Borders = new CellBorders
+        {
+            Top = edges.Top, Left = edges.Left, Bottom = edges.Bottom, Right = edges.Right,
+            DiagonalDown = edges.DiagonalDown, DiagonalUp = edges.DiagonalUp,
+        };
+        return result;
+    }
+
+    /// <summary>Applies one level's cell format: its edges overwrite the running edges, everything else merges.</summary>
+    private static void ApplyCellLevel(TableCellFormat result, CellBorders edges, TableCellFormat level)
+    {
+        if (level.Borders is { } b)
+        {
+            edges.Top = b.Top ?? edges.Top; edges.Left = b.Left ?? edges.Left;
+            edges.Bottom = b.Bottom ?? edges.Bottom; edges.Right = b.Right ?? edges.Right;
+            edges.DiagonalDown = b.DiagonalDown ?? edges.DiagonalDown; edges.DiagonalUp = b.DiagonalUp ?? edges.DiagonalUp;
+        }
+        result.ApplyFrom(level);
+    }
+
+    /// <summary>Throws when <paramref name="c"/> does not address a cell of its table.</summary>
+    internal static void Validate(TableCellRef c)
+    {
+        if (c.Table is null) throw new ArgumentException("TableCellRef.Table is null.", nameof(c));
+        if (c.Row < 0 || c.Row >= c.Table.Rows.Count) throw new ArgumentOutOfRangeException(nameof(c), $"Row {c.Row} is outside the table (0..{c.Table.Rows.Count - 1}).");
+        if (c.Column < 0 || c.Column >= c.Table.Columns) throw new ArgumentOutOfRangeException(nameof(c), $"Column {c.Column} is outside the table (0..{c.Table.Columns - 1}).");
+    }
+
+    /// <summary>
+    /// The conditional regions that apply to a cell, in the order ECMA-376 §17.7.6 applies them
+    /// (later wins): whole table, column bands, row bands, first/last row, first/last column,
+    /// then the corner cells. With no tblLook anywhere, Word's default look (0x04A0: header row,
+    /// first column, row banding) applies.
+    /// </summary>
+    internal static List<TableRegion> ApplicableRegions(Document doc, TableCellRef c)
+    {
+        Validate(c);
+        var t = c.Table;
+        var tf = ResolveTable(doc, t);
+        var look = tf.Look ?? TableLook.Default;
+        int rows = t.Rows.Count, cols = t.Columns;
+        bool firstRow = look.HasFlag(TableLook.FirstRow) && c.Row == 0;
+        bool lastRow = look.HasFlag(TableLook.LastRow) && c.Row == rows - 1;
+        bool firstCol = look.HasFlag(TableLook.FirstColumn) && c.Column == 0;
+        bool lastCol = look.HasFlag(TableLook.LastColumn) && c.Column + Math.Max(1, t.Rows[c.Row].Cells[c.Column].ColumnSpan) - 1 >= cols - 1;
+
+        var list = new List<TableRegion> { TableRegion.WholeTable };
+        if (!look.HasFlag(TableLook.NoVerticalBand) && !firstCol && !lastCol)
+        {
+            int size = Math.Max(1, tf.ColumnBandSize ?? 1);
+            int idx = (c.Column - (look.HasFlag(TableLook.FirstColumn) ? 1 : 0)) / size;
+            list.Add(idx % 2 == 0 ? TableRegion.OddColumnBand : TableRegion.EvenColumnBand);
+        }
+        if (!look.HasFlag(TableLook.NoHorizontalBand) && !firstRow && !lastRow)
+        {
+            int size = Math.Max(1, tf.RowBandSize ?? 1);
+            int idx = (c.Row - (look.HasFlag(TableLook.FirstRow) ? 1 : 0)) / size;
+            list.Add(idx % 2 == 0 ? TableRegion.OddRowBand : TableRegion.EvenRowBand);
+        }
+        if (firstRow) list.Add(TableRegion.FirstRow);
+        if (lastRow) list.Add(TableRegion.LastRow);
+        if (firstCol) list.Add(TableRegion.FirstColumn);
+        if (lastCol) list.Add(TableRegion.LastColumn);
+        if (firstRow && firstCol) list.Add(TableRegion.TopLeftCell);
+        if (firstRow && lastCol) list.Add(TableRegion.TopRightCell);
+        if (lastRow && firstCol) list.Add(TableRegion.BottomLeftCell);
+        if (lastRow && lastCol) list.Add(TableRegion.BottomRightCell);
+        return list;
+    }
+
+    /// <summary>Row/column bounds of the region containing the cell, for mapping a region's borders onto its edges.</summary>
+    private static (int R0, int R1, int C0, int C1) RegionBounds(TableRegion region, TableCellRef c, int lastRow, int lastCol) => region switch
+    {
+        TableRegion.WholeTable => (0, lastRow, 0, lastCol),
+        TableRegion.FirstRow or TableRegion.LastRow or TableRegion.OddRowBand or TableRegion.EvenRowBand => (c.Row, c.Row, 0, lastCol),
+        TableRegion.FirstColumn or TableRegion.LastColumn or TableRegion.OddColumnBand or TableRegion.EvenColumnBand => (0, lastRow, c.Column, c.Column),
+        _ => (c.Row, c.Row, c.Column, c.Column), // corner cells
+    };
+
+    /// <summary>Maps a region's table-style borders onto one cell's edges: outer edges on the region boundary, inside lines elsewhere.</summary>
+    private static void ApplyRegionBorders(CellBorders edges, TableBorders? b, int row, int col, int span, int r0, int r1, int c0, int c1)
+    {
+        if (b is null) return;
+        int lastColOfCell = col + span - 1;
+        var top = row <= r0 ? b.Top : b.InsideHorizontal;
+        var bottom = row >= r1 ? b.Bottom : b.InsideHorizontal;
+        var left = col <= c0 ? b.Left : b.InsideVertical;
+        var right = lastColOfCell >= c1 ? b.Right : b.InsideVertical;
+        edges.Top = top ?? edges.Top;
+        edges.Bottom = bottom ?? edges.Bottom;
+        edges.Left = left ?? edges.Left;
+        edges.Right = right ?? edges.Right;
+    }
+
+    private static TableBorders MergeBorders(TableBorders? under, TableBorders over) => new()
+    {
+        Top = over.Top ?? under?.Top, Left = over.Left ?? under?.Left, Bottom = over.Bottom ?? under?.Bottom,
+        Right = over.Right ?? under?.Right, InsideHorizontal = over.InsideHorizontal ?? under?.InsideHorizontal,
+        InsideVertical = over.InsideVertical ?? under?.InsideVertical,
+    };
+
+    private static CellMargins MergeMargins(CellMargins? under, CellMargins over) => new()
+    {
+        TopPt = over.TopPt ?? under?.TopPt, LeftPt = over.LeftPt ?? under?.LeftPt,
+        BottomPt = over.BottomPt ?? under?.BottomPt, RightPt = over.RightPt ?? under?.RightPt,
+    };
 
     /// <summary>The paragraph's style id, falling back to the default paragraph style when it does not exist.</summary>
     private static string? ParagraphStyleId(Document doc, Paragraph p)

@@ -150,7 +150,30 @@ internal static class StylesXml
             x.WriteEndElement();
         }
         if (s.RunFormat is { } rf) RunProperties.Write(x, rf);
-        foreach (var raw in s.RawTableXml) WriteFragment(x, raw);
+        if (s.Type == StyleType.Table)
+        {
+            // CT_Style tail: tblPr, trPr, tcPr, tblStylePr* (in ST_TblStyleOverrideType order).
+            TableXml.WriteStyleTablePr(x, s.TableFormat);
+            TableXml.WriteStyleRowPr(x, s.RowFormat);
+            TableXml.WriteStyleCellPr(x, s.CellFormat);
+            foreach (var (region, _) in RegionTokens)
+            {
+                if (!s.ConditionalFormats.TryGetValue(region, out var cf)) continue;
+                x.WriteStartElement("tblStylePr", W);
+                x.WriteAttributeString("type", W, RegionToken(region));
+                if (!cf.ParagraphFormat.IsDefault)
+                {
+                    x.WriteStartElement("pPr", W);
+                    ParagraphProperties.WriteBody(x, cf.ParagraphFormat);
+                    x.WriteEndElement();
+                }
+                if (cf.RunFormat is { } crf) RunProperties.Write(x, crf);
+                TableXml.WriteStyleTablePr(x, cf.TableFormat);
+                TableXml.WriteStyleRowPr(x, cf.RowFormat);
+                TableXml.WriteStyleCellPr(x, cf.CellFormat);
+                x.WriteEndElement();
+            }
+        }
         x.WriteEndElement();
     }
 
@@ -261,12 +284,20 @@ internal static class StylesXml
                     using (var rp = r.ReadSubtree()) s.RunFormat = RunProperties.Read(rp, out _);
                     break;
                 case "tblPr":
+                    using (var tp = r.ReadSubtree()) TableXml.CopyTableFormat(TableXml.ReadStyleTablePr(tp), s.TableFormat);
+                    break;
                 case "trPr":
+                    using (var tr = r.ReadSubtree()) TableXml.CopyRowFormat(TableXml.ReadStyleRowPr(tr), s.RowFormat);
+                    break;
                 case "tcPr":
+                    using (var tc = r.ReadSubtree()) s.CellFormat.ApplyFrom(TableXml.ReadStyleCellPr(tc));
+                    break;
                 case "tblStylePr":
-                    // Table-style substance (cell margins, borders, conditional formats): kept verbatim
-                    // until table styles are modelled, so saving never strips it.
-                    using (var tp = r.ReadSubtree()) { tp.Read(); s.RawTableXml.Add(tp.ReadOuterXml()); }
+                    var region = ParseRegion(r.GetAttribute("type", W));
+                    using (var cp = r.ReadSubtree())
+                    {
+                        if (region is TableRegion reg) ReadConditional(cp, s.Conditional(reg));
+                    }
                     break;
                 default:
                     // rsid, personal…: not part of the model.
@@ -275,6 +306,66 @@ internal static class StylesXml
             }
         }
         return s;
+    }
+
+    // ---- Table-style conditional formats -------------------------------------------------------
+
+    private static void ReadConditional(XmlReader r, TableConditionalFormat cf)
+    {
+        if (!r.Read()) return;
+        int childDepth = r.Depth + 1;
+        while (r.Read())
+        {
+            if (r.NodeType != XmlNodeType.Element || r.Depth != childDepth || r.NamespaceURI != W) continue;
+            switch (r.LocalName)
+            {
+                case "pPr":
+                    using (var pp = r.ReadSubtree())
+                    {
+                        var scratch = new Paragraph();
+                        ParagraphProperties.Read(pp, scratch);
+                        cf.ParagraphFormat.ApplyFrom(scratch.Format);
+                    }
+                    break;
+                case "rPr":
+                    using (var rp = r.ReadSubtree()) cf.RunFormat = RunProperties.Read(rp, out _);
+                    break;
+                case "tblPr":
+                    using (var tp = r.ReadSubtree()) TableXml.CopyTableFormat(TableXml.ReadStyleTablePr(tp), cf.TableFormat);
+                    break;
+                case "trPr":
+                    using (var tr = r.ReadSubtree()) TableXml.CopyRowFormat(TableXml.ReadStyleRowPr(tr), cf.RowFormat);
+                    break;
+                case "tcPr":
+                    using (var tc = r.ReadSubtree()) cf.CellFormat.ApplyFrom(TableXml.ReadStyleCellPr(tc));
+                    break;
+                default:
+                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Region tokens in ST_TblStyleOverrideType order — the order Word writes tblStylePr elements.</summary>
+    private static readonly (TableRegion Region, string Token)[] RegionTokens =
+    {
+        (TableRegion.WholeTable, "wholeTable"), (TableRegion.FirstRow, "firstRow"), (TableRegion.LastRow, "lastRow"),
+        (TableRegion.FirstColumn, "firstCol"), (TableRegion.LastColumn, "lastCol"), (TableRegion.OddColumnBand, "band1Vert"),
+        (TableRegion.EvenColumnBand, "band2Vert"), (TableRegion.OddRowBand, "band1Horz"), (TableRegion.EvenRowBand, "band2Horz"),
+        (TableRegion.TopRightCell, "neCell"), (TableRegion.TopLeftCell, "nwCell"), (TableRegion.BottomRightCell, "seCell"),
+        (TableRegion.BottomLeftCell, "swCell"),
+    };
+
+    private static string RegionToken(TableRegion r)
+    {
+        foreach (var (region, token) in RegionTokens) if (region == r) return token;
+        throw new ArgumentOutOfRangeException(nameof(r), r, "Undefined TableRegion value.");
+    }
+
+    private static TableRegion? ParseRegion(string? v)
+    {
+        foreach (var (region, token) in RegionTokens) if (token == v) return region;
+        return null;
     }
 
     // ---- Helpers ---------------------------------------------------------------------------
