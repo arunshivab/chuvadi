@@ -25,17 +25,20 @@ internal static class ParagraphProperties
     public static void Write(XmlWriter x, Paragraph p)
     {
         var f = p.Format;
-        bool needed = p.Style != ParagraphStyle.Normal || p.List != ListKind.None || !f.IsDefault;
+        var styleId = p.StyleId;
+        bool hasStyle = styleId != "Normal";
+        bool needed = hasStyle || p.List != ListKind.None || !f.IsDefault;
         if (!needed) return;
 
         x.WriteStartElement("pPr", W);
-        if (p.Style != ParagraphStyle.Normal) Val(x, "pStyle", DocumentSerializer.StyleId(p.Style));
+        if (hasStyle) Val(x, "pStyle", styleId);
         WriteBody(x, f, p.List, p.ListLevel);
         x.WriteEndElement();
     }
 
     /// <summary>Writes the pPr children for a format (no pStyle) — reusable by style definitions.</summary>
-    internal static void WriteBody(XmlWriter x, ParagraphFormat f, ListKind list = ListKind.None, int listLevel = 0)
+    internal static void WriteBody(XmlWriter x, ParagraphFormat f, ListKind list = ListKind.None, int listLevel = 0,
+        string? rawNumberingXml = null)
     {
         Toggle(x, "keepNext", f.KeepWithNext);
         Toggle(x, "keepLines", f.KeepLinesTogether);
@@ -48,6 +51,10 @@ internal static class ParagraphProperties
             Val(x, "ilvl", Math.Clamp(listLevel, 0, 8).ToString(CultureInfo.InvariantCulture));
             Val(x, "numId", list == ListKind.Bullet ? "1" : "2");
             x.WriteEndElement();
+        }
+        else if (rawNumberingXml is not null)
+        {
+            StylesXml.WriteFragment(x, rawNumberingXml);
         }
 
         Toggle(x, "suppressLineNumbers", f.SuppressLineNumbers);
@@ -151,7 +158,7 @@ internal static class ParagraphProperties
     /// Reads a <c>w:pPr</c> subtree (reader on the pPr element) into <paramref name="p"/>.
     /// Tracked-change history (w:pPrChange), section properties and frames are skipped.
     /// </summary>
-    public static void Read(XmlReader sub, Paragraph p, Func<string?, ParagraphStyle> styleFromId)
+    public static void Read(XmlReader sub, Paragraph p)
     {
         var f = p.Format;
         if (!sub.Read()) return;
@@ -167,7 +174,7 @@ internal static class ParagraphProperties
             }
             switch (sub.LocalName)
             {
-                case "pStyle": p.Style = styleFromId(Attr(sub, "val")); break;
+                case "pStyle": if (Attr(sub, "val") is { Length: > 0 } sid) p.StyleId = sid; break;
                 case "keepNext": f.KeepWithNext = RunProperties.OnOff(sub); break;
                 case "keepLines": f.KeepLinesTogether = RunProperties.OnOff(sub); break;
                 case "pageBreakBefore": f.StartOnNewPage = RunProperties.OnOff(sub); break;
@@ -264,7 +271,7 @@ internal static class ParagraphProperties
         // abstract definitions are resolved in the lists phase). numId 0 = explicitly no list.
         if (numId is null or "0") return;
         p.List = numId == "2" ? ListKind.Number : ListKind.Bullet;
-        if (p.Style == ParagraphStyle.Normal) p.Style = ParagraphStyle.ListParagraph;
+        if (p.StyleId == "Normal") p.Style = ParagraphStyle.ListParagraph;
     }
 
     private static ParagraphBorders ReadBorders(XmlReader sub)

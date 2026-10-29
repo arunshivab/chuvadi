@@ -65,6 +65,38 @@ internal static class DocumentLoader
             throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
 
         var doc = new Document();
+
+        // Theme part (theme fonts/colours), carried through verbatim, within the part-size limit.
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal || !rel.Type.EndsWith("/theme", StringComparison.Ordinal)) continue;
+            var themeUri = rel.Target.StartsWith('/') ? rel.Target
+                : documentUri[..(documentUri.LastIndexOf('/') + 1)] + rel.Target;
+            Stream? themeRaw = null;
+            try { themeRaw = pkg.OpenPart(themeUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (themeRaw is null) break;
+            using var ts = GuardedPartStream.Wrap(themeRaw, options.MaxPartBytes, ct, themeUri);
+            using var tm = new MemoryStream();
+            ts.CopyTo(tm);
+            doc.ThemeXml = tm.ToArray();
+            break;
+        }
+
+        // Styles and document defaults (styles.xml), when the document has them.
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal || !rel.Type.EndsWith("/styles", StringComparison.Ordinal)) continue;
+            var stylesUri = rel.Target.StartsWith('/') ? rel.Target
+                : documentUri[..(documentUri.LastIndexOf('/') + 1)] + rel.Target;
+            Stream? stylesRaw = null;
+            try { stylesRaw = pkg.OpenPart(stylesUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (stylesRaw is null) break;
+            using var ss = GuardedPartStream.Wrap(stylesRaw, options.MaxPartBytes, ct, stylesUri);
+            using var sr = GuardedXmlReader.Create(ss, options.MaxXmlDepth, ct, stylesUri);
+            StylesXml.Read(sr, doc);
+            break;
+        }
+
         using var raw = pkg.OpenPart(documentUri);
         using var s = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, documentUri);
         using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, ct, documentUri);
@@ -128,7 +160,7 @@ internal static class DocumentLoader
                     using (sub.ReadSubtree()) { }
                     break;
                 case "pPr":
-                    using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p, StyleFromId);
+                    using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
                     break;
                 case "r":
                     using (var r = sub.ReadSubtree()) LoadRun(r, p);
@@ -148,13 +180,14 @@ internal static class DocumentLoader
     private static void LoadRun(XmlReader sub, Paragraph p)
     {
         var format = TextFormat.None;
+        string? charStyle = null;
         var text = new System.Text.StringBuilder();
         if (!sub.Read()) return; // positioned on <w:r>
 
         void Flush()
         {
             if (text.Length == 0) return;
-            p.AddRun(new Run(text.ToString(), format));
+            p.AddRun(new Run(text.ToString(), format) { CharacterStyleId = charStyle });
             text.Clear();
         }
 
@@ -189,7 +222,7 @@ internal static class DocumentLoader
                     // rPr belongs first in a run; if (invalidly) text came before it, that text
                     // keeps the formatting it was read with.
                     Flush();
-                    using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out _);
+                    using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out charStyle);
                     break;
                 case "t":
                     text.Append(sub.ReadElementContentAsString());
@@ -219,7 +252,7 @@ internal static class DocumentLoader
                     if (type == "page" && p.Runs.Count == 0)
                         p.PageBreakBefore = true; // the shape Document.AddPageBreak writes
                     else
-                        p.AddRun(Run.BreakRun(ParseBreak(type, clear), format));
+                        p.AddRun(Run.BreakRun(ParseBreak(type, clear), format, charStyle));
                     break;
             }
         }
@@ -300,20 +333,4 @@ internal static class DocumentLoader
         return t;
     }
 
-    private static ParagraphStyle StyleFromId(string? id) => id switch
-    {
-        "Title" => ParagraphStyle.Title,
-        "Heading1" => ParagraphStyle.Heading1,
-        "Heading2" => ParagraphStyle.Heading2,
-        "Heading3" => ParagraphStyle.Heading3,
-        "Quote" => ParagraphStyle.Quote,
-        "ListParagraph" => ParagraphStyle.ListParagraph,
-        "Heading4" => ParagraphStyle.Heading4,
-        "Heading5" => ParagraphStyle.Heading5,
-        "Heading6" => ParagraphStyle.Heading6,
-        "Heading7" => ParagraphStyle.Heading7,
-        "Heading8" => ParagraphStyle.Heading8,
-        "Heading9" => ParagraphStyle.Heading9,
-        _ => ParagraphStyle.Normal,
-    };
 }

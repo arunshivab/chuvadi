@@ -190,8 +190,10 @@ internal static class RunProperties
                 case "cs": csFlag = OnOff(sub); break;
                 case "color":
                     var c = Attr(sub, "val");
-                    color = (c is null || c.Equals("auto", StringComparison.OrdinalIgnoreCase)) ? null : c;
                     themeColor = ParseThemeColorToken(Attr(sub, "themeColor"));
+                    // "auto" is an explicit value (it overrides an inherited colour) — kept, unless it
+                    // is only the placeholder written alongside a theme colour.
+                    color = c is null || (themeColor is not null && c.Equals("auto", StringComparison.OrdinalIgnoreCase)) ? null : c;
                     tint = ParseHexByte(Attr(sub, "themeTint"));
                     shade = ParseHexByte(Attr(sub, "themeShade"));
                     break;
@@ -207,7 +209,7 @@ internal static class RunProperties
                     break;
                 case "u":
                     underlineStyle = ParseUnderline(Attr(sub, "val"));
-                    underlineColor = Attr(sub, "color") is { } uc && !uc.Equals("auto", StringComparison.OrdinalIgnoreCase) ? uc : null;
+                    underlineColor = Attr(sub, "color"); // "auto" kept: an explicit override
                     break;
                 case "shd":
                     // A plain fill maps to the ShadingHex shortcut; anything richer (pattern,

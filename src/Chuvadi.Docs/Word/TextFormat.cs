@@ -74,7 +74,7 @@ public sealed class TextFormat
     /// </summary>
     public double SizePt { get; init; }
 
-    /// <summary>Text color as 6-digit hex WITHOUT '#', e.g. "C00000". Null = inherit. See also <see cref="ThemeColor"/>.</summary>
+    /// <summary>Text color as 6-digit hex WITHOUT '#', e.g. "C00000", or "auto" (automatic — explicitly overrides an inherited colour). Null = inherit. See also <see cref="ThemeColor"/>.</summary>
     public string? ColorHex { get; init; }
 
     /// <summary>Highlight color name per OOXML (yellow, green, cyan, magenta, red, blue,
@@ -160,7 +160,7 @@ public sealed class TextFormat
     /// <summary>Underline style; takes precedence over <see cref="Underline"/>. <see cref="Word.UnderlineStyle.None"/> removes an inherited underline. Null = per <see cref="Underline"/>.</summary>
     public UnderlineStyle? UnderlineStyle { get; init; }
 
-    /// <summary>Underline color as 6-digit hex without '#'. Null = text color.</summary>
+    /// <summary>Underline color as 6-digit hex without '#', or "auto". Null = inherit (text color).</summary>
     public string? UnderlineColorHex { get; init; }
 
     /// <summary>Double strikethrough (w:dstrike). Null = inherit.</summary>

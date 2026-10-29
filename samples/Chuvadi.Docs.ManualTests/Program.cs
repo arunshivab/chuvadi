@@ -32,6 +32,7 @@ public static class Program
             ("Hardening", HardeningTests.Run),
             ("TextModel", TextModelTests.Run),
             ("ParagraphModel", ParagraphModelTests.Run),
+            ("Styles", StylesTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

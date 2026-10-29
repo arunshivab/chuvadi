@@ -1,5 +1,24 @@
 # Chuvadi.Docs — Changelog
 
+## Unreleased
+
+### Styles
+
+- **Style model**: `Document.Styles` (`StyleCollection`) of `StyleDefinition`s — paragraph, character, table and numbering styles with id, name, aliases, basedOn, next, link, default, custom, quick-format, UI priority, hidden / semi-hidden / unhide-when-used, locked, auto-redefine, a `ParagraphFormat` and a run `TextFormat`. `AddParagraphStyle` / `AddCharacterStyle` helpers; `AddOrReplace`, `Remove`, `TryGet`, `GetDefault`.
+- **Document defaults**: `Document.Defaults` (`RunFormat`, `ParagraphFormat`) replace the hard-coded Calibri 11pt; set e.g. `FontForAllScripts = "Nirmala UI"` once for a whole Indic document.
+- **Custom styles in content**: `Paragraph.StyleId` (any style id; built-in ids map to `ParagraphStyle`) and character styles on runs via `Paragraph.StyledText(text, characterStyleId)` / `Run.CharacterStyleId`.
+- **Effective formatting**: `Document.GetEffectiveRunFormat(paragraph, run)` and `GetEffectiveParagraphFormat(paragraph)` resolve document defaults → paragraph style chain → character style chain → direct formatting, with toggle properties combining by exclusive-or between paragraph and character styles (ECMA-376 §17.7.3), tab stops accumulating (Clear removes) and borders merging per side. Robust to basedOn cycles and missing styles. Verified against a Word-authored styles.xml (164 styles; Heading 1 resolves to Word's 14pt bold accent-1 heading font).
+- **Document.Load reads styles.xml** — every style and the document defaults — and keeps custom paragraph and character style ids on content (previously unknown style ids became Normal). Load → save reproduces both `styles.xml` and `document.xml` exactly for documents written by Chuvadi.Docs.
+- Built-in styles now come from the model, with the same look; headings and Title, Quote and List Paragraph are based on Normal with Next = Normal, headings keep with the next paragraph and keep their lines together (Word's behaviour), and style bold/size now also apply to complex-script text (`bCs`/`szCs`).
+- **Theme carried through**: `Document.ThemeXml` holds the theme part (word/theme/theme1.xml) of a loaded document and writes it back, so theme fonts and colours survive load → save (verified: LibreOffice renders a Word-authored file in the same fonts before and after).
+- **Never a dangling style reference**: built-in styles that content refers to but a loaded styles.xml lacks (Word lists only styles in use) — e.g. after adding a heading, hyperlink or list item to a loaded file — are written to the output; the document's own collection is not changed.
+- Table styles keep their table/row/cell properties and conditional formats (`tblPr`, `trPr`, `tcPr`, `tblStylePr`), and styles keep their numbering reference (`numPr`), verbatim through load → save until those are modelled in the tables and lists phases.
+- Duplicate style ids in a loaded styles.xml: the first definition wins (linear time, robust to hostile files).
+- Colour `auto` is kept as an explicit value (`ColorHex = "auto"`, also for underline colour) so it overrides an inherited colour; previously it read as "unset".
+- Effective paragraph formatting: a level that sets a first-line indent replaces an inherited hanging indent (and vice versa), and explicit spacing replaces inherited auto-spacing. A paragraph referring to a non-paragraph style falls back to the default paragraph style.
+- Design choice: toggles combined from the style levels replace a toggle set in the document defaults (the spec leaves this open; Word documents do not set toggles in docDefaults in practice).
+- Not yet loaded: latent style information (Word regenerates it).
+
 ## 1.2.0 (2026-10-28)
 
 Hardening for untrusted input, the complete character (run) and paragraph models, Indic/complex-script fixes, and cancellable, faster encryption.

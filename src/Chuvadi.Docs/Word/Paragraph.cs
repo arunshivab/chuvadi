@@ -21,7 +21,33 @@ public sealed class Paragraph
 {
     private readonly List<Run> _runs = new();
 
-    public ParagraphStyle Style { get; set; } = ParagraphStyle.Normal;
+    private ParagraphStyle _style = ParagraphStyle.Normal;
+    private string? _customStyleId;
+
+    /// <summary>
+    /// The paragraph's built-in style. For a custom style (see <see cref="StyleId"/>) this reads
+    /// <see cref="ParagraphStyle.Normal"/>. Setting it clears any custom style.
+    /// </summary>
+    public ParagraphStyle Style
+    {
+        get => _style;
+        set { _style = value; _customStyleId = null; }
+    }
+
+    /// <summary>
+    /// The paragraph style id (w:pStyle): a built-in ("Normal", "Heading1"…) or any style in
+    /// <see cref="Document.Styles"/>. Setting a built-in id also sets <see cref="Style"/>.
+    /// </summary>
+    public string StyleId
+    {
+        get => _customStyleId ?? Internal.DocumentSerializer.StyleId(_style);
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Style id required.", nameof(value));
+            if (Internal.DocumentSerializer.TryBuiltInStyle(value, out var builtIn)) { _style = builtIn; _customStyleId = null; }
+            else { _style = ParagraphStyle.Normal; _customStyleId = value; }
+        }
+    }
 
     /// <summary>All paragraph-level formatting (spacing, indents, borders, tabs…). Owned by this paragraph.</summary>
     public ParagraphFormat Format { get; } = new();
@@ -79,6 +105,15 @@ public sealed class Paragraph
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         _runs.Add(new Run(text, format ?? TextFormat.None));
+        return this;
+    }
+
+    /// <summary>Appends a text run that uses the character style <paramref name="characterStyleId"/> (see <see cref="Document.Styles"/>), with optional direct formatting on top.</summary>
+    public Paragraph StyledText(string text, string characterStyleId, TextFormat? format = null)
+    {
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        if (string.IsNullOrWhiteSpace(characterStyleId)) throw new ArgumentException("Style id required.", nameof(characterStyleId));
+        _runs.Add(new Run(text, format ?? TextFormat.None) { CharacterStyleId = characterStyleId });
         return this;
     }
 
@@ -163,6 +198,9 @@ public sealed class Run
     /// <summary>Non-null when this run is an image (inline or floating).</summary>
     public ImageSpec? Image { get; init; }
 
+    /// <summary>Character style applied to the run (w:rStyle), below its direct <see cref="Format"/>. Null = none (hyperlinks use "Hyperlink").</summary>
+    public string? CharacterStyleId { get; init; }
+
     /// <summary>Non-null when this run is an explicit break (<see cref="TextContent"/> is "\n").</summary>
     public BreakType? Break { get; private init; }
 
@@ -178,8 +216,8 @@ public sealed class Run
     internal static Run Field(string instruction)
         => new("1", TextFormat.None) { FieldInstruction = instruction };
 
-    internal static Run BreakRun(BreakType type, TextFormat format)
-        => new("\n", format) { Break = type };
+    internal static Run BreakRun(BreakType type, TextFormat format, string? characterStyleId = null)
+        => new("\n", format) { Break = type, CharacterStyleId = characterStyleId };
 
     internal static Run TabRun(TextFormat format)
         => new("\t", format) { IsTab = true };
