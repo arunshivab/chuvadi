@@ -128,7 +128,7 @@ internal static class DocumentLoader
                     using (sub.ReadSubtree()) { }
                     break;
                 case "pPr":
-                    using (var pPr = sub.ReadSubtree()) LoadParagraphProperties(pPr, p);
+                    using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p, StyleFromId);
                     break;
                 case "r":
                     using (var r = sub.ReadSubtree()) LoadRun(r, p);
@@ -138,53 +138,25 @@ internal static class DocumentLoader
         return p;
     }
 
-    private static void LoadParagraphProperties(XmlReader sub, Paragraph p)
-    {
-        if (!sub.Read()) return;
-        while (sub.Read())
-        {
-            if (sub.NodeType != XmlNodeType.Element || sub.NamespaceURI != W) continue;
-            switch (sub.LocalName)
-            {
-                case "pStyle":
-                    p.Style = StyleFromId(sub.GetAttribute("val", W));
-                    break;
-                case "jc":
-                    p.Alignment = (sub.GetAttribute("val", W)) switch
-                    {
-                        "center" => ParagraphAlignment.Center,
-                        "right" or "end" => ParagraphAlignment.Right,
-                        "both" or "distribute" => ParagraphAlignment.Justify,
-                        _ => ParagraphAlignment.Left,
-                    };
-                    break;
-                case "numId":
-                    // Our own files: 1 = bullet, 2 = number. Foreign files: treat any
-                    // list as a bullet (the abstract definitions aren't resolved here).
-                    var numId = sub.GetAttribute("val", W);
-                    if (numId is null or "0") break; // numId 0 = explicitly not a list
-                    p.List = numId == "2" ? ListKind.Number : ListKind.Bullet;
-                    if (p.Style == ParagraphStyle.Normal) p.Style = ParagraphStyle.ListParagraph;
-                    break;
-                case "ilvl":
-                    if (int.TryParse(sub.GetAttribute("val", W), out var lvl)) p.ListLevel = lvl;
-                    break;
-                case "rPr":        // paragraph-mark formatting: not part of the run model
-                case "pPrChange":  // tracked-change record of the PREVIOUS properties
-                case "sectPr":
-                    // Disposing a subtree reader leaves the cursor on the element's end tag,
-                    // so the loop's next Read continues with the following sibling.
-                    using (sub.ReadSubtree()) { }
-                    break;
-            }
-        }
-    }
-
-    /// <summary>Loads one <c>w:r</c>: its run properties, then each content child in order.</summary>
+    /// <summary>
+    /// Loads one <c>w:r</c>. Text, tabs and plain line breaks inside one run become ONE
+    /// <see cref="Run"/> whose text carries <c>\t</c> and <c>\n</c> — exactly what the writer
+    /// turns back into the same <c>w:t</c>/<c>w:tab</c>/<c>w:br</c> sequence, so a run
+    /// round-trips as a single run. Page, column and text-wrapping breaks become explicit
+    /// <see cref="BreakType"/> runs.
+    /// </summary>
     private static void LoadRun(XmlReader sub, Paragraph p)
     {
         var format = TextFormat.None;
+        var text = new System.Text.StringBuilder();
         if (!sub.Read()) return; // positioned on <w:r>
+
+        void Flush()
+        {
+            if (text.Length == 0) return;
+            p.AddRun(new Run(text.ToString(), format));
+            text.Clear();
+        }
 
         // ReadElementContentAsString leaves the cursor on the NEXT node, so the loop only
         // advances when the previous step did not already do so.
@@ -205,6 +177,7 @@ internal static class DocumentLoader
             if (sub.LocalName is "drawing" or "pict" or "object")
             {
                 // Text boxes / shapes: keep their words, flattened (geometry is outside the model).
+                Flush();
                 AppendEmbeddedText(sub, p);
                 continue;
             }
@@ -213,34 +186,44 @@ internal static class DocumentLoader
             switch (sub.LocalName)
             {
                 case "rPr":
+                    // rPr belongs first in a run; if (invalidly) text came before it, that text
+                    // keeps the formatting it was read with.
+                    Flush();
                     using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out _);
                     break;
                 case "t":
-                    var text = sub.ReadElementContentAsString();
-                    if (text.Length > 0) p.AddRun(new Run(text, format));
+                    text.Append(sub.ReadElementContentAsString());
                     advance = false;
                     break;
                 case "tab":
-                    p.AddRun(Run.TabRun(format));
+                    text.Append('\t');
+                    break;
+                case "cr":
+                    text.Append('\n');
+                    break;
+                case "noBreakHyphen":
+                    text.Append('\u2011');
+                    break;
+                case "softHyphen":
+                    text.Append('\u00AD');
                     break;
                 case "br":
                     var type = sub.GetAttribute("type", W);
+                    var clear = sub.GetAttribute("clear", W);
+                    if (type is null && clear is null)
+                    {
+                        text.Append('\n');
+                        break;
+                    }
+                    Flush();
                     if (type == "page" && p.Runs.Count == 0)
                         p.PageBreakBefore = true; // the shape Document.AddPageBreak writes
                     else
-                        p.AddRun(Run.BreakRun(ParseBreak(type, sub.GetAttribute("clear", W)), format));
-                    break;
-                case "cr":
-                    p.AddRun(Run.BreakRun(BreakType.Line, format));
-                    break;
-                case "noBreakHyphen":
-                    p.AddRun(new Run("\u2011", format));
-                    break;
-                case "softHyphen":
-                    p.AddRun(new Run("\u00AD", format));
+                        p.AddRun(Run.BreakRun(ParseBreak(type, clear), format));
                     break;
             }
         }
+        Flush();
     }
 
     /// <summary>
@@ -325,6 +308,12 @@ internal static class DocumentLoader
         "Heading3" => ParagraphStyle.Heading3,
         "Quote" => ParagraphStyle.Quote,
         "ListParagraph" => ParagraphStyle.ListParagraph,
+        "Heading4" => ParagraphStyle.Heading4,
+        "Heading5" => ParagraphStyle.Heading5,
+        "Heading6" => ParagraphStyle.Heading6,
+        "Heading7" => ParagraphStyle.Heading7,
+        "Heading8" => ParagraphStyle.Heading8,
+        "Heading9" => ParagraphStyle.Heading9,
         _ => ParagraphStyle.Normal,
     };
 }

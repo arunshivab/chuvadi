@@ -220,6 +220,12 @@ public sealed class TextFormat
     public string? ShadingHex { get; init; }
 
     /// <summary>
+    /// Full run shading (pattern, pattern color, fill, theme fill). Takes precedence over
+    /// <see cref="ShadingHex"/>, which is the plain-fill shortcut. Null = none.
+    /// </summary>
+    public Shading? Shading { get; init; }
+
+    /// <summary>
     /// Original toggles written as EXPLICITLY OFF (<c>w:val="0"</c>), cancelling bold, italic or
     /// strikethrough inherited from a style. Applies only where the matching bool is false.
     /// Document.Load sets these from the file, so explicit-off runs round-trip.
@@ -244,7 +250,7 @@ public sealed class TextFormat
         && Outline is null && Shadow is null && Emboss is null && Imprint is null && NoProof is null
         && VerticalPosition is null && BaselineShiftPt is null && CharacterSpacingPt is null
         && HorizontalScalePercent is null && KerningMinSizePt is null
-        && ThemeColor is null && ThemeColorTint is null && ThemeColorShade is null && ShadingHex is null;
+        && ThemeColor is null && ThemeColorTint is null && ThemeColorShade is null && ShadingHex is null && Shading is null;
 
     /// <summary>The underline that will actually be written: <see cref="UnderlineStyle"/> if set, else Single when <see cref="Underline"/>.</summary>
     public UnderlineStyle? EffectiveUnderline => UnderlineStyle ?? (Underline ? Word.UnderlineStyle.Single : null);
@@ -371,6 +377,12 @@ public enum ParagraphStyle
     Quote,
     /// <summary>Used automatically for bulleted/numbered list items.</summary>
     ListParagraph,
+    Heading4,
+    Heading5,
+    Heading6,
+    Heading7,
+    Heading8,
+    Heading9,
 }
 
 /// <summary>Paragraph alignment.</summary>
@@ -379,7 +391,18 @@ public enum ParagraphAlignment
     Left,
     Center,
     Right,
+    /// <summary>Justified: lines stretch to both margins (w:jc="both").</summary>
     Justify,
+    /// <summary>Distributed: like Justify, but also spreads the last line and characters (w:jc="distribute").</summary>
+    Distribute,
+    /// <summary>Arabic justification by kashida elongation, low (w:jc="lowKashida").</summary>
+    LowKashida,
+    /// <summary>Arabic kashida justification, medium.</summary>
+    MediumKashida,
+    /// <summary>Arabic kashida justification, high.</summary>
+    HighKashida,
+    /// <summary>Thai distributed justification (w:jc="thaiDistribute").</summary>
+    ThaiDistribute,
 }
 
 /// <summary>List kind for <see cref="Paragraph"/> items that are part of a list.</summary>

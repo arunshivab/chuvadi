@@ -22,7 +22,34 @@ public sealed class Paragraph
     private readonly List<Run> _runs = new();
 
     public ParagraphStyle Style { get; set; } = ParagraphStyle.Normal;
-    public ParagraphAlignment Alignment { get; set; } = ParagraphAlignment.Left;
+
+    /// <summary>All paragraph-level formatting (spacing, indents, borders, tabs…). Owned by this paragraph.</summary>
+    public ParagraphFormat Format { get; } = new();
+
+    /// <summary>
+    /// Horizontal alignment — a shortcut for <see cref="ParagraphFormat.Alignment"/>
+    /// (Left = inherit; reading returns Left when unset).
+    /// </summary>
+    public ParagraphAlignment Alignment
+    {
+        get => Format.Alignment ?? ParagraphAlignment.Left;
+        set => Format.Alignment = value == ParagraphAlignment.Left ? null : value;
+    }
+
+    /// <summary>Copies every set value of <paramref name="format"/> onto <see cref="Format"/> (see <see cref="ParagraphFormat.ApplyFrom"/>).</summary>
+    public Paragraph ApplyFormat(ParagraphFormat format)
+    {
+        Format.ApplyFrom(format);
+        return this;
+    }
+
+    /// <summary>Fluent access to <see cref="Format"/>: <c>doc.AddParagraph("x").Configure(f => f.SpaceAfterPt = 6)</c>.</summary>
+    public Paragraph Configure(Action<ParagraphFormat> configure)
+    {
+        if (configure is null) throw new ArgumentNullException(nameof(configure));
+        configure(Format);
+        return this;
+    }
 
     /// <summary>When set, this paragraph is a list item at <see cref="ListLevel"/>.</summary>
     public ListKind List { get; set; } = ListKind.None;
