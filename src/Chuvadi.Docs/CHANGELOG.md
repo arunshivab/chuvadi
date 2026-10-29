@@ -1,6 +1,8 @@
 # Chuvadi.Docs — Changelog
 
-## Unreleased
+## 1.2.0 (2026-10-28)
+
+Hardening for untrusted input, the complete character (run) and paragraph models, Indic/complex-script fixes, and cancellable, faster encryption.
 
 ### Fixes
 
