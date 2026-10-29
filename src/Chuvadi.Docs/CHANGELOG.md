@@ -1,6 +1,8 @@
 # Chuvadi.Docs — Changelog
 
-## Unreleased
+## 1.4.0 (2026-10-28)
+
+Lists (the full numbering model and Word-compatible list labels) and sections (multiple sections, columns, per-section headers and footers, page numbering, watermarks), both read back by Document.Load.
 
 ### Sections
 
