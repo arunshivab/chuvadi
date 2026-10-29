@@ -22,18 +22,19 @@ internal static class ParagraphProperties
     /// autoSpaceDN, bidi, adjustRightInd, snapToGrid, spacing, ind, contextualSpacing,
     /// mirrorIndents, jc, textAlignment, outlineLvl, rPr.
     /// </summary>
-    public static void Write(XmlWriter x, Paragraph p, NumberingXml.Plan? numbering)
+    public static void Write(XmlWriter x, Paragraph p, NumberingXml.Plan? numbering, Action<XmlWriter>? sectPr = null)
     {
         var f = p.Format;
         var styleId = p.StyleId;
         bool hasStyle = styleId != "Normal";
         var num = numbering?.For(p);
-        bool needed = hasStyle || num is not null || !f.IsDefault;
+        bool needed = hasStyle || num is not null || !f.IsDefault || sectPr is not null;
         if (!needed) return;
 
         x.WriteStartElement("pPr", W);
         if (hasStyle) Val(x, "pStyle", styleId);
         WriteBody(x, f, num);
+        sectPr?.Invoke(x); // CT_PPr: … rPr, sectPr, pPrChange
         x.WriteEndElement();
     }
 
@@ -244,8 +245,11 @@ internal static class ParagraphProperties
                 case "rPr":
                     using (var rp = sub.ReadSubtree()) f.MarkFormat = RunProperties.Read(rp, out _);
                     break;
+                case "sectPr":
+                    using (var sp = sub.ReadSubtree()) p.LoadedSection = SectionXml.Read(sp);
+                    break;
                 default:
-                    // pPrChange (history), sectPr, framePr, cnfStyle, divId…: not part of the model.
+                    // pPrChange (history), framePr, cnfStyle, divId…: not part of the model.
                     if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
                     break;
             }

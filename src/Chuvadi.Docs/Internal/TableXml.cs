@@ -852,13 +852,13 @@ internal static class TableXml
         (CellTextDirection.TopToBottomRightToLeftRotated, new[] { "tbRlV", "rlV" }),
     };
 
-    private static string TextDirectionToken(CellTextDirection d)
+    internal static string TextDirectionToken(CellTextDirection d)
     {
         foreach (var (dir, tokens) in TextDirections) if (dir == d) return tokens[0];
         throw new ArgumentOutOfRangeException(nameof(d), d, "Undefined CellTextDirection value.");
     }
 
-    private static CellTextDirection? ParseTextDirection(string? v)
+    internal static CellTextDirection? ParseTextDirection(string? v)
     {
         foreach (var (dir, tokens) in TextDirections) if (Array.IndexOf(tokens, v) >= 0) return dir;
         return null;
