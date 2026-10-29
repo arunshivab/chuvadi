@@ -71,7 +71,7 @@ internal static class StylesXml
 
     // ---- Write -----------------------------------------------------------------------------
 
-    public static void Write(XmlWriter x, Document doc, IEnumerable<string>? referencedStyleIds = null)
+    public static void Write(XmlWriter x, Document doc, IEnumerable<string>? referencedStyleIds = null, NumberingXml.Plan? numbering = null)
     {
         x.WriteStartDocument(standalone: true);
         x.WriteStartElement("w", "styles", W);
@@ -90,7 +90,7 @@ internal static class StylesXml
         x.WriteEndElement();
         x.WriteEndElement(); // docDefaults
 
-        foreach (var s in doc.Styles) WriteStyle(x, s);
+        foreach (var s in doc.Styles) WriteStyle(x, s, numbering);
 
         // Built-in styles the content refers to but the collection lacks (typical after loading a
         // Word file, whose styles.xml lists only styles in use) are added to the OUTPUT so every
@@ -105,7 +105,7 @@ internal static class StylesXml
             {
                 var id = pending.Dequeue();
                 if (doc.Styles.Contains(id) || !written.Add(id) || !builtIns.TryGet(id, out var b)) continue;
-                WriteStyle(x, b);
+                WriteStyle(x, b, numbering);
                 if (b.BasedOn is not null) pending.Enqueue(b.BasedOn);
                 if (b.Next is not null) pending.Enqueue(b.Next);
             }
@@ -116,7 +116,7 @@ internal static class StylesXml
     }
 
     /// <summary>CT_Style child order: name, aliases, basedOn, next, link, autoRedefine, hidden, uiPriority, semiHidden, unhideWhenUsed, qFormat, locked, pPr, rPr.</summary>
-    private static void WriteStyle(XmlWriter x, StyleDefinition s)
+    private static void WriteStyle(XmlWriter x, StyleDefinition s, NumberingXml.Plan? numbering)
     {
         x.WriteStartElement("style", W);
         x.WriteAttributeString("type", W, s.Type switch
@@ -143,10 +143,11 @@ internal static class StylesXml
         if (s.QuickFormat) Empty(x, "qFormat");
         if (s.Locked) Empty(x, "locked");
 
-        if (s.Type != StyleType.Character && (!s.ParagraphFormat.IsDefault || s.RawNumberingXml is not null))
+        var num = numbering?.For(s);
+        if (s.Type != StyleType.Character && (!s.ParagraphFormat.IsDefault || num is not null))
         {
             x.WriteStartElement("pPr", W);
-            ParagraphProperties.WriteBody(x, s.ParagraphFormat, rawNumberingXml: s.RawNumberingXml);
+            ParagraphProperties.WriteBody(x, s.ParagraphFormat, num);
             x.WriteEndElement();
         }
         if (s.RunFormat is { } rf) RunProperties.Write(x, rf);
@@ -277,8 +278,9 @@ internal static class StylesXml
                         var scratch = new Paragraph();
                         ParagraphProperties.Read(parse, scratch);
                         s.ParagraphFormat.ApplyFrom(scratch.Format);
+                        s.LoadedNumId = scratch.LoadedNumId;
+                        s.ListLevel = scratch.LoadedListLevelExplicit ? scratch.ListLevel : null;
                     }
-                    s.RawNumberingXml = ExtractChild(pPrXml, "numPr");
                     break;
                 case "rPr":
                     using (var rp = r.ReadSubtree()) s.RunFormat = RunProperties.Read(rp, out _);
@@ -379,20 +381,6 @@ internal static class StylesXml
             IgnoreWhitespace = true,
             IgnoreComments = true,
         });
-
-    /// <summary>The outer XML of the first direct w:<paramref name="localName"/> child of a fragment, or null.</summary>
-    private static string? ExtractChild(string xml, string localName)
-    {
-        using var r = Reparse(xml);
-        if (!r.Read()) return null;
-        int childDepth = r.Depth + 1;
-        while (r.Read())
-        {
-            if (r.NodeType == XmlNodeType.Element && r.Depth == childDepth && r.NamespaceURI == W && r.LocalName == localName)
-                return r.ReadOuterXml();
-        }
-        return null;
-    }
 
     /// <summary>Writes a verbatim XML fragment at the current position.</summary>
     internal static void WriteFragment(XmlWriter x, string xml)

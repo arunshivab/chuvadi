@@ -63,6 +63,8 @@ internal static class DocumentSerializer
     internal sealed class PartContext
     {
         public string PartUri { get; }
+        /// <summary>The numbering written with this save (ids for list paragraphs).</summary>
+        public NumberingXml.Plan? Numbering { get; init; }
         public List<(string RelId, string Url)> Hyperlinks { get; } = new();
         public List<(string RelId, string MediaUri)> Images { get; } = new();
 
@@ -100,7 +102,8 @@ internal static class DocumentSerializer
     public static void Write(Stream output, Document doc)
     {
         using var pkg = OoxmlPackage.Create(output);
-        bool hasLists = DocumentHasLists(doc);
+        var numbering = new NumberingXml.Plan(doc);
+        bool hasLists = numbering.HasAny;
 
         // Package-wide media registry: each image becomes a unique /word/media/imageN.ext
         // part, written after all the XML parts. A global drawing-id counter keeps every
@@ -118,7 +121,7 @@ internal static class DocumentSerializer
         }
         int NextDrawingId() => ++drawingIdCounter;
 
-        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId);
+        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId) { Numbering = numbering };
 
         // ---- /word/document.xml ----
         using (var s = pkg.CreatePart("/word/document.xml", CtDocument))
@@ -157,7 +160,7 @@ internal static class DocumentSerializer
         using (var s = pkg.CreatePart("/word/styles.xml", CtStyles))
         using (var x = CreateXml(s))
         {
-            StylesXml.Write(x, doc, ReferencedStyleIds(doc));
+            StylesXml.Write(x, doc, ReferencedStyleIds(doc), numbering);
         }
 
         // ---- /word/theme/theme1.xml (carried through from a loaded document) ----
@@ -172,7 +175,18 @@ internal static class DocumentSerializer
         {
             using var s = pkg.CreatePart("/word/numbering.xml", CtNumbering);
             using var x = CreateXml(s);
-            WriteNumbering(x);
+            NumberingXml.Write(x, numbering);
+        }
+        if (hasLists)
+        {
+            // Images behind picture bullets, with numbering.xml's relationship ids unchanged.
+            int pic = 0;
+            foreach (var (relId, relType, bytes, contentType) in doc.Numbering.RawPictureParts)
+            {
+                var uri = $"/word/media/numbering-picture{++pic}.{ImageMetadata.ExtensionFor(contentType)}";
+                using (var ps = pkg.CreatePart(uri, contentType)) ps.Write(bytes, 0, bytes.Length);
+                pkg.AddRelationship("/word/numbering.xml", uri, relType, relId);
+            }
         }
 
         // ---- /word/settings.xml (always present; carries documentProtection when set) ----
@@ -200,7 +214,7 @@ internal static class DocumentSerializer
         var hfContexts = new List<PartContext>();
         foreach (var (uri, _, _, content, isHeader) in hfParts)
         {
-            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId);
+            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering };
             hfContexts.Add(hfCtx);
             using var s = pkg.CreatePart(uri, isHeader ? CtHeader : CtFooter);
             using var x = CreateXml(s);
@@ -264,7 +278,7 @@ internal static class DocumentSerializer
         x.WriteStartElement("p", W);
 
         // pPr — paragraph properties in schema order (see ParagraphProperties).
-        ParagraphProperties.Write(x, p);
+        ParagraphProperties.Write(x, p, ctx?.Numbering);
 
         if (p.PageBreakBefore)
         {
@@ -726,72 +740,6 @@ internal static class DocumentSerializer
         x.WriteEndElement(); // sectPr
     }
 
-    // ---- numbering.xml -------------------------------------------------------------------
-
-    private static void WriteNumbering(XmlWriter x)
-    {
-        x.WriteStartDocument(standalone: true);
-        x.WriteStartElement("w", "numbering", W);
-
-        // abstractNum 0 — bullets; abstractNum 1 — decimal numbering. 9 levels each.
-        //
-        // Bullet characters: plain Unicode, NO font override (no Symbol/Wingdings/Courier).
-        // Word's own built-in bullet list does the same — these code points are in every
-        // modern system font, so they render correctly in Word AND LibreOffice.
-        //   U+2022 BULLET            • level 0, 3, 6
-        //   U+2013 EN DASH           – level 1, 4, 7
-        //   U+25AA BLACK SMALL SQ    ▪ level 2, 5, 8
-        string[] bulletChars = { "\u2022", "\u2013", "\u25AA" };
-        for (int abs = 0; abs < 2; abs++)
-        {
-            x.WriteStartElement("abstractNum", W);
-            x.WriteAttributeString("abstractNumId", W, abs.ToString(CultureInfo.InvariantCulture));
-            for (int lvl = 0; lvl < 9; lvl++)
-            {
-                x.WriteStartElement("lvl", W);
-                x.WriteAttributeString("ilvl", W, lvl.ToString(CultureInfo.InvariantCulture));
-                x.WriteStartElement("start", W);
-                x.WriteAttributeString("val", W, "1");
-                x.WriteEndElement();
-                x.WriteStartElement("numFmt", W);
-                x.WriteAttributeString("val", W, abs == 0 ? "bullet" : "decimal");
-                x.WriteEndElement();
-                x.WriteStartElement("lvlText", W);
-                x.WriteAttributeString("val", W, abs == 0
-                    ? bulletChars[lvl % bulletChars.Length]
-                    : $"%{lvl + 1}.");
-                x.WriteEndElement();
-                x.WriteStartElement("lvlJc", W);
-                x.WriteAttributeString("val", W, "left");
-                x.WriteEndElement();
-                x.WriteStartElement("pPr", W);
-                x.WriteStartElement("ind", W);
-                x.WriteAttributeString("left", W, ((lvl + 1) * 720).ToString(CultureInfo.InvariantCulture));
-                x.WriteAttributeString("hanging", W, "360");
-                x.WriteEndElement();
-                x.WriteEndElement();
-                // No rPr/rFonts on bullet levels — inherit paragraph font.
-                // This matches Word's own built-in bullet list behaviour.
-                x.WriteEndElement(); // lvl
-            }
-            x.WriteEndElement(); // abstractNum
-        }
-
-        // num 1 → bullets, num 2 → decimal.
-        for (int num = 1; num <= 2; num++)
-        {
-            x.WriteStartElement("num", W);
-            x.WriteAttributeString("numId", W, num.ToString(CultureInfo.InvariantCulture));
-            x.WriteStartElement("abstractNumId", W);
-            x.WriteAttributeString("val", W, (num - 1).ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-            x.WriteEndElement();
-        }
-
-        x.WriteEndElement();
-        x.WriteEndDocument();
-    }
-
     // ---- settings.xml (+ documentProtection) ----------------------------------------------
 
     private static void WriteSettings(XmlWriter x, Document doc)
@@ -880,18 +828,31 @@ internal static class DocumentSerializer
     // ---- Helpers --------------------------------------------------------------------------
 
     /// <summary>Every paragraph in the document: body, table cells and headers/footers.</summary>
+    /// <summary>Every paragraph: body (tables and nested tables included, in order), then headers and footers.</summary>
     internal static IEnumerable<Paragraph> AllParagraphs(Document doc)
     {
         foreach (var block in doc.Blocks)
         {
             if (block is Paragraph p) yield return p;
             else if (block is DocTable t)
-                foreach (var row in t.Rows)
-                    foreach (var cell in row.Cells)
-                        foreach (var cp in cell.Paragraphs) yield return cp;
+                foreach (var tp in TableParagraphs(t, 0)) yield return tp;
         }
         foreach (var hf in new[] { doc.Header, doc.Footer, doc.FirstPageHeader, doc.FirstPageFooter })
             foreach (var p in hf) yield return p;
+    }
+
+    /// <summary>Paragraphs of a table in content order, nested tables included (depth-guarded).</summary>
+    internal static IEnumerable<Paragraph> TableParagraphs(DocTable t, int depth)
+    {
+        if (depth > 512) yield break; // far beyond what MaxXmlDepth admits on load
+        foreach (var row in t.Rows)
+            foreach (var cell in row.Cells)
+                foreach (var b in cell.Blocks)
+                {
+                    if (b is Paragraph cp) yield return cp;
+                    else if (b is DocTable nested)
+                        foreach (var np in TableParagraphs(nested, depth + 1)) yield return np;
+                }
     }
 
     /// <summary>Paragraph and character style ids the content refers to (incl. the implicit Hyperlink style).</summary>
@@ -937,20 +898,6 @@ internal static class DocumentSerializer
         ParagraphStyle.Heading9 => "Heading9",
         _ => "Normal",
     };
-
-    private static bool DocumentHasLists(Document doc)
-    {
-        foreach (var b in doc.Blocks)
-        {
-            if (b is Paragraph p && p.List != ListKind.None) return true;
-            if (b is DocTable t)
-                foreach (var row in t.Rows)
-                    foreach (var cell in row.Cells)
-                        foreach (var cp in cell.Paragraphs)
-                            if (cp.List != ListKind.None) return true;
-        }
-        return false;
-    }
 
     private static string PtToTwips(double pt)
         => ((int)Math.Round(pt * 20)).ToString(CultureInfo.InvariantCulture);

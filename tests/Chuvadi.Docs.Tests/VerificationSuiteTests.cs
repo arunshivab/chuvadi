@@ -33,6 +33,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_ParagraphModel() => ParagraphModelTests.Run(FreshOutDir());
     [Fact] public void Suite_Styles() => StylesTests.Run(FreshOutDir());
     [Fact] public void Suite_TablesModel() => TablesModelTests.Run(FreshOutDir());
+    [Fact] public void Suite_Lists() => ListsTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 
