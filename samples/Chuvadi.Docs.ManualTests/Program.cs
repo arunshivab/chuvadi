@@ -33,6 +33,7 @@ public static class Program
             ("TextModel", TextModelTests.Run),
             ("ParagraphModel", ParagraphModelTests.Run),
             ("Styles", StylesTests.Run),
+            ("TablesModel", TablesModelTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

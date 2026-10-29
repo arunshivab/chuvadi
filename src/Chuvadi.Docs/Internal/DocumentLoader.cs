@@ -184,11 +184,13 @@ internal static class DocumentLoader
         var text = new System.Text.StringBuilder();
         if (!sub.Read()) return; // positioned on <w:r>
 
+        bool sawText = false; // an empty <w:t/> is still a run (kept for exact round-trip)
         void Flush()
         {
-            if (text.Length == 0) return;
+            if (text.Length == 0 && !sawText) return;
             p.AddRun(new Run(text.ToString(), format) { CharacterStyleId = charStyle });
             text.Clear();
+            sawText = false;
         }
 
         // ReadElementContentAsString leaves the cursor on the NEXT node, so the loop only
@@ -226,6 +228,7 @@ internal static class DocumentLoader
                     break;
                 case "t":
                     text.Append(sub.ReadElementContentAsString());
+                    sawText = true;
                     advance = false;
                     break;
                 case "tab":
@@ -314,23 +317,6 @@ internal static class DocumentLoader
         },
     };
 
-    private static DocTable LoadTable(XmlReader sub)
-    {
-        // First pass over the subtree: parse into row/cell text via DocxReader's grid
-        // parser, then rebuild as a DocTable. Formatting inside foreign cells is reduced
-        // to text — consistent with the documented load contract.
-        var grid = DocxReader.ParseTable(sub);
-        int columns = 1;
-        foreach (var row in grid) columns = Math.Max(columns, row.Length);
-
-        var t = new DocTable(columns);
-        foreach (var row in grid)
-        {
-            var tr = t.AddRow();
-            for (int c = 0; c < row.Length && c < columns; c++)
-                tr.Cell(c).SetText(row[c]);
-        }
-        return t;
-    }
+    private static DocTable LoadTable(XmlReader sub) => TableXml.Read(sub, LoadParagraph);
 
 }
