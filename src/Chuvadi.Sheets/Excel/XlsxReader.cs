@@ -38,6 +38,9 @@ public sealed class XlsxReader : IDisposable
     /// <summary>Shared strings, indexed by SST id. May be empty if the file uses only inline strings.</summary>
     internal string[] SharedStrings { get; }
 
+    /// <summary>Runs of the rich shared strings, parallel to <see cref="SharedStrings"/> (null entries: plain); null when none is rich.</summary>
+    internal RichText?[]? SharedRichText { get; private init; }
+
     /// <summary>Style entries, indexed by cellXf id. May be empty for files with no styles.xml.</summary>
     internal StyleEntry[] Styles { get; }
 
@@ -48,8 +51,52 @@ public sealed class XlsxReader : IDisposable
     /// </summary>
     public CellStyleTable StyleTable { get; }
 
-    /// <summary>The sheets in the workbook, in tab order.</summary>
+    /// <summary>The worksheets in the workbook, in tab order (chart sheets are in <see cref="ChartSheets"/>).</summary>
     public IReadOnlyList<SheetInfo> Sheets { get; }
+
+    /// <summary>
+    /// The chart sheets (tabs holding one chart), in tab order; read them with
+    /// <see cref="ReadChartSheet(SheetInfo)"/>. <see cref="SheetInfo.WorkbookIndex"/> gives each
+    /// one's place among all tabs. Since 1.7.0.
+    /// </summary>
+    public IReadOnlyList<SheetInfo> ChartSheets { get; }
+
+    /// <summary>
+    /// Reads a chart sheet: its page setup, view, tab colour and chart (metadata, as for
+    /// worksheet charts). One pass over the small chart-sheet part. Since 1.7.0.
+    /// </summary>
+    public ChartSheet ReadChartSheet(SheetInfo chartSheet)
+    {
+        if (chartSheet is null) throw new ArgumentNullException(nameof(chartSheet));
+        bool found = false;
+        foreach (var c in ChartSheets) if (ReferenceEquals(c, chartSheet)) { found = true; break; }
+        if (!found) throw new ArgumentException("Not a chart sheet of this workbook; use one from ChartSheets.", nameof(chartSheet));
+        return ReadChartSheetCore(chartSheet, eager: false, _options.LoadImageData);
+    }
+
+    internal ChartSheet ReadChartSheetCore(SheetInfo info, bool eager, bool loadImages)
+    {
+        _options.CancellationToken.ThrowIfCancellationRequested();
+        var collector = new SheetLayoutCollector(StyleTable);
+        using (var stream = OpenPartLimited(info.PartUri))
+        using (var xml = XmlReader.Create(stream, new XmlReaderSettings { IgnoreWhitespace = false, IgnoreComments = true, CloseInput = false, DtdProcessing = DtdProcessing.Prohibit }))
+        {
+            while (xml.Read())
+            {
+                switch (xml.NodeType)
+                {
+                    case XmlNodeType.Element: collector.OnElement(xml); break;
+                    case XmlNodeType.Text: case XmlNodeType.CDATA: case XmlNodeType.Whitespace: case XmlNodeType.SignificantWhitespace:
+                        collector.OnText(xml.Value); break;
+                    case XmlNodeType.EndElement: collector.OnEndElement(xml.LocalName); break;
+                }
+            }
+        }
+        var layout = collector.ToLayoutInfo(StyleTable);
+        PrintNames.Apply(layout.PageSetup, DefinedNames, info.WorkbookIndex);
+        var drawings = DrawingReader.Read(this, info.PartUri, layout.DrawingRelId, eager, loadImages);
+        return new ChartSheet(info, layout, drawings);
+    }
 
     /// <summary>
     /// True if the workbook uses the 1904 date system (&lt;workbookPr date1904="1"/&gt;; common in
@@ -75,6 +122,14 @@ public sealed class XlsxReader : IDisposable
     /// of the sheet Excel opens on (&lt;workbookView activeTab&gt;); 0 when not stated.
     /// </summary>
     public int ActiveTab { get; }
+
+    /// <summary>
+    /// True when the workbook is ISO/IEC 29500 Strict (its workbook part uses the
+    /// http://purl.oclc.org/ooxml/spreadsheetml/main namespace, or declares conformance="strict").
+    /// Strict workbooks are read like Transitional ones (since 1.7.0): only namespace names
+    /// differ; values are read as stored.
+    /// </summary>
+    public bool IsStrict { get; }
 
     internal XlsxReaderOptions Options => _options;
 
@@ -129,6 +184,8 @@ public sealed class XlsxReader : IDisposable
         DefinedNames = wb.DefinedNames;
         HasMacros = hasMacros;
         ActiveTab = wb.ActiveTab ?? 0;
+        IsStrict = wb.Strict;
+        ChartSheets = wb.ChartSheets;
     }
 
     /// <summary>Per-cellXf date detection data, derived from the parsed style table.</summary>
@@ -214,13 +271,20 @@ public sealed class XlsxReader : IDisposable
                     throw new XlsxLimitExceededException("MaxTotalUncompressedBytes", cap, input.Length - input.Position,
                         "the encrypted file is larger than the limit.");
                 byte[] plaintext;
-                // The container is read through a stream that checks the token on every read, so a
-                // cancel lands while the file is being read; the in-memory decryption after that
-                // (key derivation, AES, HMAC) runs to completion.
+                // The container is read through a stream that checks the token on every read, and the
+                // shared crypto checks it inside key derivation (every 4,096 spins), so a cancel lands
+                // within milliseconds at any stage. The declared spin count is capped before any
+                // derivation starts (MaxSpinCount).
                 try
                 {
                     using var cancellable = new CancellableReadStream(input, ct);
-                    plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(cancellable, password);
+                    plaintext = Chuvadi.Internal.Crypto.EncryptedPackageReader.DecryptToPlaintextPackage(
+                        cancellable, password, options.MaxSpinCount, ct);
+                }
+                catch (Chuvadi.Internal.Crypto.PackageLimitException ex) when (ex.Limit == Chuvadi.Internal.Crypto.PackageLimit.SpinCount)
+                {
+                    throw new XlsxLimitExceededException("MaxSpinCount", ex.Allowed, ex.Actual,
+                        "the encrypted file's key-derivation spin count is higher than allowed.");
                 }
                 catch (Chuvadi.Internal.Crypto.PackagePasswordException) when (ct.IsCancellationRequested)
                 {
@@ -256,12 +320,14 @@ public sealed class XlsxReader : IDisposable
             if (workbookUri is null)
                 throw new XlsxFormatException("Package has no officeDocument relationship; not a valid xlsx.");
 
-            var sst = TryLoadSharedStrings(pkg, options, budget);
+            var sst = TryLoadSharedStrings(pkg, workbookUri, options, budget, out var sstRich);
             var styleTable = TryLoadStyleTable(pkg, workbookUri, options, budget);
             var wb = LoadWorkbookPart(pkg, workbookUri, options, budget);
             bool macros = DetectMacros(pkg);
 
-            return new XlsxReader(pkg, sst, styleTable, wb, macros, options, budget, owned);
+            if (sstRich is not null)
+                foreach (var rt in sstRich) if (rt is not null) RichTextXml.Resolve(rt, styleTable);
+            return new XlsxReader(pkg, sst, styleTable, wb, macros, options, budget, owned) { SharedRichText = sstRich };
         }
         catch
         {
@@ -317,17 +383,9 @@ public sealed class XlsxReader : IDisposable
     /// <summary>The relationships of a part (targets as stored, relative to the part).</summary>
     internal IEnumerable<PackageRelationship> PartRelationships(string partUri) => _package.GetRelationships(partUri);
 
-    internal bool HasPart(string partUri)
-    {
-        foreach (var p in _package.Parts) if (string.Equals(p.Uri, partUri, StringComparison.Ordinal)) return true;
-        return false;
-    }
+    internal bool HasPart(string partUri) => _package.HasPart(partUri);
 
-    internal string? PartContentType(string partUri)
-    {
-        foreach (var p in _package.Parts) if (string.Equals(p.Uri, partUri, StringComparison.Ordinal)) return p.ContentType;
-        return null;
-    }
+    internal string? PartContentType(string partUri) => _package.GetPart(partUri)?.ContentType;
 
     /// <summary>Wraps a part stream in the decompression guards when limits are configured.</summary>
     private static Stream Limit(Stream s, string partUri, XlsxReaderOptions options, ReadBudget budget)
@@ -335,17 +393,18 @@ public sealed class XlsxReader : IDisposable
 
     // ---- Loading -----------------------------------------------------------------
 
-    private static string[] TryLoadSharedStrings(OoxmlPackage pkg, XlsxReaderOptions options, ReadBudget budget)
+    private static string[] TryLoadSharedStrings(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options, ReadBudget budget,
+        out RichText?[]? rich)
     {
-        foreach (var part in pkg.Parts)
-        {
-            if (part.Uri.EndsWith("/sharedStrings.xml", StringComparison.Ordinal))
-            {
-                using var s = Limit(pkg.OpenPart(part.Uri), part.Uri, options, budget);
-                return SharedStringReader.Read(s, options.CancellationToken);
-            }
-        }
-        return Array.Empty<string>();
+        rich = null;
+        // The workbook's sharedStrings relationship first; then any part with that name.
+        var uri = FindWorkbookRelatedPart(pkg, workbookUri, "/sharedStrings");
+        if (uri is null)
+            foreach (var part in pkg.Parts)
+                if (part.Uri.EndsWith("/sharedStrings.xml", StringComparison.OrdinalIgnoreCase)) { uri = part.Uri; break; }
+        if (uri is null) return Array.Empty<string>();
+        using var s = Limit(pkg.OpenPart(uri), uri, options, budget);
+        return SharedStringReader.Read(s, options.CancellationToken, out rich);
     }
 
     /// <summary>
@@ -399,8 +458,7 @@ public sealed class XlsxReader : IDisposable
         {
             if (!rel.Type.EndsWith(typeSuffix, StringComparison.Ordinal)) continue;
             var uri = ResolveWorkbookTarget(workbookUri, rel.Target);
-            foreach (var part in pkg.Parts)
-                if (string.Equals(part.Uri, uri, StringComparison.Ordinal)) return uri;
+            if (pkg.HasPart(uri)) return uri;
         }
         return null;
     }
@@ -425,19 +483,24 @@ public sealed class XlsxReader : IDisposable
     private sealed class WorkbookPartInfo
     {
         public readonly List<SheetInfo> Sheets = new();
+        public readonly List<SheetInfo> ChartSheets = new();
         public readonly List<DefinedNameInfo> DefinedNames = new();
         public bool Date1904;
         public int? ActiveTab;
+        public bool Strict;
     }
 
     /// <summary>Reads workbook.xml: the sheet list (with visibility), workbookPr and definedNames.</summary>
     private static WorkbookPartInfo LoadWorkbookPart(OoxmlPackage pkg, string workbookUri, XlsxReaderOptions options, ReadBudget budget)
     {
         var rels = new Dictionary<string, string>(StringComparer.Ordinal);
+        var chartRels = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var rel in pkg.GetRelationships(workbookUri))
         {
             if (rel.Type.EndsWith("/worksheet", StringComparison.Ordinal))
                 rels[rel.Id] = ResolveWorkbookTarget(workbookUri, rel.Target);
+            else if (rel.Type.EndsWith("/chartsheet", StringComparison.Ordinal))
+                chartRels[rel.Id] = ResolveWorkbookTarget(workbookUri, rel.Target);
         }
 
         var info = new WorkbookPartInfo();
@@ -450,6 +513,9 @@ public sealed class XlsxReader : IDisposable
                 if (r.NodeType != XmlNodeType.Element) continue;
                 switch (r.LocalName)
                 {
+                    case "workbook" when r.Depth == 0:
+                        info.Strict = r.NamespaceURI == StrictOoxml.MainStrictNs || r.GetAttribute("conformance") == "strict";
+                        break;
                     case "workbookView":
                         if (info.ActiveTab is null && int.TryParse(r.GetAttribute("activeTab"), System.Globalization.NumberStyles.Integer,
                                 System.Globalization.CultureInfo.InvariantCulture, out var tab))
@@ -464,7 +530,7 @@ public sealed class XlsxReader : IDisposable
                         int position = sheetPosition++;
                         var name = r.GetAttribute("name");
                         var sheetId = r.GetAttribute("sheetId");
-                        var rId = r.GetAttribute("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+                        var rId = StrictOoxml.GetRelAttribute(r);
                         var state = r.GetAttribute("state") switch
                         {
                             "hidden" => SheetVisibility.Hidden,
@@ -472,8 +538,11 @@ public sealed class XlsxReader : IDisposable
                             _ => SheetVisibility.Visible,
                         };
                         if (name is null || rId is null) break;
-                        if (!rels.TryGetValue(rId, out var partUri)) break;   // chart sheets, macro sheets
-                        info.Sheets.Add(new SheetInfo(name, sheetId ?? "1", partUri, state, position));
+                        if (rels.TryGetValue(rId, out var partUri))
+                            info.Sheets.Add(new SheetInfo(name, sheetId ?? "1", partUri, state, position));
+                        else if (chartRels.TryGetValue(rId, out var chartUri) && pkg.HasPart(chartUri))
+                            info.ChartSheets.Add(new SheetInfo(name, sheetId ?? "1", chartUri, state, position));
+                        // macro and dialog sheets are skipped
                         break;
                     }
                     case "definedName":
@@ -669,6 +738,7 @@ public sealed class SheetReader
             }
         }
         var info = collector.ToLayoutInfo(_book.StyleTable);
+        info.Hyperlinks = collector.ResolveHyperlinks(_book, _info.PartUri);
         PrintNames.Apply(info.PageSetup, _book.DefinedNames, _info.WorkbookIndex);
         return _layoutInfo = info;
     }
@@ -689,6 +759,36 @@ public sealed class SheetReader
         return _drawings = DrawingReader.Read(_book, _info.PartUri, layout.DrawingRelId, eager: false, loadImages: true);
     }
 
+    private IReadOnlyList<CellComment>? _comments;
+
+    /// <summary>
+    /// The sheet's cell comments (notes) with author, text (and runs), box anchor and
+    /// visibility, in file order; empty when there are none. Uses <see cref="ReadLayout"/> to
+    /// find the comment shapes. Cached. Since 1.7.0.
+    /// </summary>
+    public IReadOnlyList<CellComment> ReadComments()
+    {
+        if (_comments is not null) return _comments;
+        var layout = ReadLayout();
+        _book.Options.CancellationToken.ThrowIfCancellationRequested();
+        return _comments = LegacyDrawingReader.ReadComments(_book, _info.PartUri, layout.LegacyDrawingRelId);
+    }
+
+    private IReadOnlyList<HeaderFooterPicture>? _hfPictures;
+
+    /// <summary>
+    /// The pictures in the sheet's headers and footers (&amp;G), from its legacyDrawingHF part;
+    /// empty when there are none. Image bytes are read on demand while the reader is open.
+    /// Cached. Since 1.7.0.
+    /// </summary>
+    public IReadOnlyList<HeaderFooterPicture> ReadHeaderFooterPictures()
+    {
+        if (_hfPictures is not null) return _hfPictures;
+        var layout = ReadLayout();
+        _book.Options.CancellationToken.ThrowIfCancellationRequested();
+        return _hfPictures = LegacyDrawingReader.ReadHeaderFooterPictures(_book, _info.PartUri, layout.LegacyDrawingHFRelId, eager: false, loadImages: true);
+    }
+
     /// <summary>Skips the current element's subtree, checking the token as it goes (sheetData can be huge).</summary>
     private static void SkipSubtree(XmlReader xml, System.Threading.CancellationToken ct)
     {
@@ -698,6 +798,40 @@ public sealed class SheetReader
             if ((++n & 0xFFFF) == 0) ct.ThrowIfCancellationRequested();
             if (xml.NodeType == XmlNodeType.EndElement && xml.Depth == depth) return;
         }
+    }
+
+    /// <summary>The last row number of the worksheet grid (1,048,576).</summary>
+    public const int MaxRow = 1_048_576;
+
+    /// <summary>The last column number of the worksheet grid (16,384, column XFD).</summary>
+    public const int MaxColumn = 16_384;
+
+    /// <summary>
+    /// Rows the current (or last) row enumeration dropped because their row number lies
+    /// outside the grid (below 1 or above <see cref="MaxRow"/>). Such rows cannot exist in
+    /// Excel; some third-party writers produce them (for example r="0"). Reset when a new
+    /// enumeration starts; complete once it has run to the end.
+    /// </summary>
+    public long OutOfGridRows { get; private set; }
+
+    /// <summary>
+    /// Cells the current (or last) row enumeration dropped because they lie outside the grid:
+    /// every cell of an out-of-grid row, plus cells whose column is beyond <see cref="MaxColumn"/>
+    /// or whose reference has no column letters. The values are not altered or moved, only
+    /// left out. Reset and completed as <see cref="OutOfGridRows"/>.
+    /// </summary>
+    public long OutOfGridCells { get; private set; }
+
+    /// <summary>The reference of the first dropped cell (as written, e.g. "A0"), or "row N" for an empty dropped row; null when nothing was dropped.</summary>
+    public string? FirstOutOfGridReference { get; private set; }
+
+    internal void ResetOutOfGrid() { OutOfGridRows = 0; OutOfGridCells = 0; FirstOutOfGridReference = null; }
+
+    internal void NoteOutOfGrid(string reference, long rows, long cells)
+    {
+        OutOfGridRows += rows;
+        OutOfGridCells += cells;
+        FirstOutOfGridReference ??= reference;
     }
 
     internal Dictionary<string, int>? HeaderIndex => _headerIndex;
@@ -743,6 +877,9 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     private bool[] _cellPresent = new bool[16];        // parallel: a <c> element exists for the column
     private FormulaSlot[] _formulas = new FormulaSlot[16];   // parallel: formula of the cell, if any
     private bool _rowHasFormula;
+    private RichText?[]? _rich;                         // parallel: runs of rich-text cells (allocated on first use)
+    private bool _rowHasRich;
+    private RichText? _pendingRich;                     // runs of the cell being read
     private RowData? _rowData;                          // the current <row>'s attributes (null = none)
     private readonly Dictionary<int, SharedFormulaMaster> _sharedMasters = new();
     private int _maxColumnSeen;
@@ -765,11 +902,12 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         _autoDetectDates = _book.Options.AutoDetectDates;
         _ct = _book.Options.CancellationToken;
         _maxRows = _book.Options.MaxRowsPerSheet ?? long.MaxValue;
+        sheet.ResetOutOfGrid();
     }
 
     public RowReader Current
         => _hasCurrent
-            ? new RowReader(_cellValues, _cellStyles, _maxColumnSeen, _currentRowNumber, _sheet, new RowExtras(_cellPresent, _rowHasFormula ? _formulas : null, _rowData, _sharedMasters))
+            ? new RowReader(_cellValues, _cellStyles, _maxColumnSeen, _currentRowNumber, _sheet, new RowExtras(_cellPresent, _rowHasFormula ? _formulas : null, _rowData, _sharedMasters, _rowHasRich ? _rich : null))
             : throw new InvalidOperationException("Enumeration has not started or already ended.");
 
     object IEnumerator.Current => Current;
@@ -828,6 +966,14 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 ? rn
                 : _currentRowNumber + 1;
 
+            if (_currentRowNumber < 1 || _currentRowNumber > SheetReader.MaxRow)
+            {
+                // A row outside the worksheet grid (r="0", r="1048577"): Excel cannot hold it.
+                // Drop it and its cells, and report them on the SheetReader.
+                SkipOutOfGridRow(rAttr);
+                continue;
+            }
+
             _rowData = SheetLayoutCollector.ParseRow(_xml);
             if (_rowData is not null) _layout?.SetRow(_currentRowNumber, _rowData);
 
@@ -865,9 +1011,18 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             }
             else
             {
-                col = ++impliedCol;
+                col = Math.Min(impliedCol + 1, SheetReader.MaxColumn + 1);
             }
             impliedCol = col;
+
+            if (col < 1 || col > SheetReader.MaxColumn)
+            {
+                // A column outside the grid (beyond XFD, or a reference with no column letters):
+                // drop the cell and report it.
+                _sheet.NoteOutOfGrid(rAttr ?? $"R{_currentRowNumber}C{col}", rows: 0, cells: 1);
+                SkipElement();
+                continue;
+            }
 
             var t = _xml.GetAttribute("t");
             var s = _xml.GetAttribute("s");
@@ -877,6 +1032,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
 
             // Read the cell's contents.
             _pending = default;
+            _pendingRich = null;
             var value = ReadCellValue(t, styleIndex);
 
             // Store in buffer; grow if needed.
@@ -884,6 +1040,12 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             _cellValues[col - 1] = value;
             _cellStyles[col - 1] = styleIndex;
             _cellPresent[col - 1] = true;
+            if (_pendingRich is not null)
+            {
+                _rich ??= new RichText?[_cellValues.Length];
+                _rich[col - 1] = _pendingRich;
+                _rowHasRich = true;
+            }
             if (_pending.Present)
             {
                 var slot = _pending;
@@ -940,9 +1102,10 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 }
                 else if (_xml.LocalName == "is")
                 {
-                    // Inline string container — extract its text content.
+                    // Inline string container: its text (a <t>, or rich-text runs; phonetic runs are skipped).
                     inlineSb ??= new System.Text.StringBuilder();
-                    ExtractStringFromInlineStrContainer(inlineSb);
+                    var rt = RichTextXml.ReadItem(_xml, inlineSb);
+                    if (rt is not null) _pendingRich = RichTextXml.Resolve(rt, _book.StyleTable);
                 }
             }
         }
@@ -969,30 +1132,6 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         return sb.ToString();
     }
 
-    private void ExtractStringFromInlineStrContainer(System.Text.StringBuilder sb)
-    {
-        // <is> may contain a simple <t> or rich-text <r>/<t> structure.
-        if (_xml.IsEmptyElement) return;
-        int depth = _xml.Depth;
-        while (_xml.Read())
-        {
-            if (_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == depth) return;
-            if (_xml.NodeType == XmlNodeType.Element && _xml.LocalName == "t")
-            {
-                if (!_xml.IsEmptyElement)
-                {
-                    int td = _xml.Depth;
-                    while (_xml.Read())
-                    {
-                        if (_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == td) break;
-                        if (_xml.NodeType is XmlNodeType.Text or XmlNodeType.SignificantWhitespace or XmlNodeType.Whitespace)
-                            sb.Append(_xml.Value);
-                    }
-                }
-            }
-        }
-    }
-
     private object? InterpretRawValue(string? cellType, string rawValue, int styleIndex, bool isFormula)
     {
         // OOXML cell type semantics:
@@ -1013,7 +1152,11 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var idx))
                 {
                     var arr = _book.SharedStrings;
-                    if (idx >= 0 && idx < arr.Length) return arr[idx];
+                    if (idx >= 0 && idx < arr.Length)
+                    {
+                        if (_book.SharedRichText is { } rich) _pendingRich = rich[idx];
+                        return arr[idx];
+                    }
                 }
                 return rawValue;  // malformed — return raw as fallback
             }
@@ -1043,6 +1186,8 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
 
     /// <summary>
     /// Parses the column-letter portion of an A1 address: "A1" → 1, "B23" → 2, "AA1" → 27.
+    /// Letters are matched case-insensitively. A column past XFD returns MaxColumn + 1 (no
+    /// overflow); a reference without letters returns 0.
     /// </summary>
     private static int ParseCellColumn(string a1)
     {
@@ -1050,10 +1195,45 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         for (int i = 0; i < a1.Length; i++)
         {
             var c = a1[i];
-            if (c >= 'A' && c <= 'Z') col = col * 26 + (c - 'A' + 1);
+            if (c >= 'a' && c <= 'z') c = (char)(c - 32);
+            if (c >= 'A' && c <= 'Z')
+            {
+                col = col * 26 + (c - 'A' + 1);
+                if (col > SheetReader.MaxColumn) return SheetReader.MaxColumn + 1;
+            }
             else break;
         }
         return col;
+    }
+
+    /// <summary>Skips the current element (and its content), leaving the reader on its end tag.</summary>
+    private void SkipElement()
+    {
+        if (_xml.IsEmptyElement) return;
+        int depth = _xml.Depth;
+        while (_xml.Read())
+            if (_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == depth) return;
+    }
+
+    /// <summary>Skips an out-of-grid &lt;row&gt;, counting its cells.</summary>
+    private void SkipOutOfGridRow(string? rAttr)
+    {
+        long cells = 0;
+        string? first = null;
+        if (!_xml.IsEmptyElement)
+        {
+            int depth = _xml.Depth;
+            while (_xml.Read())
+            {
+                if (_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == depth) break;
+                if (_xml.NodeType == XmlNodeType.Element && _xml.Depth == depth + 1 && _xml.LocalName == "c")
+                {
+                    cells++;
+                    first ??= _xml.GetAttribute("r");
+                }
+            }
+        }
+        _sheet.NoteOutOfGrid(first ?? $"row {rAttr ?? _currentRowNumber.ToString(CultureInfo.InvariantCulture)}", rows: 1, cells: cells);
     }
 
     private void ClearRowBuffer()
@@ -1064,8 +1244,10 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             Array.Fill(_cellStyles, -1, 0, _maxColumnSeen);
             Array.Clear(_cellPresent, 0, _maxColumnSeen);
             if (_rowHasFormula) Array.Clear(_formulas, 0, _maxColumnSeen);
+            if (_rowHasRich) Array.Clear(_rich!, 0, _maxColumnSeen);
         }
         _rowHasFormula = false;
+        _rowHasRich = false;
         _rowData = null;
         _maxColumnSeen = 0;
     }
@@ -1080,6 +1262,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         Array.Resize(ref _cellStyles, newSize);
         Array.Resize(ref _cellPresent, newSize);
         Array.Resize(ref _formulas, newSize);
+        if (_rich is not null) Array.Resize(ref _rich, newSize);
         Array.Fill(_cellStyles, -1, oldSize, newSize - oldSize);
     }
 
@@ -1211,6 +1394,21 @@ public readonly struct RowReader
         var f = slot.Value;
         return new CellFormula(Text(f) ?? string.Empty, f.Kind, f.Range);
     }
+
+    /// <summary>
+    /// The cell's rich text (runs with their fonts) when its string is rich, a shared string or
+    /// inline string with &lt;r&gt; runs; null for plain strings and other values. The indexer
+    /// returns the plain text (the runs joined). Run colours are resolved against the workbook's
+    /// theme in <see cref="RichTextRun.ResolvedColor"/>. Since 1.7.0.
+    /// </summary>
+    public RichText? GetRichText(int column0Based)
+    {
+        var r = _extras.Rich;
+        return r is null || column0Based < 0 || column0Based >= _count ? null : r[column0Based];
+    }
+
+    /// <summary>Rich text by header name (requires TreatFirstRowAsHeaders). See <see cref="GetRichText(int)"/>.</summary>
+    public RichText? GetRichText(string columnName) => GetRichText(HeaderColumn(columnName));
 
     /// <summary>
     /// True if the cell has a formula and the file stores its last computed result (a &lt;v&gt;
@@ -1397,10 +1595,11 @@ internal readonly struct RowExtras
     public readonly FormulaSlot[]? Formulas;
     public readonly RowData? RowData;
     public readonly Dictionary<int, SharedFormulaMaster> SharedMasters;
+    public readonly RichText?[]? Rich;
 
-    public RowExtras(bool[] present, FormulaSlot[]? formulas, RowData? rowData, Dictionary<int, SharedFormulaMaster> masters)
+    public RowExtras(bool[] present, FormulaSlot[]? formulas, RowData? rowData, Dictionary<int, SharedFormulaMaster> masters, RichText?[]? rich)
     {
-        Present = present; Formulas = formulas; RowData = rowData; SharedMasters = masters;
+        Present = present; Formulas = formulas; RowData = rowData; SharedMasters = masters; Rich = rich;
     }
 }
 

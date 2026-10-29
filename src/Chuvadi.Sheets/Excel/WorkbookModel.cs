@@ -64,6 +64,31 @@ public sealed class Workbook
     /// </summary>
     public bool HasMacros { get; internal set; }
 
+    private readonly List<LoadWarning> _loadWarnings = new();
+
+    /// <summary>
+    /// What <see cref="Load(string)"/> left out because the model cannot hold it (since 1.7.0:
+    /// cells outside the worksheet grid). Empty for a new workbook or a clean file. Loaded data
+    /// is never altered; this only reports skipped content.
+    /// </summary>
+    public IReadOnlyList<LoadWarning> LoadWarnings => _loadWarnings;
+
+    /// <summary>
+    /// The chart sheets of a loaded workbook (tabs holding one chart), in tab order, since
+    /// 1.7.0. Read-only: <see cref="SaveTo(string)"/> writes worksheets only, so chart sheets are
+    /// not carried to the saved file. Empty for a new workbook.
+    /// </summary>
+    public IReadOnlyList<ChartSheet> ChartSheets { get; internal set; } = Array.Empty<ChartSheet>();
+
+    internal void AddLoadWarning(LoadWarning w) => _loadWarnings.Add(w);
+
+    /// <summary>
+    /// True when the file was an ISO/IEC 29500 Strict workbook (http://purl.oclc.org/ooxml/...
+    /// namespaces; since 1.7.0 read like a Transitional one). Saving writes Transitional, as
+    /// Excel's "Excel Workbook" format does.
+    /// </summary>
+    public bool IsStrict { get; internal set; }
+
     /// <summary>
     /// The defined names of a loaded file, exactly as stored (including _xlnm.Print_Area and
     /// _xlnm.Print_Titles, and names the model cannot keep). Read-only; what is saved is
@@ -397,6 +422,53 @@ public sealed class Sheet
     public IReadOnlyList<DrawingObject> Drawings => _drawings;
 
     internal void SetLoadedDrawings(List<DrawingObject> drawings) => _drawings = drawings;
+
+    private readonly List<Hyperlink> _hyperlinks = new();
+
+    /// <summary>
+    /// The sheet's cell and range hyperlinks, in file order (since 1.7.0). Loaded with targets
+    /// resolved; saved on <see cref="Workbook.SaveTo(string)"/>. Add, remove or replace entries
+    /// freely; the linked cells' values and styles are separate (a linked cell is usually blue
+    /// and underlined through its own style).
+    /// </summary>
+    public IList<Hyperlink> Hyperlinks => _hyperlinks;
+
+    /// <summary>Adds a hyperlink over a cell or range. See <see cref="Hyperlink(string, string?, string?, string?, string?)"/>.</summary>
+    public Sheet AddHyperlink(string reference, string? target = null, string? location = null, string? tooltip = null, string? display = null)
+    {
+        _hyperlinks.Add(new Hyperlink(reference, target, location, tooltip, display));
+        return this;
+    }
+
+    private readonly List<CellComment> _comments = new();
+
+    /// <summary>
+    /// The sheet's cell comments (notes), in file order (since 1.7.0): loaded with author,
+    /// text runs, box anchor and visibility; saved on <see cref="Workbook.SaveTo(string)"/>.
+    /// Add, remove or replace entries freely.
+    /// </summary>
+    public IList<CellComment> Comments => _comments;
+
+    /// <summary>Adds a comment (note) to a cell.</summary>
+    public Sheet AddComment(string reference, string author, string text)
+    {
+        _comments.Add(new CellComment(reference, author, text));
+        return this;
+    }
+
+    private IReadOnlyList<HeaderFooterPicture> _hfPictures = Array.Empty<HeaderFooterPicture>();
+
+    /// <summary>The pictures in the headers and footers (&amp;G), as loaded. Read-only; not written on save. Since 1.7.0.</summary>
+    public IReadOnlyList<HeaderFooterPicture> HeaderFooterPictures => _hfPictures;
+
+    internal void SetLoadedHeaderFooterPictures(List<HeaderFooterPicture> pictures) => _hfPictures = pictures;
+
+    /// <summary>The first hyperlink covering the 1-based cell, or null.</summary>
+    public Hyperlink? FindHyperlink(int row, int column)
+    {
+        foreach (var h in _hyperlinks) if (h.Contains(row, column)) return h;
+        return null;
+    }
 
     internal void SetLoaded(PageSetup page, SheetView view, string? tabColor,
                             List<ConditionalFormatting> conditionalFormats, List<(string Range, DataValidation Validation)> validations)
@@ -915,7 +987,29 @@ public sealed class Cell
     public object? Value
     {
         get => _value;
-        set { _value = value; _formula = null; _arrayRange = null; }
+        set
+        {
+            if (value is RichText rt) { RichText = rt; return; }
+            _value = value; _formula = null; _arrayRange = null; _rich = null;
+        }
+    }
+
+    /// <summary>
+    /// The cell's rich text (runs with their own fonts), or null for a plain value. Loaded from
+    /// shared and inline strings with runs; <see cref="Value"/> then holds the plain text (the
+    /// runs joined), unchanged from earlier versions. Setting it makes the cell a constant
+    /// string (Value = its text) saved with its runs; setting <see cref="Value"/> (other than to
+    /// a RichText) or <see cref="Formula"/> clears it. Since 1.7.0.
+    /// </summary>
+    public RichText? RichText
+    {
+        get => _rich;
+        set
+        {
+            _rich = value;
+            _value = value?.Text;
+            _formula = null; _arrayRange = null;
+        }
     }
 
     /// <summary>
@@ -927,7 +1021,7 @@ public sealed class Cell
     public string? Formula
     {
         get => _formula;
-        set { _formula = value; _value = null; _arrayRange = null; }
+        set { _formula = value; _value = null; _arrayRange = null; _rich = null; }
     }
 
     /// <summary>
@@ -1001,6 +1095,7 @@ public sealed class Cell
     private object? _value;
     private string? _formula;
     private string? _arrayRange;
+    private RichText? _rich;
 
     internal Cell(int row, int column) { Row = row; Column = column; }
 

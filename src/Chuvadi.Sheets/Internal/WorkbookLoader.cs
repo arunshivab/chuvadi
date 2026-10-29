@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Chuvadi.Sheets.Excel;
 
 namespace Chuvadi.Sheets.Internal;
@@ -22,6 +23,7 @@ internal static class WorkbookLoader
             StyleTable = styles,
             Date1904 = reader.Date1904,
             HasMacros = reader.HasMacros,
+            IsStrict = reader.IsStrict,
             LoadedDefinedNames = reader.DefinedNames,
             DisplayCulture = reader.Options.DisplayCulture ?? System.Globalization.CultureInfo.InvariantCulture,
         };
@@ -50,6 +52,8 @@ internal static class WorkbookLoader
                     var cell = sheet.Cell(row.RowNumber, colIdx + 1);
                     if (formula is not null)
                         cell.SetLoadedFormula(formula.Text, v, formula.Kind == FormulaKind.Array ? formula.Range : null);
+                    else if (row.GetRichText(colIdx) is { } rich && v is string)
+                        cell.RichText = rich;
                     else if (v is not null)
                         cell.Value = v;
                     if (styleIndex >= 0)
@@ -60,8 +64,16 @@ internal static class WorkbookLoader
                 }
             }
 
+            if (sr.OutOfGridCells > 0 || sr.OutOfGridRows > 0)
+                wb.AddLoadWarning(new LoadWarning(LoadWarningKind.CellsOutsideGrid, sheetInfo.Name, sr.OutOfGridCells, sr.FirstOutOfGridReference,
+                    $"Sheet '{sheetInfo.Name}': {sr.OutOfGridCells:N0} cell(s) in {sr.OutOfGridRows:N0} row(s) outside the grid were left out (first: {sr.FirstOutOfGridReference})."));
+
             // Enumeration has run to the end of the part, so the collector is complete.
             layout.ApplyTo(sheet);
+            foreach (var hl in layout.ResolveHyperlinks(reader, sheetInfo.PartUri)) sheet.Hyperlinks.Add(hl);
+            foreach (var cm in LegacyDrawingReader.ReadComments(reader, sheetInfo.PartUri, layout.LegacyDrawingRelId)) sheet.Comments.Add(cm);
+            if (layout.LegacyDrawingHFRelId is not null)
+                sheet.SetLoadedHeaderFooterPictures(LegacyDrawingReader.ReadHeaderFooterPictures(reader, sheetInfo.PartUri, layout.LegacyDrawingHFRelId, eager: true, reader.Options.LoadImageData));
             if (layout.DrawingRelId is not null)
                 sheet.SetLoadedDrawings(DrawingReader.Read(reader, sheetInfo.PartUri, layout.DrawingRelId, eager: true, reader.Options.LoadImageData));
             PrintNames.Apply(sheet.PageSetup, reader.DefinedNames, sheetInfo.WorkbookIndex);
@@ -69,6 +81,13 @@ internal static class WorkbookLoader
 
         foreach (var si in reader.Sheets)
             if (si.WorkbookIndex == reader.ActiveTab) { wb.ActiveSheet = wb[si.Name]; break; }
+
+        if (reader.ChartSheets.Count > 0)
+        {
+            var charts = new List<ChartSheet>(reader.ChartSheets.Count);
+            foreach (var cs in reader.ChartSheets) charts.Add(reader.ReadChartSheetCore(cs, eager: true, reader.Options.LoadImageData));
+            wb.ChartSheets = charts;
+        }
 
         LoadDefinedNames(wb, reader);
         return wb;

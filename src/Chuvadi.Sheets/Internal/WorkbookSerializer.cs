@@ -109,7 +109,8 @@ internal static class WorkbookSerializer
         // Rows with settings but no cells (hidden or tall spacer rows) are written too.
         var rowData = sheet.RowDataMap;
         int lastSettingsRow = 0;
-        foreach (var kv in rowData) if (!kv.Value.IsEmpty && kv.Key > lastSettingsRow) lastSettingsRow = kv.Key;
+        // (Only rows whose settings produce a row format: e.g. a row with just a zero height has none.)
+        foreach (var kv in rowData) if (kv.Key > lastSettingsRow && FormatOf(kv.Value, sheet) is not null) lastSettingsRow = kv.Key;
 
         // If the sheet has no cells, we still need to emit an empty <sheetData>; the streaming
         // SheetWriter handles this automatically when FinalizeSheet runs with no rows.
@@ -169,8 +170,9 @@ internal static class WorkbookSerializer
                             }
                             else
                             {
-                                if (cell.Style.HasValue) rb.Cell(cell.Value, cell.Style.Value);
-                                else rb.Cell(cell.Value);
+                                object? value = cell.RichText ?? cell.Value;   // rich text keeps its runs
+                                if (cell.Style.HasValue) rb.Cell(value, cell.Style.Value);
+                                else rb.Cell(value);
                             }
                         }
                         else
@@ -194,6 +196,10 @@ internal static class WorkbookSerializer
                 sw.MergeCells(mr);
         if (sheet.AutoFilterRange is not null)
             sw.AutoFilter(sheet.AutoFilterRange);
+        foreach (var hl in sheet.Hyperlinks)
+            sw.AddHyperlink(hl);
+        foreach (var cm in sheet.Comments)
+            sw.AddComment(cm);
         foreach (var (range, v) in sheet.DataValidations)
             sw.AddDataValidation(range, v);
         foreach (var cf in sheet.ConditionalFormats)

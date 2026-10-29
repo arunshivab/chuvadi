@@ -265,7 +265,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     private async Task SaveAsyncImpl(CancellationToken ct)
     {
         await AssemblePackage(useAsyncCopy: true, cancellation: ct).ConfigureAwait(false);
-        EncryptPackageIfRequested();
+        EncryptPackageIfRequested(ct);
         _saved = true;
     }
 
@@ -274,7 +274,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     /// stream was closed when assembly finished). Re-open it, stream-encrypt it into the
     /// real output, and delete the plaintext temp. No-op when encryption wasn't requested.
     /// </summary>
-    private void EncryptPackageIfRequested()
+    private void EncryptPackageIfRequested(CancellationToken cancellation = default)
     {
         if (_options.Encryption is null) return;
 
@@ -285,7 +285,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
                 _packageTempPath!, FileMode.Open, FileAccess.Read, FileShare.Read,
                 bufferSize: 64 * 1024);
             Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                _finalOutputStream!, plaintext, plaintext.Length, enc.Password, enc.SpinCount);
+                _finalOutputStream!, plaintext, plaintext.Length, enc.Password, enc.SpinCount, cancellation);
             _finalOutputStream!.Flush();
         }
         finally
@@ -377,6 +377,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
             int hlIdx = 1;
             foreach (var hl in sheet.Hyperlinks)
             {
+                if (hl.Url is null) continue;   // a link within the workbook: no relationship
                 pkg.AddExternalRelationship(sheet.PartUri, hl.Url, RelHyperlink, $"rIdHL{hlIdx}");
                 hlIdx++;
                 sheetRelCounter++;

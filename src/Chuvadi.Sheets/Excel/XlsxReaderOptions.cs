@@ -88,11 +88,20 @@ public sealed class XlsxReaderOptions
     public int? MaxPackageEntries { get; set; }
 
     /// <summary>
-    /// Cancels reading. Checked while the package is opened (zip checks, shared strings), on
+    /// Maximum key-derivation spin count (iterations) accepted from an encrypted file. The
+    /// count is declared by the file, so a hostile file could otherwise demand billions of hash
+    /// rounds. It is checked after the encryption header is read and before any derivation;
+    /// exceeding it throws <see cref="XlsxLimitExceededException"/> ("MaxSpinCount"). Default
+    /// 500,000 (Excel writes 100,000; Chuvadi.Docs uses the same default). Null = unlimited.
+    /// </summary>
+    public int? MaxSpinCount { get; set; } = 500_000;
+
+    /// <summary>
+    /// Cancels reading. Checked while the package is opened (zip checks, shared strings), while
+    /// an encrypted file is read and decrypted (inside key derivation, every 4,096 spins), on
     /// every row while streaming, and on every row by <see cref="Workbook.Load(string, string?, XlsxReaderOptions?)"/>,
     /// so cancellation takes effect well within a second; it surfaces as
-    /// <see cref="System.OperationCanceledException"/>. Decrypting an encrypted file is a single
-    /// step that is not interrupted; bound it with <see cref="MaxTotalUncompressedBytes"/>.
+    /// <see cref="System.OperationCanceledException"/>.
     /// </summary>
     public System.Threading.CancellationToken CancellationToken { get; set; }
 
@@ -115,6 +124,7 @@ public sealed class XlsxReaderOptions
         MaxCompressionRatio = 500,
         MaxPackageEntries = 20_000,
         MaxRowsPerSheet = 1_048_576,
+        MaxSpinCount = 500_000,
     };
 
     /// <summary>True when any package-level limit is set (the zip is then pre-checked).</summary>
@@ -129,7 +139,8 @@ public sealed class XlsxReaderOptions
 /// <summary>
 /// Thrown when a file exceeds one of the limits added in 1.4.0 (<see cref="XlsxReaderOptions.MaxRowsPerSheet"/>,
 /// <see cref="XlsxReaderOptions.MaxTotalUncompressedBytes"/>, <see cref="XlsxReaderOptions.MaxCompressionRatio"/>,
-/// <see cref="XlsxReaderOptions.MaxPackageEntries"/>). <see cref="XlsxReaderOptions.MaxPartBytes"/> keeps
+/// <see cref="XlsxReaderOptions.MaxPackageEntries"/>) and, since 1.7.0, <see cref="XlsxReaderOptions.MaxSpinCount"/>.
+/// <see cref="XlsxReaderOptions.MaxPartBytes"/> keeps
 /// throwing <see cref="System.IO.InvalidDataException"/>, as it always has. Derives from
 /// <see cref="System.IO.IOException"/>.
 /// </summary>

@@ -25,6 +25,14 @@ internal sealed class StyleEntry
 internal static class SharedStringReader
 {
     public static string[] Read(Stream stream, System.Threading.CancellationToken cancellation = default)
+        => Read(stream, cancellation, out _);
+
+    /// <summary>
+    /// Reads the table. <paramref name="rich"/> receives the runs of rich items (&lt;si&gt; with
+    /// &lt;r&gt; runs), parallel to the result, or null when no item is rich. The plain text of
+    /// an item is its &lt;t&gt; text or its runs' text joined; phonetic runs (&lt;rPh&gt;) are not part of it.
+    /// </summary>
+    public static string[] Read(Stream stream, System.Threading.CancellationToken cancellation, out RichText?[]? rich)
     {
         using var r = XmlReader.Create(stream, new XmlReaderSettings
         {
@@ -34,6 +42,7 @@ internal static class SharedStringReader
         });
 
         var result = new List<string>();
+        List<RichText?>? runs = null;
         var sb = new StringBuilder();
 
         while (r.Read())
@@ -42,76 +51,18 @@ internal static class SharedStringReader
 
             if ((result.Count & 255) == 0) cancellation.ThrowIfCancellationRequested();
             sb.Clear();
-            ExtractStringFromSi(r, sb);
+            var rt = RichTextXml.ReadItem(r, sb);
+            if (rt is not null)
+            {
+                if (runs is null) { runs = new List<RichText?>(result.Count + 16); for (int i = 0; i < result.Count; i++) runs.Add(null); }
+                runs.Add(rt);
+            }
+            else runs?.Add(null);
             result.Add(sb.ToString());
         }
 
+        rich = runs?.ToArray();
         return result.ToArray();
-    }
-
-    /// <summary>
-    /// Extracts the text content of an &lt;si&gt; element. Handles both simple form
-    /// (&lt;si&gt;&lt;t&gt;text&lt;/t&gt;&lt;/si&gt;) and rich-text form (multiple &lt;r&gt;
-    /// runs each containing &lt;t&gt;). Ignores phonetic-run children (&lt;rPh&gt;).
-    /// </summary>
-    private static void ExtractStringFromSi(XmlReader r, StringBuilder sb)
-    {
-        // r is positioned at the <si> element. Read into it.
-        if (r.IsEmptyElement) return;
-
-        int depth = r.Depth;
-        while (r.Read())
-        {
-            if (r.NodeType == XmlNodeType.EndElement && r.Depth == depth && r.LocalName == "si")
-                return;
-
-            // Skip phonetic-run content (Japanese furigana).
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == "rPh")
-            {
-                if (!r.IsEmptyElement) r.Skip();
-                continue;
-            }
-
-            // Top-level <t> (simple form) — collect its text content.
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == "t")
-            {
-                CollectTextContent(r, sb);
-                continue;
-            }
-
-            // <r> rich-text run — its <t> child holds text.
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == "r")
-            {
-                ReadRunContent(r, sb);
-                continue;
-            }
-        }
-    }
-
-    private static void ReadRunContent(XmlReader r, StringBuilder sb)
-    {
-        if (r.IsEmptyElement) return;
-        int depth = r.Depth;
-        while (r.Read())
-        {
-            if (r.NodeType == XmlNodeType.EndElement && r.Depth == depth && r.LocalName == "r")
-                return;
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == "t")
-                CollectTextContent(r, sb);
-        }
-    }
-
-    private static void CollectTextContent(XmlReader r, StringBuilder sb)
-    {
-        if (r.IsEmptyElement) return;
-        int depth = r.Depth;
-        while (r.Read())
-        {
-            if (r.NodeType == XmlNodeType.EndElement && r.Depth == depth)
-                return;
-            if (r.NodeType is XmlNodeType.Text or XmlNodeType.SignificantWhitespace or XmlNodeType.Whitespace)
-                sb.Append(r.Value);
-        }
     }
 }
 

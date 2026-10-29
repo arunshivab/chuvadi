@@ -97,6 +97,7 @@ internal static class NumberFormatEngine
         public bool HasDigits;
         public bool IsEmpty;
         public bool HasFraction;
+        public NumLayout? Layout;             // digit-section layout, built on first render
 
         public bool Matches(double v) => CondOp switch
         {
@@ -429,12 +430,14 @@ internal static class NumberFormatEngine
         var sec = p.TextSection;
         if (sec is null) return new FormattedValue(text, null, null, false);
         var sb = new StringBuilder();
+        int fill = -1;
         foreach (var tok in sec.Tokens)
         {
             if (tok.Kind == K.Text) sb.Append(text);
             else if (tok.Kind == K.Literal) sb.Append(tok.Text);
+            else if (tok.Kind == K.Fill) fill = sb.Length;
         }
-        return new FormattedValue(sb.ToString(), sec.Color, sec.Fill, false);
+        return Result(sb.ToString(), sec, fill, false);
     }
 
     private static FormattedValue FormatNumber(Parsed p, double v, NumberFormatOptions o)
@@ -486,47 +489,43 @@ internal static class NumberFormatEngine
 
         if (sec.IsDate)
         {
-            var dateText = RenderDate(sec, x, o);
-            return new FormattedValue(dateText, sec.Color, sec.Fill, true);
+            var dateText = RenderDate(sec, x, o, out int dateFill);
+            return Result(dateText, sec, dateFill, true);
         }
 
         bool negative = x < 0;
         double ax = Math.Abs(x);
-        var text = RenderNumber(sec, ax, o, out bool roundedZero);
-        if (negative && showMinus && !roundedZero) text = "-" + text;
-        return new FormattedValue(text, sec.Color, sec.Fill, false);
+        var text = RenderNumber(sec, ax, o, negative && showMinus, out int fill);
+        return Result(text, sec, fill, false);
     }
+
+    /// <summary>The result, with <see cref="FormattedValue.FillIndex"/> set when the section has a fill and its position is known.</summary>
+    private static FormattedValue Result(string text, Section sec, int fill, bool isDate)
+        => sec.Fill is null || fill < 0
+            ? new FormattedValue(text, sec.Color, sec.Fill, isDate)
+            : new FormattedValue(text, sec.Color, sec.Fill, isDate) { FillIndex = Math.Min(fill, text.Length) };
 
     // ======================================================================================
     // Numbers
     // ======================================================================================
 
-    private static string RenderNumber(Section sec, double v, NumberFormatOptions o, out bool roundedZero)
+    /// <summary>
+    /// Digit-section layout derived from the tokens alone: placeholder positions, comma roles,
+    /// scaling and percent. Built once per section and reused for every value (immutable).
+    /// </summary>
+    private sealed class NumLayout
     {
-        var nf = o.Culture.NumberFormat;
-        var t = sec.Tokens;
-        roundedZero = false;
+        public int ExpIdx, NumEnd, PointIdx, IntEnd;
+        public int[] IntPh = Array.Empty<int>(), DecPh = Array.Empty<int>();
+        public int[] IntOrdinal = Array.Empty<int>(), DecOrdinal = Array.Empty<int>();   // per token: ordinal or -1
+        public char[] CommaRole = Array.Empty<char>();   // per token: 'g' grouping, 's' scaling, 'l' literal
+        public bool Grouping, IntHasHash;
+        public double P100 = 1, P1000 = 1;
+    }
 
-        if (!sec.HasDigits)
-        {
-            // Literals and/or General only.
-            var sb0 = new StringBuilder();
-            foreach (var tok in t)
-            {
-                if (tok.Kind == K.General) sb0.Append(GeneralText(v, nf));
-                else if (tok.Kind == K.Literal) sb0.Append(tok.Text);
-                else if (tok.Kind == K.Percent) sb0.Append('%');
-                else if (tok.Kind == K.Point) sb0.Append(nf.NumberDecimalSeparator);
-                else if (tok.Kind == K.Comma) sb0.Append(',');
-                else if (tok.Kind == K.Slash) sb0.Append('/');
-            }
-            roundedZero = v == 0;
-            return sb0.ToString();
-        }
-
-        if (sec.HasFraction) return RenderFraction(sec, v, nf, out roundedZero);
-
-        // ---- Layout analysis ----
+    private static NumLayout BuildLayout(List<Tok> t)
+    {
+        var L = new NumLayout();
         int expIdx = t.FindIndex(x => x.Kind == K.Exponent);
         int numEnd = expIdx >= 0 ? expIdx : t.Count;
         int pointIdx = -1;
@@ -544,7 +543,7 @@ internal static class NumberFormatEngine
         // Comma roles: grouping (between integer placeholders) or scaling (after the last digit).
         bool grouping = false;
         int scale = 0;
-        var commaRole = new Dictionary<int, char>();   // 'g' grouping, 's' scaling, 'l' literal
+        var commaRole = new char[t.Count];
         int firstInt = intPh.Count > 0 ? intPh[0] : -1, lastInt = intPh.Count > 0 ? intPh[^1] : -1;
         int lastDigit = -1;
         for (int i = 0; i < numEnd; i++) if (t[i].Kind is K.D0 or K.DHash or K.DQ) lastDigit = i;
@@ -561,15 +560,95 @@ internal static class NumberFormatEngine
         int pct = 0;
         foreach (var tok in t) if (tok.Kind == K.Percent) pct++;
 
-        double val = v * Math.Pow(100, pct) / Math.Pow(1000, scale);
-        int decimals = decPh.Count;
+        L.ExpIdx = expIdx; L.NumEnd = numEnd; L.PointIdx = pointIdx; L.IntEnd = intEnd;
+        L.IntPh = intPh.ToArray(); L.DecPh = decPh.ToArray();
+        L.IntOrdinal = new int[t.Count]; L.DecOrdinal = new int[t.Count];
+        Array.Fill(L.IntOrdinal, -1); Array.Fill(L.DecOrdinal, -1);
+        for (int j = 0; j < L.IntPh.Length; j++) L.IntOrdinal[L.IntPh[j]] = j;
+        for (int j = 0; j < L.DecPh.Length; j++) L.DecOrdinal[L.DecPh[j]] = j;
+        L.CommaRole = commaRole;
+        L.Grouping = grouping;
+        L.IntHasHash = intPh.Exists(i => t[i].Kind == K.DHash);
+        L.P100 = Math.Pow(100, pct);
+        L.P1000 = Math.Pow(1000, scale);
+        return L;
+    }
+
+    [ThreadStatic] private static StringBuilder? t_sb;
+    [ThreadStatic] private static char[]? t_digits;
+    [ThreadStatic] private static char[]? t_generalDigits;   // General is rendered while t_digits is in use
+    [ThreadStatic] private static NumberFormatInfo? t_sizesFor;
+    [ThreadStatic] private static int[]? t_sizes;
+
+    /// <summary>
+    /// The culture's group sizes. <see cref="NumberFormatInfo.NumberGroupSizes"/> returns a fresh
+    /// copy on every read, so the array is cached per (read-only) NumberFormatInfo.
+    /// </summary>
+    private static int[] GroupSizes(NumberFormatInfo nf)
+    {
+        if (!nf.IsReadOnly) return nf.NumberGroupSizes;   // mutable: it may change between calls
+        if (!ReferenceEquals(nf, t_sizesFor)) { t_sizes = nf.NumberGroupSizes; t_sizesFor = nf; }
+        return t_sizes!;
+    }
+
+    private static StringBuilder RentBuilder()
+    {
+        var sb = t_sb ??= new StringBuilder(64);
+        sb.Clear();
+        return sb;
+    }
+
+    private static readonly string[] FixedFormats = BuildFixedFormats();
+    private static string[] BuildFixedFormats()
+    {
+        var a = new string[28];
+        for (int i = 0; i < a.Length; i++) a[i] = "F" + i.ToString(CultureInfo.InvariantCulture);
+        return a;
+    }
+
+    private static string RenderNumber(Section sec, double v, NumberFormatOptions o, bool minus, out int fill)
+    {
+        var nf = o.Culture.NumberFormat;
+        var t = sec.Tokens;
+        fill = -1;
+
+        if (!sec.HasDigits)
+        {
+            // Literals and/or General only.
+            var sb0 = new StringBuilder();
+            foreach (var tok in t)
+            {
+                if (tok.Kind == K.General) sb0.Append(GeneralText(v, nf));
+                else if (tok.Kind == K.Literal) sb0.Append(tok.Text);
+                else if (tok.Kind == K.Percent) sb0.Append('%');
+                else if (tok.Kind == K.Point) sb0.Append(nf.NumberDecimalSeparator);
+                else if (tok.Kind == K.Comma) sb0.Append(',');
+                else if (tok.Kind == K.Slash) sb0.Append('/');
+                else if (tok.Kind == K.Fill) fill = sb0.Length;
+            }
+            bool zero0 = v == 0;
+            if (minus && !zero0) { if (fill >= 0) fill++; return "-" + sb0.ToString(); }
+            return sb0.ToString();
+        }
+
+        if (sec.HasFraction)
+        {
+            var ft = RenderFraction(sec, v, nf, out bool zeroF, out fill);
+            if (minus && !zeroF) { if (fill >= 0) fill++; return "-" + ft; }
+            return ft;
+        }
+
+        var L = sec.Layout ??= BuildLayout(t);
+        double val = v * L.P100 / L.P1000;
+        int decimals = L.DecPh.Length;
+        int intCount = L.IntPh.Length;
 
         // ---- Exponent ----
         int exponent = 0;
-        if (expIdx >= 0)
+        if (L.ExpIdx >= 0)
         {
-            int k = Math.Max(1, intPh.Count);
-            bool hasHash = intPh.Exists(i => t[i].Kind == K.DHash);
+            int k = Math.Max(1, intCount);
+            bool hasHash = L.IntHasHash;
             if (val != 0)
             {
                 exponent = (int)Math.Floor(Math.Log10(val));
@@ -585,52 +664,84 @@ internal static class NumberFormatEngine
         }
 
         // ---- Round and split ----
-        SplitRounded(val, decimals, out var intDigits, out var fracDigits);
-        roundedZero = intDigits.Length == 0 && fracDigits.TrimEnd('0').Length == 0 && expIdx < 0;
-        if (expIdx >= 0 && intDigits.Length == 0 && fracDigits.TrimEnd('0').Length == 0) roundedZero = true;
+        var buf = SplitRounded(val, decimals, out int intStart, out int intLen, out int fracStart, out int fracLen);
+        int lastSig = -1;
+        for (int j = fracLen - 1; j >= 0; j--) if (buf[fracStart + j] != '0') { lastSig = j; break; }
+        bool roundedZero = intLen == 0 && lastSig < 0;
 
-        // ---- Assign integer digits to placeholders (right-aligned, extras to the leftmost) ----
-        var intOut = AssignInteger(t, intPh, intDigits, grouping, nf);
+        // Integer digits fill the placeholders from the right; extra leading digits go to the
+        // leftmost one. Unfilled: 0 → "0", ? → " ", # → "". Group separators follow the
+        // culture's group sizes (e.g. 3;2 for 1,00,000), counted over the emitted digits.
+        int digitChars = intLen;
+        for (int j = 0; j < intCount - intLen; j++) if (t[L.IntPh[j]].Kind == K.D0) digitChars++;
+        int emitted = 0;
+        bool grouping = L.Grouping;
+        string sep = nf.NumberGroupSeparator;
+        int[]? sizes = grouping ? GroupSizes(nf) : null;
 
-        // ---- Fraction digits ----
-        int lastSig = fracDigits.TrimEnd('0').Length - 1;
-        var decOut = new Dictionary<int, string>();
-        for (int j = 0; j < decPh.Count; j++)
-        {
-            char d = fracDigits[j];
-            var kind = t[decPh[j]].Kind;
-            decOut[decPh[j]] = j <= lastSig ? d.ToString() : kind == K.D0 ? "0" : kind == K.DQ ? " " : "";
-        }
-
-        // ---- Emit ----
-        var sb = new StringBuilder();
+        var sb = RentBuilder();
+        if (minus && !roundedZero) sb.Append('-');
         for (int i = 0; i < t.Count; i++)
         {
             var tok = t[i];
             switch (tok.Kind)
             {
                 case K.D0: case K.DHash: case K.DQ:
-                    if (intOut.TryGetValue(i, out var s1)) sb.Append(s1);
-                    else if (decOut.TryGetValue(i, out var s2)) sb.Append(s2);
+                {
+                    int j = L.IntOrdinal[i];
+                    if (j >= 0)
+                    {
+                        if (j == 0 && intLen > intCount)
+                            for (int q = 0; q < intLen - intCount; q++) EmitDigit(sb, buf[intStart + q], ref emitted, digitChars, grouping, sizes, sep);
+                        int r = intCount - 1 - j;
+                        if (r < intLen) EmitDigit(sb, buf[intStart + intLen - 1 - r], ref emitted, digitChars, grouping, sizes, sep);
+                        else if (tok.Kind == K.D0) EmitDigit(sb, '0', ref emitted, digitChars, grouping, sizes, sep);
+                        else if (tok.Kind == K.DQ) sb.Append(' ');
+                        break;
+                    }
+                    int dj = L.DecOrdinal[i];
+                    if (dj >= 0)
+                    {
+                        if (dj <= lastSig) sb.Append(dj < fracLen ? buf[fracStart + dj] : '0');
+                        else if (tok.Kind == K.D0) sb.Append('0');
+                        else if (tok.Kind == K.DQ) sb.Append(' ');
+                    }
                     break;
+                }
                 case K.Point:
-                    sb.Append(i == pointIdx ? nf.NumberDecimalSeparator : ".");
+                    sb.Append(i == L.PointIdx ? nf.NumberDecimalSeparator : ".");
                     break;
                 case K.Comma:
-                    if (commaRole.TryGetValue(i, out var role) && role == 'l') sb.Append(',');
+                    if (L.CommaRole[i] == 'l') sb.Append(',');
                     break;
                 case K.Percent: sb.Append('%'); break;
                 case K.Exponent:
+                {
                     sb.Append(tok.Text);
                     if (exponent < 0) sb.Append('-'); else if (tok.Plus) sb.Append('+');
-                    sb.Append(Math.Abs(exponent).ToString(CultureInfo.InvariantCulture).PadLeft(Math.Max(tok.Len, 1), '0'));
+                    int ae = Math.Abs(exponent);
+                    int nd = ae < 10 ? 1 : ae < 100 ? 2 : ae < 1000 ? 3 : 4;
+                    for (int z = nd; z < Math.Max(tok.Len, 1); z++) sb.Append('0');
+                    Span<char> eb = stackalloc char[11];
+                    ae.TryFormat(eb, out int ew, default, CultureInfo.InvariantCulture);
+                    sb.Append(eb.Slice(0, ew));
                     break;
+                }
                 case K.Literal: sb.Append(tok.Text); break;
                 case K.General: sb.Append(GeneralText(v, nf)); break;
                 case K.Slash: sb.Append('/'); break;
+                case K.Fill: fill = sb.Length; break;
             }
         }
         return sb.ToString();
+    }
+
+    private static void EmitDigit(StringBuilder sb, char ch, ref int emitted, int digitChars, bool grouping, int[]? sizes, string sep)
+    {
+        sb.Append(ch);
+        int pos = digitChars - 1 - emitted;   // digits still to come on the right
+        if (grouping && pos > 0 && IsBoundary(pos, sizes!)) sb.Append(sep);
+        emitted++;
     }
 
     private static bool OnlyCommasBetween(List<Tok> t, int from, int to)
@@ -642,36 +753,50 @@ internal static class NumberFormatEngine
     /// <summary>
     /// Rounds half away from zero to <paramref name="decimals"/> places. Uses decimal
     /// arithmetic (which, like Excel, keeps 15 significant digits of a double) when in range.
-    /// intDigits is "" for a zero integer part.
+    /// The integer digits ("" for a zero integer part) and the fraction digits land in a
+    /// per-thread buffer, valid until the next call on the thread.
     /// </summary>
-    private static void SplitRounded(double val, int decimals, out string intDigits, out string fracDigits)
+    private static char[] SplitRounded(double val, int decimals, out int intStart, out int intLen, out int fracStart, out int fracLen,
+        bool general = false)
     {
         decimals = Math.Min(decimals, 27);
-        string s;
+        var buf = general ? (t_generalDigits ??= new char[512]) : (t_digits ??= new char[512]);
+        int w;
         if (val < 7.9e27)
         {
             decimal d = (decimal)val;
             d = Math.Round(d, decimals, MidpointRounding.AwayFromZero);
-            s = d.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+            if (!d.TryFormat(buf, out w, FixedFormats[decimals], CultureInfo.InvariantCulture))
+                throw new InvalidOperationException("Digit buffer too small.");
         }
         else
         {
             // Beyond decimal range: Excel shows 15 significant digits then zeros.
-            s = val.ToString("E14", CultureInfo.InvariantCulture);
-            var mant = s.Substring(0, s.IndexOf('E')).Replace(".", "");
-            int exp = int.Parse(s.Substring(s.IndexOf('E') + 1), CultureInfo.InvariantCulture);
-            s = mant.PadRight(exp + 1, '0') + (decimals > 0 ? "." + new string('0', decimals) : "");
+            var e = val.ToString("E14", CultureInfo.InvariantCulture);
+            var mant = e.Substring(0, e.IndexOf('E')).Replace(".", "");
+            int exp = int.Parse(e.Substring(e.IndexOf('E') + 1), CultureInfo.InvariantCulture);
+            var str = mant.PadRight(exp + 1, '0') + (decimals > 0 ? "." + new string('0', decimals) : "");
+            if (str.Length > buf.Length)
+            {
+                buf = new char[str.Length * 2];
+                if (general) t_generalDigits = buf; else t_digits = buf;
+            }
+            str.CopyTo(0, buf, 0, str.Length);
+            w = str.Length;
         }
-        int dot = s.IndexOf('.');
-        intDigits = dot < 0 ? s : s.Substring(0, dot);
-        fracDigits = dot < 0 ? string.Empty : s.Substring(dot + 1);
-        if (intDigits == "0") intDigits = string.Empty;
+        int dot = Array.IndexOf(buf, '.', 0, w);
+        intStart = 0;
+        intLen = dot < 0 ? w : dot;
+        fracStart = dot < 0 ? w : dot + 1;
+        fracLen = dot < 0 ? 0 : w - dot - 1;
+        if (intLen == 1 && buf[0] == '0') intLen = 0;
+        return buf;
     }
 
     /// <summary>
     /// Places integer digits into placeholders from the right; any extra leading digits go to
     /// the leftmost placeholder. Unfilled placeholders: 0 → "0", ? → " ", # → "". Group
-    /// separators follow the culture's group sizes (e.g. 3;2 for 1,00,000).
+    /// separators follow the culture's group sizes (e.g. 3;2 for 1,00,000). Used by fractions.
     /// </summary>
     private static Dictionary<int, string> AssignInteger(List<Tok> t, List<int> ph, string digits,
         bool grouping, NumberFormatInfo nf)
@@ -680,12 +805,12 @@ internal static class NumberFormatEngine
         int di = digits.Length - 1;
         int pos = 0;   // digit position from the right among emitted digits
         string sep = nf.NumberGroupSeparator;
-        int[] sizes = nf.NumberGroupSizes;
+        int[]? sizes = grouping ? GroupSizes(nf) : null;
 
         string Emit(char ch)
         {
             string piece = ch.ToString();
-            if (grouping && pos > 0 && IsBoundary(pos, sizes)) piece += sep;
+            if (grouping && pos > 0 && IsBoundary(pos, sizes!)) piece += sep;
             pos++;
             return piece;
         }
@@ -725,9 +850,10 @@ internal static class NumberFormatEngine
     // Fractions
     // ======================================================================================
 
-    private static string RenderFraction(Section sec, double v, NumberFormatInfo nf, out bool roundedZero)
+    private static string RenderFraction(Section sec, double v, NumberFormatInfo nf, out bool roundedZero, out int fill)
     {
         var t = sec.Tokens;
+        fill = -1;
         int slash = t.FindIndex(x => x.Kind == K.Slash);
 
         // Numerator: digit placeholders immediately before the slash.
@@ -821,6 +947,7 @@ internal static class NumberFormatEngine
                 case K.Percent: sb.Append('%'); break;
                 case K.Point: sb.Append(nf.NumberDecimalSeparator); break;
                 case K.General: sb.Append(GeneralText(v, nf)); break;
+                case K.Fill: fill = sb.Length; break;
             }
         }
         return sb.ToString();
@@ -865,10 +992,13 @@ internal static class NumberFormatEngine
         else
         {
             int decimals = e >= 0 ? Math.Max(0, 9 - e) : 9;
-            SplitRounded(a, decimals, out var ip, out var fp);
-            fp = fp.TrimEnd('0');
-            if (ip.Length == 0) ip = "0";
-            body = fp.Length > 0 ? ip + nf.NumberDecimalSeparator + fp : ip;
+            var buf = SplitRounded(a, decimals, out int ips, out int ipl, out int fps, out int fpl, general: true);
+            while (fpl > 0 && buf[fps + fpl - 1] == '0') fpl--;
+            ReadOnlySpan<char> ip = ipl == 0 ? "0" : buf.AsSpan(ips, ipl);
+            // (Not the shared builder: General can be emitted inside another section's rendering.)
+            return string.Concat(neg ? "-" : ReadOnlySpan<char>.Empty, ip,
+                fpl > 0 ? nf.NumberDecimalSeparator : ReadOnlySpan<char>.Empty,
+                fpl > 0 ? buf.AsSpan(fps, fpl) : ReadOnlySpan<char>.Empty);
         }
         return neg ? "-" + body : body;
     }
@@ -877,8 +1007,9 @@ internal static class NumberFormatEngine
     // Dates and times
     // ======================================================================================
 
-    private static string RenderDate(Section sec, double serial, NumberFormatOptions o)
+    private static string RenderDate(Section sec, double serial, NumberFormatOptions o, out int fill)
     {
+        fill = -1;
         if (serial < 0 || serial >= 2958466) return new string('#', 8);
         var dtf = o.Culture.DateTimeFormat;
         var t = sec.Tokens;
@@ -973,6 +1104,7 @@ internal static class NumberFormatEngine
                 case K.TimeSep: sb.Append(dtf.TimeSeparator); break;
                 case K.Literal: sb.Append(tok.Text); break;
                 case K.General: sb.Append(GeneralText(serial, o.Culture.NumberFormat)); break;
+                case K.Fill: fill = sb.Length; break;
             }
         }
         return sb.ToString();

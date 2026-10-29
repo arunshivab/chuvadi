@@ -30,6 +30,7 @@ internal static class ChartReader
             using var s = book.OpenPartLimited(partUri);
             using var x = XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, CloseInput = false });
             doc = XDocument.Load(x);
+            StrictOoxml.Normalize(doc);
         }
         catch (XmlException) { return null; }
         var root = doc.Root;

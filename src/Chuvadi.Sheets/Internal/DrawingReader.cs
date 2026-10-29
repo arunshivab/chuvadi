@@ -43,6 +43,7 @@ internal static class DrawingReader
         using (var s = book.OpenPartLimited(drawingUri))
         using (var x = XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, CloseInput = false }))
             doc = XDocument.Load(x);
+        StrictOoxml.Normalize(doc);
         var root = doc.Root;
         if (root is null) return result;
 

@@ -1,6 +1,6 @@
 # Chuvadi.Sheets → Chuvadi.Layout: integration guide
 
-This guide lists the public Chuvadi.Sheets APIs (1.6.1) that the Layout xlsx importer
+This guide lists the public Chuvadi.Sheets APIs (1.7.0) that the Layout xlsx importer
 should call. Each section names the exact member to use and the units and conventions it
 works in. All rows and columns are **1-based** unless a member says `column0Based`.
 
@@ -10,6 +10,7 @@ There are two ways in:
 |---|---|---|
 | Open | `Workbook.Load(path or stream, password, XlsxReaderOptions)` | `XlsxReader.Open(path or stream, password, XlsxReaderOptions)` |
 | Sheets | `wb.Sheets`, `wb[name]`, `wb.ActiveSheet` | `reader.Sheets` (`SheetInfo`), `reader.Sheet(name or index)`, `reader.ActiveTab` |
+| Chart sheets (1.7.0) | `wb.ChartSheets` (`ChartSheet`) | `reader.ChartSheets` (`SheetInfo`), `reader.ReadChartSheet(info)` |
 | Memory | All cells in memory | One row at a time |
 
 Use the model for ordinary reports. For very large sheets, use the streaming reader and a
@@ -17,11 +18,11 @@ one-page window. With the streaming reader, call in this order:
 
 1. `XlsxReader.Open(...)`
 2. `reader.Sheet(...).ReadLayout()`
-3. `ReadDrawings()`
+3. `ReadDrawings()`, `ReadComments()`, `ReadHeaderFooterPictures()` as needed
 4. Enumerate `Rows`.
 
-`ReadLayout` and `ReadDrawings` are cached. Each makes its own pass over the sheet part, so
-call them before the rows or between enumerations.
+`ReadLayout`, `ReadDrawings`, `ReadComments` and `ReadHeaderFooterPictures` are cached. Each
+makes its own pass over its part, so call them before the rows or between enumerations.
 
 **Options worth setting:**
 - `XlsxReaderOptions.TreatFirstRowAsHeaders = false`. The streaming reader defaults to
@@ -31,6 +32,22 @@ call them before the rows or between enumerations.
 - `IncludeStyledEmptyCells = true` on the model, so that empty cells with borders or fills
   are loaded.
 - For untrusted files: `XlsxReaderOptions.ForUntrustedInput()` plus a `CancellationToken`.
+  Since 1.7.0 the token also interrupts decryption (inside key derivation), and
+  `MaxSpinCount` (default 500,000) rejects encrypted files that declare a higher key-derivation
+  spin count, as `XlsxLimitExceededException` with `LimitName == "MaxSpinCount"`.
+
+**Files from other writers (1.7.0):**
+- Part names are matched case-insensitively and '\' is accepted as a separator
+  ("[content_types].xml", "xl\styles.xml"), as Excel and POI do.
+- ISO/IEC 29500 Strict workbooks (http://purl.oclc.org/ooxml/... namespaces) are read like
+  Transitional ones: `wb.IsStrict` / `reader.IsStrict` tell them apart. The Strict
+  `dateCompatibility` attribute is not applied: date serials use the 1900 or 1904 system as
+  `Date1904` says.
+- Rows and cells outside the grid (row 0, rows above 1,048,576, columns past XFD) are left
+  out. The model reports them in `wb.LoadWarnings` (`LoadWarningKind.CellsOutsideGrid`, with
+  sheet, count and first reference); the streaming reader in `sheetReader.OutOfGridRows`,
+  `OutOfGridCells` and `FirstOutOfGridReference` after enumeration. Every loaded cell is
+  therefore inside the grid, and `GetEffectiveStyle` accepts it.
 
 **Which sheets to render:** skip sheets whose `Visibility` is not `SheetVisibility.Visible`
 (`Sheet.Visibility` or `SheetInfo.Visibility`).
@@ -43,6 +60,8 @@ call them before the rows or between enumerations.
 | Raw value | `cell.Value` (formula cells: cached result) | `row[col0]` |
 | Text exactly as Excel shows it | `cell.DisplayText`, `cell.GetDisplayText(NumberFormatOptions)` | `row.GetDisplayString(col0)` |
 | Formula (for tooltips/debug only) | `cell.Formula`, `cell.HasCachedValue` | `row.GetFormula(col0)`, `row.HasCachedValue(col0)` |
+| Rich text runs (1.7.0) | `cell.RichText` | `row.GetRichText(col0)` |
+| Hyperlink on a cell (1.7.0) | `sheet.FindHyperlink(row, col)`, `sheet.Hyperlinks` | `layout.Hyperlinks` |
 
 **Colour and fill characters:** for a number format that sets a colour (`[Red]`, `[Color10]`)
 or a repeat-fill (`*-`), call
@@ -51,7 +70,24 @@ or a repeat-fill (`*-`), call
 - `Text`
 - `Color`, as "RRGGBB": this overrides the font colour;
 - `FillCharacter`, which Layout repeats to fill the cell width;
+- `FillIndex` (1.7.0): the index in `Text` where the fill goes. `Text[..FillIndex]` stays at the
+  left edge and `Text[FillIndex..]` at the right, with the fill character repeated between.
+  For `_($* #,##0.00_)` and 1234.5: `Text` " $1,234.50 ", `FillIndex` 2. For a negative
+  number in a one-section format the minus sign stays left of the fill ("* 0" → "-", fill,
+  "5"). Null when there is no fill.
 - `IsDateTime`.
+
+**Rich text (1.7.0):** a cell whose string has runs has `cell.RichText` / `row.GetRichText(col0)`
+(`RichText`), and `Value` is the plain text, as before. Draw `RichText.Runs` in order:
+- `RichTextRun.Text`, exactly as stored (line breaks included);
+- `RichTextRun.Font` (`RichTextFont`): `Name`, `Size`, `Bold`, `Italic`, `Underline`,
+  `Strikethrough`, `VerticalAlign`, `Color` (`ColorRef`), `Family`, `Charset`, `Scheme`,
+  `Outline`, `Shadow`, `Condense`, `Extend`. Each is null when the run does not state it; fall
+  back to the cell's effective font for those. `Font` itself is null for a run with no
+  `<rPr>`, which Excel draws in the cell's font.
+- `RichTextRun.ResolvedColor`: the run colour as "RRGGBB" (theme, palette and tint applied),
+  or null when the run states none.
+- Phonetic guides (`<rPh>`, furigana) are not part of the runs or the text.
 
 The format code to use is the effective style's `CellStyle.NumberFormat`, or the
 conditional format's `NumberFormat` when one applies (section 6).
@@ -178,7 +214,21 @@ defaults the properties already return.
 `DifferentFirst`), plus `ScaleWithDocument` and `AlignWithMargins`.
 - The texts are raw Excel codes, kept verbatim: `&L`, `&C`, `&R` sections; `&P`, `&N`,
   `&D`, `&T`, `&F`, `&A`; `&"font,style"`; `&nn` size; `&K` colour; `&G` picture.
-- Layout parses these codes itself. Header/footer images (`&G`) are not read in 1.6.1.
+- Layout parses these codes itself.
+- **Pictures (`&G`, 1.7.0):** `sheet.HeaderFooterPictures` / `sheetReader.ReadHeaderFooterPictures()`
+  (`HeaderFooterPicture`). Each has `Section` (Left, Center, Right), `Part` (Header, Footer),
+  `Kind` (Odd, Even, First), `WidthPoints` / `HeightPoints`, `ContentType` and
+  `GetImageBytes()`. Draw the picture where the matching section's text has `&G`.
+
+**Comments (1.7.0):** for `CellComments` = `AtEnd` or `AsDisplayed`, use `sheet.Comments` /
+`sheetReader.ReadComments()` (`CellComment`):
+- `Reference`, `Row`, `Column`, `Author`, `Text` (plain; Excel starts it with a bold
+  "Author:" run), and `RichText` for the runs;
+- `Anchor` (`CommentAnchor`): the box position when shown, as 1-based columns and rows plus
+  pixel offsets (96 DPI), the same cell-plus-offset scheme as drawing anchors; null when the
+  file has no shape for the comment;
+- `Visible`: true for comments that are always shown. With `AsDisplayed`, Excel prints only
+  those, at their anchors.
 
 ## 6. Conditional formatting
 
@@ -257,8 +307,28 @@ paragraphs), `FillColor` / `NoFill`, `LineColor` / `NoLine`, `LineWidthEmu`.
 
 `obj.Chart` is null when the chart part is missing.
 
-Not read in 1.6.1: header/footer images, comment shapes (VML), form controls, in-cell
-pictures, and charts on chart sheets.
+**Chart sheets (1.7.0):** each `ChartSheet` prints as one page. It has `Name`, `Visibility`,
+`WorkbookIndex` (its place among all tabs, worksheets included), `PageSetup` (orientation,
+margins, header/footer), `View`, `Drawings` (normally one absolutely anchored chart) and
+`Chart`, the first chart's `ChartInfo`. Scale the chart to the printable area, as Excel does.
+Interleave chart sheets with worksheets by `WorkbookIndex` (`SheetInfo.WorkbookIndex` for
+worksheets).
+
+Not read in 1.7.0: form controls, in-cell pictures, and Excel 365 threaded comments beyond the
+legacy note Excel writes with them.
+
+## 7a. Hyperlinks (1.7.0)
+
+`sheet.Hyperlinks` / `layout.Hyperlinks` (`Hyperlink`), in file order:
+- `Reference` ("B3" or "B3:D4") and the parsed `FirstRow`, `FirstColumn`, `LastRow`,
+  `LastColumn`; `Contains(row, col)`;
+- `Target`: an external URL, mailto: or file path, as stored; null for a link within the
+  workbook;
+- `Location`: a place in the workbook ("'Sheet 2'!A1" or a defined name), or in the target file;
+- `Tooltip`, `Display`; `IsInternal`.
+
+For PDF output, add a link annotation over the covered cells' rectangle: a URI action for
+`Target`, a go-to for `Location` (resolve the sheet and cell to the page Layout put it on).
 
 ## 8. Minimal render loop (model)
 
@@ -277,7 +347,12 @@ foreach (var sheet in wb.Sheets.Where(s => s.Visibility == SheetVisibility.Visib
     //   var value = sheet.FindCell(r, c)?.Value;      // does not create cells
     //   var shown = NumberFormatter.FormatDetailed(value, res?.NumberFormat ?? style.NumberFormat, opts);
     //   paint fill, borders, text (shown.Text, shown.Color ?? style.FontColor), then res?.DataBar / res?.Icon
-    // Then sheet.Drawings (§7), positioned from the anchors.
+    // Then sheet.Drawings (§7), positioned from the anchors; sheet.Hyperlinks (§7a) as link
+    // annotations; sheet.Comments (§5) when page.CellComments asks for them.
+}
+foreach (var chart in wb.ChartSheets.Where(c => c.Visibility == SheetVisibility.Visible))
+{
+    // One page per chart sheet (§7), with chart.PageSetup.
 }
 ```
 

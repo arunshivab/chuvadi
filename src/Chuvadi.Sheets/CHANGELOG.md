@@ -1,5 +1,121 @@
 # Changelog
 
+## 1.7.0 (unreleased)
+
+The Layout importer's requests from running it over the Apache POI corpus: rich text,
+hyperlinks, the fill position, files from other writers, Strict OOXML, cells outside the grid,
+faster number formatting, comments, header/footer pictures and chart sheets. Also adopts the
+shared-crypto change (D-25). Additive and source-compatible. A workbook that uses none of the
+new features writes the same bytes as 1.6.1.
+
+### Features
+- **Rich text.** Strings made of runs with their own fonts (shared strings and inline strings)
+  are read with their runs.
+  - New types: `RichText` (`Runs`, `Text`), `RichTextRun` (`Text`, `Font`, `ResolvedColor`)
+    and `RichTextFont`. `RichTextFont` holds every `<rPr>` property as stored: name, size,
+    bold, italic, underline, strike, super/subscript, colour (`ColorRef`), family, charset,
+    scheme, outline, shadow, condense, extend. A property the run does not state is null.
+  - Model: `Cell.RichText`. Streaming: `RowReader.GetRichText(col)`. `Value` stays the plain
+    text, so code that reads strings is unaffected.
+  - Written as well: set `Cell.RichText` (or `Value` to a `RichText`), or pass a `RichText` as
+    a value to the streaming writer. Shared and inline strings are both supported, and load →
+    save keeps the runs. Before 1.7.0 they were flattened to plain text.
+  - Phonetic guides (`<rPh>`) are not part of the text. This was already so for shared
+    strings and is now also so for inline strings, where 1.6.1 appended the phonetic text.
+- **Hyperlinks.** `Hyperlink` (`Reference`, `Target`, `Location`, `Tooltip`, `Display`, the
+  parsed range and `Contains`), read from `<hyperlinks>` with targets resolved through the
+  sheet's relationships.
+  - Model: `Sheet.Hyperlinks` (editable), `AddHyperlink`, `FindHyperlink`. Streaming:
+    `SheetLayoutInfo.Hyperlinks`.
+  - Load → save keeps them; before 1.7.0 they were dropped. A loaded link whose target
+    relationship is missing (no target and no location) is not written.
+  - New `SheetWriter.AddHyperlink(Hyperlink)` links ranges and places within the workbook on
+    the streaming writer; external targets become relationships as before.
+- **Fill position.** New `FormattedValue.FillIndex`: the index in `Text` where the repeat fill
+  (`*x`) goes. For `_($* #,##0.00_)` and 1234.5 it is 2 (" $" | "1,234.50 "). It is an init
+  property, so positional construction and deconstruction are unchanged.
+- **Comments.** `CellComment` (`Reference`, `Row`, `Column`, `Author`, `Text`, `RichText`,
+  `Anchor` (`CommentAnchor`), `Visible`), read from the comments part and its VML shapes.
+  - Model: `Sheet.Comments` (editable), `AddComment`. Streaming: `SheetReader.ReadComments()`.
+    New `SheetWriter.AddComment(CellComment)`.
+  - Load → save keeps text runs, box anchor and visibility; before 1.7.0 comments were dropped.
+- **Header/footer pictures.** `HeaderFooterPicture` (`Section`, `Part`, `Kind`, size in points,
+  `ImagePartName`, `ContentType`, `GetImageBytes()`), from the legacyDrawingHF part.
+  - Model: `Sheet.HeaderFooterPictures`. Streaming: `SheetReader.ReadHeaderFooterPictures()`.
+  - Read-only: not written on save.
+- **Chart sheets.** `ChartSheet` (`Name`, `Visibility`, `WorkbookIndex`, `PageSetup`, `View`,
+  `TabColor`, `Drawings`, `Chart`).
+  - Model: `Workbook.ChartSheets`. Streaming: `XlsxReader.ChartSheets` and
+    `ReadChartSheet(info)`.
+  - Read-only: `SaveTo` writes worksheets only, as before.
+- **Files from other writers.**
+  - Part names are matched case-insensitively and '\' is accepted as a separator, so
+    workbooks like POI's 49609.xlsx ("[content_types].xml", `xl\styles.xml`) now open. This is
+    in the shared `OoxmlPackage` (see the shared-ooxml change).
+  - Shared strings are found through the workbook's relationship first.
+- **Strict OOXML.** Workbooks in the ISO/IEC 29500 Strict namespaces
+  (http://purl.oclc.org/ooxml/...) are read like Transitional ones: sheets, shared strings,
+  styles, formulas, hyperlinks, drawings and charts. Before 1.7.0 they loaded with no sheets.
+  - New `Workbook.IsStrict` and `XlsxReader.IsStrict`.
+  - Saving writes Transitional.
+  - The Strict `dateCompatibility` attribute is not applied.
+- **Cells outside the grid.** Rows numbered below 1 or above 1,048,576, and cells whose column
+  is beyond XFD (or whose reference has no column letters), are left out instead of loaded.
+  Values are never moved or altered. They are reported:
+  - Model: new `Workbook.LoadWarnings` (`LoadWarning`: `Kind`
+    = `LoadWarningKind.CellsOutsideGrid`, `SheetName`, `Count`, `Reference`, `Message`).
+  - Streaming: new `SheetReader.OutOfGridRows`, `OutOfGridCells` and
+    `FirstOutOfGridReference`.
+  - New constants `SheetReader.MaxRow` and `MaxColumn`.
+  - Column letters in cell references are now matched case-insensitively.
+- **Shared crypto (D-25).** Takes the Docs chat's Crypto files.
+  - New `XlsxReaderOptions.MaxSpinCount`, default 500,000, also set by
+    `ForUntrustedInput()`. An encrypted file that declares a higher key-derivation spin
+    count fails before derivation with `XlsxLimitExceededException` ("MaxSpinCount"). Set it
+    to null to lift the cap.
+  - The reader's `CancellationToken` now interrupts decryption inside key derivation, on
+    both `Workbook.Load` and `XlsxReader.Open`.
+  - `XlsxWriter.SaveAsync`'s token cancels the encryption pass.
+  - The Docs chat reports the encrypted output byte-identical to before, with key derivation
+    about 3.4x faster.
+- **`ColorRef` factories:** `FromRgb`, `FromTheme`, `FromIndexed`, `Automatic`.
+
+### Performance
+- **Number formatting is about 4x faster and allocates about 25x less.** For 100k values with
+  "#,##0.00": ~40–60 ms and 63 bytes per value, down from ~150 ms and ~1,650 bytes.
+  - The layout of a digit section is computed once per format code.
+  - The culture's group sizes are cached (`NumberFormatInfo.NumberGroupSizes` copies its
+    array on every read).
+  - Digits are written straight into a reused buffer.
+  - The output was checked identical to 1.6.1 for 471,744 combinations: 39 format codes ×
+    3,024 values (plus text) × invariant, en-IN, de-DE and fr-FR.
+
+### Fixes
+- Load → save no longer fails on a sheet whose last stored row has customFormat but no style
+  (POI 57828.xlsx). This was a 1.6.0 regression.
+
+### Tests
+- **New `layout17` group: 19 checks.** It covers:
+  - lenient part names, and case-only duplicate entries;
+  - a Strict workbook (sheets, strings, styles, formulas, hyperlinks, a drawing), and its
+    re-save;
+  - rows and cells outside the grid, with the warnings and counters;
+  - `FillIndex` for accounting, leading, trailing, date, text and fraction fills;
+  - number-format text and allocations;
+  - rich shared and inline strings with every font property, theme colours and phonetic
+    runs, round-trip, and rich text built in code;
+  - hyperlinks of every kind, round-trip and the streaming writer;
+  - comments with Excel-style VML, and round-trip;
+  - header/footer pictures;
+  - chart sheets;
+  - the customFormat-row fix;
+  - `MaxSpinCount`, cancellation inside key derivation, and `SaveAsync` cancellation.
+- **New xUnit fact** running the group.
+- **Cross-check.** Apache POI workbooks load, save, reload with identical values and open in
+  LibreOffice: 49609, the four Strict files, poc-shared-strings, SimpleWithComments,
+  comments, 52425, 57828, WithVariousData, chart_sheet and others. LibreOffice reads the
+  saved rich-text runs, links and comments.
+
 ## 1.6.1 (unreleased)
 
 Chart metadata on sheets, plus two small helpers for the Layout importer. Read-side and

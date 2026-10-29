@@ -40,6 +40,12 @@ internal sealed class SheetLayoutCollector
     public bool SummaryRight = true;
     public string? UsedRange;
     public string? DrawingRelId;
+    /// <summary>&lt;hyperlink&gt; elements as stored; the r:id is resolved against the sheet's relationships by <see cref="ResolveHyperlinks"/>.</summary>
+    public List<(string Ref, string? RelId, string? Location, string? Tooltip, string? Display)> RawHyperlinks { get; } = new();
+
+    /// <summary>r:id of &lt;legacyDrawing&gt; (comment shapes) and &lt;legacyDrawingHF&gt; (header/footer pictures).</summary>
+    public string? LegacyDrawingRelId, LegacyDrawingHFRelId;
+
     public List<ConditionalFormatting> ConditionalFormats { get; } = new();
     public List<(string Range, DataValidation Validation)> DataValidations { get; } = new();
 
@@ -88,8 +94,21 @@ internal sealed class SheetLayoutCollector
                     SheetExtrasParser.ParseExtLst(ext, _styles, _rulesByExtId, ConditionalFormats, DataValidations);
                 break;
             case "drawing":
-                DrawingRelId ??= x.GetAttribute("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+                DrawingRelId ??= StrictOoxml.GetRelAttribute(x);
                 break;
+            case "legacyDrawing":
+                LegacyDrawingRelId ??= StrictOoxml.GetRelAttribute(x);
+                break;
+            case "legacyDrawingHF":
+                LegacyDrawingHFRelId ??= StrictOoxml.GetRelAttribute(x);
+                break;
+            case "hyperlink":
+            {
+                var reference = x.GetAttribute("ref");
+                if (!string.IsNullOrEmpty(reference))
+                    RawHyperlinks.Add((reference, StrictOoxml.GetRelAttribute(x), x.GetAttribute("location"), x.GetAttribute("tooltip"), x.GetAttribute("display")));
+                break;
+            }
             case "tabColor":
                 TabColor = _styles.ResolveColor(ColorFrom(x));
                 break;
@@ -321,7 +340,9 @@ internal sealed class SheetLayoutCollector
     private static XElement? Subtree(XmlReader x)
     {
         using var sub = x.ReadSubtree();
-        return XElement.Load(sub);
+        var e = XElement.Load(sub);
+        StrictOoxml.Normalize(e);
+        return e;
     }
 
     /// <summary>A &lt;color&gt;-like element's attributes as a <see cref="ColorRef"/>.</summary>
@@ -355,7 +376,33 @@ internal sealed class SheetLayoutCollector
         FillFormat(format);
         FinishPage();
         return new SheetLayoutInfo(Page, format, Columns.ToArray(), MergeRanges.ToArray(), UsedRange,
-            View, TabColor, ConditionalFormats.ToArray(), DataValidations.ToArray(), styles) { DrawingRelId = DrawingRelId };
+            View, TabColor, ConditionalFormats.ToArray(), DataValidations.ToArray(), styles) { DrawingRelId = DrawingRelId, LegacyDrawingRelId = LegacyDrawingRelId, LegacyDrawingHFRelId = LegacyDrawingHFRelId };
+    }
+
+    /// <summary>
+    /// The hyperlinks, with each r:id resolved to its target through the sheet's relationships
+    /// (the Target as stored, external or not). A missing relationship leaves Target null.
+    /// </summary>
+    public List<Hyperlink> ResolveHyperlinks(XlsxReader book, string sheetPartUri)
+    {
+        var list = new List<Hyperlink>(RawHyperlinks.Count);
+        if (RawHyperlinks.Count == 0) return list;
+        Dictionary<string, string>? rels = null;
+        foreach (var h in RawHyperlinks)
+        {
+            string? target = null;
+            if (h.RelId is not null)
+            {
+                if (rels is null)
+                {
+                    rels = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var r in book.PartRelationships(sheetPartUri)) rels.TryAdd(r.Id, r.Target);
+                }
+                rels.TryGetValue(h.RelId, out target);
+            }
+            list.Add(new Hyperlink(h.Ref, target, h.Location, h.Tooltip, h.Display, loaded: true));
+        }
+        return list;
     }
 
     /// <summary>Copies everything collected into the sheet model.</summary>

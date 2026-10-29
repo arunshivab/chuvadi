@@ -33,7 +33,18 @@ public sealed class NumberFormatOptions
 /// <param name="Color">Colour from a [Red] / [Color10]-style code as 6-digit RGB hex, or null.</param>
 /// <param name="FillCharacter">Repeat-fill character from a '*x' code (Excel repeats it to fill the cell), or null.</param>
 /// <param name="IsDateTime">True if the value was rendered with a date/time section.</param>
-public readonly record struct FormattedValue(string Text, string? Color, char? FillCharacter, bool IsDateTime);
+public readonly record struct FormattedValue(string Text, string? Color, char? FillCharacter, bool IsDateTime)
+{
+    /// <summary>
+    /// Where the repeat fill goes: the index in <see cref="Text"/> at which Excel inserts
+    /// <see cref="FillCharacter"/> repeated until the text fills the cell width; null when
+    /// there is no fill. For "_($* #,##0.00_)" and 1234.5 the text is " $1,234.50 " and the
+    /// index is 2: " $" stays at the left edge and "1,234.50 " at the right. 0 puts the fill
+    /// before the text (right-aligned look), Text.Length after it. With several '*' in one
+    /// section the last one is used, as for <see cref="FillCharacter"/>. Since 1.7.0.
+    /// </summary>
+    public int? FillIndex { get; init; }
+}
 
 /// <summary>
 /// Renders a cell value with an Excel number format code, producing the text Excel displays:

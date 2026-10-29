@@ -328,6 +328,35 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         return this;
     }
 
+    /// <summary>
+    /// Adds a hyperlink over a cell or range that is written (or will be written) separately,
+    /// e.g. to link a range or to link within the workbook: an external
+    /// <see cref="Hyperlink.Target"/> becomes a relationship, a <see cref="Hyperlink.Location"/>
+    /// is stored on the link, and both may be given. The cell text and style are not changed
+    /// (<see cref="RowBuilder.Hyperlink(string, string, string?)"/> writes a linked cell in one
+    /// step). Since 1.7.0.
+    /// </summary>
+    public SheetWriter AddHyperlink(Hyperlink hyperlink)
+    {
+        EnsureNotDisposed();
+        if (hyperlink is null) throw new ArgumentNullException(nameof(hyperlink));
+        _hyperlinks.Add(new SheetHyperlink(hyperlink.Reference, hyperlink.Target, hyperlink.Tooltip, hyperlink.Location, hyperlink.Display));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a comment (note) to a cell that is written (or will be written) separately, with
+    /// its text runs, box anchor and visibility when given. Since 1.7.0.
+    /// (<see cref="RowBuilder.Comment(object?, string, string)"/> writes a cell and its comment in one step.)
+    /// </summary>
+    public SheetWriter AddComment(CellComment comment)
+    {
+        EnsureNotDisposed();
+        if (comment is null) throw new ArgumentNullException(nameof(comment));
+        _comments.Add(new SheetComment(CellAddress.ToA1(comment.Row, comment.Column), comment.Author, comment.Text, comment.RichText, comment.Anchor, comment.Visible));
+        return this;
+    }
+
     /// <summary>Adds an autofilter over the given range.</summary>
     public SheetWriter AutoFilter(string range)
     {
@@ -548,6 +577,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             return;
         }
         if (value is string s)         { WriteStringCell(column, s, styleId); return; }
+        if (value is RichText rt)      { WriteRichStringCell(column, rt, styleId); return; }
         if (value is bool b)           { WriteCellOpen(column, styleId, "b"); WriteValue(b ? "1" : "0"); _xml.WriteEndElement(); return; }
         if (value is DateTime dt)
         {
@@ -661,6 +691,26 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
                 + SharedStringPlaceholderSuffix;
             WriteCellOpen(column, styleId, "s");
             WriteValue(placeholder);
+            _xml.WriteEndElement();
+        }
+    }
+
+    /// <summary>A rich-text string cell: an inline &lt;is&gt; with runs, or a rich shared string.</summary>
+    private void WriteRichStringCell(int column, RichText value, int? styleId)
+    {
+        if (_state.Options.UseInlineStrings)
+        {
+            WriteCellOpen(column, styleId, "inlineStr");
+            _xml.WriteStartElement("is", SsNs);
+            RichTextXml.WriteRuns(_xml, value);
+            _xml.WriteEndElement();
+            _xml.WriteEndElement();
+        }
+        else
+        {
+            var ssId = _state.SharedStrings.GetOrAdd(value);
+            WriteCellOpen(column, styleId, "s");
+            WriteValue(SharedStringPlaceholderPrefix + ssId.ToString(CultureInfo.InvariantCulture) + SharedStringPlaceholderSuffix);
             _xml.WriteEndElement();
         }
     }
@@ -823,22 +873,31 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             _xml.WriteEndElement();
         }
 
-        if (_hyperlinks.Count > 0)
+        if (_hyperlinks.Exists(h => h.Url is not null || h.Location is not null))
         {
             _xml.WriteStartElement("hyperlinks", SsNs);
             // Each hyperlink will get an rId allocated by the parent XlsxWriter at save time;
             // for now we generate the IDs ourselves following the convention "rIdHL{N}" and
             // pair them with their URLs for the writer to materialize as relationships.
+            // Only links with an external target get a relationship (and so an r:id).
             int n = 1;
             foreach (var hl in _hyperlinks)
             {
+                if (hl.Url is null && hl.Location is null) continue;   // a loaded link whose target is missing: nothing to point at
                 _xml.WriteStartElement("hyperlink", SsNs);
                 _xml.WriteAttributeString("ref", hl.CellAddress);
-                _xml.WriteAttributeString("id", RelNs, $"rIdHL{n}");
+                if (hl.Url is not null)
+                {
+                    _xml.WriteAttributeString("id", RelNs, $"rIdHL{n}");
+                    n++;
+                }
+                if (hl.Location is not null)
+                    _xml.WriteAttributeString("location", hl.Location);
                 if (hl.Tooltip is not null)
                     _xml.WriteAttributeString("tooltip", hl.Tooltip);
+                if (hl.Display is not null)
+                    _xml.WriteAttributeString("display", hl.Display);
                 _xml.WriteEndElement();
-                n++;
             }
             _xml.WriteEndElement();
         }

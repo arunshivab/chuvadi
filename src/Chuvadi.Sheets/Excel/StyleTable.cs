@@ -47,6 +47,40 @@ public sealed class ColorRef
     /// <summary>Tint, -1.0 (darker) .. +1.0 (lighter). 0 = none. Applies to any kind.</summary>
     public double Tint { get; internal set; }
 
+    /// <summary>An RGB colour: "RRGGBB" or "AARRGGBB" hex (stored as given). Since 1.7.0.</summary>
+    public static ColorRef FromRgb(string hex, double tint = 0)
+    {
+        if (string.IsNullOrEmpty(hex) || (hex.Length != 6 && hex.Length != 8) || !IsHex(hex))
+            throw new ArgumentException("Expected 6 (RRGGBB) or 8 (AARRGGBB) hex digits.", nameof(hex));
+        return new ColorRef { Kind = ColorKind.Rgb, Rgb = hex, Tint = CheckTint(tint) };
+    }
+
+    /// <summary>A theme colour slot (0 = lt1, 1 = dk1, 2 = lt2, 3 = dk2, 4..9 = accents, 10 = hlink, 11 = folHlink), optionally tinted. Since 1.7.0.</summary>
+    public static ColorRef FromTheme(int slot, double tint = 0)
+    {
+        if (slot < 0) throw new ArgumentOutOfRangeException(nameof(slot));
+        return new ColorRef { Kind = ColorKind.Theme, Theme = slot, Tint = CheckTint(tint) };
+    }
+
+    /// <summary>A legacy indexed palette entry (0..63, 64 = system foreground, 65 = system background). Since 1.7.0.</summary>
+    public static ColorRef FromIndexed(int index, double tint = 0)
+    {
+        if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
+        return new ColorRef { Kind = ColorKind.Indexed, Indexed = index, Tint = CheckTint(tint) };
+    }
+
+    /// <summary>The automatic colour (auto="1"). Since 1.7.0.</summary>
+    public static ColorRef Automatic() => new() { Kind = ColorKind.Auto };
+
+    private static bool IsHex(string s)
+    {
+        foreach (var c in s) if (!Uri.IsHexDigit(c)) return false;
+        return true;
+    }
+
+    private static double CheckTint(double tint)
+        => tint is >= -1 and <= 1 ? tint : throw new ArgumentOutOfRangeException(nameof(tint), "Tint must be -1.0 .. 1.0.");
+
     public override string ToString() => Kind switch
     {
         ColorKind.Rgb => $"rgb:{Rgb}" + TintSuffix(),

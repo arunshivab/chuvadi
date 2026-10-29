@@ -25,6 +25,12 @@ public sealed class SheetLayoutInfo
     /// <summary>The sheet view: gridlines, headings, zoom, view mode, frozen/split panes, selection.</summary>
     public SheetView View { get; }
 
+    /// <summary>The cell and range hyperlinks (&lt;hyperlinks&gt;), in file order, with targets resolved. Since 1.7.0.</summary>
+    public IReadOnlyList<Hyperlink> Hyperlinks { get; internal set; } = Array.Empty<Hyperlink>();
+
+    internal string? LegacyDrawingRelId { get; init; }
+    internal string? LegacyDrawingHFRelId { get; init; }
+
     /// <summary>The sheet tab colour, "RRGGBB", or null.</summary>
     public string? TabColor { get; }
 
