@@ -22,39 +22,35 @@ internal static class ParagraphProperties
     /// autoSpaceDN, bidi, adjustRightInd, snapToGrid, spacing, ind, contextualSpacing,
     /// mirrorIndents, jc, textAlignment, outlineLvl, rPr.
     /// </summary>
-    public static void Write(XmlWriter x, Paragraph p)
+    public static void Write(XmlWriter x, Paragraph p, NumberingXml.Plan? numbering)
     {
         var f = p.Format;
         var styleId = p.StyleId;
         bool hasStyle = styleId != "Normal";
-        bool needed = hasStyle || p.List != ListKind.None || !f.IsDefault;
+        var num = numbering?.For(p);
+        bool needed = hasStyle || num is not null || !f.IsDefault;
         if (!needed) return;
 
         x.WriteStartElement("pPr", W);
         if (hasStyle) Val(x, "pStyle", styleId);
-        WriteBody(x, f, p.List, p.ListLevel);
+        WriteBody(x, f, num);
         x.WriteEndElement();
     }
 
-    /// <summary>Writes the pPr children for a format (no pStyle) — reusable by style definitions.</summary>
-    internal static void WriteBody(XmlWriter x, ParagraphFormat f, ListKind list = ListKind.None, int listLevel = 0,
-        string? rawNumberingXml = null)
+    /// <summary>Writes the pPr children for a format (no pStyle) — reusable by style definitions and list levels.</summary>
+    internal static void WriteBody(XmlWriter x, ParagraphFormat f, (int? NumId, int? Level)? numbering = null)
     {
         Toggle(x, "keepNext", f.KeepWithNext);
         Toggle(x, "keepLines", f.KeepLinesTogether);
         Toggle(x, "pageBreakBefore", f.StartOnNewPage);
         Toggle(x, "widowControl", f.WidowControl);
 
-        if (list != ListKind.None)
+        if (numbering is var (numId, level))
         {
             x.WriteStartElement("numPr", W);
-            Val(x, "ilvl", Math.Clamp(listLevel, 0, 8).ToString(CultureInfo.InvariantCulture));
-            Val(x, "numId", list == ListKind.Bullet ? "1" : "2");
+            if (level is int l) Val(x, "ilvl", l.ToString(CultureInfo.InvariantCulture));
+            if (numId is int n) Val(x, "numId", n.ToString(CultureInfo.InvariantCulture));
             x.WriteEndElement();
-        }
-        else if (rawNumberingXml is not null)
-        {
-            StylesXml.WriteFragment(x, rawNumberingXml);
         }
 
         Toggle(x, "suppressLineNumbers", f.SuppressLineNumbers);
@@ -266,12 +262,10 @@ internal static class ParagraphProperties
             if (sub.LocalName == "numId") numId = Attr(sub, "val");
             else if (sub.LocalName == "ilvl" && int.TryParse(Attr(sub, "val"), out var l)) ilvl = l;
         }
-        if (ilvl is int level) p.ListLevel = level;
-        // Our own files: 1 = bullet, 2 = number. Foreign files: treat any list as a bullet (the
-        // abstract definitions are resolved in the lists phase). numId 0 = explicitly no list.
-        if (numId is null or "0") return;
-        p.List = numId == "2" ? ListKind.Number : ListKind.Bullet;
-        if (p.StyleId == "Normal") p.Style = ParagraphStyle.ListParagraph;
+        // Resolved against numbering.xml once it is read (see DocumentLoader); numId 0 = explicitly none.
+        p.ListLevel = ilvl is int level ? Math.Clamp(level, 0, 8) : 0;
+        p.LoadedNumId = int.TryParse(numId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : null;
+        p.LoadedListLevelExplicit = ilvl is not null;
     }
 
     private static ParagraphBorders ReadBorders(XmlReader sub)

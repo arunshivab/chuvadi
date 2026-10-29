@@ -51,6 +51,15 @@ internal static class FormatResolver
         return bag.ToFormat();
     }
 
+    /// <summary>A list label's run formatting: the paragraph mark's effective formatting (with the level's character style), then the level's run formatting.</summary>
+    public static TextFormat ResolveListLabelFormat(Document doc, Paragraph p, TextFormat? levelFormat, string? levelStyleId, TableCellRef? cell)
+    {
+        var mark = new Run("", p.Format.MarkFormat ?? TextFormat.None) { CharacterStyleId = levelStyleId };
+        var bag = RunBag.From(ResolveRun(doc, p, mark, cell));
+        bag.Overlay(RunBag.From(levelFormat));
+        return bag.ToFormat();
+    }
+
     public static ParagraphFormat ResolveParagraph(Document doc, Paragraph p, TableCellRef? cell = null)
     {
         var levels = new List<ParagraphFormat> { doc.Defaults.ParagraphFormat };
@@ -62,7 +71,15 @@ internal static class FormatResolver
                 foreach (var s in chain)
                     if (s.ConditionalFormats.TryGetValue(region, out var cf)) levels.Add(cf.ParagraphFormat);
         }
+        // Numbering level formatting (indents, number tab). Numbering applied through the paragraph
+        // style sits below the style (ECMA-376 §17.7.2); numbering applied directly to the paragraph
+        // overrides the style's indents, as Word renders it (e.g. List Paragraph's 36pt indent does
+        // not flatten deeper list levels).
+        var list = ListNumbering.Resolve(doc, p);
+        bool direct = list is not null && (p.ListInstance is not null || p.LegacyListKind != ListKind.None);
+        if (list is { } fromStyle && !direct) levels.Add(fromStyle.LevelAt(fromStyle.Level).ParagraphFormat);
         foreach (var s in Chain(doc, ParagraphStyleId(doc, p), StyleType.Paragraph)) levels.Add(s.ParagraphFormat);
+        if (list is { } directList && direct) levels.Add(directList.LevelAt(directList.Level).ParagraphFormat);
         levels.Add(p.Format);
 
         var result = new ParagraphFormat();
@@ -278,7 +295,7 @@ internal static class FormatResolver
     };
 
     /// <summary>The paragraph's style id, falling back to the default paragraph style when it does not exist.</summary>
-    private static string? ParagraphStyleId(Document doc, Paragraph p)
+    internal static string? ParagraphStyleId(Document doc, Paragraph p)
     {
         var id = p.StyleId;
         if (doc.Styles.TryGet(id, out var s) && s.Type == StyleType.Paragraph) return id;

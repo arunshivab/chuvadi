@@ -82,6 +82,43 @@ internal static class DocumentLoader
             break;
         }
 
+        // Lists (numbering.xml): definitions and instances; paragraphs and styles are linked after loading.
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal || !rel.Type.EndsWith("/numbering", StringComparison.Ordinal)) continue;
+            var numberingUri = rel.Target.StartsWith('/') ? rel.Target
+                : documentUri[..(documentUri.LastIndexOf('/') + 1)] + rel.Target;
+            Stream? numberingRaw = null;
+            try { numberingRaw = pkg.OpenPart(numberingUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (numberingRaw is null) break;
+            using var ns = GuardedPartStream.Wrap(numberingRaw, options.MaxPartBytes, ct, numberingUri);
+            using var nr = GuardedXmlReader.Create(ns, options.MaxXmlDepth, ct, numberingUri);
+            NumberingXml.Read(nr, doc.Numbering);
+            EnsureWellFormed(nr, numberingUri);
+            // Images that picture bullets refer to (numbering.xml's own relationships).
+            if (doc.Numbering.RawPictureBullets.Count > 0)
+            {
+                var baseDir = numberingUri[..(numberingUri.LastIndexOf('/') + 1)];
+                foreach (var pr in pkg.GetRelationships(numberingUri))
+                {
+                    if (pr.IsExternal || !pr.Type.EndsWith("/image", StringComparison.Ordinal)) continue;
+                    if (doc.Numbering.RawPictureParts.Count >= 64) break;
+                    var target = pr.Target.StartsWith('/') ? pr.Target : baseDir + pr.Target;
+                    Stream? imgRaw = null;
+                    try { imgRaw = pkg.OpenPart(target); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+                    if (imgRaw is null) continue;
+                    using var gs = GuardedPartStream.Wrap(imgRaw, options.MaxPartBytes, ct, target);
+                    using var ms = new MemoryStream();
+                    gs.CopyTo(ms);
+                    var bytes = ms.ToArray();
+                    var ext = Path.GetExtension(target).TrimStart('.');
+                    var type = ImageMetadata.DetectContentType(bytes) ?? ImageMetadata.ContentTypeForExtension(ext);
+                    if (type is not null) doc.Numbering.RawPictureParts.Add((pr.Id, pr.Type, bytes, type));
+                }
+            }
+            break;
+        }
+
         // Styles and document defaults (styles.xml), when the document has them.
         foreach (var rel in pkg.GetRelationships(documentUri))
         {
@@ -94,6 +131,7 @@ internal static class DocumentLoader
             using var ss = GuardedPartStream.Wrap(stylesRaw, options.MaxPartBytes, ct, stylesUri);
             using var sr = GuardedXmlReader.Create(ss, options.MaxXmlDepth, ct, stylesUri);
             StylesXml.Read(sr, doc);
+            EnsureWellFormed(sr, stylesUri);
             break;
         }
 
@@ -125,7 +163,47 @@ internal static class DocumentLoader
             }
             if (!r.Read()) break;
         }
+        EnsureWellFormed(r, documentUri);
+        LinkNumbering(doc);
         return doc;
+    }
+
+    /// <summary>
+    /// A well-formedness error met while a nested subtree reader is disposed leaves the reader in
+    /// the Error state without throwing; report it like any other malformed part.
+    /// </summary>
+    private static void EnsureWellFormed(XmlReader r, string partUri)
+    {
+        if (r.ReadState == ReadState.Error)
+            throw new XmlException($"Part '{partUri}' is not well-formed XML.");
+    }
+
+    /// <summary>Links the numIds read from w:numPr (paragraphs and styles) to the loaded list instances.</summary>
+    private static void LinkNumbering(Document doc)
+    {
+        foreach (var p in DocumentSerializer.AllParagraphs(doc))
+        {
+            if (p.LoadedNumId is not int id)
+            {
+                // w:numPr with only w:ilvl: the level for numbering that comes from the style.
+                if (p.LoadedListLevelExplicit) { p.StyleListLevel = p.ListLevel; p.ListLevel = 0; }
+                p.LoadedListLevelExplicit = false;
+                continue;
+            }
+            p.LoadedNumId = null;
+            p.LoadedListLevelExplicit = false;
+            if (id == 0) p.NumberingSuppressed = true;
+            else if (doc.Numbering.TryGetList(id, out var list)) p.ListInstance = list;
+            // An unknown numId numbers nothing in Word either; it is dropped.
+        }
+        foreach (var s in doc.Styles)
+        {
+            if (s.LoadedNumId is not int id) continue;
+            s.LoadedNumId = null;
+            if (id == 0) s.NumberingSuppressed = true;
+            else if (doc.Numbering.TryGetList(id, out var list)) s.ListInstance = list;
+            // An unknown numId is dropped; a stated level is kept (it still selects the level of inherited numbering).
+        }
     }
 
     // Body-level check: with ReadSubtree-based table skipping above, any w:p we reach here

@@ -77,11 +77,79 @@ public sealed class Paragraph
         return this;
     }
 
-    /// <summary>When set, this paragraph is a list item at <see cref="ListLevel"/>.</summary>
-    public ListKind List { get; set; } = ListKind.None;
+    private ListKind _list = ListKind.None;
 
-    /// <summary>0-based list indent level (0..8). Only used when <see cref="List"/> is set.</summary>
+    /// <summary>
+    /// Direct list membership. Setting <see cref="ListKind.Bullet"/> or <see cref="ListKind.Number"/>
+    /// makes the paragraph an item of the document's built-in default bullet or number list
+    /// (and clears <see cref="ListInstance"/>); <see cref="ListKind.None"/> removes the
+    /// paragraph's own list membership — numbering from its paragraph style still applies (set
+    /// <see cref="NumberingSuppressed"/> to switch that off). With a <see cref="ListInstance"/>,
+    /// reading returns Bullet when the item's level in that list's own definition is a bullet and
+    /// Number otherwise (numStyleLink is not followed; use <see cref="Document.GetListLabel"/> for
+    /// the exact label). Style numbering reads as None.
+    /// </summary>
+    public ListKind List
+    {
+        get => ListInstance is { } li
+            ? (li.EffectiveLevel(Math.Clamp(ListLevel, 0, 8)).Format == NumberFormat.Bullet ? ListKind.Bullet : ListKind.Number)
+            : _list;
+        set
+        {
+            _list = value;
+            _listInstance = null;
+            if (value != ListKind.None) NumberingSuppressed = false;
+        }
+    }
+
+    /// <summary>The built-in kind set through <see cref="List"/> (ignored while a <see cref="ListInstance"/> is set).</summary>
+    internal ListKind LegacyListKind => _list;
+
+    private ListInstance? _listInstance;
+
+    /// <summary>
+    /// The list this paragraph is an item of (w:numPr/w:numId), at <see cref="ListLevel"/> — a
+    /// list from <see cref="Document.Numbering"/> (a list from elsewhere numbers nothing).
+    /// Setting it replaces any built-in <see cref="List"/> kind; setting null leaves the
+    /// paragraph without direct list membership.
+    /// </summary>
+    public ListInstance? ListInstance
+    {
+        get => _listInstance;
+        set { _listInstance = value; _list = ListKind.None; }
+    }
+
+    /// <summary>0-based list indent level (0..8). Only used when the paragraph is a list item.</summary>
     public int ListLevel { get; set; }
+
+    /// <summary>
+    /// The list level for numbering that comes from the paragraph style (w:numPr with only
+    /// w:ilvl), e.g. a Heading 1 paragraph shown at level 2 of the heading list. Null = the
+    /// style's level. Ignored while the paragraph is itself a list item.
+    /// </summary>
+    public int? StyleListLevel { get; set; }
+
+    /// <summary>
+    /// Explicitly not numbered (w:numId="0"): switches off numbering the paragraph style would
+    /// otherwise apply. Ignored while the paragraph is itself a list item.
+    /// </summary>
+    public bool NumberingSuppressed { get; set; }
+
+    /// <summary>Makes the paragraph an item of <paramref name="list"/> at <paramref name="level"/> (0–8).</summary>
+    public Paragraph SetList(ListInstance list, int level = 0)
+    {
+        if (level < 0 || level > 8) throw new ArgumentOutOfRangeException(nameof(level), "List level must be 0–8.");
+        ListInstance = list ?? throw new ArgumentNullException(nameof(list));
+        ListLevel = level;
+        NumberingSuppressed = false;
+        return this;
+    }
+
+    /// <summary>Loader: the numId read from w:numPr, resolved against numbering.xml after loading.</summary>
+    internal int? LoadedNumId { get; set; }
+
+    /// <summary>Loader: whether w:numPr stated w:ilvl (styles often omit it).</summary>
+    internal bool LoadedListLevelExplicit { get; set; }
 
     /// <summary>Emit a page break immediately before this paragraph.</summary>
     public bool PageBreakBefore { get; set; }

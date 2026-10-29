@@ -105,7 +105,7 @@ public static class StylesTests
             AssertContains(ReadPartXml(re, "word/_rels/document.xml.rels"), "relationships/theme", "theme relationship");
         });
 
-        Check("table-style tblPr/tblStylePr and a style's numPr are preserved verbatim through load → save", () =>
+        Check("table-style tblPr/tblStylePr survive load → save; a style numPr pointing at no list is dropped (Word ignores it too)", () =>
         {
             var path = Path.Combine(outDir, "styles-table-num.docx");
             File.Copy(basePath, path, true);
@@ -126,9 +126,8 @@ public static class StylesTests
             AssertTrue(Style("TableNormal").Descendants(Wn + "tblCellMar").Any(), "TableNormal tblCellMar lost");
             AssertTrue(Style("Grid").Element(Wn + "tblStylePr")?.Attribute(Wn + "type")?.Value == "firstRow", "tblStylePr lost");
             var lb = Style("ListBullet").Element(Wn + "pPr")!;
-            AssertTrue(lb.Element(Wn + "numPr")?.Element(Wn + "numId")?.Attribute(Wn + "val")?.Value == "3", "style numPr lost");
-            var order = lb.Elements().Select(e => e.Name.LocalName).ToList();
-            AssertTrue(order.IndexOf("numPr") < order.IndexOf("contextualSpacing"), "numPr position");
+            AssertTrue(lb.Element(Wn + "numPr") is null && lb.Element(Wn + "contextualSpacing") is not null, "dangling numPr dropped, rest kept");
+            // Linked style numbering (with a real numbering part) is covered by the Lists group.
         });
 
         Check("resolver: a direct first-line indent replaces an inherited hanging indent (and spacing vs auto-spacing)", () =>

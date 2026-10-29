@@ -39,6 +39,7 @@ public sealed class Document
     public Document()
     {
         StylesXml.AddBuiltIns(Styles);
+        Numbering = new NumberingCollection(this);
     }
 
     /// <summary>
@@ -57,6 +58,58 @@ public sealed class Document
     /// formatting survives load → save; null for new documents (none is written).
     /// </summary>
     public byte[]? ThemeXml { get; set; }
+
+    /// <summary>
+    /// The document's lists (numbering.xml): definitions and the list instances paragraphs use.
+    /// <see cref="Load(string)"/> fills it from the file. Paragraphs added with
+    /// <see cref="AddBullet"/> / <see cref="AddNumbered"/> use two built-in default lists that
+    /// are written automatically and do not appear here.
+    /// </summary>
+    public NumberingCollection Numbering { get; }
+
+    /// <summary>
+    /// The built-in default lists behind <see cref="ListKind"/> (not in <see cref="Numbering"/>;
+    /// ids -1 and -2, real numIds are assigned at save). Created eagerly so concurrent readers
+    /// share one pair; the saved numbering is built from these definitions.
+    /// </summary>
+    internal (ListInstance Bullets, ListInstance Numbers) LegacyDefaults { get; } = (
+        new ListInstance(-1, LegacyDefinition(NumberingDefinition.Bulleted())),
+        new ListInstance(-2, LegacyDefinition(NumberingDefinition.Numbered())));
+
+    private static NumberingDefinition LegacyDefinition(NumberingDefinition d)
+    {
+        d.MultiLevelType = null; // the pre-1.4 output has no multiLevelType element
+        return d;
+    }
+
+    /// <summary>
+    /// The label Word shows for every numbered or bulleted paragraph — body (tables and nested
+    /// tables included) and each header/footer, each story counted separately — e.g. "1.",
+    /// "2.3.", "iv)", "•". Counting follows Word: instances of one definition continue each
+    /// other unless restarted with a start override, deeper levels restart after a shallower
+    /// item (or as <see cref="NumberingLevel.RestartAfterLevel"/> says), legal numbering shows
+    /// decimals, and numbering applied through paragraph styles (and numStyleLink) is included.
+    /// Paragraphs that are not list items are absent.
+    /// </summary>
+    public IReadOnlyDictionary<Paragraph, ListLabel> GetListLabels() => ListNumbering.Compute(this);
+
+    /// <summary>The label of one paragraph (see <see cref="GetListLabels"/>), or null when it is not a list item. Computes the whole story; call <see cref="GetListLabels"/> once for many paragraphs.</summary>
+    public ListLabel? GetListLabel(Paragraph paragraph)
+    {
+        if (paragraph is null) throw new ArgumentNullException(nameof(paragraph));
+        return ListNumbering.Compute(this).TryGetValue(paragraph, out var l) ? l : null;
+    }
+
+    /// <summary>Adds a paragraph that is an item of <paramref name="list"/> at <paramref name="level"/> (List Paragraph style).</summary>
+    public Paragraph AddListItem(string text, ListInstance list, int level = 0)
+    {
+        if (list is null) throw new ArgumentNullException(nameof(list));
+        if (!Numbering.Contains(list))
+            throw new ArgumentException("The list is not in this document's Numbering (another document's list, a removed list, or a built-in default list).", nameof(list));
+        var p = new Paragraph(text) { Style = ParagraphStyle.ListParagraph }.SetList(list, level);
+        _blocks.Add(p);
+        return p;
+    }
 
     /// <summary>
     /// The EFFECTIVE formatting of <paramref name="run"/> in <paramref name="paragraph"/>:
@@ -121,7 +174,9 @@ public sealed class Document
 
     /// <summary>
     /// The EFFECTIVE paragraph formatting: document defaults, then the paragraph style chain,
-    /// then the paragraph's direct formatting. Tab stops accumulate (a Clear stop removes an
+    /// then the paragraph's direct formatting — with a list item's level formatting (indents,
+    /// number tab) below the style when the numbering comes from the style, and above it when
+    /// the numbering is applied to the paragraph directly, as Word renders it. Tab stops accumulate (a Clear stop removes an
     /// inherited one) and borders merge per side. Returns a new, independent object.
     /// </summary>
     public ParagraphFormat GetEffectiveParagraphFormat(Paragraph paragraph)

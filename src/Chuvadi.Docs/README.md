@@ -171,6 +171,37 @@ TextFormat text = doc.GetEffectiveRunFormat(paragraph, run, new TableCellRef(t, 
 
 Regions apply in the order Word uses (whole table, column bands, row bands, first/last row, first/last column, corner cells); with no `TableLook` set anywhere, Word's default look (header row, first column, banded rows) applies. Loaded tables are capped at Word's 63 columns.
 
+## Lists
+
+`AddBullet` / `AddNumbered` use built-in default lists. For anything else, create lists in `doc.Numbering`:
+
+```csharp
+var steps = doc.Numbering.AddNumberedList(NumberFormat.LowerRoman, "({0})");    // (i) (ii) (iii)
+doc.AddListItem("Collect the sample", steps);
+doc.AddListItem("Label it", steps);
+
+var again = doc.Numbering.Restart(steps);                 // Word's "Restart at 1"
+var from10 = doc.Numbering.Restart(steps, startAt: 10);
+
+var legal = doc.Numbering.AddList(NumberingDefinition.PerLevel(
+    (NumberFormat.UpperRoman, "%1."), (NumberFormat.Decimal, "%1.%2")));
+legal.Definition.Level(1).IsLegal = true;                 // I.  then 1.1 (decimals under roman)
+
+var tamil = NumberingDefinition.Numbered(NumberFormat.Custom, "{0}.");
+tamil.Level(0).CustomFormat = "௧, ௨, ௩, ...";             // Tamil digits
+
+// Numbered headings through styles: 1. / 1.1. / 1.2. …
+var outline = doc.Numbering.AddOutlineList();
+outline.Definition.Level(0).ParagraphStyleId = "Heading1";
+doc.Styles["Heading1"].ListInstance = outline;
+
+// Renderers: the label Word shows for each list paragraph.
+foreach (var (paragraph, label) in doc.GetListLabels())
+    Console.WriteLine($"{label.Text}\t{paragraph.GetText()}");
+```
+
+Every list option is in the model: all 63 number formats, custom formats, start values, restart rules, legal numbering, suffix (tab/space/nothing), label alignment, level indents and tabs, label font, linked styles, `numStyleLink`, and per-list level overrides. Labels are computed the way Word counts them (verified against LibreOffice); formats without a built-in rendering (East Asian counting systems, Hebrew, Arabic and Thai letters, text in other languages) fall back to decimal digits in `GetListLabels`, but are still written and read exactly.
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:
@@ -236,7 +267,7 @@ var a = r.GetActiveContent();
 **Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
 
 
-`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
+`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
 
 ## Images
 

@@ -98,8 +98,21 @@ public sealed class StyleDefinition
     /// <summary>Run properties applied by this style. Null = none.</summary>
     public TextFormat? RunFormat { get; set; }
 
-    /// <summary>A style's numbering reference (w:pPr/w:numPr) carried verbatim from a loaded file until lists are modelled.</summary>
-    internal string? RawNumberingXml { get; set; }
+    /// <summary>
+    /// Numbering applied to paragraphs of this style (w:pPr/w:numPr/w:numId): a list from
+    /// <see cref="Document.Numbering"/> — e.g. outline-numbered headings. For a numbering style
+    /// (<see cref="StyleType.Numbering"/>), the list whose definition the style stands for.
+    /// </summary>
+    public ListInstance? ListInstance { get; set; }
+
+    /// <summary>The list level for <see cref="ListInstance"/> (w:ilvl). Null = the level linked to this style by <see cref="NumberingLevel.ParagraphStyleId"/>, else 0.</summary>
+    public int? ListLevel { get; set; }
+
+    /// <summary>Explicitly no numbering (w:numId="0"), switching off numbering inherited from the based-on style.</summary>
+    public bool NumberingSuppressed { get; set; }
+
+    /// <summary>Loader: numId read from the style's w:numPr, resolved after numbering.xml is read.</summary>
+    internal int? LoadedNumId { get; set; }
 
     // ---- Table styles ---------------------------------------------------------------------
 
@@ -138,7 +151,9 @@ public sealed class StyleDefinition
             Locked = Locked, AutoRedefine = AutoRedefine, RunFormat = RunFormat,
         };
         c.ParagraphFormat.ApplyFrom(ParagraphFormat);
-        c.RawNumberingXml = RawNumberingXml;
+        c.ListInstance = ListInstance;
+        c.ListLevel = ListLevel;
+        c.NumberingSuppressed = NumberingSuppressed;
         Internal.TableXml.CopyTableFormat(TableFormat, c.TableFormat);
         Internal.TableXml.CopyRowFormat(RowFormat, c.RowFormat);
         c.CellFormat.ApplyFrom(CellFormat);
