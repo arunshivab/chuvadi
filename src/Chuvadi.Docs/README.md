@@ -202,6 +202,26 @@ foreach (var (paragraph, label) in doc.GetListLabels())
 
 Every list option is in the model: all 63 number formats, custom formats, start values, restart rules, legal numbering, suffix (tab/space/nothing), label alignment, level indents and tabs, label font, linked styles, `numStyleLink`, and per-list level overrides. Labels are computed the way Word counts them (verified against LibreOffice); formats without a built-in rendering (East Asian counting systems, Hebrew, Arabic and Thai letters, text in other languages) fall back to decimal digits in `GetListLabels`, but are still written and read exactly.
 
+## Sections, columns, headers and watermarks
+
+```csharp
+doc.Section.PageNumbering.Format = NumberFormat.LowerRoman;   // i, ii, iii for the front matter
+doc.Header.SetText("Lab Report");
+doc.AddParagraph("Preface …");
+
+var results = doc.AddSectionBreak(SectionStart.NextPage);      // new section; headers linked to the previous
+results.Page.Orientation = PageOrientation.Landscape;
+results.PageNumbering.Format = NumberFormat.Decimal;
+results.PageNumbering.Start = 1;
+results.Columns.Count = 2;
+results.Columns.Separator = true;
+results.EvenPageHeader.SetText("Results — even pages");        // turns on odd/even headers
+results.Watermark = new TextWatermark("DRAFT");                 // Word's WordArt watermark
+results.Page.SetCustomSize(288, 432);                           // or A3, A5, B5, Executive, Tabloid…
+```
+
+Every section property is in the model: start type, page size/orientation/margins/gutter/header distance, columns (equal or unequal, separator line), default/first/even headers and footers (linked or blank, with tables), page numbering (format, restart, chapter numbers), line numbers, page borders, vertical alignment, text direction, right-to-left layout and the document grid. `Document.Load` reads all of it back, headers and footers included.
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:

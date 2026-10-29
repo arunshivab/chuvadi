@@ -419,6 +419,18 @@ public enum PageSize
     A4,
     Letter,
     Legal,
+    /// <summary>297 × 420 mm.</summary>
+    A3,
+    /// <summary>148 × 210 mm.</summary>
+    A5,
+    /// <summary>JIS B5, 182 × 257 mm.</summary>
+    B5,
+    /// <summary>7.25 × 10.5 in.</summary>
+    Executive,
+    /// <summary>11 × 17 in.</summary>
+    Tabloid,
+    /// <summary><see cref="PageSetup.CustomWidthPt"/> × <see cref="PageSetup.CustomHeightPt"/>.</summary>
+    Custom,
 }
 
 /// <summary>Page orientation.</summary>

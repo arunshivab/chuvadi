@@ -123,6 +123,46 @@ internal static class DocumentSerializer
 
         var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId) { Numbering = numbering };
 
+        // ---- header/footer plan: one part per non-empty (or explicitly blank, or watermarked) slot of each section ----
+        bool oddEven = doc.EffectiveOddAndEven;
+        int hfIndex = 1;
+        var hfParts = new List<(string Uri, string RelId, string RelType, HeaderFooterContent Content, bool IsHeader, TextWatermark? Watermark, Section Section)>();
+        var sectionRefs = new Dictionary<Section, List<SectionXml.Reference>>(ReferenceEqualityComparer.Instance);
+        var sections = doc.Sections;
+        var written = new Dictionary<(HeaderFooterContent, TextWatermark?, HeaderFooterContent?), string>();
+        for (int si = 0; si < sections.Count; si++)
+        {
+            var section = sections[si];
+            if (sectionRefs.ContainsKey(section)) continue;
+            var refs = new List<SectionXml.Reference>();
+            foreach (var (content, isHeader, type) in section.Slots())
+            {
+                bool watermarkHere = isHeader && section.Watermark is not null
+                    && (section.WatermarkSlots is { } only ? only.Contains(type)
+                        : type == "default" || (type == "first" && section.DifferentFirstPage) || (type == "even" && oddEven));
+                if (!content.HasContent && !watermarkHere && content.LinkToPrevious) continue;
+                // A watermark in a slot that would inherit: carry the inherited content along (as Word does).
+                HeaderFooterContent? inherited = null;
+                if (watermarkHere && !content.HasContent && content.LinkToPrevious)
+                    for (int pj = si - 1; pj >= 0 && inherited is null; pj--)
+                    {
+                        var prev = sections[pj].Slot(isHeader, type);
+                        if (prev.HasContent || !prev.LinkToPrevious) inherited = prev;
+                    }
+                var key = (content, watermarkHere ? section.Watermark : null, inherited);
+                if (!written.TryGetValue(key, out var relId))
+                {
+                    var uri = $"/word/{(isHeader ? "header" : "footer")}{hfIndex}.xml";
+                    relId = $"rIdHf{hfIndex}";
+                    hfIndex++;
+                    hfParts.Add((uri, relId, isHeader ? RelHeader : RelFooter, inherited ?? content, isHeader, watermarkHere ? section.Watermark : null, section));
+                    written[key] = relId;
+                }
+                refs.Add(new SectionXml.Reference(isHeader, type, relId));
+            }
+            sectionRefs[section] = refs;
+        }
+
         // ---- /word/document.xml ----
         using (var s = pkg.CreatePart("/word/document.xml", CtDocument))
         using (var x = CreateXml(s))
@@ -140,7 +180,12 @@ internal static class DocumentSerializer
                 if (block is DocTable && previous is DocTable)
                     WriteEmptyParagraph(x);
 
-                if (block is Paragraph p) WriteParagraph(x, p, bodyCtx);
+                if (block is Paragraph p)
+                {
+                    Action<XmlWriter>? sectPr = p.SectionProperties is { } ps && !ReferenceEquals(ps, doc.Section)
+                        ? w => SectionXml.Write(w, ps, sectionRefs[ps]) : null;
+                    WriteParagraph(x, p, bodyCtx, sectPr: sectPr);
+                }
                 else if (block is DocTable t) WriteTable(x, t, bodyCtx);
                 previous = block;
             }
@@ -149,7 +194,7 @@ internal static class DocumentSerializer
             // versions; always close with a paragraph in that case.
             if (previous is DocTable) WriteEmptyParagraph(x);
 
-            WriteSectionProperties(x, doc);
+            SectionXml.Write(x, doc.Section, sectionRefs[doc.Section]);
 
             x.WriteEndElement(); // body
             x.WriteEndElement(); // document
@@ -197,22 +242,9 @@ internal static class DocumentSerializer
         }
 
         // ---- header/footer parts ----
-        int hfIndex = 1;
-        var hfParts = new List<(string Uri, string RelId, string RelType, HeaderFooterContent Content, bool IsHeader)>();
-        void AddHf(HeaderFooterContent c, bool isHeader)
-        {
-            if (!c.HasContent) return;
-            var uri = $"/word/{(isHeader ? "header" : "footer")}{hfIndex}.xml";
-            hfParts.Add((uri, $"rIdHf{hfIndex}", isHeader ? RelHeader : RelFooter, c, isHeader));
-            hfIndex++;
-        }
-        AddHf(doc.Header, isHeader: true);
-        AddHf(doc.Footer, isHeader: false);
-        AddHf(doc.FirstPageHeader, isHeader: true);
-        AddHf(doc.FirstPageFooter, isHeader: false);
-
         var hfContexts = new List<PartContext>();
-        foreach (var (uri, _, _, content, isHeader) in hfParts)
+        int watermarkCount = 0;
+        foreach (var (uri, _, _, content, isHeader, watermark, section) in hfParts)
         {
             var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering };
             hfContexts.Add(hfCtx);
@@ -221,7 +253,40 @@ internal static class DocumentSerializer
             x.WriteStartDocument(standalone: true);
             x.WriteStartElement("w", isHeader ? "hdr" : "ftr", W);
             x.WriteAttributeString("xmlns", "r", null, R);
-            foreach (var p in content) WriteParagraph(x, p, hfCtx);
+            if (watermark is not null)
+            {
+                x.WriteAttributeString("xmlns", "v", null, Vml);
+                x.WriteAttributeString("xmlns", "o", null, Office);
+                x.WriteAttributeString("xmlns", "w10", null, Word10);
+            }
+            Action<XmlWriter>? leading = null;
+            if (watermark is not null)
+            {
+                int n = ++watermarkCount;
+                leading = w => WriteWatermark(w, watermark, section, n);
+            }
+            object? previous = null;
+            foreach (var block in content.Blocks)
+            {
+                if (block is Paragraph p)
+                {
+                    WriteParagraph(x, p, hfCtx, leading);
+                    leading = null;
+                }
+                else if (block is DocTable t)
+                {
+                    if (previous is DocTable) WriteEmptyParagraph(x);
+                    WriteTable(x, t, hfCtx);
+                }
+                previous = block;
+            }
+            if (leading is not null || previous is DocTable || previous is null)
+            {
+                // A header/footer must end with a paragraph; the watermark needs one to live in.
+                x.WriteStartElement("p", W);
+                leading?.Invoke(x);
+                x.WriteEndElement();
+            }
             x.WriteEndElement();
             x.WriteEndDocument();
         }
@@ -248,8 +313,8 @@ internal static class DocumentSerializer
             pkg.AddRelationship("/word/document.xml", "/word/theme/theme1.xml", RelTheme, "rIdTheme");
         if (hasLists)
             pkg.AddRelationship("/word/document.xml", "/word/numbering.xml", RelNumbering, "rIdNumbering");
-        foreach (var (uri, relId, relType, _, _) in hfParts)
-            pkg.AddRelationship("/word/document.xml", uri, relType, relId);
+        foreach (var part in hfParts)
+            pkg.AddRelationship("/word/document.xml", part.Uri, part.RelType, part.RelId);
 
         // Per-part hyperlink + image relationships (body and each header/footer).
         void WriteContextRels(PartContext ctx)
@@ -273,12 +338,14 @@ internal static class DocumentSerializer
         x.WriteEndElement();
     }
 
-    internal static void WriteParagraph(XmlWriter x, Paragraph p, PartContext? ctx)
+    internal static void WriteParagraph(XmlWriter x, Paragraph p, PartContext? ctx, Action<XmlWriter>? leadingRuns = null,
+        Action<XmlWriter>? sectPr = null)
     {
         x.WriteStartElement("p", W);
 
         // pPr — paragraph properties in schema order (see ParagraphProperties).
-        ParagraphProperties.Write(x, p, ctx?.Numbering);
+        ParagraphProperties.Write(x, p, ctx?.Numbering, sectPr);
+        leadingRuns?.Invoke(x);
 
         if (p.PageBreakBefore)
         {
@@ -297,6 +364,7 @@ internal static class DocumentSerializer
                 x.WriteStartElement("fldSimple", W);
                 x.WriteAttributeString("instr", W, run.FieldInstruction);
                 x.WriteStartElement("r", W);
+                RunProperties.Write(x, run.Format, run.CharacterStyleId);
                 WriteText(x, run.TextContent);
                 x.WriteEndElement();
                 x.WriteEndElement();
@@ -692,52 +760,112 @@ internal static class DocumentSerializer
     private static void WriteTable(XmlWriter x, DocTable t, PartContext ctx)
         => TableXml.Write(x, t, (w, p) => WriteParagraph(w, p, ctx));
 
-    // ---- Section properties (page setup + header/footer references) -------------------
+    // ---- Watermark ---------------------------------------------------------------------
 
-    private static void WriteSectionProperties(XmlWriter x, Document doc)
+    internal const string Vml = "urn:schemas-microsoft-com:vml";
+    internal const string Office = "urn:schemas-microsoft-com:office:office";
+    internal const string Word10 = "urn:schemas-microsoft-com:office:word";
+
+    /// <summary>
+    /// A text watermark as Word writes it: a VML WordArt shape (shapetype 136, the "PowerPlus"
+    /// watermark object) behind the text, centred on the margins.
+    /// </summary>
+    private static void WriteWatermark(XmlWriter x, TextWatermark wm, Section section, int n)
     {
-        x.WriteStartElement("sectPr", W);
+        if (string.IsNullOrWhiteSpace(wm.Text)) throw new ArgumentException("Watermark text required.", nameof(wm));
+        if (!double.IsFinite(wm.Opacity)) throw new ArgumentOutOfRangeException(nameof(wm), "Watermark opacity must be finite.");
+        var page = section.Page;
+        double contentWidth = Math.Max(36, page.WidthPt - page.LeftMarginPt - page.RightMarginPt);
+        double contentHeight = Math.Max(36, page.HeightPt - Math.Abs(page.TopMarginPt) - Math.Abs(page.BottomMarginPt));
+        double width = wm.WidthPt ?? contentWidth;
+        // WordArt stretches the text to the box: about three characters per box height reads like Word's "Auto".
+        double height = wm.HeightPt ?? Math.Min(width * 3 / Math.Max(1, wm.Text.Length), contentHeight / 2);
+        if (!(width > 0) || !(height > 0) || !double.IsFinite(width) || !double.IsFinite(height))
+            throw new ArgumentOutOfRangeException(nameof(wm), "Watermark size must be positive and finite.");
+        var color = (wm.ColorHex ?? "C0C0C0").TrimStart('#');
+        if (color.Length != 6 || !int.TryParse(color, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+            throw new ArgumentException("Watermark ColorHex must be RRGGBB.", nameof(wm));
+        string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
 
-        int hfIndex = 1;
-        void Reference(HeaderFooterContent c, bool isHeader, string type)
-        {
-            if (!c.HasContent) return;
-            x.WriteStartElement(isHeader ? "headerReference" : "footerReference", W);
-            x.WriteAttributeString("type", W, type);
-            x.WriteAttributeString("id", R, $"rIdHf{hfIndex}");
-            x.WriteEndElement();
-            hfIndex++;
-        }
-        Reference(doc.Header, isHeader: true, "default");
-        Reference(doc.Footer, isHeader: false, "default");
-        Reference(doc.FirstPageHeader, isHeader: true, "first");
-        Reference(doc.FirstPageFooter, isHeader: false, "first");
-
-        var (pw, ph) = doc.Page.PortraitTwips;
-        bool landscape = doc.Page.Orientation == PageOrientation.Landscape;
-        x.WriteStartElement("pgSz", W);
-        x.WriteAttributeString("w", W, (landscape ? ph : pw).ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("h", W, (landscape ? pw : ph).ToString(CultureInfo.InvariantCulture));
-        if (landscape) x.WriteAttributeString("orient", W, "landscape");
+        x.WriteStartElement("r", W);
+        x.WriteStartElement("rPr", W);
+        x.WriteStartElement("noProof", W);
         x.WriteEndElement();
-
-        x.WriteStartElement("pgMar", W);
-        x.WriteAttributeString("top", W, PtToTwips(doc.Page.TopMarginPt));
-        x.WriteAttributeString("right", W, PtToTwips(doc.Page.RightMarginPt));
-        x.WriteAttributeString("bottom", W, PtToTwips(doc.Page.BottomMarginPt));
-        x.WriteAttributeString("left", W, PtToTwips(doc.Page.LeftMarginPt));
-        x.WriteAttributeString("header", W, "708");
-        x.WriteAttributeString("footer", W, "708");
-        x.WriteAttributeString("gutter", W, "0");
         x.WriteEndElement();
+        x.WriteStartElement("pict", W);
 
-        if (doc.DifferentFirstPage)
+        x.WriteStartElement("v", "shapetype", Vml);
+        x.WriteAttributeString("id", "_x0000_t136");
+        x.WriteAttributeString("coordsize", "21600,21600");
+        x.WriteAttributeString("o", "spt", Office, "136");
+        x.WriteAttributeString("adj", "10800");
+        x.WriteAttributeString("path", "m@7,l@8,m@5,21600l@6,21600e");
+        x.WriteStartElement("v", "formulas", Vml);
+        foreach (var eqn in new[]
         {
-            x.WriteStartElement("titlePg", W);
+            "sum #0 0 10800", "prod #0 2 1", "sum 21600 0 @1", "sum 0 0 @2", "sum 21600 0 @3", "if @0 @3 0", "if @0 21600 @1",
+            "if @0 0 @2", "if @0 @4 21600", "mid @5 @6", "mid @8 @5", "mid @7 @8", "mid @6 @7", "sum @6 0 @5",
+        })
+        {
+            x.WriteStartElement("v", "f", Vml);
+            x.WriteAttributeString("eqn", eqn);
             x.WriteEndElement();
         }
+        x.WriteEndElement(); // formulas
+        x.WriteStartElement("v", "path", Vml);
+        x.WriteAttributeString("textpathok", "t");
+        x.WriteAttributeString("o", "connecttype", Office, "custom");
+        x.WriteAttributeString("o", "connectlocs", Office, "@9,0;@10,10800;@11,21600;@12,10800");
+        x.WriteAttributeString("o", "connectangles", Office, "270,180,90,0");
+        x.WriteEndElement();
+        x.WriteStartElement("v", "textpath", Vml);
+        x.WriteAttributeString("on", "t");
+        x.WriteAttributeString("fitshape", "t");
+        x.WriteEndElement();
+        x.WriteStartElement("v", "handles", Vml);
+        x.WriteStartElement("v", "h", Vml);
+        x.WriteAttributeString("position", "#0,bottomRight");
+        x.WriteAttributeString("xrange", "6629,14971");
+        x.WriteEndElement();
+        x.WriteEndElement();
+        x.WriteStartElement("o", "lock", Office);
+        x.WriteAttributeString("v", "ext", Vml, "edit");
+        x.WriteAttributeString("text", "t");
+        x.WriteAttributeString("shapetype", "t");
+        x.WriteEndElement();
+        x.WriteEndElement(); // shapetype
 
-        x.WriteEndElement(); // sectPr
+        x.WriteStartElement("v", "shape", Vml);
+        x.WriteAttributeString("id", "PowerPlusWaterMarkObject" + (357476640 + n).ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("o", "spid", Office, "_x0000_s" + (2048 + n).ToString(CultureInfo.InvariantCulture));
+        x.WriteAttributeString("type", "#_x0000_t136");
+        x.WriteAttributeString("style",
+            $"position:absolute;margin-left:0;margin-top:0;width:{F(width)}pt;height:{F(height)}pt;" +
+            (wm.Diagonal ? "rotation:315;" : "") +
+            "z-index:-251657216;mso-position-horizontal:center;mso-position-horizontal-relative:margin;" +
+            "mso-position-vertical:center;mso-position-vertical-relative:margin");
+        x.WriteAttributeString("o", "allowincell", Office, "f");
+        x.WriteAttributeString("fillcolor", "#" + color.ToUpperInvariant());
+        x.WriteAttributeString("stroked", "f");
+        double opacity = Math.Clamp(wm.Opacity, 0, 1);
+        if (opacity < 1)
+        {
+            x.WriteStartElement("v", "fill", Vml);
+            x.WriteAttributeString("opacity", F(opacity));
+            x.WriteEndElement();
+        }
+        x.WriteStartElement("v", "textpath", Vml);
+        x.WriteAttributeString("style", $"font-family:\"{wm.Font ?? "Calibri"}\";font-size:1pt");
+        x.WriteAttributeString("string", wm.Text);
+        x.WriteEndElement();
+        x.WriteStartElement("w10", "wrap", Word10);
+        x.WriteAttributeString("anchorx", "margin");
+        x.WriteAttributeString("anchory", "margin");
+        x.WriteEndElement();
+        x.WriteEndElement(); // shape
+
+        x.WriteEndElement(); // pict
+        x.WriteEndElement(); // r
     }
 
     // ---- settings.xml (+ documentProtection) ----------------------------------------------
@@ -746,6 +874,10 @@ internal static class DocumentSerializer
     {
         x.WriteStartDocument(standalone: true);
         x.WriteStartElement("w", "settings", W);
+
+        // CT_Settings order: … mirrorMargins, …, gutterAtTop, …, documentProtection, …, evenAndOddHeaders …
+        if (doc.MirrorMargins) { x.WriteStartElement("mirrorMargins", W); x.WriteEndElement(); }
+        if (doc.GutterAtTop) { x.WriteStartElement("gutterAtTop", W); x.WriteEndElement(); }
 
         if (doc.IsProtected)
         {
@@ -774,6 +906,8 @@ internal static class DocumentSerializer
             x.WriteAttributeString("salt", W, Convert.ToBase64String(salt));
             x.WriteEndElement();
         }
+
+        if (doc.EffectiveOddAndEven) { x.WriteStartElement("evenAndOddHeaders", W); x.WriteEndElement(); }
 
         x.WriteEndElement();
         x.WriteEndDocument();
@@ -837,8 +971,22 @@ internal static class DocumentSerializer
             else if (block is DocTable t)
                 foreach (var tp in TableParagraphs(t, 0)) yield return tp;
         }
-        foreach (var hf in new[] { doc.Header, doc.Footer, doc.FirstPageHeader, doc.FirstPageFooter })
-            foreach (var p in hf) yield return p;
+        foreach (var hf in HeaderFooterStories(doc))
+            foreach (var b in hf.Blocks)
+            {
+                if (b is Paragraph hp) yield return hp;
+                else if (b is DocTable ht)
+                    foreach (var tp in TableParagraphs(ht, 0)) yield return tp;
+            }
+    }
+
+    /// <summary>Every distinct header/footer of every section.</summary>
+    internal static IEnumerable<HeaderFooterContent> HeaderFooterStories(Document doc)
+    {
+        var seen = new HashSet<HeaderFooterContent>(ReferenceEqualityComparer.Instance);
+        foreach (var section in doc.Sections)
+            foreach (var (content, _, _) in section.Slots())
+                if (seen.Add(content)) yield return content;
     }
 
     /// <summary>Paragraphs of a table in content order, nested tables included (depth-guarded).</summary>

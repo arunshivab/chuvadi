@@ -185,23 +185,95 @@ public sealed class Document
         return FormatResolver.ResolveParagraph(this, paragraph);
     }
 
-    /// <summary>Page size, orientation, margins.</summary>
-    public PageSetup Page { get; } = new();
+    /// <summary>
+    /// The last (or only) section: page setup, headers/footers, columns, numbering… for the
+    /// content after the last <see cref="AddSectionBreak"/>. <see cref="Page"/>, <see cref="Header"/>,
+    /// <see cref="Footer"/>, <see cref="FirstPageHeader"/> and <see cref="FirstPageFooter"/> are
+    /// shortcuts into it.
+    /// </summary>
+    public Section Section { get; private set; } = new();
 
-    /// <summary>Default page header (all pages, or pages 2+ when <see cref="DifferentFirstPage"/>).</summary>
-    public HeaderFooterContent Header { get; } = new();
+    /// <summary>Loader: the final section read from the body's w:sectPr.</summary>
+    internal void SetFinalSection(Section section) => Section = section;
 
-    /// <summary>Default page footer.</summary>
-    public HeaderFooterContent Footer { get; } = new();
+    /// <summary>All sections in order: those ended by paragraphs (<see cref="Paragraph.SectionProperties"/>), then <see cref="Section"/>.</summary>
+    public IReadOnlyList<Section> Sections
+    {
+        get
+        {
+            var list = new List<Section>();
+            foreach (var b in _blocks)
+                if (b is Paragraph p && p.SectionProperties is { } s) list.Add(s);
+            list.Add(Section);
+            return list;
+        }
+    }
 
-    /// <summary>Header used on page 1 only. Setting content here enables the title-page flag.</summary>
-    public HeaderFooterContent FirstPageHeader { get; } = new();
+    /// <summary>
+    /// Ends the current section and starts a new one, as Word's Insert › Break › Section
+    /// break. The current <see cref="Section"/> object — with its layout, headers, footers and
+    /// watermark — becomes the ended section, held by the last paragraph (an empty paragraph is
+    /// added when the document does not end with one). A new section becomes
+    /// <see cref="Section"/> and is returned: its layout is a copy of the previous one (a
+    /// page-number restart is not copied; a different first page is kept), its headers and
+    /// footers are empty and linked to the previous section's, and <paramref name="start"/> says
+    /// where it begins.
+    /// </summary>
+    public Section AddSectionBreak(SectionStart start = SectionStart.NextPage)
+    {
+        if (!Enum.IsDefined(start)) throw new ArgumentOutOfRangeException(nameof(start));
+        var ended = Section;
+        var next = ended.CloneLayout();
+        next.Start = start;
+        next.PageNumbering.Start = null;
+        next.TitlePage = ended.DifferentFirstPage ? true : ended.TitlePage;
+        Paragraph holder;
+        if (_blocks.Count > 0 && _blocks[^1] is Paragraph last && last.SectionProperties is null) holder = last;
+        else { holder = new Paragraph(); _blocks.Add(holder); }
+        holder.SectionProperties = ended;
+        Section = next;
+        return next;
+    }
 
-    /// <summary>Footer used on page 1 only.</summary>
-    public HeaderFooterContent FirstPageFooter { get; } = new();
+    /// <summary>Page size, orientation, margins of the last section (<see cref="Section"/>.Page).</summary>
+    public PageSetup Page => Section.Page;
 
-    /// <summary>True when first-page header/footer differ from the rest.</summary>
-    public bool DifferentFirstPage => FirstPageHeader.HasContent || FirstPageFooter.HasContent;
+    /// <summary>Default page header of the last section (all pages, or pages 2+ when <see cref="DifferentFirstPage"/>).</summary>
+    public HeaderFooterContent Header => Section.Header;
+
+    /// <summary>Default page footer of the last section.</summary>
+    public HeaderFooterContent Footer => Section.Footer;
+
+    /// <summary>Header used on the section's first page only. Setting content here enables the title-page flag.</summary>
+    public HeaderFooterContent FirstPageHeader => Section.FirstPageHeader;
+
+    /// <summary>Footer used on the section's first page only.</summary>
+    public HeaderFooterContent FirstPageFooter => Section.FirstPageFooter;
+
+    /// <summary>True when the last section's first-page header/footer differ from the rest.</summary>
+    public bool DifferentFirstPage => Section.DifferentFirstPage;
+
+    /// <summary>
+    /// Different headers/footers on even and odd pages (settings w:evenAndOddHeaders), for the
+    /// whole document. Null = automatic: on when any section has even-page header/footer content.
+    /// </summary>
+    public bool? DifferentOddAndEvenPages { get; set; }
+
+    /// <summary>Mirror margins for facing pages (settings w:mirrorMargins): left/right become inside/outside.</summary>
+    public bool MirrorMargins { get; set; }
+
+    /// <summary>Put the gutter at the top of the page instead of the side (settings w:gutterAtTop).</summary>
+    public bool GutterAtTop { get; set; }
+
+    internal bool EffectiveOddAndEven
+    {
+        get
+        {
+            if (DifferentOddAndEvenPages is bool b) return b;
+            foreach (var s in Sections) if (s.EvenPageHeader.HasContent || s.EvenPageFooter.HasContent) return true;
+            return false;
+        }
+    }
 
     internal bool IsProtected { get; private set; }
     internal string? ProtectionPassword { get; private set; }

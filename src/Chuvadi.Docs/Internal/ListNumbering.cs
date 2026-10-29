@@ -99,10 +99,14 @@ internal static class ListNumbering
             if (b is Paragraph p) body.Item(p, null);
             else if (b is DocTable t) body.Table(t, 0);
         }
-        foreach (var story in new[] { doc.Header, doc.Footer, doc.FirstPageHeader, doc.FirstPageFooter })
+        foreach (var story in DocumentSerializer.HeaderFooterStories(doc))
         {
             var c = new Counter(doc, result);
-            foreach (var p in story) c.Item(p, null);
+            foreach (var b in story.Blocks)
+            {
+                if (b is Paragraph p) c.Item(p, null);
+                else if (b is DocTable t) c.Table(t, 0);
+            }
         }
         return result;
     }

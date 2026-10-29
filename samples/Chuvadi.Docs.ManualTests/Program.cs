@@ -35,6 +35,7 @@ public static class Program
             ("Styles", StylesTests.Run),
             ("TablesModel", TablesModelTests.Run),
             ("Lists", ListsTests.Run),
+            ("Sections", SectionsTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

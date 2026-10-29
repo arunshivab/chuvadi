@@ -8,11 +8,11 @@ using Chuvadi.Internal;
 namespace Chuvadi.Docs.Internal;
 
 /// <summary>
-/// Builds an editable <see cref="Document"/> from a docx package stream. Preserves body
-/// paragraphs with basic run formatting (bold/italic/underline/strike, font, size, color,
-/// highlight), paragraph style/alignment/list membership, and tables with text cells.
-/// Everything the model can't represent (images, fields, comments, tracked changes,
-/// content controls, section variations) is dropped — see <see cref="Document"/> docs.
+/// Builds an editable <see cref="Document"/> from a docx package stream: styles and theme,
+/// numbering, settings, body paragraphs (full run and paragraph formatting) and tables,
+/// sections with their header/footer parts and watermarks. What the model cannot represent
+/// (drawings, most fields, comments, tracked changes, content controls) is dropped — see
+/// the <see cref="Document"/> docs.
 /// </summary>
 internal static class DocumentLoader
 {
@@ -135,6 +135,29 @@ internal static class DocumentLoader
             break;
         }
 
+        // Document-wide page settings (settings.xml): even/odd headers, mirror margins, gutter position.
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal || !rel.Type.EndsWith("/settings", StringComparison.Ordinal)) continue;
+            var settingsUri = Resolve(documentUri, rel.Target);
+            Stream? settingsRaw = null;
+            try { settingsRaw = pkg.OpenPart(settingsUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (settingsRaw is null) break;
+            using var gs = GuardedPartStream.Wrap(settingsRaw, options.MaxPartBytes, ct, settingsUri);
+            using var gr = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, settingsUri);
+            try
+            {
+                ReadSettings(gr, doc);
+                EnsureWellFormed(gr, settingsUri);
+            }
+            catch (XmlException)
+            {
+                // A malformed settings part only carries page flags; the document still loads.
+            }
+            break;
+        }
+
+        (Section, System.Collections.Generic.List<SectionXml.Reference>)? bodySectPr = null;
         using var raw = pkg.OpenPart(documentUri);
         using var s = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, documentUri);
         using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, ct, documentUri);
@@ -152,6 +175,12 @@ internal static class DocumentLoader
                     doc.AddBlock(table);
                     continue;
                 }
+                if (r.LocalName == "sectPr")
+                {
+                    using (var sub = r.ReadSubtree()) bodySectPr = SectionXml.Read(sub);
+                    r.Read();
+                    continue;
+                }
                 if (r.LocalName == "p" && IsBodyLevel(r))
                 {
                     Paragraph p;
@@ -164,8 +193,217 @@ internal static class DocumentLoader
             if (!r.Read()) break;
         }
         EnsureWellFormed(r, documentUri);
+        LoadSections(pkg, documentUri, doc, bodySectPr, options, ct);
+        // Word keeps even-page headers after "Different odd & even" is switched off: without the setting they stay hidden.
+        doc.DifferentOddAndEvenPages ??= false;
         LinkNumbering(doc);
         return doc;
+    }
+
+    private static string Resolve(string sourceUri, string target)
+        => target.StartsWith('/') ? target : sourceUri[..(sourceUri.LastIndexOf('/') + 1)] + target;
+
+    private static void ReadSettings(XmlReader r, Document doc)
+    {
+        if (!r.Read()) return;
+        r.MoveToContent();
+        if (r.IsEmptyElement) return;
+        int childDepth = r.Depth + 1;
+        while (r.Read())
+        {
+            if (r.NodeType != XmlNodeType.Element || r.Depth != childDepth || r.NamespaceURI != W) continue;
+            switch (r.LocalName)
+            {
+                case "evenAndOddHeaders": doc.DifferentOddAndEvenPages = RunProperties.OnOff(r) == true; break;
+                case "mirrorMargins": doc.MirrorMargins = RunProperties.OnOff(r) == true; break;
+                case "gutterAtTop": doc.GutterAtTop = RunProperties.OnOff(r) == true; break;
+            }
+            if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+        }
+    }
+
+    /// <summary>
+    /// Builds the sections: one per top-level paragraph carrying w:sectPr, then the body's final
+    /// w:sectPr, with their header/footer parts (each part read once) and text watermarks.
+    /// </summary>
+    private static void LoadSections(OoxmlPackage pkg, string documentUri, Document doc,
+        (Section Section, System.Collections.Generic.List<SectionXml.Reference> References)? bodySectPr,
+        DocxReaderOptions options, CancellationToken ct)
+    {
+        var rels = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var rel in pkg.GetRelationships(documentUri))
+            if (!rel.IsExternal && (rel.Type.EndsWith("/header", StringComparison.Ordinal) || rel.Type.EndsWith("/footer", StringComparison.Ordinal)))
+                rels[rel.Id] = Resolve(documentUri, rel.Target);
+        var parts = new System.Collections.Generic.Dictionary<string, (HeaderFooterContent Content, TextWatermark? Watermark)>(StringComparer.Ordinal);
+
+        Section Build((Section Section, System.Collections.Generic.List<SectionXml.Reference> References) loaded)
+        {
+            var (section, refs) = loaded;
+            foreach (var rf in refs)
+            {
+                if (!rels.TryGetValue(rf.RelId, out var uri)) continue;
+                if (!parts.TryGetValue(uri, out var part))
+                {
+                    try { part = LoadHeaderFooter(pkg, uri, options, ct); }
+                    catch (XmlException) { part = (new HeaderFooterContent(), null); } // a malformed header/footer loads blank
+                    parts[uri] = part;
+                }
+                // One object per part: sections referencing the same part share it (written once again).
+                part.Content.LinkToPrevious = false; // a reference exists: an empty part is a deliberate blank
+                section.SetSlot(rf.IsHeader, rf.Type, part.Content);
+                if (rf.IsHeader && part.Watermark is { } wm)
+                {
+                    if (section.Watermark is null || rf.Type == "default")
+                    {
+                        var slots = section.WatermarkSlots;
+                        section.Watermark = wm.Clone();
+                        section.WatermarkSlots = slots;
+                    }
+                    (section.WatermarkSlots ??= new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal)).Add(rf.Type);
+                }
+            }
+            if (section.Watermark is not null) section.WatermarkSlots ??= new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            // No w:titlePg: no different first page — unless nothing first-page exists, then stay automatic.
+            if (section.TitlePage is null && refs.Exists(r => r.Type == "first")) section.TitlePage = false;
+            return section;
+        }
+
+        foreach (var b in doc.Blocks)
+        {
+            if (b is not Paragraph p || p.LoadedSection is not { } loaded) continue;
+            p.LoadedSection = null;
+            p.SectionProperties = Build(loaded);
+        }
+        if (bodySectPr is { } body) doc.SetFinalSection(Build(body));
+    }
+
+    private static (HeaderFooterContent Content, TextWatermark? Watermark) LoadHeaderFooter(OoxmlPackage pkg, string uri,
+        DocxReaderOptions options, CancellationToken ct)
+    {
+        var content = new HeaderFooterContent();
+        Stream? raw = null;
+        try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+        if (raw is null) return (content, null);
+        byte[] bytes;
+        using (var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri))
+        using (var ms = new MemoryStream())
+        {
+            gs.CopyTo(ms);
+            bytes = ms.ToArray();
+        }
+        TextWatermark? watermark;
+        using (var wr = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, ct, uri))
+        {
+            watermark = FindWatermark(wr);
+            EnsureWellFormed(wr, uri);
+        }
+        using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, ct, uri);
+        if (!r.Read()) return (content, watermark);
+        while (!r.EOF)
+        {
+            if (r.NodeType == XmlNodeType.Element && r.NamespaceURI == W)
+            {
+                if (r.LocalName == "tbl")
+                {
+                    DocTable table;
+                    using (var sub = r.ReadSubtree()) table = LoadTable(sub);
+                    r.Read();
+                    content.AppendTable(table);
+                    continue;
+                }
+                if (r.LocalName == "p")
+                {
+                    Paragraph p;
+                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub);
+                    r.Read();
+                    content.Add(p);
+                    continue;
+                }
+            }
+            if (!r.Read()) break;
+        }
+        EnsureWellFormed(r, uri);
+        return (content, watermark);
+    }
+
+    /// <summary>The text watermark Word writes in a header: a VML shape whose id starts with PowerPlusWaterMarkObject.</summary>
+    private static TextWatermark? FindWatermark(XmlReader r)
+    {
+        while (r.Read())
+        {
+            if (r.NodeType != XmlNodeType.Element || r.NamespaceURI != DocumentSerializer.Vml || r.LocalName != "shape") continue;
+            var id = r.GetAttribute("id");
+            if (id is null || !id.StartsWith("PowerPlusWaterMarkObject", StringComparison.Ordinal)) continue;
+            var style = r.GetAttribute("style") ?? "";
+            var fill = r.GetAttribute("fillcolor");
+            string? text = null, font = null;
+            double opacity = 1;
+            using (var sub = r.ReadSubtree())
+            {
+                while (sub.Read())
+                {
+                    if (sub.NodeType != XmlNodeType.Element || sub.NamespaceURI != DocumentSerializer.Vml) continue;
+                    if (sub.LocalName == "textpath")
+                    {
+                        text = sub.GetAttribute("string");
+                        font = CssValue(sub.GetAttribute("style") ?? "", "font-family")?.Trim('"', '\'', ' ');
+                    }
+                    else if (sub.LocalName == "fill" && double.TryParse(sub.GetAttribute("opacity"), System.Globalization.NumberStyles.Float,
+                                 System.Globalization.CultureInfo.InvariantCulture, out var o) && double.IsFinite(o))
+                        opacity = Math.Clamp(o, 0, 1);
+                }
+            }
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var wm = new TextWatermark(text) { Opacity = opacity };
+            if (!string.IsNullOrWhiteSpace(font)) wm.Font = font;
+            wm.ColorHex = NamedColor(fill) ?? wm.ColorHex;
+            var rotation = CssValue(style, "rotation");
+            wm.Diagonal = rotation is not null && rotation.Trim() is not ("0" or "");
+            wm.WidthPt = CssPoints(CssValue(style, "width"));
+            wm.HeightPt = CssPoints(CssValue(style, "height"));
+            return wm;
+        }
+        return null;
+    }
+
+    private static string? CssValue(string style, string name)
+    {
+        foreach (var part in style.Split(';'))
+        {
+            int colon = part.IndexOf(':');
+            if (colon > 0 && part[..colon].Trim().Equals(name, StringComparison.OrdinalIgnoreCase)) return part[(colon + 1)..].Trim();
+        }
+        return null;
+    }
+
+    private static double? CssPoints(string? v)
+    {
+        if (v is null || !v.EndsWith("pt", StringComparison.Ordinal)) return null;
+        return double.TryParse(v[..^2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)
+            && double.IsFinite(d) && d > 0 && d < 10_000 ? d : null;
+    }
+
+    /// <summary>VML colour: #RRGGBB, #RGB or a few CSS names Word uses (silver, gray, black, red…).</summary>
+    private static string? NamedColor(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return null;
+        v = v.Trim();
+        var space = v.IndexOf(' ');
+        if (space > 0) v = v[..space]; // "#ff0000 [3204]"
+        if (v.StartsWith('#'))
+        {
+            var hex = v[1..];
+            if (hex.Length == 3) hex = string.Concat(hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]);
+            return hex.Length == 6 && int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out _)
+                ? hex.ToUpperInvariant() : null;
+        }
+        return v.ToLowerInvariant() switch
+        {
+            "silver" => "C0C0C0", "gray" or "grey" => "808080", "black" => "000000", "white" => "FFFFFF", "red" => "FF0000",
+            "maroon" => "800000", "blue" => "0000FF", "navy" => "000080", "green" => "008000", "lime" => "00FF00",
+            "yellow" => "FFFF00", "olive" => "808000", "purple" => "800080", "teal" => "008080", "aqua" => "00FFFF", "fuchsia" => "FF00FF",
+            _ => null,
+        };
     }
 
     /// <summary>
@@ -219,6 +457,7 @@ internal static class DocumentLoader
     {
         var p = new Paragraph();
         if (!sub.Read()) return p; // positioned on <w:p>
+        var fields = new FieldState();
 
         while (sub.Read())
         {
@@ -241,11 +480,59 @@ internal static class DocumentLoader
                     using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
                     break;
                 case "r":
-                    using (var r = sub.ReadSubtree()) LoadRun(r, p);
+                    using (var r = sub.ReadSubtree()) LoadRun(r, p, fields);
                     break;
+                case "fldSimple":
+                {
+                    var instr = sub.GetAttribute("instr", W);
+                    if (!IsPageField(instr)) break; // other fields: their result runs load as text
+                    var result = new System.Text.StringBuilder();
+                    TextFormat? fieldFormat = null;
+                    string? fieldStyle = null;
+                    using (var fs = sub.ReadSubtree())
+                    {
+                        bool adv = true;
+                        while (true)
+                        {
+                            if (adv && !fs.Read()) break;
+                            adv = true;
+                            if (fs.EOF) break;
+                            if (fs.NodeType != XmlNodeType.Element || fs.NamespaceURI != W) continue;
+                            if (fs.LocalName == "rPr" && fieldFormat is null)
+                                using (var rp = fs.ReadSubtree()) fieldFormat = RunProperties.Read(rp, out fieldStyle);
+                            else if (fs.LocalName == "t") { result.Append(fs.ReadElementContentAsString()); adv = false; }
+                        }
+                    }
+                    p.AddRun(Run.Field(instr!, result.ToString(), fieldFormat, fieldStyle));
+                    break;
+                }
             }
         }
+        // A page field still open at the paragraph end (malformed, or ending in a later paragraph):
+        // keep what was captured instead of losing it.
+        if (fields.Capturing && fields.Result.Length > 0)
+            p.AddRun(Run.Field(fields.Instruction.ToString(), fields.Result.ToString(), fields.Format, fields.StyleId));
         return p;
+    }
+
+    /// <summary>Page-number fields the model represents as field runs (PAGE, NUMPAGES, SECTIONPAGES); other fields load as their result text.</summary>
+    private static bool IsPageField(string? instruction)
+    {
+        if (instruction is null) return false;
+        var word = instruction.Trim().Split(' ', 2)[0].ToUpperInvariant();
+        return word is "PAGE" or "NUMPAGES" or "SECTIONPAGES";
+    }
+
+    /// <summary>Complex field (w:fldChar begin/separate/end + w:instrText) state across the runs of one paragraph.</summary>
+    private sealed class FieldState
+    {
+        public int Depth;
+        public bool Collecting;
+        public bool Capturing;
+        public readonly System.Text.StringBuilder Instruction = new();
+        public readonly System.Text.StringBuilder Result = new();
+        public TextFormat? Format;
+        public string? StyleId;
     }
 
     /// <summary>
@@ -255,7 +542,7 @@ internal static class DocumentLoader
     /// round-trips as a single run. Page, column and text-wrapping breaks become explicit
     /// <see cref="BreakType"/> runs.
     /// </summary>
-    private static void LoadRun(XmlReader sub, Paragraph p)
+    private static void LoadRun(XmlReader sub, Paragraph p, FieldState fields)
     {
         var format = TextFormat.None;
         string? charStyle = null;
@@ -305,10 +592,53 @@ internal static class DocumentLoader
                     using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out charStyle);
                     break;
                 case "t":
-                    text.Append(sub.ReadElementContentAsString());
-                    sawText = true;
+                    if (fields.Capturing)
+                    {
+                        if (fields.Result.Length == 0 && fields.Format is null) { fields.Format = format; fields.StyleId = charStyle; }
+                        fields.Result.Append(sub.ReadElementContentAsString());
+                    }
+                    else
+                    {
+                        text.Append(sub.ReadElementContentAsString());
+                        sawText = true;
+                    }
                     advance = false;
                     break;
+                case "instrText":
+                {
+                    var instr = sub.ReadElementContentAsString();
+                    if (fields.Collecting && fields.Depth == 1) fields.Instruction.Append(instr);
+                    advance = false;
+                    break;
+                }
+                case "fldChar":
+                {
+                    var kind = sub.GetAttribute("fldCharType", W);
+                    Flush();
+                    if (kind == "begin")
+                    {
+                        fields.Depth++;
+                        if (fields.Depth == 1) { fields.Collecting = true; fields.Instruction.Clear(); }
+                    }
+                    else if (kind == "separate" && fields.Depth == 1)
+                    {
+                        fields.Collecting = false;
+                        if (IsPageField(fields.Instruction.ToString())) { fields.Capturing = true; fields.Result.Clear(); fields.Format = null; fields.StyleId = null; }
+                    }
+                    else if (kind == "end" && fields.Depth > 0)
+                    {
+                        if (fields.Depth == 1)
+                        {
+                            var instr = fields.Instruction.ToString();
+                            if (fields.Capturing || (fields.Collecting && IsPageField(instr)))
+                                p.AddRun(Run.Field(instr, fields.Result.ToString(), fields.Format, fields.StyleId));
+                            fields.Capturing = false;
+                            fields.Collecting = false;
+                        }
+                        fields.Depth--;
+                    }
+                    break;
+                }
                 case "tab":
                     text.Append('\t');
                     break;

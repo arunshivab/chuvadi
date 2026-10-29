@@ -145,6 +145,16 @@ public sealed class Paragraph
         return this;
     }
 
+    /// <summary>
+    /// Ends a section here (w:pPr/w:sectPr): the content up to and including this paragraph is
+    /// laid out with these settings. Only paragraphs directly in <see cref="Document.Blocks"/>
+    /// end sections. See <see cref="Document.AddSectionBreak"/>.
+    /// </summary>
+    public Section? SectionProperties { get; set; }
+
+    /// <summary>Loader: the w:sectPr read from w:pPr with its header/footer references, completed once header parts can be read.</summary>
+    internal (Section Section, List<Internal.SectionXml.Reference> References)? LoadedSection { get; set; }
+
     /// <summary>Loader: the numId read from w:numPr, resolved against numbering.xml after loading.</summary>
     internal int? LoadedNumId { get; set; }
 
@@ -283,6 +293,9 @@ public sealed class Run
 
     internal static Run Field(string instruction)
         => new("1", TextFormat.None) { FieldInstruction = instruction };
+
+    internal static Run Field(string instruction, string result, TextFormat? format = null, string? characterStyleId = null)
+        => new(string.IsNullOrEmpty(result) ? "1" : result, format ?? TextFormat.None) { FieldInstruction = instruction, CharacterStyleId = characterStyleId };
 
     internal static Run BreakRun(BreakType type, TextFormat format, string? characterStyleId = null)
         => new("\n", format) { Break = type, CharacterStyleId = characterStyleId };
