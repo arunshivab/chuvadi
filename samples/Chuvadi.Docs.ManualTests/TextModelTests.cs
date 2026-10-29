@@ -346,11 +346,12 @@ public static class TextModelTests
             AssertTrue(first == "Line one\nLine two\tTabbed\nLine three\nLine four", $"reader text was '{first.Replace("\n", "\\n").Replace("\t", "\\t")}'");
             AssertTrue(((Paragraph)doc.Blocks[0]).GetText() == "Line one\nLine two\tTabbed\r\nLine three\rLine four", "GetText");
         });
-        Check("loader restores explicit break and tab runs with their kinds", () =>
+        Check("loader: one w:r stays one run (text with \\n and \\t); page/column/wrapping breaks are explicit runs", () =>
         {
             var loaded = Document.Load(path);
             var p0 = (Paragraph)loaded.Blocks[0];
-            AssertTrue(p0.Runs.Count(r => r.Break == BreakType.Line) == 3 && p0.Runs.Count(r => r.IsTab) == 1, "paragraph 0 runs");
+            AssertTrue(p0.Runs.Count == 1 && p0.Runs[0].TextContent == "Line one\nLine two\tTabbed\nLine three\nLine four",
+                $"paragraph 0: {p0.Runs.Count} runs");
             AssertTrue(((Paragraph)loaded.Blocks[1]).Runs.Any(r => r.Break == BreakType.Page), "mid-paragraph page break kept in place");
             AssertTrue(((Paragraph)loaded.Blocks[2]).Runs.Any(r => r.Break == BreakType.Column), "column break");
             var kinds = ((Paragraph)loaded.Blocks[3]).Runs.Where(r => r.Break is not null).Select(r => r.Break!.Value).ToList();

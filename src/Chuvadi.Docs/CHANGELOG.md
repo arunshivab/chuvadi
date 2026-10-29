@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Fixes
+
+- `DocxReader` text extraction no longer turns tab-stop definitions (`w:pPr/w:tabs`) into tab characters — Word documents with custom tab stops gained phantom leading tabs per stop — and ignores the style recorded in `w:pPrChange` history.
+- `Document.SaveTo(Stream)` now leaves the caller's stream open (flushed, positioned at the end). Previously it disposed it, so save-to-MemoryStream-then-read failed.
+
+### Paragraph model
+
+- **`ParagraphFormat`** (`Paragraph.Format`, plus `ApplyFormat` / `Configure` / `Clone`) with the full paragraph-property set: alignment (now also distribute, kashida and Thai distributed), keep with next, keep lines together, page break before (`StartOnNewPage`), widow control, line-number and hyphenation suppression; space before/after (points or auto), line spacing (`LineSpacing.Multiple` / `Exactly` / `AtLeast`), contextual spacing; left/right/first-line/hanging indents and mirror indents; paragraph borders (top, left, bottom, right, between, bar) and shading; custom tab stops with alignment and leaders; outline level, bidi, font alignment, grid snapping; East Asian line-breaking toggles; and the paragraph mark's own run formatting (`MarkFormat`), which sets the height of empty paragraphs.
+- Shared value types **`Shading`** (all 38 ST_Shd patterns, pattern color, fill, theme fill), **`BorderSpec`** (27 line styles, width, color, theme color, spacing, shadow, frame; Word's decorative art borders round-trip via `RawStyleToken`), **`TabStop`** and **`LineSpacing`**, reused by tables in a later phase.
+- **`TextFormat.Shading`** carries full run shading; a plain fill still loads as `ShadingHex`. This closes the run-shading gap noted under the text model.
+- **Heading 1–9**: `AddHeading` accepts levels 1–9 (previously 1–3) and `styles.xml` defines Heading 4–9 with outline levels.
+- `Paragraph.Alignment` is now a shortcut for `Format.Alignment` (Left means inherit); existing code and output are unchanged.
+- Robust against odd or hostile input: non-finite, underflowing or absurd measurements are ignored on load (never thrown), border width/spacing are clamped to the schema ranges, out-of-range outline levels and non-token `textAlignment` values are ignored. Values set through the API that cannot be written (undefined enum values, NaN measurements, a non-token `RawStyleToken`) fail clearly at save with `ArgumentException`/`ArgumentOutOfRangeException`.
+- **Behaviour changes for loaded documents:** `jc="distribute"` now loads as `ParagraphAlignment.Distribute` (was `Justify`); a run's tabs and plain line breaks load inside its text (`\t`, `\n`) rather than as separate `IsTab` / `Break == Line` runs. An encrypted file opened with NO password now reports `DocxPasswordRequiredException` even when its spin count exceeds `MaxSpinCount` (the password check runs first).
+- **Document.Load** reads every paragraph property, including Word's `w:start`/`w:end` indents and borders; tracked previous properties never override. A run (`w:r`) now loads as ONE `Run` whose text carries `\t` / `\n` for its tabs and line breaks, so a load → save round-trip reproduces `document.xml` exactly, paragraph properties included. Page, column and text-wrapping breaks remain explicit `Break` runs.
+
 ### Text model (run formatting, scripts, breaks)
 
 - **Complete run formatting on `TextFormat`**: four font slots (`AsciiFont`, `HighAnsiFont`, `EastAsiaFont`, `ComplexScriptFont`) plus `FontForAllScripts`, theme fonts per slot and `FontHint`; complex-script `BoldComplexScript`, `ItalicComplexScript`, `SizeComplexScriptPt`, `ComplexScript`, `RightToLeft`; `Language` / `EastAsiaLanguage` / `ComplexScriptLanguage`; `UnderlineStyle` (all 18 styles) and `UnderlineColorHex`; `DoubleStrikethrough`, `Caps`, `SmallCaps`, `Hidden`, `Outline`, `Shadow`, `Emboss`, `Imprint`, `NoProof`; `VerticalPosition` (superscript/subscript), `BaselineShiftPt`, `CharacterSpacingPt`, `HorizontalScalePercent`, `KerningMinSizePt`; `ThemeColor` with tint/shade; `ShadingHex`. New toggles are tri-state (`bool?`) so they can switch an inherited effect off.

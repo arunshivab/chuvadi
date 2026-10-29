@@ -529,9 +529,22 @@ public sealed partial class DocxReader : IDisposable
             {
                 switch (sub.LocalName)
                 {
-                    case "pStyle":
-                        style = sub.GetAttribute("val", DocumentSerializer.W) ?? style;
-                        break;
+                    case "pPr":
+                        // Paragraph properties hold no text — notably w:tabs/w:tab are tab-stop
+                        // DEFINITIONS, not tab characters. Take the style id (not the one inside
+                        // w:pPrChange history) and skip the rest.
+                        using (var pPr = sub.ReadSubtree())
+                        {
+                            pPr.Read();
+                            int childDepth = pPr.Depth + 1;
+                            while (pPr.Read())
+                            {
+                                if (pPr.NodeType == XmlNodeType.Element && pPr.Depth == childDepth
+                                    && pPr.LocalName == "pStyle" && pPr.NamespaceURI == DocumentSerializer.W)
+                                    style = pPr.GetAttribute("val", DocumentSerializer.W) ?? style;
+                            }
+                        }
+                        break; // cursor on </w:pPr>; the Read below moves past it
                     case "t":
                         sb.Append(sub.ReadElementContentAsString());
                         continue; // cursor already advanced past </t>

@@ -252,44 +252,8 @@ internal static class DocumentSerializer
     {
         x.WriteStartElement("p", W);
 
-        // pPr — paragraph properties. Child order matters: pStyle, numPr, spacing, jc...
-        bool needsPpr = p.Style != ParagraphStyle.Normal
-            || p.Alignment != ParagraphAlignment.Left
-            || p.List != ListKind.None;
-        if (needsPpr)
-        {
-            x.WriteStartElement("pPr", W);
-            if (p.Style != ParagraphStyle.Normal)
-            {
-                x.WriteStartElement("pStyle", W);
-                x.WriteAttributeString("val", W, StyleId(p.Style));
-                x.WriteEndElement();
-            }
-            if (p.List != ListKind.None)
-            {
-                x.WriteStartElement("numPr", W);
-                x.WriteStartElement("ilvl", W);
-                x.WriteAttributeString("val", W, Math.Clamp(p.ListLevel, 0, 8).ToString(CultureInfo.InvariantCulture));
-                x.WriteEndElement();
-                x.WriteStartElement("numId", W);
-                x.WriteAttributeString("val", W, p.List == ListKind.Bullet ? "1" : "2");
-                x.WriteEndElement();
-                x.WriteEndElement();
-            }
-            if (p.Alignment != ParagraphAlignment.Left)
-            {
-                x.WriteStartElement("jc", W);
-                x.WriteAttributeString("val", W, p.Alignment switch
-                {
-                    ParagraphAlignment.Center => "center",
-                    ParagraphAlignment.Right => "right",
-                    ParagraphAlignment.Justify => "both",
-                    _ => "left",
-                });
-                x.WriteEndElement();
-            }
-            x.WriteEndElement(); // pPr
-        }
+        // pPr — paragraph properties in schema order (see ParagraphProperties).
+        ParagraphProperties.Write(x, p);
 
         if (p.PageBreakBefore)
         {
@@ -954,6 +918,25 @@ internal static class DocumentSerializer
         Style("Heading3", "heading 3", false,
             pPr: () => { SpacingBefore(160); OutlineLvl(2); },
             rPr: () => { Bold(); Sz(24); Color("1F4D78"); });
+        void Italic() { x.WriteStartElement("i", W); x.WriteEndElement(); }
+        Style("Heading4", "heading 4", false,
+            pPr: () => { SpacingBefore(120); OutlineLvl(3); },
+            rPr: () => { Bold(); Italic(); Sz(22); Color("2E74B5"); });
+        Style("Heading5", "heading 5", false,
+            pPr: () => { SpacingBefore(120); OutlineLvl(4); },
+            rPr: () => { Sz(22); Color("2E74B5"); });
+        Style("Heading6", "heading 6", false,
+            pPr: () => { SpacingBefore(120); OutlineLvl(5); },
+            rPr: () => { Sz(22); Color("1F4D78"); });
+        Style("Heading7", "heading 7", false,
+            pPr: () => { SpacingBefore(120); OutlineLvl(6); },
+            rPr: () => { Italic(); Sz(22); Color("1F4D78"); });
+        Style("Heading8", "heading 8", false,
+            pPr: () => { SpacingBefore(120); OutlineLvl(7); },
+            rPr: () => { Sz(21); Color("404040"); });
+        Style("Heading9", "heading 9", false,
+            pPr: () => { SpacingBefore(120); OutlineLvl(8); },
+            rPr: () => { Italic(); Sz(21); Color("404040"); });
         Style("Quote", "Quote", false,
             pPr: () =>
             {
@@ -1154,6 +1137,12 @@ internal static class DocumentSerializer
         ParagraphStyle.Heading3 => "Heading3",
         ParagraphStyle.Quote => "Quote",
         ParagraphStyle.ListParagraph => "ListParagraph",
+        ParagraphStyle.Heading4 => "Heading4",
+        ParagraphStyle.Heading5 => "Heading5",
+        ParagraphStyle.Heading6 => "Heading6",
+        ParagraphStyle.Heading7 => "Heading7",
+        ParagraphStyle.Heading8 => "Heading8",
+        ParagraphStyle.Heading9 => "Heading9",
         _ => "Normal",
     };
 

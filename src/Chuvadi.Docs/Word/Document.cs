@@ -97,7 +97,7 @@ public sealed class Document
         return paragraph;
     }
 
-    /// <summary>Adds a heading (level 1–3).</summary>
+    /// <summary>Adds a heading (level 1–9, Word's built-in Heading 1 … Heading 9 styles).</summary>
     public Paragraph AddHeading(string text, int level = 1)
     {
         var style = level switch
@@ -105,7 +105,13 @@ public sealed class Document
             1 => ParagraphStyle.Heading1,
             2 => ParagraphStyle.Heading2,
             3 => ParagraphStyle.Heading3,
-            _ => throw new ArgumentOutOfRangeException(nameof(level), "Heading level must be 1–3."),
+            4 => ParagraphStyle.Heading4,
+            5 => ParagraphStyle.Heading5,
+            6 => ParagraphStyle.Heading6,
+            7 => ParagraphStyle.Heading7,
+            8 => ParagraphStyle.Heading8,
+            9 => ParagraphStyle.Heading9,
+            _ => throw new ArgumentOutOfRangeException(nameof(level), "Heading level must be 1–9."),
         };
         return AddParagraph(text, style);
     }
@@ -171,11 +177,12 @@ public sealed class Document
         SaveTo(stream);
     }
 
-    /// <summary>Saves the docx package to a stream.</summary>
+    /// <summary>Saves the docx package to a stream, which is flushed and left OPEN (the caller disposes it).</summary>
     public void SaveTo(Stream output)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
-        DocumentSerializer.Write(output, this);
+        // The caller owns the stream: it is flushed but left open (before 1.2 it was disposed).
+        DocumentSerializer.Write(new NonClosingStream(output), this);
     }
 
     /// <summary>

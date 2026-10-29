@@ -30,6 +30,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_ProtectionEncryption() => ProtectionEncryptionTest.Run(FreshOutDir());
     [Fact] public void Suite_Hardening() => HardeningTests.Run(FreshOutDir());
     [Fact] public void Suite_TextModel() => TextModelTests.Run(FreshOutDir());
+    [Fact] public void Suite_ParagraphModel() => ParagraphModelTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 
@@ -216,8 +217,12 @@ public class VerificationSuiteTests
     [Fact]
     public void HeadingLevel_OutOfRange_Throws()
     {
+        // Range widened from 1–3 to 1–9 in 1.2 (Word's built-in Heading 1 … Heading 9).
         var doc = new Document();
-        Assert.Throws<System.ArgumentOutOfRangeException>(() => doc.AddHeading("x", 4));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => doc.AddHeading("x", 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => doc.AddHeading("x", 10));
+        for (int level = 4; level <= 9; level++)
+            Assert.Equal("Heading" + level, doc.AddHeading("x", level).Style.ToString());
     }
 
     [Fact]

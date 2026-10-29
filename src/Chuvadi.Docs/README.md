@@ -48,7 +48,7 @@ doc.Page.Orientation = PageOrientation.Portrait;
 doc.SaveTo("report.docx");
 ```
 
-Paragraph styles: `Title`, `Heading1`–`Heading3`, `Quote`, `Normal`, plus lists, hyperlinks (`p.Hyperlink(text, url)`), page breaks (`doc.AddPageBreak()`), different first-page headers/footers (`doc.FirstPageHeader`), and landscape/Letter/Legal page setups.
+Paragraph styles: `Title`, `Heading1`–`Heading9`, `Quote`, `Normal`, plus lists, hyperlinks (`p.Hyperlink(text, url)`), page breaks (`doc.AddPageBreak()`), different first-page headers/footers (`doc.FirstPageHeader`), and landscape/Letter/Legal page setups.
 
 ## Character formatting, scripts and breaks
 
@@ -66,6 +66,37 @@ doc.AddParagraph().Text("Part 1").Break(BreakType.Page).Text("Part 2");
 ```
 
 Toggles added in 1.2 are tri-state (`bool?`): `null` inherits, `false` switches an inherited effect off.
+
+## Paragraph formatting
+
+Every paragraph owns a `ParagraphFormat`: spacing, line spacing, indents, pagination control, borders, shading, tab stops, outline level, bidi and East Asian typography.
+
+```csharp
+doc.AddParagraph("The patient was admitted with chest pain …").Configure(f =>
+{
+    f.Alignment = ParagraphAlignment.Justify;
+    f.FirstLineIndentPt = 24;
+    f.LineSpacing = LineSpacing.Multiple(1.5);
+    f.SpaceAfterPt = 8;
+});
+
+// A boxed, shaded call-out:
+doc.AddParagraph("Continue dual antiplatelet therapy for 12 months.").Configure(f =>
+{
+    f.Borders = ParagraphBorders.Box(new BorderSpec { WidthPt = 1.5, ColorHex = "C00000", SpacePt = 4 });
+    f.Shading = Shading.Fill("FDE9E7");
+});
+
+// Invoice lines with a right-aligned, dot-leader tab:
+doc.AddParagraph().Text("Angioplasty package").Tab().Text("₹ 1,85,000.00")
+   .Configure(f => f.TabStops.Add(new TabStop(430, TabAlignment.Right, TabLeader.Dot)));
+
+// Reuse settings across paragraphs (copies, never shares):
+var body = new ParagraphFormat { SpaceAfterPt = 6, LineSpacing = LineSpacing.Multiple(1.15) };
+doc.AddParagraph("…").ApplyFormat(body);
+```
+
+Headings run from `AddHeading(text, 1)` to `AddHeading(text, 9)`.
 
 ## Fill a template (the recommended way to generate reports)
 

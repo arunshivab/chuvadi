@@ -94,14 +94,8 @@ internal static class RunProperties
             x.WriteEndElement();
         }
 
-        if (f.ShadingHex is not null)
-        {
-            x.WriteStartElement("shd", W);
-            x.WriteAttributeString("val", W, "clear");
-            x.WriteAttributeString("color", W, "auto");
-            x.WriteAttributeString("fill", W, f.ShadingHex.TrimStart('#'));
-            x.WriteEndElement();
-        }
+        if (f.Shading is not null) FormattingXml.WriteShading(x, f.Shading);
+        else if (f.ShadingHex is not null) FormattingXml.WriteShading(x, Word.Shading.Fill(f.ShadingHex));
 
         if (f.VerticalPosition is VerticalTextPosition vp)
             Val(x, "vertAlign", vp switch
@@ -138,6 +132,7 @@ internal static class RunProperties
         var explicitlyOff = RunToggles.None;
         string? ascii = null, hAnsi = null, eastAsia = null, cs = null, color = null, highlight = null;
         string? underlineColor = null, shading = null, lang = null, langEa = null, langBidi = null;
+        Shading? fullShading = null;
         ThemeFont? asciiTheme = null, hAnsiTheme = null, eaTheme = null, csTheme = null;
         FontHint? hint = null;
         double size = 0, sizeCs = 0;
@@ -196,7 +191,7 @@ internal static class RunProperties
                 case "color":
                     var c = Attr(sub, "val");
                     color = (c is null || c.Equals("auto", StringComparison.OrdinalIgnoreCase)) ? null : c;
-                    themeColor = ParseThemeColor(Attr(sub, "themeColor"));
+                    themeColor = ParseThemeColorToken(Attr(sub, "themeColor"));
                     tint = ParseHexByte(Attr(sub, "themeTint"));
                     shade = ParseHexByte(Attr(sub, "themeShade"));
                     break;
@@ -215,8 +210,11 @@ internal static class RunProperties
                     underlineColor = Attr(sub, "color") is { } uc && !uc.Equals("auto", StringComparison.OrdinalIgnoreCase) ? uc : null;
                     break;
                 case "shd":
-                    var fill = Attr(sub, "fill");
-                    shading = fill is null || fill.Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : fill;
+                    // A plain fill maps to the ShadingHex shortcut; anything richer (pattern,
+                    // pattern color, theme fill, auto fill) is carried in full as Shading.
+                    var shd = FormattingXml.ReadShading(sub);
+                    if (FormattingXml.IsPlainFill(shd)) shading = shd.FillHex;
+                    else fullShading = shd;
                     break;
                 case "vertAlign":
                     vertAlign = Attr(sub, "val") switch
@@ -284,6 +282,7 @@ internal static class RunProperties
             KerningMinSizePt = kern,
             BaselineShiftPt = position,
             ShadingHex = shading,
+            Shading = fullShading,
             VerticalPosition = vertAlign,
             Language = lang,
             EastAsiaLanguage = langEa,
@@ -345,7 +344,7 @@ internal static class RunProperties
         _ => "text1",
     };
 
-    private static ThemeColor? ParseThemeColor(string? v)
+    internal static ThemeColor? ParseThemeColorToken(string? v)
     {
         if (v is null) return null;
         foreach (ThemeColor c in Enum.GetValues<ThemeColor>())
@@ -423,17 +422,38 @@ internal static class RunProperties
         _ => true,
     };
 
-    internal static string HalfPoints(double pt)
-        => ((int)Math.Round(pt * 2, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture);
+    internal static string HalfPoints(double pt) => Scaled(pt, 2);
 
-    internal static string Twips(double pt)
-        => ((int)Math.Round(pt * 20, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture);
+    internal static string Twips(double pt) => Scaled(pt, 20);
 
+    /// <summary>Points → integer units; a non-finite or out-of-range value is a caller error, reported clearly at save time.</summary>
+    private static string Scaled(double pt, int unitsPerPoint)
+    {
+        double units = Math.Round(pt * unitsPerPoint, MidpointRounding.AwayFromZero);
+        if (!double.IsFinite(units) || Math.Abs(units) > MaxMeasure)
+            throw new ArgumentOutOfRangeException(nameof(pt), pt, "Measurement must be a finite number of points within the document's range.");
+        return ((int)units).ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Largest magnitude accepted for a measurement read from a file (in its own unit); beyond it the value is ignored.</summary>
+    private const double MaxMeasure = 1_000_000;
+
+    /// <summary>Half-points → points; null for missing, non-numeric, non-finite or absurd values (hostile input).</summary>
     internal static double? FromHalfPoints(string? v)
-        => double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) ? h / 2.0 : null;
+        => TryMeasure(v, out var h) ? h / 2.0 : null;
 
+    /// <summary>Twips → points; null for missing, non-numeric, non-finite or absurd values (hostile input).</summary>
     internal static double? FromTwips(string? v)
-        => double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var t) ? t / 20.0 : null;
+        => TryMeasure(v, out var t) ? t / 20.0 : null;
+
+    internal static bool TryMeasure(string? v, out double value)
+    {
+        if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+            && double.IsFinite(value) && Math.Abs(value) <= MaxMeasure)
+            return true;
+        value = 0;
+        return false;
+    }
 
     private static int? ParseInt(string? v)
         => int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
