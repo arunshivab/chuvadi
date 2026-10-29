@@ -100,6 +100,59 @@ public sealed class Document
         return ListNumbering.Compute(this).TryGetValue(paragraph, out var l) ? l : null;
     }
 
+    /// <summary>
+    /// Every picture in the model, in document order — body (tables and nested tables included),
+    /// then each header and footer — with its paragraph, run, story, section and table cell. For
+    /// a floating picture the paragraph is its anchor; read its effective formatting with
+    /// <see cref="GetEffectiveParagraphFormat(Paragraph)"/> and its geometry from
+    /// <see cref="ImageSpec.Position"/>.
+    /// </summary>
+    public IReadOnlyList<PlacedImage> GetImagePlacements()
+    {
+        var result = new List<PlacedImage>();
+        var sections = Sections;
+        int sectionIndex = 0;
+        void FromParagraph(Paragraph p, ImageHost host, Section section, HeaderFooterContent? hf, TableCellRef? cell)
+        {
+            for (int i = 0; i < p.Runs.Count; i++)
+                if (p.Runs[i].Image is { } img) result.Add(new PlacedImage(img, p, p.Runs[i], i, host, section, hf, cell));
+        }
+        void FromTable(DocTable t, ImageHost host, Section section, HeaderFooterContent? hf, int depth)
+        {
+            if (depth > 512) return;
+            for (int r = 0; r < t.Rows.Count; r++)
+                for (int c = 0; c < t.Rows[r].Cells.Count; c++)
+                    foreach (var b in t.Rows[r].Cells[c].Blocks)
+                    {
+                        if (b is Paragraph cp) FromParagraph(cp, host, section, hf, new TableCellRef(t, r, c));
+                        else if (b is DocTable nested) FromTable(nested, host, section, hf, depth + 1);
+                    }
+        }
+        foreach (var b in _blocks)
+        {
+            var section = sections[Math.Min(sectionIndex, sections.Count - 1)];
+            if (b is Paragraph p)
+            {
+                FromParagraph(p, ImageHost.Body, section, null, null);
+                if (p.SectionProperties is not null) sectionIndex++;
+            }
+            else if (b is DocTable t) FromTable(t, ImageHost.Body, section, null, 0);
+        }
+        var seen = new HashSet<HeaderFooterContent>(ReferenceEqualityComparer.Instance);
+        foreach (var section in sections)
+            foreach (var (content, isHeader, _) in section.Slots())
+            {
+                if (!seen.Add(content)) continue;
+                var host = isHeader ? ImageHost.Header : ImageHost.Footer;
+                foreach (var b in content.Blocks)
+                {
+                    if (b is Paragraph hp) FromParagraph(hp, host, section, content, null);
+                    else if (b is DocTable ht) FromTable(ht, host, section, content, 0);
+                }
+            }
+        return result;
+    }
+
     /// <summary>Adds a paragraph that is an item of <paramref name="list"/> at <paramref name="level"/> (List Paragraph style).</summary>
     public Paragraph AddListItem(string text, ListInstance list, int level = 0)
     {
@@ -192,6 +245,9 @@ public sealed class Document
     /// shortcuts into it.
     /// </summary>
     public Section Section { get; private set; } = new();
+
+    /// <summary>Loader: media bytes by part, shared by every part read during one load (then dropped).</summary>
+    internal Dictionary<string, (byte[] Bytes, string ContentType)?>? LoadedMediaCache { get; set; }
 
     /// <summary>Loader: the final section read from the body's w:sectPr.</summary>
     internal void SetFinalSection(Section section) => Section = section;
@@ -395,8 +451,20 @@ public sealed class Document
     public void SaveTo(string path)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        SaveTo(stream);
+        // Write beside the target and replace it only when the save succeeded: a failing save
+        // never leaves a truncated file (or destroys the file being overwritten).
+        var full = Path.GetFullPath(path);
+        var temp = Path.Combine(Path.GetDirectoryName(full) ?? ".", "." + Path.GetFileName(full) + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp");
+        try
+        {
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                SaveTo(stream);
+            File.Move(temp, full, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
     }
 
     /// <summary>Saves the docx package to a stream, which is flushed and left OPEN (the caller disposes it).</summary>

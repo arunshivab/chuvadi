@@ -55,6 +55,10 @@ internal static class ImageMetadata
         // EMF: a bit further in, but check the common signature " EMF" at offset 40
         if (bytes.Length >= 44 && bytes[40] == 0x20 && bytes[41] == 0x45 && bytes[42] == 0x4D && bytes[43] == 0x46)
             return "image/x-emf";
+        // WebP: "RIFF" .... "WEBP"
+        if (bytes.Length >= 12 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46
+            && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+            return "image/webp";
         // WMF: D7 CD C6 9A (placeable) or 01 00 09 00
         if (bytes[0] == 0xD7 && bytes[1] == 0xCD && bytes[2] == 0xC6 && bytes[3] == 0x9A)
             return "image/x-wmf";
@@ -72,6 +76,8 @@ internal static class ImageMetadata
         "image/tiff" => "tiff",
         "image/x-emf" => "emf",
         "image/x-wmf" => "wmf",
+        "image/webp" => "webp",
+        "image/svg+xml" => "svg",
         _ => "bin",
     };
 
@@ -88,6 +94,8 @@ internal static class ImageMetadata
             "tif" or "tiff" => "image/tiff",
             "emf" => "image/x-emf",
             "wmf" => "image/x-wmf",
+            "webp" => "image/webp",
+            "svg" => "image/svg+xml",
             _ => null,
         };
     }

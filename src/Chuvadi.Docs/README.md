@@ -287,7 +287,7 @@ var a = r.GetActiveContent();
 **Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
 
 
-`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent (images, fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
+`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent yet (charts and shapes, most fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
 
 ## Images
 

@@ -161,6 +161,9 @@ internal static class DocumentLoader
         using var raw = pkg.OpenPart(documentUri);
         using var s = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, documentUri);
         using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, ct, documentUri);
+        var mediaCache = new System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
+        doc.LoadedMediaCache = mediaCache;
+        var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache);
 
         if (!r.Read()) return doc;
         while (!r.EOF)
@@ -170,7 +173,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "tbl")
                 {
                     DocTable table;
-                    using (var sub = r.ReadSubtree()) table = LoadTable(sub);
+                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, bodyImages);
                     r.Read();
                     doc.AddBlock(table);
                     continue;
@@ -184,7 +187,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "p" && IsBodyLevel(r))
                 {
                     Paragraph p;
-                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub);
+                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, bodyImages);
                     r.Read();
                     doc.AddBlock(p);
                     continue;
@@ -194,6 +197,7 @@ internal static class DocumentLoader
         }
         EnsureWellFormed(r, documentUri);
         LoadSections(pkg, documentUri, doc, bodySectPr, options, ct);
+        doc.LoadedMediaCache = null;
         // Word keeps even-page headers after "Different odd & even" is switched off: without the setting they stay hidden.
         doc.DifferentOddAndEvenPages ??= false;
         LinkNumbering(doc);
@@ -244,7 +248,7 @@ internal static class DocumentLoader
                 if (!rels.TryGetValue(rf.RelId, out var uri)) continue;
                 if (!parts.TryGetValue(uri, out var part))
                 {
-                    try { part = LoadHeaderFooter(pkg, uri, options, ct); }
+                    try { part = LoadHeaderFooter(pkg, uri, options, ct, doc.LoadedMediaCache ?? new()); }
                     catch (XmlException) { part = (new HeaderFooterContent(), null); } // a malformed header/footer loads blank
                     parts[uri] = part;
                 }
@@ -278,7 +282,8 @@ internal static class DocumentLoader
     }
 
     private static (HeaderFooterContent Content, TextWatermark? Watermark) LoadHeaderFooter(OoxmlPackage pkg, string uri,
-        DocxReaderOptions options, CancellationToken ct)
+        DocxReaderOptions options, CancellationToken ct,
+        System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> mediaCache)
     {
         var content = new HeaderFooterContent();
         Stream? raw = null;
@@ -297,6 +302,7 @@ internal static class DocumentLoader
             watermark = FindWatermark(wr);
             EnsureWellFormed(wr, uri);
         }
+        var images = new ImageSource(pkg, uri, options, ct, mediaCache);
         using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, ct, uri);
         if (!r.Read()) return (content, watermark);
         while (!r.EOF)
@@ -306,7 +312,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "tbl")
                 {
                     DocTable table;
-                    using (var sub = r.ReadSubtree()) table = LoadTable(sub);
+                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, images);
                     r.Read();
                     content.AppendTable(table);
                     continue;
@@ -314,7 +320,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "p")
                 {
                     Paragraph p;
-                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub);
+                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, images);
                     r.Read();
                     content.Add(p);
                     continue;
@@ -453,7 +459,9 @@ internal static class DocumentLoader
     /// (<c>w:r</c>) wherever it sits — directly, or inside hyperlinks, insertions, smart tags,
     /// simple fields or content controls — with its full run formatting.
     /// </summary>
-    internal static Paragraph LoadParagraph(XmlReader sub)
+    internal static Paragraph LoadParagraph(XmlReader sub) => LoadParagraph(sub, null);
+
+    internal static Paragraph LoadParagraph(XmlReader sub, ImageSource? images)
     {
         var p = new Paragraph();
         if (!sub.Read()) return p; // positioned on <w:p>
@@ -480,7 +488,7 @@ internal static class DocumentLoader
                     using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
                     break;
                 case "r":
-                    using (var r = sub.ReadSubtree()) LoadRun(r, p, fields);
+                    using (var r = sub.ReadSubtree()) LoadRun(r, p, fields, images);
                     break;
                 case "fldSimple":
                 {
@@ -515,6 +523,19 @@ internal static class DocumentLoader
         return p;
     }
 
+    private static void ReadFallbackOffsets(XmlReader fb, FloatingPosition target)
+    {
+        while (fb.Read())
+        {
+            if (fb.NodeType != XmlNodeType.Element || fb.NamespaceURI != DocumentSerializer.WP || fb.LocalName != "anchor") continue;
+            var abs = DrawingXml.Read(fb).Position;
+            if (abs is null) return;
+            if (target.HorizontalOffsetPercent is not null) target.HorizontalOffsetPt = abs.HorizontalOffsetPt;
+            if (target.VerticalOffsetPercent is not null) target.VerticalOffsetPt = abs.VerticalOffsetPt;
+            return;
+        }
+    }
+
     /// <summary>Page-number fields the model represents as field runs (PAGE, NUMPAGES, SECTIONPAGES); other fields load as their result text.</summary>
     private static bool IsPageField(string? instruction)
     {
@@ -542,7 +563,7 @@ internal static class DocumentLoader
     /// round-trips as a single run. Page, column and text-wrapping breaks become explicit
     /// <see cref="BreakType"/> runs.
     /// </summary>
-    private static void LoadRun(XmlReader sub, Paragraph p, FieldState fields)
+    private static void LoadRun(XmlReader sub, Paragraph p, FieldState fields, ImageSource? images)
     {
         var format = TextFormat.None;
         string? charStyle = null;
@@ -550,6 +571,7 @@ internal static class DocumentLoader
         if (!sub.Read()) return; // positioned on <w:r>
 
         bool sawText = false; // an empty <w:t/> is still a run (kept for exact round-trip)
+        var acTaken = new System.Collections.Generic.Dictionary<int, bool>();
         void Flush()
         {
             if (text.Length == 0 && !sawText) return;
@@ -568,12 +590,73 @@ internal static class DocumentLoader
             if (sub.EOF) break;
             if (sub.NodeType != XmlNodeType.Element) continue;
 
-            if (IsAlternateRepresentation(sub))
+            // mc:AlternateContent (markup compatibility): the first Choice whose Requires we understand,
+            // else the Fallback — never both (they carry the same content in two forms).
+            if (sub.NamespaceURI == Mc && sub.LocalName == "AlternateContent")
             {
-                using (sub.ReadSubtree()) { } // mc:Fallback duplicates mc:Choice (text boxes)
+                acTaken[sub.Depth] = false;
+                continue;
+            }
+            if (sub.NamespaceURI == Mc && sub.LocalName is "Choice" or "Fallback")
+            {
+                int parent = sub.Depth - 1;
+                bool taken = acTaken.TryGetValue(parent, out var t) && t;
+                bool use = !taken && (sub.LocalName == "Fallback" || UnderstoodRequires(sub.GetAttribute("Requires")));
+                if (!use)
+                {
+                    // A skipped Fallback of a percentage-positioned picture still carries the absolute
+                    // position older readers use: keep it as the picture's point offsets.
+                    if (sub.LocalName == "Fallback" && p.Runs.Count > 0 && p.Runs[^1].Image?.Position is { } pp
+                        && (pp.HorizontalOffsetPercent is not null || pp.VerticalOffsetPercent is not null))
+                        using (var fb = sub.ReadSubtree()) ReadFallbackOffsets(fb, pp);
+                    else using (sub.ReadSubtree()) { }
+                    continue;
+                }
+                acTaken[parent] = true;
                 continue;
             }
 
+            if (images is not null && sub.LocalName == "drawing" && sub.NamespaceURI == W)
+            {
+                // A picture becomes an image run in place (inline or floating, with its anchor
+                // properties); other drawings keep their text, flattened.
+                Flush();
+                var loose = new System.Text.StringBuilder(); // text outside wp:inline / wp:anchor (non-standard drawings)
+                using (var d = sub.ReadSubtree())
+                {
+                    d.Read();
+                    int depth = d.Depth + 1;
+                    bool more = d.Read();
+                    while (more)
+                    {
+                        if (IsAlternateRepresentation(d)) { d.Skip(); more = !d.EOF; continue; }
+                        if (d.NodeType == XmlNodeType.Element && d.NamespaceURI == W && d.LocalName == "t")
+                        {
+                            loose.Append(d.ReadElementContentAsString());
+                            more = !d.EOF;
+                            continue;
+                        }
+                        if (d.NodeType == XmlNodeType.Element && d.Depth == depth && d.NamespaceURI == DocumentSerializer.WP
+                            && d.LocalName is "inline" or "anchor")
+                        {
+                            var pic = DrawingXml.Read(d);
+                            var media = pic.IsPicture && pic.EmbedRelId is { } er ? images.Get(er) : null;
+                            var link = pic.IsPicture && pic.LinkRelId is { } lr ? images.GetLink(lr) : null;
+                            if (media is { } m)
+                                p.AddRun(new Run("", TextFormat.None) { Image = pic.ToImage(m.Bytes, m.ContentType, link) });
+                            else if (link is not null)
+                                p.AddRun(new Run("", TextFormat.None) { Image = pic.ToImage(Array.Empty<byte>(), ImageMetadata.ContentTypeForExtension(Path.GetExtension(link)) ?? "application/octet-stream", link) });
+                            else if (pic.Text.Length > 0)
+                                p.AddRun(new Run(pic.Text, TextFormat.None));
+                            more = d.Read();
+                            continue;
+                        }
+                        more = d.Read();
+                    }
+                }
+                if (loose.Length > 0) p.AddRun(new Run(loose.ToString(), TextFormat.None));
+                continue;
+            }
             if (sub.LocalName is "drawing" or "pict" or "object")
             {
                 // Text boxes / shapes: keep their words, flattened (geometry is outside the model).
@@ -705,6 +788,23 @@ internal static class DocumentLoader
     private const string Mc = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
     /// <summary>
+    /// Markup-compatibility namespaces this loader understands, by Word's standard prefixes (a
+    /// subtree reader cannot resolve prefixes declared on the document root).
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> KnownMcPrefixes = new(StringComparer.Ordinal)
+    {
+        "wps", "wpg", "wpc", "wpi", "wp14", "w14", "w15", "w16", "w16se", "w16cid", "w16cex", "w16sdtdh", "a14", "v", "o", "w10", "wne", "m",
+    };
+
+    private static bool UnderstoodRequires(string? requires)
+    {
+        if (string.IsNullOrWhiteSpace(requires)) return false;
+        foreach (var prefix in requires.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (!KnownMcPrefixes.Contains(prefix)) return false;
+        return true;
+    }
+
+    /// <summary>
     /// True for <c>mc:Fallback</c>: Word writes text boxes, shapes and some newer features
     /// as mc:AlternateContent with a Choice and a Fallback carrying the SAME content in an
     /// older form. Reading both would duplicate it; the Choice is kept.
@@ -725,6 +825,59 @@ internal static class DocumentLoader
         },
     };
 
-    private static DocTable LoadTable(XmlReader sub) => TableXml.Read(sub, LoadParagraph);
+    private static DocTable LoadTable(XmlReader sub, ImageSource? images) => TableXml.Read(sub, s => LoadParagraph(s, images));
+
+    /// <summary>The media a part's pictures refer to (r:embed → bytes and type), read once each, within the part-size limit.</summary>
+    internal sealed class ImageSource
+    {
+        private readonly OoxmlPackage _pkg;
+        private readonly DocxReaderOptions _options;
+        private readonly CancellationToken _ct;
+        private readonly System.Collections.Generic.Dictionary<string, string> _targets = new(StringComparer.Ordinal);
+        private readonly System.Collections.Generic.Dictionary<string, string> _links = new(StringComparer.Ordinal);
+        private readonly System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> _cache;
+
+        /// <summary><paramref name="sharedCache"/> (by media part) lets every part reuse one byte array per media file.</summary>
+        public ImageSource(OoxmlPackage pkg, string partUri, DocxReaderOptions options, CancellationToken ct,
+            System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> sharedCache)
+        {
+            _cache = sharedCache;
+            _pkg = pkg;
+            _options = options;
+            _ct = ct;
+            foreach (var rel in pkg.GetRelationships(partUri))
+            {
+                if (!rel.Type.EndsWith("/image", StringComparison.Ordinal)) continue;
+                if (rel.IsExternal) _links[rel.Id] = rel.Target;
+                else _targets[rel.Id] = Resolve(partUri, rel.Target);
+            }
+        }
+
+        /// <summary>The external target of a linked picture (r:link), or null.</summary>
+        public string? GetLink(string relId) => _links.TryGetValue(relId, out var t) ? t : null;
+
+        public (byte[] Bytes, string ContentType)? Get(string relId)
+        {
+            if (!_targets.TryGetValue(relId, out var uri)) return null;
+            if (_cache.TryGetValue(uri, out var hit)) return hit;
+            (byte[], string)? result = null;
+            {
+                Stream? raw = null;
+                try { raw = _pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+                if (raw is not null)
+                {
+                    using var gs = GuardedPartStream.Wrap(raw, _options.MaxPartBytes, _ct, uri);
+                    using var ms = new MemoryStream();
+                    gs.CopyTo(ms);
+                    var bytes = ms.ToArray();
+                    // An unrecognised format is kept as opaque bytes so the picture and its space survive.
+                    var type = ImageMetadata.DetectContentType(bytes) ?? ImageMetadata.ContentTypeForExtension(Path.GetExtension(uri)) ?? "application/octet-stream";
+                    if (bytes.Length > 0) result = (bytes, type);
+                }
+            }
+            _cache[uri] = result;
+            return result;
+        }
+    }
 
 }

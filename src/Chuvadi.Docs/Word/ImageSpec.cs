@@ -21,7 +21,7 @@ namespace Chuvadi.Docs.Word;
 /// </summary>
 public sealed class ImageSpec
 {
-    /// <summary>Raw image bytes.</summary>
+    /// <summary>Raw image bytes (empty for a picture that is only linked, see <see cref="LinkUrl"/>). Loaded documents share one array per media part.</summary>
     public required byte[] Bytes { get; init; }
 
     /// <summary>MIME type, e.g. "image/png". Detected automatically by the factory methods.</summary>
@@ -42,6 +42,48 @@ public sealed class ImageSpec
 
     /// <summary>Position for floating images; required when <see cref="Placement"/> is Floating.</summary>
     public FloatingPosition? Position { get; set; }
+
+    /// <summary>Shape name (wp:docPr/@name). Null = "Picture N".</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Accessibility title (wp:docPr/@title).</summary>
+    public string? Title { get; set; }
+
+    /// <summary>Hidden (wp:docPr/@hidden): kept in the file but not shown.</summary>
+    public bool Hidden { get; set; }
+
+    /// <summary>Cropping of the picture (a:srcRect), as fractions of each side; null = none.</summary>
+    public ImageCrop? Crop { get; set; }
+
+    /// <summary>Clockwise rotation in degrees (a:xfrm/@rot).</summary>
+    public double RotationDegrees { get; set; }
+
+    /// <summary>Mirrored left-to-right (a:xfrm/@flipH).</summary>
+    public bool FlipHorizontal { get; set; }
+
+    /// <summary>Mirrored top-to-bottom (a:xfrm/@flipV).</summary>
+    public bool FlipVertical { get; set; }
+
+    /// <summary>
+    /// Extra space the picture's effects (shadow, glow, rotation) take outside its frame, in points
+    /// (wp:effectExtent). Layout reserves it around the image.
+    /// </summary>
+    public ImageEffectExtent? EffectExtent { get; set; }
+
+    /// <summary>Width as a percentage of a page frame (wp14:sizeRelH); <see cref="WidthPt"/> stays the fallback size.</summary>
+    public RelativeSize? RelativeWidth { get; set; }
+
+    /// <summary>Height as a percentage of a page frame (wp14:sizeRelV); <see cref="HeightPt"/> stays the fallback size.</summary>
+    public RelativeSize? RelativeHeight { get; set; }
+
+    /// <summary>
+    /// A linked picture (a:blip/@r:link): the external file or URL Word shows. With empty
+    /// <see cref="Bytes"/> only the link is written ("link to file"); with bytes too, both ("link and save").
+    /// </summary>
+    public string? LinkUrl { get; set; }
+
+    /// <summary>Space between an INLINE picture and the text, in points (wp:inline/@distT…). Floating pictures use <see cref="FloatingPosition"/>.</summary>
+    public ImageEffectExtent? InlineDistance { get; set; }
 
     // ---- Factory methods ------------------------------------------------------------
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Chuvadi.Docs.Word;
 
@@ -112,7 +113,7 @@ public sealed class FloatingPosition
     /// <summary>Text-wrap mode around the image.</summary>
     public TextWrap Wrap { get; set; } = TextWrap.Square;
 
-    /// <summary>When <see cref="Wrap"/> is None: true = behind text, false = in front of text.</summary>
+    /// <summary>Behind the text (behindDoc) rather than in front — Word's "Behind text" (with <see cref="Wrap"/> None); kept for any wrap.</summary>
     public bool BehindText { get; set; }
 
     /// <summary>Allow this image to overlap other floating objects.</summary>
@@ -124,9 +125,108 @@ public sealed class FloatingPosition
     /// <summary>Z-order; higher is closer to the front. Default auto-assigns.</summary>
     public long? RelativeHeight { get; set; }
 
-    /// <summary>Distance from text on each side, in points (wrap padding).</summary>
+    /// <summary>Distance from text on each side, in points (wrap padding); the per-side values below override it.</summary>
     public double DistanceFromTextPt { get; set; } = 0;
+
+    /// <summary>Distance from text above the image (wp:anchor/@distT); null = <see cref="DistanceFromTextPt"/>.</summary>
+    public double? DistanceTopPt { get; set; }
+
+    /// <summary>Distance from text below the image (@distB); null = <see cref="DistanceFromTextPt"/>.</summary>
+    public double? DistanceBottomPt { get; set; }
+
+    /// <summary>Distance from text left of the image (@distL); null = <see cref="DistanceFromTextPt"/>.</summary>
+    public double? DistanceLeftPt { get; set; }
+
+    /// <summary>Distance from text right of the image (@distR); null = <see cref="DistanceFromTextPt"/>.</summary>
+    public double? DistanceRightPt { get; set; }
+
+    /// <summary>Which sides text wraps on for Square/Tight/Through (wrapText). Default both sides.</summary>
+    public WrapSide WrapSide { get; set; } = WrapSide.BothSides;
+
+    /// <summary>The wrap outline for Tight/Through (wp:wrapPolygon); null = the image rectangle.</summary>
+    public WrapPolygon? WrapPolygon { get; set; }
+
+    /// <summary>Position relative to the table cell when the anchor is in a table (@layoutInCell). Default true.</summary>
+    public bool LayoutInCell { get; set; } = true;
+
+    /// <summary>
+    /// Horizontal position as a percentage of the <see cref="HorizontalAnchor"/> frame's width
+    /// (wp14:pctPosHOffset, Word 2010+), e.g. 50 = halfway. Takes precedence over
+    /// <see cref="HorizontalOffsetPt"/>, which is kept as the fallback for older readers; <see cref="HAlign"/> still wins.
+    /// </summary>
+    public double? HorizontalOffsetPercent { get; set; }
+
+    /// <summary>Vertical position as a percentage of the <see cref="VerticalAnchor"/> frame's height (wp14:pctPosVOffset).</summary>
+    public double? VerticalOffsetPercent { get; set; }
+
+    /// <summary>Use the simple absolute position (@simplePos, wp:simplePos) instead of positionH/positionV.</summary>
+    public bool UseSimplePosition { get; set; }
+
+    /// <summary>Simple position X from the page's top-left, in points (with <see cref="UseSimplePosition"/>).</summary>
+    public double SimplePositionXPt { get; set; }
+
+    /// <summary>Simple position Y from the page's top-left, in points (with <see cref="UseSimplePosition"/>).</summary>
+    public double SimplePositionYPt { get; set; }
+
+    /// <summary>Effective distances (per side, falling back to <see cref="DistanceFromTextPt"/>).</summary>
+    public (double Top, double Bottom, double Left, double Right) EffectiveDistances
+        => (DistanceTopPt ?? DistanceFromTextPt, DistanceBottomPt ?? DistanceFromTextPt, DistanceLeftPt ?? DistanceFromTextPt, DistanceRightPt ?? DistanceFromTextPt);
 }
+
+/// <summary>What a relative (percentage) picture size is measured against (wp14:sizeRelH/V/@relativeFrom).</summary>
+public enum RelativeSizeFrame
+{
+    Page,
+    Margin,
+    LeftMargin,
+    RightMargin,
+    InsideMargin,
+    OutsideMargin,
+    TopMargin,
+    BottomMargin,
+}
+
+/// <summary>A picture dimension as a percentage of a page frame (Word 2010+ "relative size").</summary>
+/// <param name="Percent">e.g. 50 = half the frame.</param>
+/// <param name="RelativeTo">The frame.</param>
+public sealed record RelativeSize(double Percent, RelativeSizeFrame RelativeTo);
+
+/// <summary>Which sides of a floating image text wraps on (ST_WrapText).</summary>
+public enum WrapSide
+{
+    BothSides,
+    Left,
+    Right,
+    /// <summary>Only the side with more room.</summary>
+    Largest,
+}
+
+/// <summary>
+/// The outline text wraps around (wp:wrapPolygon), in the image's own coordinate space of
+/// 21600 × 21600 units (0,0 top-left; 21600,21600 bottom-right of the extent).
+/// </summary>
+public sealed class WrapPolygon
+{
+    /// <summary>The outline: the first point is the start, each following point a line to it.</summary>
+    public List<(long X, long Y)> Points { get; } = new();
+
+    /// <summary>The outline was edited by hand in Word (@edited).</summary>
+    public bool Edited { get; set; }
+
+    /// <summary>The image rectangle (Word's default outline).</summary>
+    public static WrapPolygon Rectangle()
+    {
+        var p = new WrapPolygon();
+        p.Points.AddRange(new (long, long)[] { (0, 0), (0, 21600), (21600, 21600), (21600, 0), (0, 0) });
+        return p;
+    }
+}
+
+/// <summary>Cropping as fractions (0–1, may be negative to pad) of the picture removed from each side (a:srcRect).</summary>
+public sealed record ImageCrop(double Left, double Top, double Right, double Bottom);
+
+/// <summary>Four distances in points (left, top, right, bottom).</summary>
+public sealed record ImageEffectExtent(double LeftPt, double TopPt, double RightPt, double BottomPt);
 
 /// <summary>
 /// A read-only description of an image found in a document. Carries the raw bytes, format,
@@ -176,6 +276,21 @@ public sealed class ImageInfo
 
     /// <summary>Text of the paragraph the image is anchored to (for identification), if available.</summary>
     public string? AnchorParagraphText { get; init; }
+
+    /// <summary>Cropping (a:srcRect), or null.</summary>
+    public ImageCrop? Crop { get; init; }
+
+    /// <summary>Clockwise rotation in degrees.</summary>
+    public double RotationDegrees { get; init; }
+
+    /// <summary>Mirrored left-to-right.</summary>
+    public bool FlipHorizontal { get; init; }
+
+    /// <summary>Mirrored top-to-bottom.</summary>
+    public bool FlipVertical { get; init; }
+
+    /// <summary>Space taken by effects outside the frame, or null.</summary>
+    public ImageEffectExtent? EffectExtent { get; init; }
 }
 
 /// <summary>Which part of the document an image was found in.</summary>
@@ -185,3 +300,19 @@ public enum ImageHost
     Header,
     Footer,
 }
+
+/// <summary>
+/// One picture in the document model with everything a layout engine needs to place it: the
+/// paragraph it sits in (inline) or is anchored to (floating), the run, its index among the
+/// paragraph's runs, the story and section, and the table cell when inside a table.
+/// </summary>
+/// <param name="Image">The picture: size, crop, rotation, placement and <see cref="ImageSpec.Position"/>.</param>
+/// <param name="Paragraph">The paragraph holding the image run — the anchor paragraph of a floating image.</param>
+/// <param name="Run">The run carrying the image.</param>
+/// <param name="RunIndex">Index of <paramref name="Run"/> in <see cref="Paragraph.Runs"/>.</param>
+/// <param name="Host">Body, header or footer.</param>
+/// <param name="Section">For headers/footers: the (first) section using that header/footer; for the body: the section containing the paragraph.</param>
+/// <param name="HeaderFooter">For headers/footers: the header/footer content object; null in the body.</param>
+/// <param name="Cell">The innermost table cell holding the paragraph, or null.</param>
+public sealed record PlacedImage(ImageSpec Image, Paragraph Paragraph, Run Run, int RunIndex, ImageHost Host, Section Section,
+    HeaderFooterContent? HeaderFooter, TableCellRef? Cell);
