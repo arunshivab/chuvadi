@@ -63,6 +63,27 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void StyleApi() => StyleApiTest.Run(_dir);
+
+    [Fact]
+    public void NumberFormat() => NumberFormatTest.Run(_dir);
+
+    [Fact]
+    public void AutoFit() => AutoFitTest.Run(_dir);
+
+    [Fact]
+    public void ReadSafety() => ReadSafetyTest.Run(_dir);
+
+    [Fact]
+    public void FormulaPrint() => FormulaPrintTest.Run(_dir);
+
+    [Fact]
+    public void LayoutFidelity() => LayoutFidelityTest.Run(_dir);
+
+    [Fact]
+    public void ChartMetadata() => ChartMetadataTest.Run(_dir);
+
+    [Fact]
+    public void Layout17() => Layout17Test.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

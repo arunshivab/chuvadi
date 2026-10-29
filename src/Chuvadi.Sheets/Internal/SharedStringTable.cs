@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
+using Chuvadi.Sheets.Excel;
 
 namespace Chuvadi.Sheets.Internal;
 
@@ -28,13 +29,17 @@ internal sealed class SharedStringTable
     private readonly Dictionary<string, int> _index = new(StringComparer.Ordinal);
     private readonly List<string> _ordered = new();
 
+    /// <summary>Rich entries (since 1.7.0): index → runs, for the indexes that are rich; deduplicated by value.</summary>
+    private Dictionary<RichText, int>? _richIndex;
+    private Dictionary<int, RichText>? _richAt;
+
     /// <summary>
     /// Number of unique strings currently in the table.
     /// </summary>
     public int Count => _ordered.Count;
 
     /// <summary>
-    /// Total number of times <see cref="GetOrAdd"/> has been called (including repeats).
+    /// Total number of times <see cref="GetOrAdd(string)"/> has been called (including repeats).
     /// xlsx's sharedStrings.xml records this as the &lt;sst count="..."&gt; attribute and
     /// it must match the actual count of string-cell references in the workbook.
     /// </summary>
@@ -61,6 +66,24 @@ internal sealed class SharedStringTable
     }
 
     /// <summary>
+    /// Returns the existing index for a rich string (same runs and fonts), or adds it. Rich and
+    /// plain entries with the same text are separate entries.
+    /// </summary>
+    public int GetOrAdd(RichText value)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        TotalReferences++;
+        _richIndex ??= new Dictionary<RichText, int>();
+        _richAt ??= new Dictionary<int, RichText>();
+        if (_richIndex.TryGetValue(value, out var id)) return id;
+        id = _ordered.Count;
+        _ordered.Add(value.Text);
+        _richIndex[value] = id;
+        _richAt[id] = value;
+        return id;
+    }
+
+    /// <summary>
     /// Reads back a string by index. Used by the reader path; not called during write.
     /// </summary>
     public string GetAt(int index) => _ordered[index];
@@ -83,8 +106,16 @@ internal sealed class SharedStringTable
         writer.WriteAttributeString("count", TotalReferences.ToString(System.Globalization.CultureInfo.InvariantCulture));
         writer.WriteAttributeString("uniqueCount", _ordered.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-        foreach (var s in _ordered)
+        for (int idx = 0; idx < _ordered.Count; idx++)
         {
+            var s = _ordered[idx];
+            if (_richAt is not null && _richAt.TryGetValue(idx, out var rich))
+            {
+                writer.WriteStartElement("si", SsNs);
+                RichTextXml.WriteRuns(writer, rich);
+                writer.WriteEndElement(); // </si>
+                continue;
+            }
             writer.WriteStartElement("si", SsNs);
             writer.WriteStartElement("t", SsNs);
 

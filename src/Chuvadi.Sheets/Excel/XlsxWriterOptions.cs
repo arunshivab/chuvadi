@@ -54,4 +54,13 @@ public sealed class XlsxWriterOptions
     /// Defaults to "[h]:mm:ss" — bracketed hours so durations &gt; 24h aren't truncated.
     /// </summary>
     public string DefaultTimeSpanFormat { get; set; } = "[h]:mm:ss";
+
+    /// <summary>
+    /// If true, workbook.xml carries &lt;calcPr fullCalcOnLoad="1"/&gt;, telling Excel (and other
+    /// calculating applications) to recalculate every formula when the file is opened, instead
+    /// of trusting stored results. Useful when formulas are written with cached values
+    /// (<see cref="RowBuilder.Formula(string, object?)"/>) that may be approximate. Default false
+    /// (no &lt;calcPr&gt; is written, as before).
+    /// </summary>
+    public bool FullCalculationOnLoad { get; set; }
 }

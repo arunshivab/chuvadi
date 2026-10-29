@@ -35,8 +35,10 @@ internal static class ExportEngine
                 sheet.SetColumnWidth(i + 1, columns[i].Width);
         }
         if (cfg._freezeHeaderRow) sheet.FreezeRows(1);
+        if (cfg._autoFit is not null) sheet.AutoFitColumns(cfg._autoFit);
         if (cfg._pageHeader is not null || cfg._pageFooter is not null)
             sheet.SetHeaderFooter(cfg._pageHeader, cfg._pageFooter);
+        cfg._pageSetup?.Invoke(sheet.PageSetup);
 
         // Header row — styled.
         var headerStyle = cfg._headerStyle;
@@ -134,8 +136,10 @@ internal static class ExportEngine
                 sheet.SetColumnWidth(i + 1, ov.Width);
         }
         if (cfg._freezeHeaderRow) sheet.FreezeRows(1);
+        if (cfg._autoFit is not null) sheet.AutoFitColumns(cfg._autoFit);
         if (cfg._pageHeader is not null || cfg._pageFooter is not null)
             sheet.SetHeaderFooter(cfg._pageHeader, cfg._pageFooter);
+        cfg._pageSetup?.Invoke(sheet.PageSetup);
 
         // Header row.
         var headerStyle = cfg._headerStyle;

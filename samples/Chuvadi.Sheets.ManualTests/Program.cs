@@ -57,6 +57,27 @@ public static class Program
             if (testName is "all" or "styleapi")
                 StyleApiTest.Run(outputDir);
 
+            if (testName is "all" or "numfmt")
+                NumberFormatTest.Run(outputDir);
+
+            if (testName is "all" or "autofit")
+                AutoFitTest.Run(outputDir);
+
+            if (testName is "all" or "readsafety")
+                ReadSafetyTest.Run(outputDir);
+
+            if (testName is "all" or "formulaprint")
+                FormulaPrintTest.Run(outputDir);
+
+            if (testName is "all" or "fidelity")
+                LayoutFidelityTest.Run(outputDir);
+
+            if (testName is "all" or "charts")
+                ChartMetadataTest.Run(outputDir);
+
+            if (testName is "all" or "layout17")
+                Layout17Test.Run(outputDir);
+
             Console.WriteLine();
             Console.WriteLine(new string('-', 70));
             Console.WriteLine("All tests completed successfully.");

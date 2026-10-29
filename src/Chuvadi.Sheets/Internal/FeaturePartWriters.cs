@@ -114,6 +114,13 @@ internal static class FeaturePartWriters
             w.WriteAttributeString("ref", c.CellAddress);
             w.WriteAttributeString("authorId", authorIndex[c.Author].ToString(CultureInfo.InvariantCulture));
             w.WriteStartElement("text", SsNs);
+            if (c.Rich is not null)
+            {
+                RichTextXml.WriteRuns(w, c.Rich);   // the comment's own runs, as loaded or built
+                w.WriteEndElement(); // </text>
+                w.WriteEndElement(); // </comment>
+                continue;
+            }
             w.WriteStartElement("r", SsNs);
             w.WriteStartElement("rPr", SsNs);
             w.WriteStartElement("sz", SsNs); w.WriteAttributeString("val", "9"); w.WriteEndElement();
@@ -168,17 +175,30 @@ internal static class FeaturePartWriters
             // The Anchor attribute is "leftCol, leftColOffset, leftRow, leftRowOffset, rightCol, rightColOffset, rightRow, rightRowOffset".
             sb.Append("<v:shape id=\"_x0000_s").Append(shapeId).Append("\" type=\"#_x0000_t202\" style=\"position:absolute;margin-left:80pt;margin-top:5pt;width:108pt;height:60pt;z-index:");
             sb.Append(shapeId - 1023);
-            sb.Append(";visibility:hidden\" fillcolor=\"#ffffe1\" o:insetmode=\"auto\"><v:fill color2=\"#ffffe1\"/><v:shadow on=\"t\" color=\"black\" obscured=\"t\"/><v:path o:connecttype=\"none\"/><v:textbox style=\"mso-direction-alt:auto\"><div style=\"text-align:left\"/></v:textbox>");
+            sb.Append(c.Visible ? ";visibility:visible\" fillcolor=" : ";visibility:hidden\" fillcolor=");
+            sb.Append("\"#ffffe1\" o:insetmode=\"auto\"><v:fill color2=\"#ffffe1\"/><v:shadow on=\"t\" color=\"black\" obscured=\"t\"/><v:path o:connecttype=\"none\"/><v:textbox style=\"mso-direction-alt:auto\"><div style=\"text-align:left\"/></v:textbox>");
             sb.Append("<x:ClientData ObjectType=\"Note\"><x:MoveWithCells/><x:SizeWithCells/>");
             sb.Append("<x:Anchor>");
-            sb.Append(anchorCol + 1).Append(", 15, ");
-            sb.Append(anchorRow).Append(", 10, ");
-            sb.Append(anchorCol + 3).Append(", 15, ");
-            sb.Append(anchorRow + 4).Append(", 10");
+            if (c.Anchor is { } an)
+            {
+                // A loaded or caller-set box position (1-based in the API, 0-based in VML).
+                sb.Append(an.LeftColumn - 1).Append(", ").Append(an.LeftOffset).Append(", ");
+                sb.Append(an.TopRow - 1).Append(", ").Append(an.TopOffset).Append(", ");
+                sb.Append(an.RightColumn - 1).Append(", ").Append(an.RightOffset).Append(", ");
+                sb.Append(an.BottomRow - 1).Append(", ").Append(an.BottomOffset);
+            }
+            else
+            {
+                sb.Append(anchorCol + 1).Append(", 15, ");
+                sb.Append(anchorRow).Append(", 10, ");
+                sb.Append(anchorCol + 3).Append(", 15, ");
+                sb.Append(anchorRow + 4).Append(", 10");
+            }
             sb.Append("</x:Anchor>");
             sb.Append("<x:AutoFill>False</x:AutoFill>");
             sb.Append("<x:Row>").Append(anchorRow).Append("</x:Row>");
             sb.Append("<x:Column>").Append(anchorCol).Append("</x:Column>");
+            if (c.Visible) sb.Append("<x:Visible/>");
             sb.Append("</x:ClientData></v:shape>");
             shapeId++;
         }

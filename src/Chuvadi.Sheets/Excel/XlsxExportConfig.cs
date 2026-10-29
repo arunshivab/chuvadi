@@ -22,6 +22,8 @@ public abstract class ExportConfigBase
     internal TableStyle _tableStyle = TableStyle.Medium2;
     internal string? _pageHeader;
     internal string? _pageFooter;
+    internal Action<PageSetup>? _pageSetup;
+    internal AutoFitOptions? _autoFit;
 
     /// <summary>Per-column-name overrides (works for both T-property names and DataTable column names).</summary>
     internal Dictionary<string, ColumnOverride> _columnOverrides = new(StringComparer.Ordinal);
@@ -44,6 +46,13 @@ public abstract class ExportConfigBase
     protected void SetHeaderStyle(CellStyle style) => _headerStyle = style;
     protected void SetAutoFilter(bool on) => _autoFilter = on;
     protected void SetFreezeHeaderRow(bool on) => _freezeHeaderRow = on;
+    protected void SetAutoFit(AutoFitOptions? options) => _autoFit = options ?? AutoFitOptions.Default;
+    protected void SetPageSetup(Action<PageSetup> configure)
+    {
+        if (configure is null) throw new ArgumentNullException(nameof(configure));
+        _pageSetup += configure;
+    }
+
     protected void SetPageHeaderFooter(string? header, string? footer)
     {
         _pageHeader = header;
@@ -92,6 +101,12 @@ public sealed class XlsxExportConfig<T> : ExportConfigBase
     public XlsxExportConfig<T> FreezeHeaderRow(bool on = true) { SetFreezeHeaderRow(on); return this; }
 
     /// <summary>
+    /// Sizes each column to its content (header and values as displayed). A width set with
+    /// <c>Column(..., width)</c> or <c>[Column(Width = ...)]</c> wins. See <see cref="AutoFitOptions"/>.
+    /// </summary>
+    public XlsxExportConfig<T> AutoFitColumns(AutoFitOptions? options = null) { SetAutoFit(options); return this; }
+
+    /// <summary>
     /// Wraps the data range in an Excel structured table with the given name and style.
     /// </summary>
     public XlsxExportConfig<T> AsTable(string name, TableStyle style = TableStyle.Medium2)
@@ -103,6 +118,14 @@ public sealed class XlsxExportConfig<T> : ExportConfigBase
     /// </summary>
     public XlsxExportConfig<T> PageHeaderFooter(string? header, string? footer = null)
     { SetPageHeaderFooter(header, footer); return this; }
+
+    /// <summary>
+    /// Configures the sheet's print settings, e.g.
+    /// <c>.PageSetup(p =&gt; { p.Orientation = PageOrientation.Landscape; p.FitTo(1, 0); p.PrintTitleRows = (1, 1); })</c>.
+    /// Runs after <see cref="PageHeaderFooter"/>; several calls run in order.
+    /// </summary>
+    public XlsxExportConfig<T> PageSetup(Action<PageSetup> configure)
+    { SetPageSetup(configure); return this; }
 
     // ---- Strongly-typed column overrides (preferred for IEnumerable<T>) ------------
 
@@ -156,6 +179,12 @@ public sealed class DataTableExportConfig : ExportConfigBase
     public DataTableExportConfig AutoFilter(bool on = true) { SetAutoFilter(on); return this; }
     public DataTableExportConfig FreezeHeaderRow(bool on = true) { SetFreezeHeaderRow(on); return this; }
 
+    /// <summary>
+    /// Sizes each column to its content (header and values as displayed). A width set with
+    /// <c>Column(..., width)</c> wins. See <see cref="AutoFitOptions"/>.
+    /// </summary>
+    public DataTableExportConfig AutoFitColumns(AutoFitOptions? options = null) { SetAutoFit(options); return this; }
+
     public DataTableExportConfig AsTable(string name, TableStyle style = TableStyle.Medium2)
     { SetAsTable(name, style); return this; }
 
@@ -165,6 +194,10 @@ public sealed class DataTableExportConfig : ExportConfigBase
     /// </summary>
     public DataTableExportConfig PageHeaderFooter(string? header, string? footer = null)
     { SetPageHeaderFooter(header, footer); return this; }
+
+    /// <summary>Configures the sheet's print settings. See <see cref="XlsxExportConfig{T}.PageSetup"/>.</summary>
+    public DataTableExportConfig PageSetup(Action<PageSetup> configure)
+    { SetPageSetup(configure); return this; }
 
     /// <summary>Overrides settings for the column with the given <c>DataColumn.ColumnName</c>.</summary>
     public DataTableExportConfig Column(
