@@ -31,6 +31,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_Hardening() => HardeningTests.Run(FreshOutDir());
     [Fact] public void Suite_TextModel() => TextModelTests.Run(FreshOutDir());
     [Fact] public void Suite_ParagraphModel() => ParagraphModelTests.Run(FreshOutDir());
+    [Fact] public void Suite_Styles() => StylesTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 

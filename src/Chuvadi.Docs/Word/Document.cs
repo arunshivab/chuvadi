@@ -35,6 +35,55 @@ public sealed class Document
 {
     private readonly List<object> _blocks = new();  // Paragraph | DocTable
 
+    /// <summary>Creates an empty document with the built-in styles and Calibri 11pt defaults.</summary>
+    public Document()
+    {
+        StylesXml.AddBuiltIns(Styles);
+    }
+
+    /// <summary>
+    /// The document's styles (paragraph, character, table, numbering). Starts with the
+    /// built-in set; <see cref="Load(string)"/> replaces it with the file's styles.
+    /// </summary>
+    public StyleCollection Styles { get; } = new();
+
+    /// <summary>Document-wide default run and paragraph formatting (w:docDefaults).</summary>
+    public DocumentDefaults Defaults { get; } = new();
+
+    /// <summary>
+    /// The document's DrawingML theme part (word/theme/theme1.xml) as raw bytes: the theme
+    /// fonts and colours that <see cref="ThemeFont"/> / <see cref="ThemeColor"/> references
+    /// resolve against. Carried through unchanged from a loaded document so theme-based
+    /// formatting survives load → save; null for new documents (none is written).
+    /// </summary>
+    public byte[]? ThemeXml { get; set; }
+
+    /// <summary>
+    /// The EFFECTIVE formatting of <paramref name="run"/> in <paramref name="paragraph"/>:
+    /// document defaults, then the paragraph style chain, then the character style chain, then
+    /// the run's direct formatting — with toggle properties (bold, italic, caps…) set by both
+    /// the paragraph and character styles combining by exclusive-or, as Word does. The result
+    /// states complex-script properties explicitly (<see cref="TextFormat.MirrorToComplexScript"/>
+    /// is false). Use it to render or measure text exactly as Word would style it.
+    /// </summary>
+    public TextFormat GetEffectiveRunFormat(Paragraph paragraph, Run run)
+    {
+        if (paragraph is null) throw new ArgumentNullException(nameof(paragraph));
+        if (run is null) throw new ArgumentNullException(nameof(run));
+        return FormatResolver.ResolveRun(this, paragraph, run);
+    }
+
+    /// <summary>
+    /// The EFFECTIVE paragraph formatting: document defaults, then the paragraph style chain,
+    /// then the paragraph's direct formatting. Tab stops accumulate (a Clear stop removes an
+    /// inherited one) and borders merge per side. Returns a new, independent object.
+    /// </summary>
+    public ParagraphFormat GetEffectiveParagraphFormat(Paragraph paragraph)
+    {
+        if (paragraph is null) throw new ArgumentNullException(nameof(paragraph));
+        return FormatResolver.ResolveParagraph(this, paragraph);
+    }
+
     /// <summary>Page size, orientation, margins.</summary>
     public PageSetup Page { get; } = new();
 

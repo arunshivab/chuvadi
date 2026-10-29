@@ -98,6 +98,37 @@ doc.AddParagraph("…").ApplyFormat(body);
 
 Headings run from `AddHeading(text, 1)` to `AddHeading(text, 9)`.
 
+## Styles and effective formatting
+
+```csharp
+var doc = new Document();
+doc.Defaults.RunFormat = new TextFormat { FontForAllScripts = "Nirmala UI", SizePt = 10.5 };
+
+var note = doc.Styles.AddParagraphStyle("ClinicalNote", "Clinical Note");   // based on Normal
+note.ParagraphFormat.IndentLeftPt = 18;
+note.RunFormat = new TextFormat { Italic = true, ColorHex = "404040" };
+
+var drug = doc.Styles.AddCharacterStyle("DrugName", "Drug Name");
+drug.RunFormat = new TextFormat { Bold = true };
+
+doc.AddParagraph("Patient tolerated the procedure well.").StyleId = "ClinicalNote";
+doc.AddParagraph().Text("Give ").StyledText("Clopidogrel", "DrugName").Text(" 75 mg daily.");
+```
+
+To render or measure text exactly as Word would style it, resolve the effective formatting — defaults, then the paragraph style chain, then the character style chain, then direct formatting, with Word's exclusive-or rule for bold/italic/caps toggles:
+
+```csharp
+var loaded = Document.Load("report.docx");
+foreach (var p in loaded.Blocks.OfType<Paragraph>())
+{
+    ParagraphFormat pf = loaded.GetEffectiveParagraphFormat(p);
+    foreach (var run in p.Runs)
+    {
+        TextFormat f = loaded.GetEffectiveRunFormat(p, run);   // f.SizePt, f.Bold, f.ComplexScriptFont …
+    }
+}
+```
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:

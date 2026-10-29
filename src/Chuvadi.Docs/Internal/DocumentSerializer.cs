@@ -35,6 +35,8 @@ internal static class DocumentSerializer
 
     private const string RelOfficeDocument = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
     private const string RelStyles = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
+    private const string RelTheme = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+    private const string CtTheme = "application/vnd.openxmlformats-officedocument.theme+xml";
     private const string RelNumbering = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering";
     private const string RelSettings = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
     private const string RelHeader = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
@@ -155,7 +157,14 @@ internal static class DocumentSerializer
         using (var s = pkg.CreatePart("/word/styles.xml", CtStyles))
         using (var x = CreateXml(s))
         {
-            WriteStyles(x);
+            StylesXml.Write(x, doc, ReferencedStyleIds(doc));
+        }
+
+        // ---- /word/theme/theme1.xml (carried through from a loaded document) ----
+        if (doc.ThemeXml is { Length: > 0 } theme)
+        {
+            using var s = pkg.CreatePart("/word/theme/theme1.xml", CtTheme);
+            s.Write(theme, 0, theme.Length);
         }
 
         // ---- /word/numbering.xml (only when lists are used) ----
@@ -221,6 +230,8 @@ internal static class DocumentSerializer
 
         pkg.AddRelationship("/word/document.xml", "/word/styles.xml", RelStyles, "rIdStyles");
         pkg.AddRelationship("/word/document.xml", "/word/settings.xml", RelSettings, "rIdSettings");
+        if (doc.ThemeXml is { Length: > 0 })
+            pkg.AddRelationship("/word/document.xml", "/word/theme/theme1.xml", RelTheme, "rIdTheme");
         if (hasLists)
             pkg.AddRelationship("/word/document.xml", "/word/numbering.xml", RelNumbering, "rIdNumbering");
         foreach (var (uri, relId, relType, _, _) in hfParts)
@@ -291,7 +302,7 @@ internal static class DocumentSerializer
                 x.WriteAttributeString("id", R, relId);
                 x.WriteAttributeString("history", W, "1");
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, characterStyleId: "Hyperlink");
+                RunProperties.Write(x, run.Format, characterStyleId: run.CharacterStyleId ?? "Hyperlink");
                 WriteText(x, run.TextContent);
                 x.WriteEndElement();
                 x.WriteEndElement();
@@ -302,7 +313,7 @@ internal static class DocumentSerializer
             if (run.Image is not null) continue;
 
             x.WriteStartElement("r", W);
-            RunProperties.Write(x, run.Format);
+            RunProperties.Write(x, run.Format, run.CharacterStyleId);
             if (run.Break is BreakType bt) WriteBreak(x, bt);
             else if (run.IsTab) { x.WriteStartElement("tab", W); x.WriteEndElement(); }
             else WriteText(x, run.TextContent);
@@ -833,149 +844,6 @@ internal static class DocumentSerializer
         x.WriteEndElement(); // sectPr
     }
 
-    // ---- styles.xml --------------------------------------------------------------------
-
-    private static void WriteStyles(XmlWriter x)
-    {
-        x.WriteStartDocument(standalone: true);
-        x.WriteStartElement("w", "styles", W);
-
-        // Document defaults: Calibri 11pt.
-        x.WriteStartElement("docDefaults", W);
-        x.WriteStartElement("rPrDefault", W);
-        x.WriteStartElement("rPr", W);
-        x.WriteStartElement("rFonts", W);
-        x.WriteAttributeString("ascii", W, "Calibri");
-        x.WriteAttributeString("hAnsi", W, "Calibri");
-        x.WriteAttributeString("cs", W, "Calibri");
-        x.WriteEndElement();
-        x.WriteStartElement("sz", W);
-        x.WriteAttributeString("val", W, "22");
-        x.WriteEndElement();
-        // Complex-script text (Indic, Arabic…) sizes from szCs; without it Word falls back to
-        // 10pt for those scripts while Latin text is 11pt.
-        x.WriteStartElement("szCs", W);
-        x.WriteAttributeString("val", W, "22");
-        x.WriteEndElement();
-        x.WriteEndElement();
-        x.WriteEndElement();
-        x.WriteStartElement("pPrDefault", W);
-        x.WriteEndElement();
-        x.WriteEndElement();
-
-        void Style(string id, string name, bool isDefault, Action? pPr, Action? rPr, bool character = false)
-        {
-            x.WriteStartElement("style", W);
-            x.WriteAttributeString("type", W, character ? "character" : "paragraph");
-            if (isDefault) x.WriteAttributeString("default", W, "1");
-            x.WriteAttributeString("styleId", W, id);
-            x.WriteStartElement("name", W);
-            x.WriteAttributeString("val", W, name);
-            x.WriteEndElement();
-            x.WriteStartElement("qFormat", W);
-            x.WriteEndElement();
-            if (pPr is not null) { x.WriteStartElement("pPr", W); pPr(); x.WriteEndElement(); }
-            if (rPr is not null) { x.WriteStartElement("rPr", W); rPr(); x.WriteEndElement(); }
-            x.WriteEndElement();
-        }
-        void Sz(int halfPoints)
-        {
-            x.WriteStartElement("sz", W);
-            x.WriteAttributeString("val", W, halfPoints.ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-        }
-        void Bold() { x.WriteStartElement("b", W); x.WriteEndElement(); }
-        void Color(string hex)
-        {
-            x.WriteStartElement("color", W);
-            x.WriteAttributeString("val", W, hex);
-            x.WriteEndElement();
-        }
-        void SpacingBefore(int twips)
-        {
-            x.WriteStartElement("spacing", W);
-            x.WriteAttributeString("before", W, twips.ToString(CultureInfo.InvariantCulture));
-            x.WriteAttributeString("after", W, "120");
-            x.WriteEndElement();
-        }
-        void OutlineLvl(int n)
-        {
-            x.WriteStartElement("outlineLvl", W);
-            x.WriteAttributeString("val", W, n.ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-        }
-
-        Style("Normal", "Normal", isDefault: true, pPr: null, rPr: null);
-        Style("Title", "Title", false,
-            pPr: () => SpacingBefore(0),
-            rPr: () => { Sz(56); Color("1F3864"); });
-        Style("Heading1", "heading 1", false,
-            pPr: () => { SpacingBefore(240); OutlineLvl(0); },
-            rPr: () => { Bold(); Sz(32); Color("2E74B5"); });
-        Style("Heading2", "heading 2", false,
-            pPr: () => { SpacingBefore(200); OutlineLvl(1); },
-            rPr: () => { Bold(); Sz(26); Color("2E74B5"); });
-        Style("Heading3", "heading 3", false,
-            pPr: () => { SpacingBefore(160); OutlineLvl(2); },
-            rPr: () => { Bold(); Sz(24); Color("1F4D78"); });
-        void Italic() { x.WriteStartElement("i", W); x.WriteEndElement(); }
-        Style("Heading4", "heading 4", false,
-            pPr: () => { SpacingBefore(120); OutlineLvl(3); },
-            rPr: () => { Bold(); Italic(); Sz(22); Color("2E74B5"); });
-        Style("Heading5", "heading 5", false,
-            pPr: () => { SpacingBefore(120); OutlineLvl(4); },
-            rPr: () => { Sz(22); Color("2E74B5"); });
-        Style("Heading6", "heading 6", false,
-            pPr: () => { SpacingBefore(120); OutlineLvl(5); },
-            rPr: () => { Sz(22); Color("1F4D78"); });
-        Style("Heading7", "heading 7", false,
-            pPr: () => { SpacingBefore(120); OutlineLvl(6); },
-            rPr: () => { Italic(); Sz(22); Color("1F4D78"); });
-        Style("Heading8", "heading 8", false,
-            pPr: () => { SpacingBefore(120); OutlineLvl(7); },
-            rPr: () => { Sz(21); Color("404040"); });
-        Style("Heading9", "heading 9", false,
-            pPr: () => { SpacingBefore(120); OutlineLvl(8); },
-            rPr: () => { Italic(); Sz(21); Color("404040"); });
-        Style("Quote", "Quote", false,
-            pPr: () =>
-            {
-                x.WriteStartElement("ind", W);
-                x.WriteAttributeString("left", W, "720");
-                x.WriteAttributeString("right", W, "720");
-                x.WriteEndElement();
-            },
-            rPr: () =>
-            {
-                x.WriteStartElement("i", W);
-                x.WriteEndElement();
-                Color("404040");
-            });
-        Style("ListParagraph", "List Paragraph", false,
-            pPr: () =>
-            {
-                x.WriteStartElement("ind", W);
-                x.WriteAttributeString("left", W, "720");
-                x.WriteEndElement();
-                x.WriteStartElement("contextualSpacing", W);
-                x.WriteEndElement();
-            },
-            rPr: null);
-        Style("Hyperlink", "Hyperlink", false,
-            pPr: null,
-            rPr: () =>
-            {
-                Color("0563C1");
-                x.WriteStartElement("u", W);
-                x.WriteAttributeString("val", W, "single");
-                x.WriteEndElement();
-            },
-            character: true);
-
-        x.WriteEndElement(); // styles
-        x.WriteEndDocument();
-    }
-
     // ---- numbering.xml -------------------------------------------------------------------
 
     private static void WriteNumbering(XmlWriter x)
@@ -1128,6 +996,48 @@ internal static class DocumentSerializer
     }
 
     // ---- Helpers --------------------------------------------------------------------------
+
+    /// <summary>Every paragraph in the document: body, table cells and headers/footers.</summary>
+    internal static IEnumerable<Paragraph> AllParagraphs(Document doc)
+    {
+        foreach (var block in doc.Blocks)
+        {
+            if (block is Paragraph p) yield return p;
+            else if (block is DocTable t)
+                foreach (var row in t.Rows)
+                    foreach (var cell in row.Cells)
+                        foreach (var cp in cell.Paragraphs) yield return cp;
+        }
+        foreach (var hf in new[] { doc.Header, doc.Footer, doc.FirstPageHeader, doc.FirstPageFooter })
+            foreach (var p in hf) yield return p;
+    }
+
+    /// <summary>Paragraph and character style ids the content refers to (incl. the implicit Hyperlink style).</summary>
+    internal static HashSet<string> ReferencedStyleIds(Document doc)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal) { "Normal" };
+        foreach (var p in AllParagraphs(doc))
+        {
+            ids.Add(p.StyleId);
+            foreach (var r in p.Runs)
+            {
+                if (r.CharacterStyleId is not null) ids.Add(r.CharacterStyleId);
+                else if (r.HyperlinkUrl is not null) ids.Add("Hyperlink");
+            }
+        }
+        return ids;
+    }
+
+    /// <summary>Maps a built-in style id back to its <see cref="ParagraphStyle"/>.</summary>
+    internal static bool TryBuiltInStyle(string id, out ParagraphStyle style)
+    {
+        foreach (ParagraphStyle s in Enum.GetValues<ParagraphStyle>())
+        {
+            if (StyleId(s) == id) { style = s; return true; }
+        }
+        style = ParagraphStyle.Normal;
+        return false;
+    }
 
     internal static string StyleId(ParagraphStyle s) => s switch
     {
