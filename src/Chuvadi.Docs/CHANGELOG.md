@@ -1,6 +1,8 @@
 # Chuvadi.Docs — Changelog
 
-## Unreleased
+## 1.3.0 (2026-10-28)
+
+The style model with effective (resolved) formatting, the theme carried through, and the complete table model: table/row/cell properties, merges, nested tables, table styles with conditional formats, and exact load → save round-trip.
 
 ### Tables
 

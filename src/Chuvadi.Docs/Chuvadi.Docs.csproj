@@ -11,10 +11,10 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Docs</Product>
-    <Description>Pure-BCL Word document (docx) library for .NET. Write reports with full character and paragraph formatting (incl. Indic/complex scripts), styles, tables, lists, images, headers/footers; read and round-trip documents; fill designed templates; password encryption (read and write); hardened for untrusted input (resource limits, macro/active-content detection, cancellation). No NuGet dependencies.</Description>
+    <Description>Pure-BCL Word document (docx) library for .NET. Write reports with full character and paragraph formatting (incl. Indic/complex scripts), custom styles with effective-formatting resolution, full tables (merges, nested tables, table styles), lists, images, headers/footers; read and round-trip documents; fill designed templates; password encryption (read and write); hardened for untrusted input (resource limits, macro/active-content detection, cancellation). No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Generate the XML doc file for IntelliSense without requiring 100% doc coverage. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
