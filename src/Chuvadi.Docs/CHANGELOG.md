@@ -1,6 +1,8 @@
 # Chuvadi.Docs — Changelog
 
-## Unreleased
+## 1.6.0 (2026-10-28)
+
+Fields, notes, bookmarks, text boxes, embedded fonts, floating tables and document properties (Phase 8); comments and tracked changes with accept/reject (Phase 9); the Chuvadi.Docs.Conversion companion package (D-15).
 
 ### Conversion (D-15)
 
