@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Docs.Conversion</RootNamespace>
+    <AssemblyName>Chuvadi.Docs.Conversion</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Docs.Conversion</Product>
+    <Description>Conversions for Chuvadi.Docs documents: plain text, Markdown (CommonMark with GFM tables, task lists and strikethrough) and HTML, both ways, plus a self-contained HTML preview. Markdown and HTML are parsed with Chuvadi.Markup; HTML input is sanitized with its allowlist sanitizer before it is mapped to the document model. Pure BCL; depends only on Chuvadi.Docs and Chuvadi.Markup.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>1.6.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>docx;word;markdown;html;text;conversion;commonmark;gfm</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Docs.Conversion.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Docs.Conversion.Tests" />
+  </ItemGroup>
+
+  <!-- First-party libraries from this monorepo (no third-party packages). Packed, these become
+       dependencies on the Chuvadi.Docs and Chuvadi.Markup packages of the same release train. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Docs\Chuvadi.Docs.csproj" />
+    <ProjectReference Include="..\Chuvadi.Markup\Chuvadi.Markup.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
