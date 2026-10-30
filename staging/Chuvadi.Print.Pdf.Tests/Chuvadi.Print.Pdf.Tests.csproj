@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests for the Chuvadi.Print.Pdf adapter. Like the adapter, under staging/ and outside Chuvadi.slnx and CI;
+       the Chuvadi.Pdf packages come from the local feed in staging/nuget.config (D-29). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
+    <ProjectReference Include="..\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj" />
+    <ProjectReference Include="..\..\samples\Chuvadi.Print.ManualTests\Chuvadi.Print.ManualTests.csproj" />
+  </ItemGroup>
+
+</Project>

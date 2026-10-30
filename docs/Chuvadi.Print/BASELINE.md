@@ -60,8 +60,12 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - **A4** — `Chuvadi.Print.Ipp`: IPP encoder/decoder, `IppClient`, PWG Raster writer/reader,
   `IppPrinterTarget` (rendered pages as PWG Raster) and `IppDocumentTarget` (PDF passthrough via the new
   core `PrintJob.SubmitTo` / `IDocumentTarget`): driverless printing on any OS. (0.4.0)
-- **A5 — Chuvadi.Print.Pdf** — separate package: `IPageRasterizer` over Chuvadi.Pdf and a vector-imposition
-  `PdfFileTarget` (print-to-PDF), once Chuvadi.Pdf is buildable with this repo.
+- **A5 — Chuvadi.Print.Pdf** — separate package (`staging/Chuvadi.Print.Pdf`, tests in
+  `staging/Chuvadi.Print.Pdf.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering) and the
+  vector-imposition `PdfFileTarget` (print-to-PDF via `SubmitTo`). It consumes the version-pinned Chuvadi.Pdf
+  packages from the local feed through `staging/nuget.config`; it never references a source clone (D-29).
+  It stays outside `Chuvadi.slnx` and CI, and outside the `src/` scanned by the pure-BCL check, until
+  Chuvadi.Pdf moves into the monorepo or is on nuget.org (D-28). (0.1.0)
 - **Product: "Chuvadi PDF" virtual printer** — separate product consuming the Chuvadi.Print nupkg
   (decision D-11): a Print Support App virtual printer on Windows 11, a "Microsoft Print to PDF" queue
   fallback on Windows 10, an IPP server later. No v3/v4 driver, port monitor or print processor.
