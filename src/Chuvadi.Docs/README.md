@@ -435,9 +435,22 @@ There is also cooperative "restrict editing" protection — `doc.Protect("pass",
 
 ## Scope
 
-Included: paragraphs and rich run formatting, styles, lists, tables, hyperlinks, headers/footers, page setup, **images (inline and floating, read and write, in templates)**, encryption, and restrict-editing protection.
+Included:
+- paragraphs and rich run formatting, styles, lists, tables, hyperlinks
+- multiple sections with headers and footers, page setup
+- **images** (inline and floating, read and write, in templates)
+- fields, footnotes and endnotes, bookmarks, text boxes, embedded fonts
+- comments and tracked changes, with accept and reject
+- templates, encryption, and restrict-editing protection
 
-Deliberately not included yet: legacy `.doc` (pre-2007 binary format), writing or running macros (`.docm` files are opened and flagged, never executed), comments, tracked changes, footnote authoring, and multi-section documents. Page-to-image rendering is intentionally out of scope for a pure-BCL library and is planned via a future Word→PDF pipeline (the reader already exposes all image bytes and geometry that pipeline needs).
+Conversions to and from plain text, Markdown and HTML, plus a safe HTML preview, are in the companion package [Chuvadi.Docs.Conversion](../Chuvadi.Docs.Conversion/README.md). It depends on Chuvadi.Markup; Chuvadi.Docs itself stays dependency-free.
+
+Deliberately not included yet:
+- legacy `.doc` (the pre-2007 binary format)
+- writing or running macros (`.docm` files are opened and flagged, never executed)
+- table-level tracked changes (cell insertions and deletions, table and row property changes)
+
+Page-to-image rendering is intentionally out of scope for a pure-BCL library. It is planned via a future Word→PDF pipeline; the reader already exposes the image bytes and geometry that pipeline needs.
 
 ## License
 

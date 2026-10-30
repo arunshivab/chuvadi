@@ -1,6 +1,6 @@
 # Chuvadi.Docs.Conversion — Changelog
 
-## 1.6.0 (unreleased)
+## 1.6.0 (2026-10-28)
 
 First release, versioned with Chuvadi.Docs 1.6.0 (decision D-15). Depends on Chuvadi.Docs 1.6.0 and Chuvadi.Markup 1.0.0.
 
