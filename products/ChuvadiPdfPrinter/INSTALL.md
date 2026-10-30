@@ -17,6 +17,10 @@ No printer driver, port monitor or print processor is installed. The compatibili
 - Administrator rights to install.
 - To build the Windows 11 package: .NET 10 SDK and the Windows 11 SDK 10.0.26100 or later
   (Visual Studio Installer, "Windows 11 SDK").
+- To build at all: the Chuvadi.Pdf packages (the PDF renderer behind forwarding to Windows printers) in the
+  local feed `C:\Users\aruns\Documents\local-nuget`, set in `nuget.config` next to this file. Pack them in
+  the chuvadi-pdf clone with `.\build\pack.ps1 -Version 3.22.1` and copy `artifacts\nupkg\*.nupkg` into the
+  feed.
 
 ## 1. Build (on the build machine)
 
@@ -80,14 +84,19 @@ Edit, then `Restart-Service ChuvadiPdfAgent`. Check a change with
 **Print and also send to a physical printer**: add entries to `ForwardTo`:
 ```json
 "ForwardTo": [
+  { "Kind": "WindowsPrinter", "Printer": "Ward-3 LaserJet", "Copies": 1, "Duplex": "Vertical" },
   { "Kind": "Ipp", "Printer": "ipp://10.0.0.21/ipp/print", "Copies": 1, "Duplex": "Vertical" }
 ]
 ```
-- `"Kind": "Ipp"` works now with any network printer that accepts PDF over IPP (most printers since about
-  2015, "IPP Everywhere" / "AirPrint"); the PDF is passed through unchanged.
-- `"Kind": "WindowsPrinter"` with a Windows printer name is supported by the code but needs the PDF renderer
-  (Chuvadi.Print.Pdf), which is not part of this release; until then such jobs are saved normally and the
-  forward is recorded as failed with that reason.
+- `"Kind": "WindowsPrinter"` with an installed Windows printer's name: the PDF is rendered page by page
+  (Chuvadi.Print.Pdf) and printed through the Windows spooler, silently. Extra settings, all optional:
+  `"Paper"` (`"Auto"` = the size of the PDF's first page, default; or `A3`, `A4`, `A5`, `Letter`, `Legal`, ...),
+  `"Color"` (`Color`, `Grayscale`, `Monochrome`), `"Scale"` (`ShrinkToFit` default, `FitToPage`, `ActualSize`),
+  `"MaxRasterDpi"` (default 300; 600 for fine print, slower). Pages keep their size, are centred, and are
+  turned when a landscape page meets a portrait sheet.
+- `"Kind": "Ipp"` with any network printer that accepts PDF over IPP (most printers since about 2015,
+  "IPP Everywhere" / "AirPrint"); the PDF is passed through unchanged.
+- Each forward is one entry in the audit trail; a failed forward never loses the saved PDF.
 
 ## Uninstall (elevated)
 

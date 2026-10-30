@@ -4,9 +4,10 @@
     Chuvadi PDF virtual printer - core logic. Plain net10.0, no Windows APIs except the
     [SupportedOSPlatform("windows")] forwarder, so almost everything is unit-tested on any OS.
 
-    Chuvadi.Print is referenced as a project by default (monorepo development). Build with
-    -p:UseChuvadiPrintPackage=true to consume the Chuvadi.Print nupkg instead (decision D-11);
-    the package must then be available from a configured NuGet source (e.g. the local dist folder).
+    Chuvadi.Print (src/) and Chuvadi.Print.Pdf (staging/) are referenced as projects of this monorepo by default;
+    Chuvadi.Print.Pdf brings the Chuvadi.Pdf packages, resolved from the local feed in this product's nuget.config
+    (D-29: never a chuvadi-pdf source clone). Build with -p:UseChuvadiPrintPackage=true to consume the
+    Chuvadi.Print and Chuvadi.Print.Pdf packages from that feed instead (decision D-11).
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -19,14 +20,17 @@
     <Version>0.1.0</Version>
     <IsPackable>false</IsPackable>
     <UseChuvadiPrintPackage Condition="'$(UseChuvadiPrintPackage)' == ''">false</UseChuvadiPrintPackage>
-    <ChuvadiPrintPackageVersion Condition="'$(ChuvadiPrintPackageVersion)' == ''">0.4.0</ChuvadiPrintPackageVersion>
+    <ChuvadiPrintPackageVersion Condition="'$(ChuvadiPrintPackageVersion)' == ''">0.5.0</ChuvadiPrintPackageVersion>
+    <ChuvadiPrintPdfPackageVersion Condition="'$(ChuvadiPrintPdfPackageVersion)' == ''">0.1.0</ChuvadiPrintPdfPackageVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseChuvadiPrintPackage)' != 'true'">
     <ProjectReference Include="..\..\..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
+    <ProjectReference Include="..\..\..\..\staging\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseChuvadiPrintPackage)' == 'true'">
     <PackageReference Include="Chuvadi.Print" Version="$(ChuvadiPrintPackageVersion)" />
+    <PackageReference Include="Chuvadi.Print.Pdf" Version="$(ChuvadiPrintPdfPackageVersion)" />
   </ItemGroup>
 
   <ItemGroup>

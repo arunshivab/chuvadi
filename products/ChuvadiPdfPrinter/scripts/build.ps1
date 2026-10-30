@@ -10,6 +10,8 @@
     out\psa\ChuvadiPdf.cer  the public certificate the package is signed with (with -Psa)
 
   -Psa needs the Windows SDK 10.0.26100 or later (makeappx.exe, makepri.exe, signtool.exe).
+  Forwarding to Windows printers uses Chuvadi.Print.Pdf, which needs the Chuvadi.Pdf packages in the local feed
+  (C:\Users\aruns\Documents\local-nuget, see nuget.config).
   The self-signed certificate is created once in Cert:\CurrentUser\My (subject = -Publisher) and reused.
 
 .EXAMPLE

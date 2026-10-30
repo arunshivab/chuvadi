@@ -302,14 +302,13 @@ public class EngineTests
     }
 
     [Fact]
-    public void Windows_forwarding_without_a_rasteriser_explains_itself()
+    public void Unavailable_forwarding_explains_itself_and_audits()
     {
         var audit = new MemoryAuditSink();
-        IForwarder forwarder = new DefaultForwarderFactory().Create(new ForwardTarget { Kind = ForwardKind.WindowsPrinter, Printer = "Ward-3" });
-        var unavailable = Assert.IsType<UnavailableForwarder>(forwarder);
-        Assert.Contains(OperatingSystem.IsWindows() ? "Chuvadi.Print.Pdf" : "only be used on Windows", unavailable.Reason);
+        IForwarder forwarder = new UnavailableForwarder("Forwarding to a Windows printer is switched off.");
         PrintResult result = forwarder.Forward("x.pdf", Samples.Job(), new ForwardTarget { Printer = "Ward-3" }, audit);
         Assert.Equal(PrintJobStatus.Failed, result.Status);
+        Assert.Contains("switched off", result.Error);
         Assert.Equal("Ward-3", Assert.Single(audit.Events).PrinterName);
     }
 
