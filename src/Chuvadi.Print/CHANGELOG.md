@@ -1,5 +1,29 @@
 # Chuvadi.Print — Changelog
 
+## 1.0.0-rc.1 (unreleased)
+
+Release candidate for 1.0.0. Everything from 0.1.0 to 0.5.0 (A1 to A6) is in it. The public API is now frozen
+for 1.x: from here on, changes are additive only, and any breaking change waits for 2.0.
+
+- **Version**: 1.0.0-rc.1. No API changes since 0.5.0.
+- **Docs**: `docs/Chuvadi.Print/GUIDE.md`, the user guide covering settings, layout and planning, `PrintJob`,
+  the targets (PNG, Windows, IPP, PDF file), the spool envelope, the audit trail, remote printing (hub and
+  agent), Chuvadi.Print.Pdf and the Chuvadi PDF virtual printer. `docs/Chuvadi.Print/PRINTING-REPORTS.md`
+  covers printing Docs/Sheets reports through Chuvadi.Layout. `docs/Chuvadi.Print/WINDOWS-VERIFICATION.md` is
+  the checklist run on Windows 10 and 11 before tagging print-v1.0.0.
+- **Companions**: Chuvadi.Print.Pdf 0.1.0 lives in `staging/`. It consumes the Chuvadi.Pdf 3.22.1 packages
+  from the local feed (D-29) and stays outside `Chuvadi.slnx` and CI until Chuvadi.Pdf moves into the monorepo
+  or is on nuget.org (D-28). The Chuvadi PDF product (0.2.0)
+  now also forwards each PDF to Windows printers, rendering it with Chuvadi.Print.Pdf and printing it through
+  the GDI spooler. Forward targets take paper (Auto matches the first page), colour, scale and resolution
+  settings.
+- **Product fix**: the agent now claims each output file name by creating the file exclusively before moving
+  the PDF onto it. Before, two concurrent jobs with the same title could take the same name where a move does
+  not refuse an existing target; a stress test showed this about once in 20 runs on Linux.
+- **Known limits for 1.0**: Chuvadi.Pdf's renderer draws the media box. Annotation printing ignores the
+  annotation Print flag. A vector PDF output keeps its original colours. Everything verified only on Windows
+  is listed in WINDOWS-VERIFICATION.md.
+
 ## 0.5.0 (unreleased)
 
 A6: remote printing (`Chuvadi.Print.Remote`, decision D-26). Agents next to the printers dial out to a hub the host application embeds; nothing listens on the agent's machine (P07). Pure BCL (System.Net.Http, System.Text.Json, System.Security.Cryptography).

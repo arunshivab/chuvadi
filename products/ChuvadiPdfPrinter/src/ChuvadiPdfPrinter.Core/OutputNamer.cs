@@ -114,7 +114,8 @@ namespace ChuvadiPdfPrinter
 
         /// <summary>
         /// Moves <paramref name="sourcePath"/> to <paramref name="folder"/>\&lt;baseName&gt;.pdf following
-        /// <paramref name="policy"/>. The move is atomic per attempt, so concurrent jobs never share a name.
+        /// <paramref name="policy"/>. A name is claimed by creating the file exclusively (atomic on every OS), then
+        /// the PDF is moved over the claimed file, so concurrent jobs never share a name.
         /// Returns the final path.
         /// </summary>
         public static string Place(string sourcePath, string folder, string baseName, CollisionPolicy policy)
@@ -129,25 +130,45 @@ namespace ChuvadiPdfPrinter
                     File.Move(sourcePath, first, overwrite: true);
                     return first;
                 case CollisionPolicy.Fail:
-                    if (File.Exists(first)) throw new IOException("Output file already exists: " + first);
-                    File.Move(sourcePath, first, overwrite: false);
+                    if (!TryReserve(first)) throw new IOException("Output file already exists: " + first);
+                    MoveOntoReserved(sourcePath, first);
                     return first;
                 default:
                     for (int n = 1; n < 10_000; n++)
                     {
                         string candidate = n == 1 ? first : Path.Combine(folder, baseName + " (" + n.ToString(CultureInfo.InvariantCulture) + ").pdf");
-                        if (File.Exists(candidate)) continue;
-                        try
-                        {
-                            File.Move(sourcePath, candidate, overwrite: false);
-                            return candidate;
-                        }
-                        catch (IOException) when (File.Exists(candidate))
-                        {
-                            // Another job took this name between the check and the move; try the next one.
-                        }
+                        if (!TryReserve(candidate)) continue; // taken, possibly by a concurrent job
+                        MoveOntoReserved(sourcePath, candidate);
+                        return candidate;
                     }
                     throw new IOException("No free file name for '" + baseName + "' in " + folder);
+            }
+        }
+
+        /// <summary>Claims <paramref name="path"/> by creating it exclusively; false when it already exists.</summary>
+        private static bool TryReserve(string path)
+        {
+            try
+            {
+                using (new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+                return true;
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                return false;
+            }
+        }
+
+        private static void MoveOntoReserved(string sourcePath, string reserved)
+        {
+            try
+            {
+                File.Move(sourcePath, reserved, overwrite: true);
+            }
+            catch
+            {
+                try { File.Delete(reserved); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                throw;
             }
         }
     }
