@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Conversion (D-15)
+
+- New companion package **Chuvadi.Docs.Conversion** (its own README and CHANGELOG): plain text, Markdown (CommonMark + GFM, through Chuvadi.Markup) and HTML (sanitized with Chuvadi.Markup) to and from `Document`, plus a safe HTML preview. Chuvadi.Docs itself gains no dependency.
+- `ImageSpec.FromBytes` now refuses an image whose header gives no valid size (for example a PNG claiming 0xFFFFFFFF pixels) with `InvalidOperationException`, instead of producing a negative size that failed later at save.
+
 ### Comments and tracked changes (Phase 9)
 
 - **Comments**: `Document.Comments` (`CommentCollection`, `Comment` with author, initials, date, paragraphs and tables, `Done`, `Parent`), `Comments.Add(author, text)` and `Comments.Reply(comment, author, text)`, range markers (`Run.CommentRange`, `Paragraph.CommentStart` / `CommentEnd`), the anchor (`Run.CommentReference`, `Paragraph.CommentReference`) and `Paragraph.Commented(text, comment)`; the comment's own mark (`Run.IsAnnotationMark`). Written as comments.xml with commentsExtended.xml (Word 2013+ threads and done flags) and the annotation styles; replies without markers of their own are anchored with their comment. Loaded from Word files with their threads and done flags; ranges between paragraphs and table rows load like bookmarks. A malformed comments part loses its comments only.

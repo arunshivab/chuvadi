@@ -116,6 +116,9 @@ public sealed class ImageSpec
         if (info.PixelWidth == 0 || info.PixelHeight == 0)
             throw new InvalidOperationException(
                 "This image format carries no pixel dimensions (e.g. EMF/WMF). Supply explicit widthPt/heightPt via Inline(...) or FromFile(path, widthPt, heightPt).");
+        // A corrupt or hostile header (e.g. a PNG claiming 0xFFFFFFFF pixels) gives no usable size.
+        if (info.PixelWidth < 0 || info.PixelHeight < 0 || !(double.IsFinite(info.WidthPt) && double.IsFinite(info.HeightPt) && info.WidthPt > 0 && info.HeightPt > 0))
+            throw new InvalidOperationException("The image header gives no valid size. Supply explicit widthPt/heightPt via Inline(...).");
         return new ImageSpec
         {
             Bytes = bytes,
