@@ -33,6 +33,15 @@ internal static class DocumentSerializer
     private const string CtFooter = "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
     private const string CtCore = "application/vnd.openxmlformats-package.core-properties+xml";
     private const string CtApp = "application/vnd.openxmlformats-officedocument.extended-properties+xml";
+    private const string CtCustom = "application/vnd.openxmlformats-officedocument.custom-properties+xml";
+    private const string CtFootnotes = "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
+    private const string CtEndnotes = "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
+    private const string RelFootnotes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes";
+    private const string RelEndnotes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes";
+    private const string RelCustom = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties";
+    private const string CtFontTable = "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
+    private const string RelFontTable = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable";
+    private const string RelFont = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 
     private const string RelOfficeDocument = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
     private const string RelStyles = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
@@ -67,6 +76,15 @@ internal static class DocumentSerializer
         /// <summary>The numbering written with this save (ids for list paragraphs).</summary>
         public NumberingXml.Plan? Numbering { get; init; }
         public List<(string RelId, string Url)> Hyperlinks { get; } = new();
+
+        /// <summary>Package-wide ids (bookmarks, notes).</summary>
+        public SaveState State { get; init; } = new();
+
+        /// <summary>The note part being written (note marks become footnoteRef / endnoteRef), or null.</summary>
+        public NoteKind? NoteKind { get; init; }
+
+        /// <summary>Only the body may hold note references (Word rejects them in notes, headers and footers).</summary>
+        public bool AllowNoteReferences { get; init; }
         public List<(string RelId, string MediaUri)> Images { get; } = new();
 
         private readonly Func<ImageSpec, string> _registerMedia;
@@ -99,6 +117,9 @@ internal static class DocumentSerializer
 
         public int NextDrawingId() => _nextDrawingId();
 
+        /// <summary>Text boxes being written around the current paragraph (Word does not nest them; guards cycles).</summary>
+        public int TextBoxDepth { get; set; }
+
         public List<(string RelId, string Url)> ImageLinks { get; } = new();
 
         /// <summary>An external relationship for a linked picture.</summary>
@@ -108,6 +129,48 @@ internal static class DocumentSerializer
             ImageLinks.Add((id, url));
             return id;
         }
+    }
+
+    /// <summary>Ids shared by every part of one save: bookmarks (w:id) and notes.</summary>
+    internal sealed class SaveState
+    {
+        private int _nextBookmarkId;
+        private readonly Dictionary<Bookmark, Stack<int>> _open = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<string, Bookmark> _names = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<Bookmark, string> _written = new(ReferenceEqualityComparer.Instance);
+        public readonly Dictionary<Note, int> NoteIds = new(ReferenceEqualityComparer.Instance);
+
+        /// <summary>A new id for each start (a bookmark object used twice gets two ids), with a name unique in the file.</summary>
+        public (int Id, string Name) StartBookmark(Bookmark b)
+        {
+            int id = _nextBookmarkId++;
+            if (!_open.TryGetValue(b, out var stack)) _open[b] = stack = new Stack<int>();
+            stack.Push(id);
+            if (!_written.TryGetValue(b, out var name))
+            {
+                name = b.Name;
+                if (_names.TryGetValue(name, out var other) && !ReferenceEquals(other, b))
+                {
+                    // Two bookmarks with one name: Word keeps one; the later is written under a free name.
+                    int n = 2;
+                    string candidate;
+                    do
+                    {
+                        var suffix = "_" + n++;
+                        candidate = (name.Length + suffix.Length > 40 ? name[..(40 - suffix.Length)] : name) + suffix;
+                    }
+                    while (_names.ContainsKey(candidate));
+                    name = candidate;
+                }
+                _names[name] = b;
+                _written[b] = name;
+            }
+            return (id, name);
+        }
+
+        /// <summary>The id of the latest open start of <paramref name="b"/>, or null for an end with no start before it.</summary>
+        public int? EndBookmark(Bookmark b)
+            => _open.TryGetValue(b, out var stack) && stack.Count > 0 ? stack.Pop() : null;
     }
 
     public static void Write(Stream output, Document doc)
@@ -136,7 +199,12 @@ internal static class DocumentSerializer
         }
         int NextDrawingId() => ++drawingIdCounter;
 
-        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId) { Numbering = numbering };
+        var state = new SaveState();
+        int noteId = 0;
+        foreach (var n in doc.Footnotes) state.NoteIds[n] = ++noteId;
+        noteId = 0;
+        foreach (var n in doc.Endnotes) state.NoteIds[n] = ++noteId;
+        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, AllowNoteReferences = true };
 
         // ---- header/footer plan: one part per non-empty (or explicitly blank, or watermarked) slot of each section ----
         bool oddEven = doc.EffectiveOddAndEven;
@@ -262,7 +330,7 @@ internal static class DocumentSerializer
         int watermarkCount = 0;
         foreach (var (uri, _, _, content, isHeader, watermark, section) in hfParts)
         {
-            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering };
+            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering, State = state };
             hfContexts.Add(hfCtx);
             using var s = pkg.CreatePart(uri, isHeader ? CtHeader : CtFooter);
             using var x = CreateXml(s);
@@ -308,6 +376,40 @@ internal static class DocumentSerializer
             x.WriteEndDocument();
         }
 
+        // ---- font table with embedded fonts (only when the document has one) ----
+        if (doc.Fonts.Count > 0)
+        {
+            var fontParts = new List<(string Uri, string RelId, byte[] Bytes)>();
+            using (var s = pkg.CreatePart("/word/fontTable.xml", CtFontTable))
+            using (var x = CreateXml(s))
+                FontTableXml.Write(x, doc.Fonts, bytes =>
+                {
+                    int n = fontParts.Count + 1;
+                    fontParts.Add(($"/word/fonts/font{n}.odttf", $"rIdFont{n}", bytes));
+                    return $"rIdFont{n}";
+                });
+            foreach (var (uri, relId, bytes) in fontParts)
+            {
+                using (var s = pkg.CreatePart(uri, FontTableXml.ObfuscatedFontType)) s.Write(bytes, 0, bytes.Length);
+                pkg.AddRelationship("/word/fontTable.xml", uri, RelFont, relId);
+            }
+            pkg.AddRelationship("/word/document.xml", "/word/fontTable.xml", RelFontTable, "rIdFontTable");
+        }
+
+        // ---- footnotes / endnotes ----
+        var noteContexts = new List<PartContext>();
+        foreach (var notes in new[] { doc.Footnotes, doc.Endnotes })
+        {
+            if (notes.Count == 0) continue;
+            bool foot = notes.Kind == NoteKind.Footnote;
+            var uri = foot ? "/word/footnotes.xml" : "/word/endnotes.xml";
+            var nctx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, NoteKind = notes.Kind };
+            noteContexts.Add(nctx);
+            using var s = pkg.CreatePart(uri, foot ? CtFootnotes : CtEndnotes);
+            using var x = CreateXml(s);
+            WriteNotes(x, notes, nctx);
+        }
+
         // ---- media parts (binary) ----
         foreach (var (uri, img) in mediaParts)
         {
@@ -316,13 +418,16 @@ internal static class DocumentSerializer
         }
 
         // ---- docProps ----
-        WriteCoreProps(pkg);
-        WriteAppProps(pkg);
+        WriteCoreProps(pkg, doc.Properties);
+        WriteAppProps(pkg, doc.Properties);
+        bool custom = doc.Properties.Custom.Count > 0;
+        if (custom) WriteCustomProps(pkg, doc.Properties);
 
         // ---- relationships ----
         pkg.AddRelationship("/", "/word/document.xml", RelOfficeDocument, "rId1");
         pkg.AddRelationship("/", "/docProps/core.xml", RelCore, "rId2");
         pkg.AddRelationship("/", "/docProps/app.xml", RelApp, "rId3");
+        if (custom) pkg.AddRelationship("/", "/docProps/custom.xml", RelCustom, "rId4");
 
         pkg.AddRelationship("/word/document.xml", "/word/styles.xml", RelStyles, "rIdStyles");
         pkg.AddRelationship("/word/document.xml", "/word/settings.xml", RelSettings, "rIdSettings");
@@ -332,6 +437,8 @@ internal static class DocumentSerializer
             pkg.AddRelationship("/word/document.xml", "/word/numbering.xml", RelNumbering, "rIdNumbering");
         foreach (var part in hfParts)
             pkg.AddRelationship("/word/document.xml", part.Uri, part.RelType, part.RelId);
+        if (doc.Footnotes.Count > 0) pkg.AddRelationship("/word/document.xml", "/word/footnotes.xml", RelFootnotes, "rIdFootnotes");
+        if (doc.Endnotes.Count > 0) pkg.AddRelationship("/word/document.xml", "/word/endnotes.xml", RelEndnotes, "rIdEndnotes");
 
         // Per-part hyperlink + image relationships (body and each header/footer).
         void WriteContextRels(PartContext ctx)
@@ -345,6 +452,7 @@ internal static class DocumentSerializer
         }
         WriteContextRels(bodyCtx);
         foreach (var ctx in hfContexts) WriteContextRels(ctx);
+        foreach (var ctx in noteContexts) WriteContextRels(ctx);
 
         pkg.Close();
     }
@@ -375,8 +483,32 @@ internal static class DocumentSerializer
             x.WriteEndElement();
         }
 
-        foreach (var run in p.Runs)
+        // Simple fields (w:fldSimple) need their end in the same paragraph and no separate marker.
+        // Simple fields (w:fldSimple) need their end in the same paragraph, no separate marker, and
+        // proper nesting with the other simple fields of the paragraph (they become XML elements).
+        HashSet<Field>? simpleOpen = null;
+        HashSet<Field>? simpleHere = null;
         {
+            List<Field>? stack = null;
+            for (int i = 0; i < p.Runs.Count; i++)
+            {
+                if (p.Runs[i].FieldMark is not { Field.Simple: true } fm) continue;
+                stack ??= new List<Field>();
+                if (fm.Type == FieldMarkType.Begin) { if (!stack.Contains(fm.Field)) stack.Add(fm.Field); }
+                else if (fm.Type == FieldMarkType.Separate) { int k = stack.IndexOf(fm.Field); if (k >= 0) stack.RemoveRange(k, stack.Count - k); }
+                else
+                {
+                    int k = stack.IndexOf(fm.Field);
+                    if (k < 0) continue;
+                    if (k == stack.Count - 1) (simpleHere ??= new(ReferenceEqualityComparer.Instance)).Add(fm.Field);
+                    stack.RemoveRange(k, stack.Count - k); // fields opened inside but not closed are not simple
+                }
+            }
+        }
+
+        for (int index = 0; index < p.Runs.Count; index++)
+        {
+            var run = p.Runs[index];
             if (run.FieldInstruction is not null)
             {
                 // <w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>
@@ -396,11 +528,128 @@ internal static class DocumentSerializer
                 continue;
             }
 
-            if (run.HyperlinkUrl is not null && ctx is not null)
+            if (run.TextBox is { } box)
             {
-                var relId = ctx.AddHyperlink(run.HyperlinkUrl);
+                // Word does not allow a text box inside a text box: nested boxes are not written.
+                if (ctx is not null && ctx.TextBoxDepth == 0) WriteTextBoxRun(x, box, ctx);
+                continue;
+            }
+
+            if (run.Bookmark is { } bm)
+            {
+                if (ctx is null) continue;
+                if (bm.IsStart)
+                {
+                    var (bid, bname) = ctx.State.StartBookmark(bm.Bookmark);
+                    x.WriteStartElement("bookmarkStart", W);
+                    x.WriteAttributeString("id", W, bid.ToString(CultureInfo.InvariantCulture));
+                    x.WriteAttributeString("name", W, bname);
+                    if (bm.Bookmark.ColumnFirst is int cf) x.WriteAttributeString("colFirst", W, cf.ToString(CultureInfo.InvariantCulture));
+                    if (bm.Bookmark.ColumnLast is int cl) x.WriteAttributeString("colLast", W, cl.ToString(CultureInfo.InvariantCulture));
+                    x.WriteEndElement();
+                }
+                else if (ctx.State.EndBookmark(bm.Bookmark) is int eid)
+                {
+                    x.WriteStartElement("bookmarkEnd", W);
+                    x.WriteAttributeString("id", W, eid.ToString(CultureInfo.InvariantCulture));
+                    x.WriteEndElement();
+                }
+                continue;
+            }
+
+            if (run.FieldMark is { } mark)
+            {
+                var field = mark.Field;
+                if (simpleHere is not null && simpleHere.Contains(field))
+                {
+                    if (mark.Type == FieldMarkType.Begin)
+                    {
+                        x.WriteStartElement("fldSimple", W);
+                        x.WriteAttributeString("instr", W, field.Instruction);
+                        if (field.Locked) x.WriteAttributeString("fldLock", W, "1");
+                        if (field.Dirty) x.WriteAttributeString("dirty", W, "1");
+                        (simpleOpen ??= new(ReferenceEqualityComparer.Instance)).Add(field);
+                    }
+                    else if (mark.Type == FieldMarkType.End && simpleOpen is not null && simpleOpen.Remove(field))
+                        x.WriteEndElement();
+                    continue;
+                }
+                x.WriteStartElement("r", W);
+                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                x.WriteStartElement("fldChar", W);
+                x.WriteAttributeString("fldCharType", W, mark.Type switch
+                {
+                    FieldMarkType.Begin => "begin",
+                    FieldMarkType.Separate => "separate",
+                    _ => "end",
+                });
+                if (mark.Type == FieldMarkType.Begin)
+                {
+                    if (field.Locked) x.WriteAttributeString("fldLock", W, "1");
+                    if (field.Dirty) x.WriteAttributeString("dirty", W, "1");
+                    foreach (var raw in field.RawData) StylesXml.WriteFragmentClean(x, raw);
+                }
+                x.WriteEndElement();
+                x.WriteEndElement();
+                if (mark.Type == FieldMarkType.Begin)
+                {
+                    WriteInstruction(x, field, run, 0);
+                    // A simple field written in complex form (its markers did not nest): its result needs a separator.
+                    if (field.Simple)
+                    {
+                        x.WriteStartElement("r", W);
+                        RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                        x.WriteStartElement("fldChar", W);
+                        x.WriteAttributeString("fldCharType", W, "separate");
+                        x.WriteEndElement();
+                        x.WriteEndElement();
+                    }
+                }
+                continue;
+            }
+
+            if (run.NoteReference is { } note)
+            {
+                // A removed note, or a reference outside the body: nothing is written (Word rejects both).
+                if (ctx is null || !ctx.AllowNoteReferences || !ctx.State.NoteIds.TryGetValue(note, out var nid)) continue;
+                x.WriteStartElement("r", W);
+                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                x.WriteStartElement(note.Kind == NoteKind.Footnote ? "footnoteReference" : "endnoteReference", W);
+                if (run.CustomMarkFollows) x.WriteAttributeString("customMarkFollows", W, "1");
+                x.WriteAttributeString("id", W, nid.ToString(CultureInfo.InvariantCulture));
+                x.WriteEndElement();
+                x.WriteEndElement();
+                continue;
+            }
+
+            if (run.IsNoteMark)
+            {
+                x.WriteStartElement("r", W);
+                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                x.WriteStartElement(ctx?.NoteKind == NoteKind.Endnote ? "endnoteRef" : "footnoteRef", W);
+                x.WriteEndElement();
+                x.WriteEndElement();
+                continue;
+            }
+
+            if (run.Symbol is { } sym && !run.IsLink)
+            {
+                x.WriteStartElement("r", W);
+                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                x.WriteStartElement("sym", W);
+                x.WriteAttributeString("font", W, sym.Font);
+                x.WriteAttributeString("char", W, ((int)sym.Code).ToString("X4", CultureInfo.InvariantCulture));
+                x.WriteEndElement();
+                x.WriteEndElement();
+                continue;
+            }
+
+            if (run.IsLink && ctx is not null)
+            {
                 x.WriteStartElement("hyperlink", W);
-                x.WriteAttributeString("id", R, relId);
+                if (run.HyperlinkUrl is not null) x.WriteAttributeString("id", R, ctx.AddHyperlink(run.HyperlinkUrl));
+                if (run.HyperlinkAnchor is not null) x.WriteAttributeString("anchor", W, run.HyperlinkAnchor);
+                if (run.HyperlinkTooltip is not null) x.WriteAttributeString("tooltip", W, run.HyperlinkTooltip);
                 x.WriteAttributeString("history", W, "1");
                 x.WriteStartElement("r", W);
                 RunProperties.Write(x, run.Format, characterStyleId: run.EffectiveCharacterStyleId);
@@ -421,6 +670,9 @@ internal static class DocumentSerializer
             else WriteText(x, run.TextContent);
             x.WriteEndElement();
         }
+
+        // A simple field left open (its end was elsewhere): close it so the XML stays well formed.
+        if (simpleOpen is not null) foreach (var _ in simpleOpen) x.WriteEndElement();
 
         x.WriteEndElement(); // p
     }
@@ -455,6 +707,137 @@ internal static class DocumentSerializer
         string? embed = image.Bytes.Length > 0 || image.LinkUrl is null ? ctx.AddImage(image) : null;
         string? link = image.LinkUrl is { } url ? ctx.AddImageLink(url) : null;
         DrawingXml.WriteRun(x, image, embed, ctx.NextDrawingId(), link);
+    }
+
+    /// <summary>
+    /// A text box as Word 2010+ writes it: a wps:wsp shape inside mc:AlternateContent (Choice
+    /// Requires="wps"; readers that do not understand wps show nothing in its place).
+    /// </summary>
+    private static void WriteTextBoxRun(XmlWriter x, TextBox box, PartContext ctx)
+    {
+        const string Mc = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+        if (!double.IsFinite(box.WidthPt) || !double.IsFinite(box.HeightPt) || box.WidthPt < 0 || box.HeightPt < 0)
+            throw new ArgumentOutOfRangeException(nameof(box), "Text box size must be finite and not negative.");
+        var spec = new ImageSpec
+        {
+            Bytes = Array.Empty<byte>(), ContentType = "image/png", WidthPt = box.WidthPt, HeightPt = box.HeightPt,
+            Placement = box.Placement, Position = box.Placement == ImagePlacement.Floating ? box.Position ?? new FloatingPosition() : null,
+            Name = box.Name, AltText = box.AltText, RelativeWidth = box.RelativeWidth, RelativeHeight = box.RelativeHeight,
+        };
+        int id = ctx.NextDrawingId();
+        bool wp14 = DrawingXml.NeedsWp14(spec);
+        x.WriteStartElement("r", W);
+        x.WriteStartElement("mc", "AlternateContent", Mc);
+        x.WriteStartElement("mc", "Choice", Mc);
+        x.WriteAttributeString("xmlns", "wps", null, DrawingXml.Wps);
+        if (wp14) x.WriteAttributeString("xmlns", "wp14", null, DrawingXml.Wp14);
+        x.WriteAttributeString("Requires", wp14 ? "wps wp14" : "wps");
+        x.WriteStartElement("drawing", W);
+        DrawingXml.WriteDrawing(x, spec, null, id, null, wp14, (w, cx, cy, name) =>
+        {
+            w.WriteStartElement("a", "graphic", A);
+            w.WriteAttributeString("xmlns", "a", null, A);
+            w.WriteStartElement("a", "graphicData", A);
+            w.WriteAttributeString("uri", DrawingXml.Wps);
+            w.WriteStartElement("wps", "wsp", DrawingXml.Wps);
+            w.WriteStartElement("wps", "cNvSpPr", DrawingXml.Wps);
+            w.WriteAttributeString("txBox", "1");
+            w.WriteEndElement();
+            if (box.RawSpPrValid) StylesXml.WriteFragmentClean(w, box.RawSpPr!);
+            else
+            {
+            w.WriteStartElement("wps", "spPr", DrawingXml.Wps);
+            w.WriteStartElement("a", "xfrm", A);
+            if (!double.IsFinite(box.RotationDegrees)) throw new ArgumentOutOfRangeException(nameof(box), "Rotation must be finite.");
+            long rot = (long)Math.Round(((box.RotationDegrees % 360) + 360) % 360 * 60000);
+            if (rot != 0) w.WriteAttributeString("rot", rot.ToString(CultureInfo.InvariantCulture));
+            w.WriteStartElement("a", "off", A); w.WriteAttributeString("x", "0"); w.WriteAttributeString("y", "0"); w.WriteEndElement();
+            w.WriteStartElement("a", "ext", A);
+            w.WriteAttributeString("cx", cx.ToString(CultureInfo.InvariantCulture));
+            w.WriteAttributeString("cy", cy.ToString(CultureInfo.InvariantCulture));
+            w.WriteEndElement();
+            w.WriteEndElement(); // xfrm
+            w.WriteStartElement("a", "prstGeom", A);
+            w.WriteAttributeString("prst", "rect");
+            w.WriteStartElement("a", "avLst", A); w.WriteEndElement();
+            w.WriteEndElement();
+            void Solid(string hex)
+            {
+                var h = hex.TrimStart('#');
+                if (h.Length != 6 || !int.TryParse(h, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    throw new ArgumentException("Text box colours are RRGGBB.", nameof(box));
+                w.WriteStartElement("a", "solidFill", A);
+                w.WriteStartElement("a", "srgbClr", A);
+                w.WriteAttributeString("val", h.ToUpperInvariant());
+                w.WriteEndElement();
+                w.WriteEndElement();
+            }
+            if (box.FillHex is { } fill) Solid(fill);
+            else { w.WriteStartElement("a", "noFill", A); w.WriteEndElement(); }
+            w.WriteStartElement("a", "ln", A);
+            if (box.LineWidthPt is double lw)
+            {
+                if (!double.IsFinite(lw) || lw < 0 || lw > 1584) throw new ArgumentOutOfRangeException(nameof(box), "Outline width must be 0–1584pt.");
+                w.WriteAttributeString("w", ((long)Math.Round(lw * EmuPerPoint)).ToString(CultureInfo.InvariantCulture));
+            }
+            if (box.LineHex is { } line) Solid(line);
+            else { w.WriteStartElement("a", "noFill", A); w.WriteEndElement(); }
+            w.WriteEndElement(); // ln
+            w.WriteEndElement(); // spPr
+            }
+            if (box.RawStyle is { } style) StylesXml.WriteFragmentClean(w, style);
+            w.WriteStartElement("wps", "txbx", DrawingXml.Wps);
+            w.WriteStartElement("txbxContent", W);
+            ctx.TextBoxDepth++;
+            try
+            {
+                object? previous = null;
+                foreach (var block in box.Blocks)
+                {
+                    if (block is Paragraph bp) WriteParagraph(w, bp, ctx);
+                    else if (block is DocTable bt)
+                    {
+                        if (previous is DocTable) WriteEmptyParagraph(w);
+                        WriteTable(w, bt, ctx);
+                    }
+                    previous = block;
+                }
+                if (previous is null or DocTable) WriteEmptyParagraph(w);
+            }
+            finally { ctx.TextBoxDepth--; }
+            w.WriteEndElement(); // txbxContent
+            w.WriteEndElement(); // txbx
+            if (box.RawBodyPrValid) StylesXml.WriteFragmentClean(w, box.RawBodyPr!);
+            else
+            {
+            w.WriteStartElement("wps", "bodyPr", DrawingXml.Wps);
+            w.WriteAttributeString("rot", "0");
+            w.WriteAttributeString("vert", "horz");
+            w.WriteAttributeString("wrap", "square");
+            var ins = box.Insets ?? new ImageEffectExtent(7.2, 3.6, 7.2, 3.6);
+            string E(double pt)
+            {
+                if (!double.IsFinite(pt) || pt < 0 || pt > 1584) throw new ArgumentOutOfRangeException(nameof(box), "Insets must be 0–1584pt.");
+                return ((long)Math.Round(pt * EmuPerPoint)).ToString(CultureInfo.InvariantCulture);
+            }
+            w.WriteAttributeString("lIns", E(ins.LeftPt));
+            w.WriteAttributeString("tIns", E(ins.TopPt));
+            w.WriteAttributeString("rIns", E(ins.RightPt));
+            w.WriteAttributeString("bIns", E(ins.BottomPt));
+            w.WriteAttributeString("anchor", box.VerticalAnchor switch { TextBoxVerticalAnchor.Center => "ctr", TextBoxVerticalAnchor.Bottom => "b", _ => "t" });
+            w.WriteAttributeString("anchorCtr", "0");
+            w.WriteStartElement("a", box.AutoFit ? "spAutoFit" : "noAutofit", A);
+            w.WriteEndElement();
+            w.WriteEndElement(); // bodyPr
+            }
+            w.WriteEndElement(); // wsp
+            w.WriteEndElement(); // graphicData
+            w.WriteEndElement(); // graphic
+        });
+        x.WriteEndElement(); // drawing
+        x.WriteEndElement(); // Choice
+        x.WriteEndElement(); // AlternateContent
+        x.WriteEndElement(); // r
     }
 
     /// <summary>
@@ -540,6 +923,107 @@ internal static class DocumentSerializer
             if (b is Paragraph p) yield return p;
             else if (b is DocTable t) foreach (var tp in TableParagraphs(t, 0)) yield return tp;
         }
+    }
+
+    /// <summary>The instruction runs of a field: text as w:instrText, nested fields as complete fields with their cached result.</summary>
+    private static void WriteInstruction(XmlWriter x, Field field, Run run, int depth)
+    {
+        foreach (var part in field.InstructionParts)
+        {
+            if (part is string text)
+            {
+                if (text.Length == 0) continue;
+                x.WriteStartElement("r", W);
+                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                x.WriteStartElement("instrText", W);
+                x.WriteAttributeString("xml", "space", null, "preserve");
+                x.WriteString(text);
+                x.WriteEndElement();
+                x.WriteEndElement();
+            }
+            else if (part is Field nested && depth < 16)
+            {
+                void Char(string type, bool begin)
+                {
+                    x.WriteStartElement("r", W);
+                    RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                    x.WriteStartElement("fldChar", W);
+                    x.WriteAttributeString("fldCharType", W, type);
+                    if (begin)
+                    {
+                        if (nested.Locked) x.WriteAttributeString("fldLock", W, "1");
+                        if (nested.Dirty) x.WriteAttributeString("dirty", W, "1");
+                        foreach (var raw in nested.RawData) StylesXml.WriteFragmentClean(x, raw);
+                    }
+                    x.WriteEndElement();
+                    x.WriteEndElement();
+                }
+                Char("begin", true);
+                WriteInstruction(x, nested, run, depth + 1);
+                Char("separate", false);
+                if (!string.IsNullOrEmpty(nested.CachedResult))
+                {
+                    x.WriteStartElement("r", W);
+                    RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                    WriteText(x, nested.CachedResult);
+                    x.WriteEndElement();
+                }
+                Char("end", false);
+            }
+        }
+    }
+
+    // ---- Notes -------------------------------------------------------------------------
+
+    private static void WriteNotes(XmlWriter x, NoteCollection notes, PartContext ctx)
+    {
+        bool foot = notes.Kind == NoteKind.Footnote;
+        string element = foot ? "footnote" : "endnote";
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("w", foot ? "footnotes" : "endnotes", W);
+        x.WriteAttributeString("xmlns", "r", null, R);
+        if (notes.SelectMany(n => n.Blocks).OfType<Paragraph>().Any(p => p.Runs.Any(r => r.Image is { } im && DrawingXml.NeedsWp14(im)))) DeclareWp14(x);
+        // Word's separators: the line above notes, and the line when notes continue on the next page.
+        foreach (var (type, id, mark) in new[] { ("separator", "-1", "separator"), ("continuationSeparator", "0", "continuationSeparator") })
+        {
+            x.WriteStartElement(element, W);
+            x.WriteAttributeString("type", W, type);
+            x.WriteAttributeString("id", W, id);
+            x.WriteStartElement("p", W);
+            x.WriteStartElement("pPr", W);
+            x.WriteStartElement("spacing", W);
+            x.WriteAttributeString("after", W, "0");
+            x.WriteAttributeString("line", W, "240");
+            x.WriteAttributeString("lineRule", W, "auto");
+            x.WriteEndElement();
+            x.WriteEndElement();
+            x.WriteStartElement("r", W);
+            x.WriteStartElement(mark, W);
+            x.WriteEndElement();
+            x.WriteEndElement();
+            x.WriteEndElement();
+            x.WriteEndElement();
+        }
+        foreach (var note in notes)
+        {
+            x.WriteStartElement(element, W);
+            x.WriteAttributeString("id", W, ctx.State.NoteIds[note].ToString(CultureInfo.InvariantCulture));
+            object? previous = null;
+            foreach (var block in note.Blocks)
+            {
+                if (block is Paragraph np) WriteParagraph(x, np, ctx);
+                else if (block is DocTable nt)
+                {
+                    if (previous is DocTable) WriteEmptyParagraph(x);
+                    WriteTable(x, nt, ctx);
+                }
+                previous = block;
+            }
+            if (previous is null or DocTable) WriteEmptyParagraph(x); // a note ends with a paragraph
+            x.WriteEndElement();
+        }
+        x.WriteEndElement();
+        x.WriteEndDocument();
     }
 
     // ---- Watermark ---------------------------------------------------------------------
@@ -657,7 +1141,10 @@ internal static class DocumentSerializer
         x.WriteStartDocument(standalone: true);
         x.WriteStartElement("w", "settings", W);
 
-        // CT_Settings order: … mirrorMargins, …, gutterAtTop, …, documentProtection, …, defaultTabStop, …, evenAndOddHeaders …
+        // CT_Settings order: … embedTrueTypeFonts, saveSubsetFonts, mirrorMargins, …, gutterAtTop, …, documentProtection, …,
+        // defaultTabStop, …, evenAndOddHeaders, …, updateFields, footnotePr, endnotePr …
+        if (doc.EmbedTrueTypeFonts) { x.WriteStartElement("embedTrueTypeFonts", W); x.WriteEndElement(); }
+        if (doc.SaveSubsetFonts) { x.WriteStartElement("saveSubsetFonts", W); x.WriteEndElement(); }
         if (doc.MirrorMargins) { x.WriteStartElement("mirrorMargins", W); x.WriteEndElement(); }
         if (doc.GutterAtTop) { x.WriteStartElement("gutterAtTop", W); x.WriteEndElement(); }
 
@@ -698,13 +1185,31 @@ internal static class DocumentSerializer
 
         if (doc.EffectiveOddAndEven) { x.WriteStartElement("evenAndOddHeaders", W); x.WriteEndElement(); }
 
+        if (doc.UpdateFieldsOnOpen) { x.WriteStartElement("updateFields", W); x.WriteAttributeString("val", W, "true"); x.WriteEndElement(); }
+
+        // Document-wide note properties; with notes, the separator references Word expects.
+        foreach (var (kind, props, count) in new[] { (NoteKind.Footnote, doc.FootnoteProperties, doc.Footnotes.Count), (NoteKind.Endnote, doc.EndnoteProperties, doc.Endnotes.Count) })
+        {
+            string element = kind == NoteKind.Footnote ? "footnote" : "endnote";
+            Action<XmlWriter>? separators = count == 0 ? null : w =>
+            {
+                foreach (var id in new[] { "-1", "0" })
+                {
+                    w.WriteStartElement(element, W);
+                    w.WriteAttributeString("id", W, id);
+                    w.WriteEndElement();
+                }
+            };
+            NotesXml.Write(x, kind, props, separators);
+        }
+
         x.WriteEndElement();
         x.WriteEndDocument();
     }
 
     // ---- docProps ----------------------------------------------------------------------------
 
-    private static void WriteCoreProps(OoxmlPackage pkg)
+    private static void WriteCoreProps(OoxmlPackage pkg, DocumentProperties props)
     {
         const string cp = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
         const string dc = "http://purl.org/dc/elements/1.1/";
@@ -718,32 +1223,105 @@ internal static class DocumentSerializer
         x.WriteAttributeString("xmlns", "dc", null, dc);
         x.WriteAttributeString("xmlns", "dcterms", null, dcterms);
         x.WriteAttributeString("xmlns", "xsi", null, xsi);
-        x.WriteStartElement("creator", dc);
-        x.WriteString("Chuvadi.Docs");
-        x.WriteEndElement();
-        var now = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
-        x.WriteStartElement("dcterms", "created", dcterms);
-        x.WriteAttributeString("xsi", "type", xsi, "dcterms:W3CDTF");
-        x.WriteString(now);
-        x.WriteEndElement();
-        x.WriteStartElement("dcterms", "modified", dcterms);
-        x.WriteAttributeString("xsi", "type", xsi, "dcterms:W3CDTF");
-        x.WriteString(now);
-        x.WriteEndElement();
+        void Text(string prefix, string ns, string name, string? value)
+        {
+            if (value is null) return;
+            x.WriteStartElement(prefix, name, ns);
+            x.WriteString(value);
+            x.WriteEndElement();
+        }
+        void Date(string prefix, string ns, string name, DateTime value, bool typed)
+        {
+            x.WriteStartElement(prefix, name, ns);
+            if (typed) x.WriteAttributeString("xsi", "type", xsi, "dcterms:W3CDTF");
+            x.WriteString(Utc(value).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+            x.WriteEndElement();
+        }
+        Text("dc", dc, "title", props.Title);
+        Text("dc", dc, "subject", props.Subject);
+        Text("dc", dc, "creator", props.Author ?? "Chuvadi.Docs");
+        Text("cp", cp, "keywords", props.Keywords);
+        Text("dc", dc, "description", props.Description);
+        Text("cp", cp, "lastModifiedBy", props.LastModifiedBy);
+        Text("cp", cp, "revision", props.Revision);
+        if (props.LastPrinted is DateTime printed) Date("cp", cp, "lastPrinted", printed, false);
+        var now = DateTime.UtcNow;
+        Date("dcterms", dcterms, "created", props.Created ?? now, true);
+        // A loaded document's modified date, unchanged since loading, becomes the time of this save (as Word does).
+        Date("dcterms", dcterms, "modified", props.Modified is { } mod && mod != props.LoadedModified ? mod : now, true);
+        Text("cp", cp, "category", props.Category);
+        Text("cp", cp, "contentStatus", props.ContentStatus);
+        Text("dc", dc, "language", props.Language);
+        Text("dc", dc, "identifier", props.Identifier);
+        Text("cp", cp, "version", props.Version);
         x.WriteEndElement();
         x.WriteEndDocument();
     }
 
-    private static void WriteAppProps(OoxmlPackage pkg)
+    private static void WriteAppProps(OoxmlPackage pkg, DocumentProperties props)
     {
         const string ep = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
         using var s = pkg.CreatePart("/docProps/app.xml", CtApp);
         using var x = CreateXml(s);
         x.WriteStartDocument(standalone: true);
         x.WriteStartElement("Properties", ep);
-        x.WriteStartElement("Application", ep);
-        x.WriteString("Chuvadi.Docs");
+        void Text(string name, string? value)
+        {
+            if (value is null) return;
+            x.WriteStartElement(name, ep);
+            x.WriteString(value);
+            x.WriteEndElement();
+        }
+        Text("Template", props.Template);
+        Text("Application", "Chuvadi.Docs");
+        Text("Manager", props.Manager);
+        Text("Company", props.Company);
+        Text("HyperlinkBase", props.HyperlinkBase);
         x.WriteEndElement();
+        x.WriteEndDocument();
+    }
+
+    /// <summary>UTC for writing: an Unspecified date is taken as already UTC (no shift by the local offset).</summary>
+    private static DateTime Utc(DateTime value)
+        => value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : value.ToUniversalTime();
+
+    private static void WriteCustomProps(OoxmlPackage pkg, DocumentProperties props)
+    {
+        const string cust = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
+        const string vt = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
+        using var s = pkg.CreatePart("/docProps/custom.xml", CtCustom);
+        using var x = CreateXml(s);
+        x.WriteStartDocument(standalone: true);
+        x.WriteStartElement("Properties", cust);
+        x.WriteAttributeString("xmlns", "vt", null, vt);
+        int pid = 2; // 0 and 1 are reserved
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in props.Custom)
+        {
+            if (string.IsNullOrWhiteSpace(name) || value is null || !seen.Add(name)) continue; // first of duplicate names wins
+            x.WriteStartElement("property", cust);
+            x.WriteAttributeString("fmtid", "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}");
+            x.WriteAttributeString("pid", (pid++).ToString(CultureInfo.InvariantCulture));
+            x.WriteAttributeString("name", name);
+            var (type, text) = value switch
+            {
+                bool b => ("bool", b ? "true" : "false"),
+                int i => ("i4", i.ToString(CultureInfo.InvariantCulture)),
+                short or byte or sbyte or ushort => ("i4", Convert.ToString(value, CultureInfo.InvariantCulture)!),
+                uint u => ("ui4", u.ToString(CultureInfo.InvariantCulture)),
+                long l => ("i8", l.ToString(CultureInfo.InvariantCulture)),
+                ulong ul => ("ui8", ul.ToString(CultureInfo.InvariantCulture)),
+                double d => ("r8", d.ToString("R", CultureInfo.InvariantCulture)),
+                float f => ("r8", ((double)f).ToString("R", CultureInfo.InvariantCulture)),
+                decimal m => ("decimal", m.ToString(CultureInfo.InvariantCulture)),
+                DateTime dt => ("filetime", Utc(dt).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)),
+                _ => ("lpwstr", Convert.ToString(value, CultureInfo.InvariantCulture) ?? ""),
+            };
+            x.WriteStartElement("vt", type, vt);
+            x.WriteString(text);
+            x.WriteEndElement();
+            x.WriteEndElement();
+        }
         x.WriteEndElement();
         x.WriteEndDocument();
     }
@@ -753,6 +1331,40 @@ internal static class DocumentSerializer
     /// <summary>Every paragraph in the document: body, table cells and headers/footers.</summary>
     /// <summary>Every paragraph: body (tables and nested tables included, in order), then headers and footers.</summary>
     internal static IEnumerable<Paragraph> AllParagraphs(Document doc)
+    {
+        var seenBoxes = new HashSet<TextBox>(ReferenceEqualityComparer.Instance);
+        foreach (var p in AllParagraphsCore(doc))
+        {
+            yield return p;
+            foreach (var inner in TextBoxParagraphs(p, 0, seenBoxes)) yield return inner;
+        }
+    }
+
+    /// <summary>Paragraphs inside the text boxes of <paramref name="p"/> (and of tables in them), each box once, depth-guarded.</summary>
+    internal static IEnumerable<Paragraph> TextBoxParagraphs(Paragraph p, int depth, HashSet<TextBox> seen)
+    {
+        if (depth > 8) yield break;
+        foreach (var r in p.Runs)
+        {
+            if (r.TextBox is not { } box || !seen.Add(box)) continue;
+            foreach (var b in box.Blocks)
+            {
+                if (b is Paragraph bp)
+                {
+                    yield return bp;
+                    foreach (var inner in TextBoxParagraphs(bp, depth + 1, seen)) yield return inner;
+                }
+                else if (b is DocTable bt)
+                    foreach (var tp in TableParagraphs(bt, 0))
+                    {
+                        yield return tp;
+                        foreach (var inner in TextBoxParagraphs(tp, depth + 1, seen)) yield return inner;
+                    }
+            }
+        }
+    }
+
+    private static IEnumerable<Paragraph> AllParagraphsCore(Document doc)
     {
         foreach (var block in doc.Blocks)
         {
@@ -767,6 +1379,14 @@ internal static class DocumentSerializer
                 else if (b is DocTable ht)
                     foreach (var tp in TableParagraphs(ht, 0)) yield return tp;
             }
+        foreach (var notes in new[] { doc.Footnotes, doc.Endnotes })
+            foreach (var note in notes)
+                foreach (var b in note.Blocks)
+                {
+                    if (b is Paragraph np) yield return np;
+                    else if (b is DocTable nt)
+                        foreach (var tp in TableParagraphs(nt, 0)) yield return tp;
+                }
     }
 
     /// <summary>Every distinct header/footer of every section.</summary>

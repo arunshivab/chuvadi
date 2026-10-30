@@ -22,6 +22,7 @@ internal static class DrawingXml
     private const long Emu = DocumentSerializer.EmuPerPoint;
 
     internal const string Wp14 = "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing";
+    internal const string Wps = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
     private const string Mc = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
     // =====================================================================================
@@ -69,7 +70,8 @@ internal static class DrawingXml
         => image.Placement == ImagePlacement.Floating && image.Position is { } p
            && (p.HorizontalOffsetPercent is not null || p.VerticalOffsetPercent is not null || image.RelativeWidth is not null || image.RelativeHeight is not null);
 
-    public static void WriteDrawing(XmlWriter x, ImageSpec image, string? relId, int docPrId, string? linkRelId = null, bool wp14 = false)
+    public static void WriteDrawing(XmlWriter x, ImageSpec image, string? relId, int docPrId, string? linkRelId = null, bool wp14 = false,
+        Action<XmlWriter, long, long, string>? graphic = null)
     {
         if (!double.IsFinite(image.WidthPt) || !double.IsFinite(image.HeightPt) || image.WidthPt < 0 || image.HeightPt < 0)
             throw new ArgumentOutOfRangeException(nameof(image), "Image size must be finite and not negative.");
@@ -113,8 +115,8 @@ internal static class DrawingXml
             EffectExtent(x, image.EffectExtent);
             WriteWrap(x, pos);
             DocPr(x, image, docPrId, name);
-            FrameLocks(x);
-            Graphic(x, image, cx, cy, name, relId, linkRelId);
+            if (graphic is null) { FrameLocks(x); Graphic(x, image, cx, cy, name, relId, linkRelId); }
+            else { x.WriteStartElement("wp", "cNvGraphicFramePr", WP); x.WriteEndElement(); graphic(x, cx, cy, name); }
             if (wp14)
             {
                 if (image.RelativeWidth is { } rw) SizeRel(x, "sizeRelH", "pctWidth", rw);
@@ -133,8 +135,8 @@ internal static class DrawingXml
             Extent(x, cx, cy);
             EffectExtent(x, image.EffectExtent);
             DocPr(x, image, docPrId, name);
-            FrameLocks(x);
-            Graphic(x, image, cx, cy, name, relId, linkRelId);
+            if (graphic is null) { FrameLocks(x); Graphic(x, image, cx, cy, name, relId, linkRelId); }
+            else { x.WriteStartElement("wp", "cNvGraphicFramePr", WP); x.WriteEndElement(); graphic(x, cx, cy, name); }
             x.WriteEndElement(); // inline
         }
     }
@@ -337,6 +339,8 @@ internal static class DrawingXml
         public bool IsPicture;
         /// <summary>Text inside the drawing (text boxes in shapes), for drawings that are not pictures.</summary>
         public string Text = "";
+        /// <summary>A top-level text box shape (wps:wsp with wps:txbx), with its content read through the callback.</summary>
+        public TextBox? TextBox;
 
         public ImageSpec ToImage(byte[] bytes, string contentType, string? linkUrl = null) => new()
         {
@@ -354,7 +358,7 @@ internal static class DrawingXml
     /// shapes, charts, SmartArt, text boxes and groups; their text is in <see cref="Picture.Text"/>.
     /// Malformed content inside property elements is tolerated (the property is ignored).
     /// </summary>
-    public static Picture Read(XmlReader r)
+    public static Picture Read(XmlReader r, Action<XmlReader, TextBox>? textBoxContent = null)
     {
         var p = new Picture { Placement = r.LocalName == "anchor" ? ImagePlacement.Floating : ImagePlacement.Inline };
         FloatingPosition? pos = null;
@@ -383,7 +387,10 @@ internal static class DrawingXml
 
         // Depths inside the subtree: 0 = anchor/inline, 1 = its children (extent, docPr, wrap…),
         // 2 = a:graphicData, 3 = pic:pic, 4 = blipFill / spPr, 5 = blip, srcRect, xfrm.
-        bool isPicture = false, inTopPic = false;
+        bool isPicture = false, inTopPic = false, isShape = false, inSpPr = false, inLn = false, inFill = false;
+        TextBox? box = null;
+        string? fill = null, line = null;
+        bool noFill = false, noLine = false, sawFill = false, sawLine = false, sawTxbx = false;
         var text = new System.Text.StringBuilder();
         using var sub = r.ReadSubtree();
         sub.Read();
@@ -474,6 +481,37 @@ internal static class DrawingXml
             else if (sub.NamespaceURI == A && depth == 2 && sub.LocalName == "graphicData")
             {
                 isPicture = sub.GetAttribute("uri") == PIC;
+                isShape = sub.GetAttribute("uri") == Wps;
+            }
+            else if (isShape && depth == 3 && !(sub.NamespaceURI == Wps && sub.LocalName == "wsp"))
+            {
+                isShape = false; // not a single shape (e.g. a group)
+            }
+            else if (isShape && depth == 4 && sub.NamespaceURI == Wps && sub.LocalName is "spPr" or "style" or "bodyPr")
+            {
+                // Kept verbatim (theme colours, gradients, presets, effects…) and parsed for the modelled values.
+                var partName = sub.LocalName;
+                var raw = sub.ReadOuterXml();
+                advance = false;
+                box ??= new TextBox();
+                if (partName == "spPr") box.RawSpPr = raw;
+                else if (partName == "style") box.RawStyle = raw;
+                else box.RawBodyPr = raw;
+                if (partName != "style")
+                {
+                    try
+                    {
+                        using var fr = XmlReader.Create(new System.IO.StringReader(raw), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+                        while (fr.Read())
+                            if (fr.NodeType == XmlNodeType.Element) ReadShapePart(fr, fr.Depth + 4);
+                    }
+                    catch (XmlException) { }
+                }
+                continue;
+            }
+            else if (isShape && depth >= 4)
+            {
+                ReadShapePart(sub, depth);
             }
             else if (isPicture && depth == 3 && sub.NamespaceURI == PIC && sub.LocalName == "pic")
             {
@@ -510,7 +548,76 @@ internal static class DrawingXml
         p.IsPicture = isPicture && (!string.IsNullOrEmpty(p.EmbedRelId) || !string.IsNullOrEmpty(p.LinkRelId));
         // "Picture N" is the default name (Word's and the writer's): keep it automatic so ids renumber cleanly.
         if (p.Name is not null && p.Name.StartsWith("Picture ", StringComparison.Ordinal) && int.TryParse(p.Name.AsSpan(8), out _)) p.Name = null;
+        if (box is not null && isShape && sawTxbx)
+        {
+            box.Placement = p.Placement;
+            box.Position = p.Position;
+            box.WidthPt = p.WidthPt;
+            box.HeightPt = p.HeightPt;
+            box.RelativeWidth = p.RelativeWidth;
+            box.RelativeHeight = p.RelativeHeight;
+            box.Name = p.Name;
+            box.AltText = p.AltText;
+            box.FillHex = noFill || !sawFill ? null : fill;
+            box.LineHex = noLine || !sawLine ? null : line ?? "000000";
+            box.RotationDegrees = p.RotationDegrees;
+            box.CaptureRawSnapshot();
+            p.TextBox = box;
+        }
         return p;
+
+        // Text-box shape parts below wps:wsp (depth 3): spPr (fill, line, rotation), txbx content, bodyPr.
+        void ReadShapePart(XmlReader x, int d)
+        {
+            if (d == 4) { inSpPr = x.NamespaceURI == Wps && x.LocalName == "spPr"; inLn = false; inFill = false; }
+            if (d == 4 && x.NamespaceURI == Wps && x.LocalName == "bodyPr")
+            {
+                box ??= new TextBox();
+                double? Ins(string n) => long.TryParse(x.GetAttribute(n), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) && v >= 0 && v <= 50_000_000 ? v / (double)Emu : null;
+                var (l, t, rr, b) = (Ins("lIns"), Ins("tIns"), Ins("rIns"), Ins("bIns"));
+                if (l is not null || t is not null || rr is not null || b is not null)
+                    box.Insets = new ImageEffectExtent(l ?? 7.2, t ?? 3.6, rr ?? 7.2, b ?? 3.6);
+                box.VerticalAnchor = x.GetAttribute("anchor") switch { "ctr" => TextBoxVerticalAnchor.Center, "b" => TextBoxVerticalAnchor.Bottom, "t" => TextBoxVerticalAnchor.Top, _ => null };
+                if (!x.IsEmptyElement)
+                    using (var bp = x.ReadSubtree())
+                        while (bp.Read())
+                            if (bp.NodeType == XmlNodeType.Element && bp.NamespaceURI == A && bp.LocalName == "spAutoFit") box.AutoFit = true;
+                return;
+            }
+            if (d == 5 && x.NamespaceURI == W && x.LocalName == "txbxContent")
+            {
+                box ??= new TextBox();
+                sawTxbx = true;
+                if (textBoxContent is not null && !x.IsEmptyElement)
+                    using (var tc = x.ReadSubtree()) textBoxContent(tc, box);
+                return;
+            }
+            if (!inSpPr || x.NamespaceURI != A) return;
+            if (d == 5)
+            {
+                inLn = x.LocalName == "ln";
+                inFill = x.LocalName == "solidFill";
+                switch (x.LocalName)
+                {
+                    case "xfrm":
+                        if (long.TryParse(x.GetAttribute("rot"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var rot)) p.RotationDegrees = (rot % 21_600_000) / 60000.0;
+                        break;
+                    case "noFill": noFill = true; sawFill = true; break;
+                    case "solidFill": sawFill = true; break;
+                    case "ln":
+                        sawLine = true;
+                        if (long.TryParse(x.GetAttribute("w"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var lw) && lw >= 0 && lw <= 20_116_800)
+                            (box ??= new TextBox()).LineWidthPt = lw / (double)Emu;
+                        break;
+                }
+            }
+            else if (d == 6 && inFill && x.LocalName == "srgbClr") fill = Hex(x.GetAttribute("val"));
+            else if (d == 6 && inLn && x.LocalName == "noFill") noLine = true;
+            else if (d == 7 && inLn && x.LocalName == "srgbClr") line = Hex(x.GetAttribute("val"));
+        }
+
+        static string? Hex(string? v) => v is { Length: 6 } && int.TryParse(v, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _) ? v.ToUpperInvariant() : null;
+
     }
 
     private static void ReadPolygon(XmlReader wr, FloatingPosition pos)

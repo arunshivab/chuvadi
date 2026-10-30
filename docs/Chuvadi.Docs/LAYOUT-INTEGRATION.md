@@ -1,6 +1,6 @@
 # Chuvadi.Docs — integration guide for a paginator (Chuvadi.Layout)
 
-This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.5.0** (exact image anchoring, plus the loader additions Layout asked for: hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Word` namespace.
+This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.6.0** (Phase 8: fields, footnotes/endnotes, bookmarks, text boxes, floating tables, embedded fonts; earlier: exact image anchoring, hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Word` namespace.
 
 ## 1. Load
 
@@ -44,6 +44,11 @@ Each `Run` is one `w:r`:
 - `Paragraph.PageBreakBefore` means a page break before the paragraph.
 - U+2011 is a non-breaking hyphen and U+00AD a soft hyphen.
 - `Run.HyperlinkUrl` is the target of an external link (`w:hyperlink` → its relationship; a `w:anchor` is appended as `#fragment`). Loaded links carry exactly the style the file gave them — use `GetEffectiveRunFormat`, which adds no Hyperlink style to a loaded link (a link added in code with `Paragraph.Hyperlink` does get it).
+- Zero-width marker runs (`Run.IsMarker`): `Run.Bookmark` (bookmark ends) and `Run.FieldMark` (field begin / separate / end). Skip them when measuring.
+- `Run.NoteReference`: a footnote/endnote reference (draw its label from `doc.GetNoteReferences()`, superscript via the reference style); `Run.IsNoteMark`: the note's own number at the start of a note.
+- `Run.Symbol`: a symbol character — draw `Symbol.Code` in `Symbol.Font` (`TextContent` holds the code).
+- `Run.TextBox`: a text box (see section 7a).
+- `Run.HyperlinkAnchor`: an internal link to a bookmark (`doc.GetBookmarks()`).
 - `Run.PositionalTab` (`w:ptab`, `TextContent` "\t"): advance to `Alignment` (left / center / right) of the margin area or the indent area (`RelativeTo`), ignoring tab stops, filling with `Leader`. It is not an ordinary tab (`Run.IsTab` is false).
 
 ## 5. List numbering
@@ -102,21 +107,34 @@ foreach (var placed in doc.GetImagePlacements())   // body (tables, nested table
 
 Drawings that are not pictures (charts, SmartArt, shapes, groups, text boxes) are not image runs; their text is flattened into the paragraph. VML pictures from Word 2003-era files load as text only. Pictures in footnotes come with Phase 8. `doc.Images` (`ImageInfo`) is a separate streaming listing (`DocxReader.Images()`). It counts differently: it also lists the first picture inside groups and text boxes. Use the image runs for layout.
 
+## 7a. Text boxes
+
+`Run.TextBox` (`TextBox`) sits in its paragraph like a picture: `Placement` inline (a glyph of `WidthPt` × `HeightPt`) or floating with `Position` (the same `FloatingPosition` rules as pictures; `RelativeWidth` / `RelativeHeight` win when set). Lay out `TextBox.Blocks` (paragraphs and tables, with the same effective-format APIs) inside the box minus `Insets` (null = 7.2 / 3.6 pt), aligned by `VerticalAnchor`; `AutoFit` means the box grows with its text. Draw `FillHex` / `LineHex` / `LineWidthPt` (null = none / 0.75pt), rotated by `RotationDegrees`. Pictures inside text boxes come from `GetImagePlacements()` with `PlacedImage.TextBox` set. Other shapes (not text boxes) still load as their text only.
+
+## 7b. Floating tables
+
+`doc.GetEffectiveTableFormat(table).FloatingPosition` (`TableFloatingPosition`) non-null means the table floats: `HorizontalAnchor` / `VerticalAnchor` (text = the column / the paragraph, margin, page; null = ECMA defaults), `XAlign` / `YAlign` win over `XPt` / `YPt`, and text keeps `Left/Right/Top/BottomFromTextPt` away. `AllowOverlap == false` keeps floating tables apart.
+
+## 7c. Fonts
+
+`doc.Fonts` lists the font table: `Name`, `AltName`, `Panose`, `Charset`, `Family`, `Pitch`, `Signature` for substitution, and `Embedded` font files (`EmbeddedFont.Data` is a plain TrueType/OpenType file per `Style`: regular, bold, italic, bold italic). Load embedded fonts before falling back to substitutes.
+
 ## 8. Fields
 
 | Field | How it appears |
 |---|---|
 | `PAGE`, `NUMPAGES`, `SECTIONPAGES` | A `Run` with `FieldInstruction` set (e.g. `" PAGE "`) and the cached value as `TextContent`. Replace the cached value with the real page number at layout time, formatted with the section's `PageNumbering.Format`. |
-| Every other field (DATE, REF, TOC …) | Its cached result text, as ordinary runs, until Phase 8 (fields and notes) models fields |
+| Every other field (DATE, REF, PAGEREF, TOC, SEQ …) | Marker runs: `FieldMark` Begin (with `Field.Instruction`, `FieldType`, `Argument`), Separate, End; the cached result is ordinary runs between Separate and End, possibly over several paragraphs (a TOC). Lay out the cached result; to show live page numbers, replace the result of `PAGEREF bookmark` with the page where that bookmark's start (from `doc.GetBookmarks()` markers) lands. |
+
+## 8a. Footnotes and endnotes
+
+`doc.GetNoteReferences()` lists every reference in the body in order with its `Note`, `Number`, `Label` (in the note number format; a custom mark as text) and `Section`. Footnotes go at the bottom of the page holding their reference (`NoteProperties.Position`: page bottom or beneath text), separated by a short rule; endnotes at the end of the section or document. Effective note properties: `section.FootnoteProperties` over `doc.FootnoteProperties` (same for endnotes). When `RestartsEachPage` is true, renumber per page yourself. Lay out `note.Blocks` with the usual effective-format APIs (style "FootnoteText"); a note's first run is normally `IsNoteMark` (draw the same label).
 
 ## 9. Not yet available
 
 | Not available | Comes with |
 |---|---|
-| Footnotes/endnotes | Phase 8 |
-| Bookmarks and internal links (`w:hyperlink` with only `w:anchor`) | Phase 8 |
 | Comments and tracked changes | Phase 9 |
 | Content-control boundaries | the sdt content is loaded; the control itself is not kept |
-| Text boxes and shapes | text is flattened into the paragraph; geometry is not kept |
-| Floating tables | positioning is carried but not exposed |
+| Shapes other than text boxes, groups, charts, SmartArt, VML text boxes | their text is flattened into the paragraph; geometry is not kept |
 | Paragraph frames (`w:framePr`) | not modelled |

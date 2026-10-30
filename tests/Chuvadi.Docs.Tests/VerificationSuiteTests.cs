@@ -39,6 +39,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_Templates() => TemplatesTests.Run(FreshOutDir());
     [Fact] public void Suite_TemplateFixes() => TemplateFixesTests.Run(FreshOutDir());
     [Fact] public void Suite_LoaderHandoff() => LoaderHandoffTests.Run(FreshOutDir());
+    [Fact] public void Suite_FieldsNotes() => FieldsNotesTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 

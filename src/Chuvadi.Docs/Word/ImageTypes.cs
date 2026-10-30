@@ -299,6 +299,10 @@ public enum ImageHost
     Body,
     Header,
     Footer,
+    /// <summary>Inside a footnote (<see cref="PlacedImage.Note"/>).</summary>
+    Footnote,
+    /// <summary>Inside an endnote (<see cref="PlacedImage.Note"/>).</summary>
+    Endnote,
 }
 
 /// <summary>
@@ -315,4 +319,11 @@ public enum ImageHost
 /// <param name="HeaderFooter">For headers/footers: the header/footer content object; null in the body.</param>
 /// <param name="Cell">The innermost table cell holding the paragraph, or null.</param>
 public sealed record PlacedImage(ImageSpec Image, Paragraph Paragraph, Run Run, int RunIndex, ImageHost Host, Section Section,
-    HeaderFooterContent? HeaderFooter, TableCellRef? Cell);
+    HeaderFooterContent? HeaderFooter, TableCellRef? Cell)
+{
+    /// <summary>The footnote or endnote holding the picture (hosts <see cref="ImageHost.Footnote"/> / <see cref="ImageHost.Endnote"/>), else null.</summary>
+    public Note? Note { get; init; }
+
+    /// <summary>The text box holding the picture (inside a text box's paragraphs), else null.</summary>
+    public TextBox? TextBox { get; init; }
+}

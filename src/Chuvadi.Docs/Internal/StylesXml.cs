@@ -390,6 +390,55 @@ internal static class StylesXml
         x.WriteNode(r, defattr: true);
     }
 
+    /// <summary>
+    /// Writes a raw fragment node by node, dropping namespace declarations the output already has in
+    /// scope (a fragment captured with ReadOuterXml repeats them on every element).
+    /// </summary>
+    internal static void WriteFragmentClean(XmlWriter x, string xml)
+    {
+        using var r = Reparse(xml);
+        r.MoveToContent();
+        int start = r.Depth;
+        bool first = true;
+        while (first || r.Read())
+        {
+            first = false;
+            switch (r.NodeType)
+            {
+                case XmlNodeType.Element:
+                {
+                    bool empty = r.IsEmptyElement;
+                    x.WriteStartElement(r.Prefix, r.LocalName, r.NamespaceURI);
+                    if (r.MoveToFirstAttribute())
+                    {
+                        do
+                        {
+                            bool isDecl = r.Prefix == "xmlns" || (r.Prefix.Length == 0 && r.LocalName == "xmlns");
+                            if (isDecl && x.LookupPrefix(r.Value) == (r.Prefix == "xmlns" ? r.LocalName : "")) continue;
+                            x.WriteAttributeString(r.Prefix, r.LocalName, r.NamespaceURI, r.Value);
+                        }
+                        while (r.MoveToNextAttribute());
+                        r.MoveToElement();
+                    }
+                    if (empty)
+                    {
+                        x.WriteEndElement();
+                        if (r.Depth == start) return;
+                    }
+                    break;
+                }
+                case XmlNodeType.EndElement:
+                    x.WriteEndElement();
+                    if (r.Depth == start) return;
+                    break;
+                case XmlNodeType.Text: x.WriteString(r.Value); break;
+                case XmlNodeType.SignificantWhitespace:
+                case XmlNodeType.Whitespace: x.WriteWhitespace(r.Value); break;
+                case XmlNodeType.CDATA: x.WriteCData(r.Value); break;
+            }
+        }
+    }
+
     private static string? Attr(XmlReader r) => r.GetAttribute("val", W);
 
     private static bool IsOn(string? v) => v is "1" or "true" or "on";

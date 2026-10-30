@@ -250,14 +250,17 @@ public static class ImagesModelTests
             AssertContains(xml, "<wp14:pctWidth>40000</wp14:pctWidth>", "relative size");
             AssertTrue(Document.Load(outPath).GetImagePlacements().Count == 1, "one picture after round-trip");
         });
-        Check("a text box holding a picture keeps its text and is not mistaken for a picture", () =>
+        Check("a text box holding a picture keeps its text (in the text box) and is not mistaken for a picture", () =>
         {
             const string Wps = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
             var inner = "<w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"381000\" cy=\"285750\"/><wp:docPr id=\"9\" name=\"in\"/>" + PicGraphic("r:embed=\"rIdPic\"") + "</wp:inline></w:drawing>";
             var shape = "<a:graphic><a:graphicData uri=\"" + Wps + "\"><wps:wsp xmlns:wps=\"" + Wps + "\"><wps:txbx><w:txbxContent><w:p><w:r><w:t>Box text</w:t></w:r><w:r>" + inner + "</w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic>";
             var path = Inject(outDir, "img-textbox.docx", "<w:p><w:r><w:drawing>" + AnchorXml("<wp:positionH relativeFrom=\"column\"><wp:posOffset>0</wp:posOffset></wp:positionH>", graphic: shape, extent: "cx=\"2743200\" cy=\"914400\"") + "</w:drawing></w:r></w:p>");
             var p = (Paragraph)Document.Load(path).Blocks[0];
-            AssertTrue(p.GetText() == "Box text" && !p.Runs.Any(r => r.Image is not null), $"text '{p.GetText()}'");
+            // Since Phase 8 the text box is modelled: its paragraphs (with the picture inside) live in Run.TextBox.
+            var box = p.Runs.Single(r => r.TextBox is not null).TextBox!;
+            AssertTrue(box.GetText() == "Box text" && !p.Runs.Any(r => r.Image is not null), $"text '{box.GetText()}'");
+            AssertTrue(box.Paragraphs[0].Runs.Any(r => r.Image is not null), "the picture stays inside the box");
         });
         Check("linked pictures, opaque media formats, behindDoc with square wrap, negative sizes and stray elements in posOffset", () =>
         {

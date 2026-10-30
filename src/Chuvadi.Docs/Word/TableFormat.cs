@@ -54,15 +54,18 @@ public sealed class TableFormat
     /// <summary>Accessibility description of the table (w:tblDescription).</summary>
     public string? Description { get; set; }
 
-    /// <summary>Floating-table positioning (w:tblpPr/w:tblOverlap) carried verbatim from a loaded file.</summary>
-    internal System.Collections.Generic.List<string> RawPositioningXml { get; } = new();
+    /// <summary>Floating-table positioning (w:tblpPr): the table floats with text wrapping around it. Null = an inline table.</summary>
+    public TableFloatingPosition? FloatingPosition { get; set; }
+
+    /// <summary>Whether a floating table may overlap other floating tables (w:tblOverlap); null = not stated (Word allows it).</summary>
+    public bool? AllowOverlap { get; set; }
 
     /// <summary>True when nothing is set.</summary>
     internal bool IsDefault =>
         StyleId is null && Look is null && Width is null && Alignment is null && IndentPt is null && Layout is null
         && Borders is null && CellMargins is null && CellSpacingPt is null && Shading is null && RightToLeft is null
         && RowBandSize is null && ColumnBandSize is null && Caption is null && Description is null
-        && RawPositioningXml.Count == 0;
+        && FloatingPosition is null && AllowOverlap is null;
 }
 
 /// <summary>A table or cell width (ST_TblWidth): auto, points, or a percentage of the available width.</summary>
@@ -223,4 +226,71 @@ public enum CellTextDirection
     TopToBottomLeftToRightRotated,
     /// <summary>Top to bottom, right to left, East Asian characters rotated.</summary>
     TopToBottomRightToLeftRotated,
+}
+
+/// <summary>What a floating table's position is measured from (ST_HAnchor / ST_VAnchor).</summary>
+public enum TableFloatAnchor
+{
+    /// <summary>The text column (horizontal) or the paragraph the table follows (vertical).</summary>
+    Text,
+    /// <summary>The page margins.</summary>
+    Margin,
+    /// <summary>The page edge.</summary>
+    Page,
+}
+
+/// <summary>Relative horizontal position of a floating table (ST_XAlign).</summary>
+public enum TableFloatXAlign
+{
+    Left,
+    Center,
+    Right,
+    /// <summary>Inside edge (left on odd pages with mirror margins).</summary>
+    Inside,
+    /// <summary>Outside edge.</summary>
+    Outside,
+}
+
+/// <summary>Relative vertical position of a floating table (ST_YAlign).</summary>
+public enum TableFloatYAlign
+{
+    /// <summary>In line with the text.</summary>
+    Inline,
+    Top,
+    Center,
+    Bottom,
+    Inside,
+    Outside,
+}
+
+/// <summary>
+/// Floating-table positioning (w:tblpPr). The relative alignments win over the point offsets
+/// when both are given. Null members are not stated (ECMA-376 defaults apply: anchors text /
+/// margin… as Word reads them; offsets 0).
+/// </summary>
+public sealed class TableFloatingPosition
+{
+    /// <summary>Horizontal anchor (w:horzAnchor).</summary>
+    public TableFloatAnchor? HorizontalAnchor { get; set; }
+    /// <summary>Vertical anchor (w:vertAnchor).</summary>
+    public TableFloatAnchor? VerticalAnchor { get; set; }
+    /// <summary>Horizontal offset from the anchor in points (w:tblpX).</summary>
+    public double? XPt { get; set; }
+    /// <summary>Relative horizontal position (w:tblpXSpec), winning over <see cref="XPt"/>.</summary>
+    public TableFloatXAlign? XAlign { get; set; }
+    /// <summary>Vertical offset from the anchor in points (w:tblpY).</summary>
+    public double? YPt { get; set; }
+    /// <summary>Relative vertical position (w:tblpYSpec), winning over <see cref="YPt"/>.</summary>
+    public TableFloatYAlign? YAlign { get; set; }
+    /// <summary>Distance from the text on the left (w:leftFromText), points.</summary>
+    public double? LeftFromTextPt { get; set; }
+    /// <summary>Distance from the text on the right (w:rightFromText), points.</summary>
+    public double? RightFromTextPt { get; set; }
+    /// <summary>Distance from the text above (w:topFromText), points.</summary>
+    public double? TopFromTextPt { get; set; }
+    /// <summary>Distance from the text below (w:bottomFromText), points.</summary>
+    public double? BottomFromTextPt { get; set; }
+
+    /// <summary>A copy.</summary>
+    public TableFloatingPosition Clone() => (TableFloatingPosition)MemberwiseClone();
 }

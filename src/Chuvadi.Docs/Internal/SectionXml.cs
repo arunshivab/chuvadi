@@ -33,7 +33,8 @@ internal static class SectionXml
             x.WriteAttributeString("id", R, rf.RelId);
             x.WriteEndElement();
         }
-        foreach (var raw in s.RawNoteProperties) StylesXml.WriteFragment(x, raw);
+        NotesXml.Write(x, NoteKind.Footnote, s.FootnoteProperties);
+        NotesXml.Write(x, NoteKind.Endnote, s.EndnoteProperties);
         if (s.Start is SectionStart st) Val(x, "type", st switch
         {
             SectionStart.NextPage => "nextPage",
@@ -212,8 +213,10 @@ internal static class SectionXml
                     break;
                 }
                 case "footnotePr":
+                    using (var sub = r.ReadSubtree()) NotesXml.Read(sub, s.FootnoteProperties);
+                    break;
                 case "endnotePr":
-                    using (var sub = r.ReadSubtree()) { sub.Read(); s.RawNoteProperties.Add(sub.ReadOuterXml()); }
+                    using (var sub = r.ReadSubtree()) NotesXml.Read(sub, s.EndnoteProperties);
                     break;
                 case "type":
                     s.Start = Attr(r) switch

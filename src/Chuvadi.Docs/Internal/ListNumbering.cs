@@ -108,6 +108,17 @@ internal static class ListNumbering
                 else if (b is DocTable t) c.Table(t, 0);
             }
         }
+        // All footnotes form one story, as do all endnotes (Word counts lists across them).
+        foreach (var notes in new[] { doc.Footnotes, doc.Endnotes })
+        {
+            var c = new Counter(doc, result);
+            foreach (var note in notes)
+                foreach (var b in note.Blocks)
+                {
+                    if (b is Paragraph p) c.Item(p, null);
+                    else if (b is DocTable t) c.Table(t, 0);
+                }
+        }
         return result;
     }
 

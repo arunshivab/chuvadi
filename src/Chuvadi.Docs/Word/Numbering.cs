@@ -390,7 +390,7 @@ public sealed class ListInstance
     }
 
     /// <summary>The numId paragraphs refer to.</summary>
-    public int Id { get; }
+    public int Id { get; internal set; }
 
     /// <summary>The definition this list uses.</summary>
     public NumberingDefinition Definition { get; }
@@ -602,6 +602,46 @@ public sealed class NumberingCollection
     }
 
     internal bool IsEmpty => _definitions.Count == 0 && _lists.Count == 0 && RawPictureBullets.Count == 0;
+
+    /// <summary>
+    /// Document.Append: moves every definition and list of <paramref name="source"/> (a throwaway
+    /// copy) into this collection under new ids; the objects themselves move, so paragraphs and
+    /// styles that refer to them keep working.
+    /// </summary>
+    internal void AdoptAll(NumberingCollection source)
+    {
+        var defIds = FreeDefinitionIds(source._definitions.Count);
+        for (int i = 0; i < source._definitions.Count; i++)
+        {
+            var d = source._definitions[i];
+            d.Id = defIds[i];
+            _definitions.Add(d);
+            _definitionSet.Add(d);
+        }
+        var listIds = FreeListIds(source._lists.Count);
+        for (int i = 0; i < source._lists.Count; i++)
+        {
+            var l = source._lists[i];
+            l.Id = listIds[i];
+            _lists.Add(l);
+            _listById[l.Id] = l;
+        }
+        if (RawPictureBullets.Count == 0 && source.RawPictureBullets.Count > 0)
+        {
+            RawPictureBullets.AddRange(source.RawPictureBullets);
+            RawPictureParts.AddRange(source.RawPictureParts);
+        }
+        else if (source.RawPictureBullets.Count > 0)
+        {
+            // Picture-bullet ids would clash: the appended lists fall back to their text bullets.
+            foreach (var d in source._definitions)
+                foreach (var level in d.Levels) level.PictureBulletId = null;
+        }
+        source._definitions.Clear();
+        source._definitionSet.Clear();
+        source._lists.Clear();
+        source._listById.Clear();
+    }
 }
 
 /// <summary>An attribute from a namespace this library does not model, carried verbatim.</summary>

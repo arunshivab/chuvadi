@@ -95,7 +95,7 @@ internal static class TableXml
     private static void WriteTablePrCore(XmlWriter x, TableFormat f, string? styleId, TableWidth? width, TableLayout? layout,
         TableBorders? borders, bool alwaysWrite)
     {
-        bool any = alwaysWrite || styleId is not null || f.RawPositioningXml.Count > 0 || f.RightToLeft is not null
+        bool any = alwaysWrite || styleId is not null || f.FloatingPosition is not null || f.AllowOverlap is not null || f.RightToLeft is not null
             || f.RowBandSize is not null || f.ColumnBandSize is not null || width is not null || f.Alignment is not null
             || f.CellSpacingPt is not null || f.IndentPt is not null || borders is { IsEmpty: false } || f.Shading is not null
             || layout is not null || f.CellMargins is { IsEmpty: false } || f.Look is not null || f.Caption is not null
@@ -104,7 +104,8 @@ internal static class TableXml
 
         x.WriteStartElement("tblPr", W);
         if (styleId is not null) Val(x, "tblStyle", styleId);
-        foreach (var raw in f.RawPositioningXml) StylesXml.WriteFragment(x, raw);
+        if (f.FloatingPosition is { } fp) WriteFloating(x, fp);
+        if (f.AllowOverlap is bool ov) Val(x, "tblOverlap", ov ? "overlap" : "never");
         Toggle(x, "bidiVisual", f.RightToLeft);
         if (f.RowBandSize is int rb) Val(x, "tblStyleRowBandSize", rb.ToString(CultureInfo.InvariantCulture));
         if (f.ColumnBandSize is int cb) Val(x, "tblStyleColBandSize", cb.ToString(CultureInfo.InvariantCulture));
@@ -256,7 +257,7 @@ internal static class TableXml
     /// table/row/cell properties and cell content, nested tables included (the XML depth limit
     /// bounds nesting). The grid column count is the larger of tblGrid and the widest row.
     /// </summary>
-    public static DocTable Read(XmlReader sub, Func<XmlReader, Paragraph> loadParagraph)
+    public static DocTable Read(XmlReader sub, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker = null)
     {
         var format = new TableFormat();
         var gridWidths = new List<double>();
@@ -286,15 +287,16 @@ internal static class TableXml
                     }
                     break;
                 case "tr":
-                    using (var tr = sub.ReadSubtree()) rows.Add(ReadRow(tr, loadParagraph));
+                    using (var tr = sub.ReadSubtree()) rows.Add(ReadRow(tr, loadParagraph, marker));
                     break;
                 case "sdt":
                 case "customXml":
                     // Rows wrapped in content controls / custom XML: read the rows inside.
-                    using (var wrap = sub.ReadSubtree()) ReadWrapped(wrap, "tr", el => rows.Add(ReadRow(el, loadParagraph)));
+                    using (var wrap = sub.ReadSubtree()) ReadWrapped(wrap, "tr", el => rows.Add(ReadRow(el, loadParagraph, marker)));
                     break;
                 default:
-                    if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
+                    if (marker is not null && IsRangeMarker(sub)) marker(sub);
+                    else if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
                     break;
             }
         }
@@ -395,10 +397,8 @@ internal static class TableXml
                 case "tblLook": f.Look = ReadLook(r); break;
                 case "tblCaption": f.Caption = Attr(r, "val"); break;
                 case "tblDescription": f.Description = Attr(r, "val"); break;
-                case "tblpPr":
-                case "tblOverlap":
-                    using (var pp = r.ReadSubtree()) { pp.Read(); f.RawPositioningXml.Add(pp.ReadOuterXml()); }
-                    break;
+                case "tblpPr": f.FloatingPosition = ReadFloating(r); break;
+                case "tblOverlap": f.AllowOverlap = Attr(r, "val") switch { "never" => false, "overlap" => true, _ => null }; break;
                 default:
                     if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
                     break;
@@ -407,7 +407,10 @@ internal static class TableXml
         return borders;
     }
 
-    private static PendingRow ReadRow(XmlReader r, Func<XmlReader, Paragraph> loadParagraph)
+    /// <summary>Range markers (bookmarks) that may sit between rows and cells; the caller places them.</summary>
+    private static bool IsRangeMarker(XmlReader r) => r.NamespaceURI == W && r.LocalName is "bookmarkStart" or "bookmarkEnd";
+
+    private static PendingRow ReadRow(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker)
     {
         var row = new PendingRow();
         if (!r.Read()) return row;
@@ -421,16 +424,17 @@ internal static class TableXml
                     using (var tp = r.ReadSubtree()) ReadRowPr(tp, row.Props);
                     break;
                 case "tc":
-                    using (var tc = r.ReadSubtree()) row.Cells.Add(ReadCell(tc, loadParagraph));
+                    using (var tc = r.ReadSubtree()) row.Cells.Add(ReadCell(tc, loadParagraph, marker));
                     break;
                 case "sdt":
                 case "customXml":
                     // Cells wrapped in content controls / custom XML: read the cells inside.
-                    using (var wrap = r.ReadSubtree()) ReadWrapped(wrap, "tc", el => row.Cells.Add(ReadCell(el, loadParagraph)));
+                    using (var wrap = r.ReadSubtree()) ReadWrapped(wrap, "tc", el => row.Cells.Add(ReadCell(el, loadParagraph, marker)));
                     break;
                 default:
                     // tblPrEx (row-level table property exceptions): not modelled.
-                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    if (marker is not null && IsRangeMarker(r)) marker(r);
+                    else if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
                     break;
             }
         }
@@ -466,7 +470,7 @@ internal static class TableXml
         }
     }
 
-    private static PendingCell ReadCell(XmlReader r, Func<XmlReader, Paragraph> loadParagraph)
+    private static PendingCell ReadCell(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker)
     {
         var pc = new PendingCell();
         var cell = pc.Cell;
@@ -489,7 +493,11 @@ internal static class TableXml
                     using (var p = r.ReadSubtree()) cell.Paragraphs.Add(loadParagraph(p));
                     break;
                 case "tbl":
-                    using (var t = r.ReadSubtree()) cell.AppendNestedTable(Read(t, loadParagraph));
+                    using (var t = r.ReadSubtree()) cell.AppendNestedTable(Read(t, loadParagraph, marker));
+                    break;
+                case "bookmarkStart":
+                case "bookmarkEnd":
+                    marker?.Invoke(r);
                     break;
                 default:
                     // sdt / customXml wrappers around cell content: keep their paragraphs' text.
@@ -822,7 +830,58 @@ internal static class TableXml
         d.StyleId = s.StyleId; d.Look = s.Look; d.Width = s.Width; d.Alignment = s.Alignment; d.IndentPt = s.IndentPt;
         d.Layout = s.Layout; d.Borders = s.Borders; d.CellMargins = s.CellMargins; d.CellSpacingPt = s.CellSpacingPt;
         d.Shading = s.Shading; d.RightToLeft = s.RightToLeft; d.RowBandSize = s.RowBandSize; d.ColumnBandSize = s.ColumnBandSize;
-        d.Caption = s.Caption; d.Description = s.Description; d.RawPositioningXml.AddRange(s.RawPositioningXml);
+        d.Caption = s.Caption; d.Description = s.Description; d.FloatingPosition = s.FloatingPosition?.Clone(); d.AllowOverlap = s.AllowOverlap;
+    }
+
+    // ---- Floating tables ----------------------------------------------------------------------
+
+    /// <summary>CT_TblPPr attribute order as Word writes it.</summary>
+    private static void WriteFloating(XmlWriter x, TableFloatingPosition p)
+    {
+        x.WriteStartElement("tblpPr", W);
+        void Tw(string name, double? v) { if (v is double d) x.WriteAttributeString(name, W, RunProperties.Twips(d)); }
+        static string Anchor(TableFloatAnchor a) => a switch { TableFloatAnchor.Margin => "margin", TableFloatAnchor.Page => "page", _ => "text" };
+        Tw("leftFromText", p.LeftFromTextPt);
+        Tw("rightFromText", p.RightFromTextPt);
+        Tw("topFromText", p.TopFromTextPt);
+        Tw("bottomFromText", p.BottomFromTextPt);
+        if (p.VerticalAnchor is { } va) x.WriteAttributeString("vertAnchor", W, Anchor(va));
+        if (p.HorizontalAnchor is { } ha) x.WriteAttributeString("horzAnchor", W, Anchor(ha));
+        if (p.XAlign is { } xa) x.WriteAttributeString("tblpXSpec", W, xa.ToString().ToLowerInvariant());
+        Tw("tblpX", p.XPt);
+        if (p.YAlign is { } ya) x.WriteAttributeString("tblpYSpec", W, ya.ToString().ToLowerInvariant());
+        Tw("tblpY", p.YPt);
+        x.WriteEndElement();
+    }
+
+    private static TableFloatingPosition ReadFloating(XmlReader r)
+    {
+        static TableFloatAnchor? Anchor(string? v) => v switch
+        {
+            "text" => TableFloatAnchor.Text, "margin" => TableFloatAnchor.Margin, "page" => TableFloatAnchor.Page, _ => null,
+        };
+        double? Tw(string name) => RunProperties.FromTwips(Attr(r, name)) is double d && double.IsFinite(d) && Math.Abs(d) <= 31680 / 20.0 ? d : null;
+        return new TableFloatingPosition
+        {
+            LeftFromTextPt = Tw("leftFromText") is double l && l >= 0 ? l : null,
+            RightFromTextPt = Tw("rightFromText") is double rr && rr >= 0 ? rr : null,
+            TopFromTextPt = Tw("topFromText") is double t && t >= 0 ? t : null,
+            BottomFromTextPt = Tw("bottomFromText") is double b && b >= 0 ? b : null,
+            VerticalAnchor = Anchor(Attr(r, "vertAnchor")),
+            HorizontalAnchor = Anchor(Attr(r, "horzAnchor")),
+            XAlign = Attr(r, "tblpXSpec") switch
+            {
+                "left" => TableFloatXAlign.Left, "center" => TableFloatXAlign.Center, "right" => TableFloatXAlign.Right,
+                "inside" => TableFloatXAlign.Inside, "outside" => TableFloatXAlign.Outside, _ => null,
+            },
+            XPt = Tw("tblpX"),
+            YAlign = Attr(r, "tblpYSpec") switch
+            {
+                "inline" => TableFloatYAlign.Inline, "top" => TableFloatYAlign.Top, "center" => TableFloatYAlign.Center,
+                "bottom" => TableFloatYAlign.Bottom, "inside" => TableFloatYAlign.Inside, "outside" => TableFloatYAlign.Outside, _ => null,
+            },
+            YPt = Tw("tblpY"),
+        };
     }
 
     // ---- Tokens ---------------------------------------------------------------------------

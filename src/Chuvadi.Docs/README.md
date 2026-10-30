@@ -223,6 +223,25 @@ results.Page.SetCustomSize(288, 432);                           // or A3, A5, B5
 
 Every section property is in the model: start type, page size/orientation/margins/gutter/header distance, columns (equal or unequal, separator line), default/first/even headers and footers (linked or blank, with tables), page numbering (format, restart, chapter numbers), line numbers, page borders, vertical alignment, text direction, right-to-left layout and the document grid. `Document.Load` reads all of it back, headers and footers included.
 
+## Fields, notes, bookmarks and text boxes
+
+```csharp
+doc.AddTableOfContents(1, 3);                                   // TOC field; Word fills it in on open
+doc.AddHeading("Results", 1).Bookmarked("Results", "");
+doc.AddParagraph("See ").InternalLink("the results", "Results").Text(" on page ").PageRef("Results");
+doc.AddParagraph("Total: ").Field("REF Total \\h", "₹ 1,85,000");    // any field, with its cached result
+doc.AddParagraph("Dose as per protocol").Footnote(doc, "NCCN guideline, 2026.");
+doc.AddParagraph("Printed on ").Date("dd/MM/yyyy");
+var box = new TextBox { WidthPt = 200, HeightPt = 80, FillHex = "FFF2CC" };
+box.Paragraphs.Add(new Paragraph("Fasting from midnight."));
+doc.AddParagraph("Instructions").TextBox(box);
+doc.Properties.Title = "Discharge summary";
+doc.Properties.SetCustom("PatientId", "P-0042");
+doc.Append(Document.Load("annexure.docx"), new AppendOptions { StartSection = SectionStart.NextPage });
+```
+
+Loaded documents keep their footnotes, endnotes, bookmarks, fields, text boxes, floating tables, embedded fonts and properties through load → save.
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:
