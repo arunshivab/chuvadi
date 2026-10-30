@@ -1,6 +1,6 @@
 # Chuvadi.Docs — integration guide for a paginator (Chuvadi.Layout)
 
-This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.4.0 + Phase 6b** (exact image anchoring). Everything lives in the `Chuvadi.Docs.Word` namespace.
+This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.5.0** (exact image anchoring, plus the loader additions Layout asked for: hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Word` namespace.
 
 ## 1. Load
 
@@ -8,7 +8,7 @@ This page lists exactly which public APIs a layout engine should call to lay out
 var doc = Document.Load(path);                    // or Load(stream, password, DocxReaderOptions, CancellationToken)
 ```
 
-Untrusted input goes through `DocxReaderOptions`, which holds the limits; a breach throws `DocxSecurityLimitException`. Any malformed part throws `XmlException` / `DocxFormatException`, except a malformed header, footer or settings part, which loads blank.
+Untrusted input goes through `DocxReaderOptions`, which holds the limits; a breach throws `DocxSecurityLimitException`. Any malformed part throws `XmlException` / `DocxFormatException`, except a malformed header, footer or settings part, which loads blank. A package whose main part is not a Word document (document, template, or their macro-enabled forms; e.g. a workbook renamed .docx) throws `DocxFormatException`, from `Document.Load` and `DocxReader.Open` alike.
 
 ## 2. Document structure — walk in this order
 
@@ -32,6 +32,8 @@ Never read raw `Paragraph.Format` or `Run.Format` for layout: they hold direct f
 | Row properties | `TableRow.HeightPt` + `HeightRule`, `IsHeader` (repeat on each page), `CantSplit`, `Hidden`, `CellSpacingPt` |
 | Fonts per script | Effective `TextFormat`: `AsciiFont`, `HighAnsiFont`, `EastAsiaFont`, `ComplexScriptFont`, the theme slots (`AsciiThemeFont`, `HighAnsiThemeFont`, `EastAsiaThemeFont`, `ComplexScriptThemeFont`) and `FontHint`. `SizePt` / `SizeComplexScriptPt` and `Bold` / `BoldComplexScript` select by script. Theme fonts and colours resolve against `doc.ThemeXml` (raw theme1.xml). |
 
+| Default tab stops | Beyond the last tab stop, tabs advance in steps of `doc.EffectiveDefaultTabStopPt` (`doc.DefaultTabStopPt` from settings `w:defaultTabStop`; 36pt when the file does not state it). |
+
 Styles themselves are in `doc.Styles` (`StyleDefinition`) and `doc.Defaults`. A paginator needs them only for introspection; the resolvers already apply them.
 
 ## 4. Text inside a run
@@ -41,7 +43,8 @@ Each `Run` is one `w:r`:
 - `Run.Break` (`Page`, `Column`, `TextWrappingClear*`) is an explicit break run.
 - `Paragraph.PageBreakBefore` means a page break before the paragraph.
 - U+2011 is a non-breaking hyphen and U+00AD a soft hyphen.
-- `Run.HyperlinkUrl` marks a link; style it as `Hyperlink`.
+- `Run.HyperlinkUrl` is the target of an external link (`w:hyperlink` → its relationship; a `w:anchor` is appended as `#fragment`). Loaded links carry exactly the style the file gave them — use `GetEffectiveRunFormat`, which adds no Hyperlink style to a loaded link (a link added in code with `Paragraph.Hyperlink` does get it).
+- `Run.PositionalTab` (`w:ptab`, `TextContent` "\t"): advance to `Alignment` (left / center / right) of the margin area or the indent area (`RelativeTo`), ignoring tab stops, filling with `Leader`. It is not an ordinary tab (`Run.IsTab` is false).
 
 ## 5. List numbering
 
@@ -60,7 +63,7 @@ For each `Section s` in `doc.Sections`:
 
 | Need | API |
 |---|---|
-| Page size as laid out | `s.Page.WidthPt`, `s.Page.HeightPt` (orientation applied) |
+| Page size as laid out | `s.Page.WidthPt`, `s.Page.HeightPt` (orientation applied). When `s.Page.SizeStated == false` the section had no valid `w:pgSz`: `Size` reads A4 but the file said nothing — use Word's default for the locale (Letter in the US, A4 elsewhere). |
 | Margins | `s.Page.TopMarginPt` / `BottomMarginPt` (a negative value means "exactly"), `LeftMarginPt`, `RightMarginPt`, `GutterPt`, `HeaderDistancePt`, `FooterDistancePt`; document-wide `doc.MirrorMargins` and `doc.GutterAtTop` |
 | Section start | `s.Start` (null = next page; `Continuous`, `EvenPage`, `OddPage`, `NextColumn`) |
 | Columns | `s.Columns.Count` / `SpacingPt` / `Separator`; `EqualWidth == false` → use `s.Columns.Columns` (`WidthPt`, `SpaceAfterPt`) |
@@ -111,7 +114,7 @@ Drawings that are not pictures (charts, SmartArt, shapes, groups, text boxes) ar
 | Not available | Comes with |
 |---|---|
 | Footnotes/endnotes | Phase 8 |
-| Bookmarks and internal links | Phase 8 |
+| Bookmarks and internal links (`w:hyperlink` with only `w:anchor`) | Phase 8 |
 | Comments and tracked changes | Phase 9 |
 | Content-control boundaries | the sdt content is loaded; the control itself is not kept |
 | Text boxes and shapes | text is flattened into the paragraph; geometry is not kept |

@@ -63,6 +63,7 @@ internal static class DocumentLoader
         }
         if (documentUri is null)
             throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
+        CheckMainPart(pkg, documentUri);
 
         var doc = new Document();
 
@@ -221,6 +222,11 @@ internal static class DocumentLoader
                 case "evenAndOddHeaders": doc.DifferentOddAndEvenPages = RunProperties.OnOff(r) == true; break;
                 case "mirrorMargins": doc.MirrorMargins = RunProperties.OnOff(r) == true; break;
                 case "gutterAtTop": doc.GutterAtTop = RunProperties.OnOff(r) == true; break;
+                case "defaultTabStop":
+                    // Twips; a zero, negative or absurd value is ignored (Word falls back to 720).
+                    if (RunProperties.FromTwips(r.GetAttribute("val", W)) is double tab && tab > 0 && tab <= 1584)
+                        doc.DefaultTabStopPt = tab;
+                    break;
             }
             if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
         }
@@ -466,7 +472,17 @@ internal static class DocumentLoader
         var p = new Paragraph();
         if (!sub.Read()) return p; // positioned on <w:p>
         var fields = new FieldState();
+        LoadParagraphContent(sub, p, fields, images, hyperlink: null);
+        // A page field still open at the paragraph end (malformed, or ending in a later paragraph):
+        // keep what was captured instead of losing it.
+        if (fields.Capturing && fields.Result.Length > 0)
+            p.AddRun(Run.Field(fields.Instruction.ToString(), fields.Result.ToString(), fields.Format, fields.StyleId));
+        return p;
+    }
 
+    /// <summary>Reads the descendants of the element the reader is on (a w:p, or a w:hyperlink inside one).</summary>
+    private static void LoadParagraphContent(XmlReader sub, Paragraph p, FieldState fields, ImageSource? images, string? hyperlink)
+    {
         while (sub.Read())
         {
             if (sub.NodeType != XmlNodeType.Element) continue;
@@ -485,10 +501,31 @@ internal static class DocumentLoader
                     using (sub.ReadSubtree()) { }
                     break;
                 case "pPr":
-                    using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
+                    if (hyperlink is null)
+                        using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
+                    else using (sub.ReadSubtree()) { }
                     break;
+                case "hyperlink":
+                {
+                    // An external link (r:id → the part's hyperlink relationship; w:anchor appended
+                    // as a fragment). Internal links (w:anchor only) come with bookmarks.
+                    string? url = hyperlink;
+                    var relId = sub.GetAttribute("id", DocumentSerializer.R);
+                    if (relId is not null && images?.GetHyperlink(relId) is { } target)
+                    {
+                        var anchor = sub.GetAttribute("anchor", W);
+                        url = string.IsNullOrEmpty(anchor) || target.Contains('#') ? target : target + "#" + anchor;
+                    }
+                    if (sub.IsEmptyElement) break;
+                    using (var h = sub.ReadSubtree())
+                    {
+                        h.Read();
+                        LoadParagraphContent(h, p, fields, images, url);
+                    }
+                    break;
+                }
                 case "r":
-                    using (var r = sub.ReadSubtree()) LoadRun(r, p, fields, images);
+                    using (var r = sub.ReadSubtree()) LoadRun(r, p, fields, images, hyperlink);
                     break;
                 case "fldSimple":
                 {
@@ -516,11 +553,32 @@ internal static class DocumentLoader
                 }
             }
         }
-        // A page field still open at the paragraph end (malformed, or ending in a later paragraph):
-        // keep what was captured instead of losing it.
-        if (fields.Capturing && fields.Result.Length > 0)
-            p.AddRun(Run.Field(fields.Instruction.ToString(), fields.Result.ToString(), fields.Format, fields.StyleId));
-        return p;
+    }
+
+    /// <summary>Main-part content types of a Word package: document, template, and their macro-enabled forms.</summary>
+    internal static readonly string[] WordMainContentTypes =
+    {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml",
+        "application/vnd.ms-word.document.macroEnabled.main+xml",
+        "application/vnd.ms-word.template.macroEnabledTemplate.main+xml",
+    };
+
+    /// <summary>
+    /// Rejects a package whose main part is not a Word document (a workbook or presentation renamed
+    /// .docx, or a part with a non-Word content type) with <see cref="DocxFormatException"/>.
+    /// </summary>
+    internal static void CheckMainPart(OoxmlPackage pkg, string documentUri)
+    {
+        var part = pkg.GetPart(documentUri)
+            ?? throw new DocxFormatException($"The main document part '{documentUri}' is missing from the package.");
+        var type = part.ContentType ?? "";
+        int semi = type.IndexOf(';');
+        if (semi >= 0) type = type[..semi];
+        type = type.Trim();
+        foreach (var accepted in WordMainContentTypes)
+            if (string.Equals(type, accepted, StringComparison.OrdinalIgnoreCase)) return;
+        throw new DocxFormatException($"The main part '{documentUri}' has content type '{part.ContentType}', not a Word document.");
     }
 
     private static void ReadFallbackOffsets(XmlReader fb, FloatingPosition target)
@@ -563,7 +621,7 @@ internal static class DocumentLoader
     /// round-trips as a single run. Page, column and text-wrapping breaks become explicit
     /// <see cref="BreakType"/> runs.
     /// </summary>
-    private static void LoadRun(XmlReader sub, Paragraph p, FieldState fields, ImageSource? images)
+    private static void LoadRun(XmlReader sub, Paragraph p, FieldState fields, ImageSource? images, string? hyperlink)
     {
         var format = TextFormat.None;
         string? charStyle = null;
@@ -575,7 +633,10 @@ internal static class DocumentLoader
         void Flush()
         {
             if (text.Length == 0 && !sawText) return;
-            p.AddRun(new Run(text.ToString(), format) { CharacterStyleId = charStyle });
+            // A loaded link keeps exactly the run's own style (Word adds no Hyperlink style by itself).
+            p.AddRun(hyperlink is null
+                ? new Run(text.ToString(), format) { CharacterStyleId = charStyle }
+                : new Run(text.ToString(), format) { CharacterStyleId = charStyle, HyperlinkUrl = hyperlink, HyperlinkStyleImplied = false });
             text.Clear();
             sawText = false;
         }
@@ -725,6 +786,10 @@ internal static class DocumentLoader
                 case "tab":
                     text.Append('\t');
                     break;
+                case "ptab":
+                    Flush();
+                    p.AddRun(Run.PositionalTabRun(ReadPositionalTab(sub), format, charStyle));
+                    break;
                 case "cr":
                     text.Append('\n');
                     break;
@@ -751,6 +816,26 @@ internal static class DocumentLoader
             }
         }
         Flush();
+    }
+
+    private static PositionalTab ReadPositionalTab(XmlReader r)
+    {
+        var alignment = r.GetAttribute("alignment", W) switch
+        {
+            "center" => PositionalTabAlignment.Center,
+            "right" => PositionalTabAlignment.Right,
+            _ => PositionalTabAlignment.Left,
+        };
+        var relativeTo = r.GetAttribute("relativeTo", W) == "indent" ? PositionalTabBase.Indent : PositionalTabBase.Margin;
+        var leader = r.GetAttribute("leader", W) switch
+        {
+            "dot" => TabLeader.Dot,
+            "hyphen" => TabLeader.Hyphen,
+            "underscore" => TabLeader.Underscore,
+            "middleDot" => TabLeader.MiddleDot,
+            _ => TabLeader.None,
+        };
+        return new PositionalTab(alignment, relativeTo, leader);
     }
 
     /// <summary>
@@ -835,6 +920,7 @@ internal static class DocumentLoader
         private readonly CancellationToken _ct;
         private readonly System.Collections.Generic.Dictionary<string, string> _targets = new(StringComparer.Ordinal);
         private readonly System.Collections.Generic.Dictionary<string, string> _links = new(StringComparer.Ordinal);
+        private readonly System.Collections.Generic.Dictionary<string, string> _hyperlinks = new(StringComparer.Ordinal);
         private readonly System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> _cache;
 
         /// <summary><paramref name="sharedCache"/> (by media part) lets every part reuse one byte array per media file.</summary>
@@ -847,11 +933,19 @@ internal static class DocumentLoader
             _ct = ct;
             foreach (var rel in pkg.GetRelationships(partUri))
             {
+                if (rel.Type.EndsWith("/hyperlink", StringComparison.Ordinal))
+                {
+                    if (rel.IsExternal) _hyperlinks[rel.Id] = rel.Target;
+                    continue;
+                }
                 if (!rel.Type.EndsWith("/image", StringComparison.Ordinal)) continue;
                 if (rel.IsExternal) _links[rel.Id] = rel.Target;
                 else _targets[rel.Id] = Resolve(partUri, rel.Target);
             }
         }
+
+        /// <summary>The external target of a hyperlink relationship (w:hyperlink/@r:id), or null.</summary>
+        public string? GetHyperlink(string relId) => _hyperlinks.TryGetValue(relId, out var t) ? t : null;
 
         /// <summary>The external target of a linked picture (r:link), or null.</summary>
         public string? GetLink(string relId) => _links.TryGetValue(relId, out var t) ? t : null;

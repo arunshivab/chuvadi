@@ -224,6 +224,22 @@ public sealed class Paragraph
         return this;
     }
 
+    /// <summary>
+    /// Appends a positional tab (w:ptab): text after it starts at the left edge, the centre or the
+    /// right edge of the margin (or indent) area, whatever the tab stops — e.g. a right-aligned
+    /// page number in a footer. Leaders: none, dot, hyphen, underscore or middle dot.
+    /// </summary>
+    public Paragraph PositionalTab(PositionalTabAlignment alignment, PositionalTabBase relativeTo = PositionalTabBase.Margin,
+        TabLeader leader = TabLeader.None, TextFormat? format = null)
+    {
+        if (!Enum.IsDefined(alignment)) throw new ArgumentOutOfRangeException(nameof(alignment));
+        if (!Enum.IsDefined(relativeTo)) throw new ArgumentOutOfRangeException(nameof(relativeTo));
+        if (!Enum.IsDefined(leader) || leader == TabLeader.Heavy)
+            throw new ArgumentOutOfRangeException(nameof(leader), leader, "A positional tab's leader is None, Dot, Hyphen, Underscore or MiddleDot.");
+        _runs.Add(Run.PositionalTabRun(new PositionalTab(alignment, relativeTo, leader), format ?? TextFormat.None));
+        return this;
+    }
+
     /// <summary>Appends an image run (inline, or floating anchored to this paragraph).</summary>
     public Paragraph Image(ImageSpec image)
     {
@@ -285,6 +301,23 @@ public sealed class Run
     /// <summary>True when this run is an explicit tab (<see cref="TextContent"/> is "\t").</summary>
     public bool IsTab { get; private init; }
 
+    /// <summary>
+    /// Non-null when this run is a positional tab (w:ptab): a tab to an absolute position measured
+    /// from the margin or indent, ignoring the paragraph's tab stops (<see cref="TextContent"/> is "\t").
+    /// </summary>
+    public PositionalTab? PositionalTab { get; private init; }
+
+    /// <summary>
+    /// For a hyperlink run: whether the Hyperlink character style applies when no
+    /// <see cref="CharacterStyleId"/> is set. True for links added in code; false for loaded
+    /// links, which keep exactly the style the file gave them.
+    /// </summary>
+    internal bool HyperlinkStyleImplied { get; init; } = true;
+
+    /// <summary>The character style that applies: <see cref="CharacterStyleId"/>, else "Hyperlink" for a link added in code.</summary>
+    internal string? EffectiveCharacterStyleId
+        => CharacterStyleId ?? (HyperlinkUrl is not null && HyperlinkStyleImplied ? "Hyperlink" : null);
+
     public Run(string text, TextFormat format)
     {
         TextContent = text ?? throw new ArgumentNullException(nameof(text));
@@ -302,4 +335,30 @@ public sealed class Run
 
     internal static Run TabRun(TextFormat format)
         => new("\t", format) { IsTab = true };
+
+    internal static Run PositionalTabRun(PositionalTab tab, TextFormat format, string? characterStyleId = null)
+        => new("\t", format) { PositionalTab = tab, CharacterStyleId = characterStyleId };
+}
+
+/// <summary>A positional tab (w:ptab): where the text after it starts.</summary>
+/// <param name="Alignment">Left edge, centre or right edge of the <paramref name="RelativeTo"/> area.</param>
+/// <param name="RelativeTo">The margins (default) or the paragraph's indents.</param>
+/// <param name="Leader">Fill drawn up to the position (never <see cref="TabLeader.Heavy"/>).</param>
+public sealed record PositionalTab(PositionalTabAlignment Alignment, PositionalTabBase RelativeTo = PositionalTabBase.Margin, TabLeader Leader = TabLeader.None);
+
+/// <summary>Alignment of a positional tab (ST_PTabAlignment).</summary>
+public enum PositionalTabAlignment
+{
+    Left,
+    Center,
+    Right,
+}
+
+/// <summary>What a positional tab is measured from (ST_PTabRelativeTo).</summary>
+public enum PositionalTabBase
+{
+    /// <summary>The page margins.</summary>
+    Margin,
+    /// <summary>The paragraph's indents.</summary>
+    Indent,
 }

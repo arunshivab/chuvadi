@@ -37,6 +37,9 @@ public static class Program
             ("Lists", ListsTests.Run),
             ("Sections", SectionsTests.Run),
             ("ImagesModel", ImagesModelTests.Run),
+            ("Templates", TemplatesTests.Run),
+            ("TemplateFixes", TemplateFixesTests.Run),
+            ("LoaderHandoff", LoaderHandoffTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

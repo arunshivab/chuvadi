@@ -130,11 +130,8 @@ public sealed partial class DocxReader : IDisposable
             if (documentUri is null)
                 throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
 
-            string mainContentType = string.Empty;
-            foreach (var part in pkg.Parts)
-            {
-                if (part.Uri == documentUri) { mainContentType = part.ContentType; break; }
-            }
+            DocumentLoader.CheckMainPart(pkg, documentUri);
+            string mainContentType = pkg.GetPart(documentUri)!.ContentType;
 
             // Header/footer/footnote/endnote part URIs from the document's own relationships.
             var headerUris = new List<string>();
@@ -553,6 +550,7 @@ public sealed partial class DocxReader : IDisposable
                         sb.Append('\n');
                         break;
                     case "tab":
+                    case "ptab":
                         sb.Append('\t');
                         break;
                     case "noBreakHyphen":

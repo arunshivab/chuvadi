@@ -43,7 +43,7 @@ internal static class FormatResolver
         }
 
         var paragraphStyle = ChainRunBag(doc, ParagraphStyleId(doc, p), StyleType.Paragraph);
-        var characterStyleId = r.CharacterStyleId ?? (r.HyperlinkUrl is not null ? "Hyperlink" : null);
+        var characterStyleId = r.EffectiveCharacterStyleId;
         var characterStyle = ChainRunBag(doc, characterStyleId, StyleType.Character);
         // Toggles XOR across all style levels (table, paragraph, character); others: later wins.
         bag.Overlay(RunBag.CombineStyleLevels(RunBag.CombineStyleLevels(tableStyle, paragraphStyle), characterStyle));
@@ -326,7 +326,7 @@ internal static class FormatResolver
     }
 
     /// <summary>Every run property as "unset (null) or value", so levels can be overlaid.</summary>
-    private sealed class RunBag
+    internal sealed class RunBag
     {
         // Toggles (§17.7.3).
         public bool? Bold, BoldCs, Italic, ItalicCs, Caps, SmallCaps, Strike, DStrike, Outline, Shadow, Emboss, Imprint, Hidden;

@@ -48,12 +48,16 @@ internal static class SectionXml
         if (!Enum.IsDefined(page.Size)) throw new ArgumentOutOfRangeException(nameof(s), page.Size, "Undefined PageSize value.");
         var (pw, ph) = page.PortraitTwips;
         bool landscape = page.Orientation == PageOrientation.Landscape;
-        x.WriteStartElement("pgSz", W);
-        x.WriteAttributeString("w", W, Int(landscape ? ph : pw));
-        x.WriteAttributeString("h", W, Int(landscape ? pw : ph));
-        if (landscape) x.WriteAttributeString("orient", W, "landscape");
-        if (page.PaperCode is int code) x.WriteAttributeString("code", W, Int(code));
-        x.WriteEndElement();
+        // A loaded section that stated no size keeps saying nothing (Word applies its default).
+        if (page.SizeStated || landscape || page.PaperCode is not null)
+        {
+            x.WriteStartElement("pgSz", W);
+            x.WriteAttributeString("w", W, Int(landscape ? ph : pw));
+            x.WriteAttributeString("h", W, Int(landscape ? pw : ph));
+            if (landscape) x.WriteAttributeString("orient", W, "landscape");
+            if (page.PaperCode is int code) x.WriteAttributeString("code", W, Int(code));
+            x.WriteEndElement();
+        }
 
         x.WriteStartElement("pgMar", W);
         x.WriteAttributeString("top", W, RunProperties.Twips(page.TopMarginPt));
@@ -187,6 +191,7 @@ internal static class SectionXml
     public static (Section Section, List<Reference> References) Read(XmlReader r)
     {
         var s = new Section();
+        s.Page.SizeStated = false; // until a valid w:pgSz is read
         var refs = new List<Reference>();
         if (!r.Read()) return (s, refs);
         int childDepth = r.Depth + 1;
@@ -374,20 +379,24 @@ internal static class SectionXml
     {
         var wTw = ParseInt(r.GetAttribute("w", W));
         var hTw = ParseInt(r.GetAttribute("h", W));
-        p.PaperCode = ParseInt(r.GetAttribute("code", W));
         bool landscape = r.GetAttribute("orient", W) == "landscape";
-        p.Orientation = landscape ? PageOrientation.Landscape : PageOrientation.Portrait;
+        // An unusable size states nothing: orientation and paper code are taken only with a valid size.
         if (wTw is not int w || hTw is not int h || w <= 0 || h <= 0 || w > 31680 || h > 31680) return;
+        p.PaperCode = ParseInt(r.GetAttribute("code", W));
+        p.Orientation = landscape ? PageOrientation.Landscape : PageOrientation.Portrait;
         // Portrait dimensions as the model holds them.
         var (pw, ph) = landscape ? (h, w) : (w, h);
+        var code = p.PaperCode;
         foreach (var size in new[] { PageSize.A4, PageSize.Letter, PageSize.Legal, PageSize.A3, PageSize.A5, PageSize.B5, PageSize.Executive, PageSize.Tabloid })
         {
             var probe = new PageSetup { Size = size };
-            if (probe.PortraitTwips == (pw, ph)) { p.Size = size; return; }
+            if (probe.PortraitTwips == (pw, ph)) { p.Size = size; p.PaperCode = code; p.SizeStated = true; return; }
         }
         p.Size = PageSize.Custom;
         p.CustomWidthPt = pw / 20.0;
         p.CustomHeightPt = ph / 20.0;
+        p.PaperCode = code;
+        p.SizeStated = true;
     }
 
     private static double? NonNegative(double? v) => v is double d && d >= 0 ? d : null;

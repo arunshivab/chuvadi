@@ -36,6 +36,9 @@ public class VerificationSuiteTests
     [Fact] public void Suite_Lists() => ListsTests.Run(FreshOutDir());
     [Fact] public void Suite_Sections() => SectionsTests.Run(FreshOutDir());
     [Fact] public void Suite_ImagesModel() => ImagesModelTests.Run(FreshOutDir());
+    [Fact] public void Suite_Templates() => TemplatesTests.Run(FreshOutDir());
+    [Fact] public void Suite_TemplateFixes() => TemplateFixesTests.Run(FreshOutDir());
+    [Fact] public void Suite_LoaderHandoff() => LoaderHandoffTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 
@@ -145,7 +148,7 @@ public class VerificationSuiteTests
     public void Template_MissingValueDictionary_Throws()
     {
         Assert.ThrowsAny<System.ArgumentException>(() =>
-            DocxTemplate.Fill("in.docx", "out.docx", null!));
+            DocxTemplate.Fill("in.docx", "out.docx", (IReadOnlyDictionary<string, string>)null!));
     }
 
     [Fact]
