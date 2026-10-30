@@ -424,6 +424,15 @@ internal static class RunProperties
         _ => true,
     };
 
+    /// <summary>An ST_OnOff attribute other than w:val: null when absent.</summary>
+    internal static bool? OnOff(XmlReader r, string attribute) => r.GetAttribute(attribute, W) switch
+    {
+        null => null,
+        "1" or "true" or "on" => true,
+        "0" or "false" or "off" => false,
+        _ => null,
+    };
+
     internal static string HalfPoints(double pt) => Scaled(pt, 2);
 
     internal static string Twips(double pt) => Scaled(pt, 20);

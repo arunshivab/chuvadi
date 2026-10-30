@@ -135,6 +135,7 @@ internal static class FormatResolver
             result.Shading = f.Shading ?? result.Shading; result.RightToLeft = f.RightToLeft ?? result.RightToLeft;
             result.RowBandSize = f.RowBandSize ?? result.RowBandSize; result.ColumnBandSize = f.ColumnBandSize ?? result.ColumnBandSize;
             result.Caption = f.Caption ?? result.Caption; result.Description = f.Description ?? result.Description;
+            result.FloatingPosition = f.FloatingPosition?.Clone() ?? result.FloatingPosition; result.AllowOverlap = f.AllowOverlap ?? result.AllowOverlap;
             if (f.Borders is { } b) borders = MergeBorders(borders, b);
             if (f.CellMargins is { } m) margins = MergeMargins(margins, m);
         }

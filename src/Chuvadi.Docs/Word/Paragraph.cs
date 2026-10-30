@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Chuvadi.Docs.Word;
@@ -207,6 +208,147 @@ public sealed class Paragraph
         return this;
     }
 
+    /// <summary>Appends a link to a bookmark in this document (rendered with the Hyperlink style).</summary>
+    public Paragraph InternalLink(string text, string bookmarkName, TextFormat? format = null)
+    {
+        if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text required.", nameof(text));
+        Word.Bookmark.CheckName(bookmarkName);
+        _runs.Add(new Run(text, format ?? TextFormat.None) { HyperlinkAnchor = bookmarkName });
+        return this;
+    }
+
+    /// <summary>Appends the start of a bookmark (end it with <see cref="BookmarkEnd"/>, in this or a later paragraph).</summary>
+    public Paragraph BookmarkStart(Bookmark bookmark)
+    {
+        if (bookmark is null) throw new ArgumentNullException(nameof(bookmark));
+        _runs.Add(Run.BookmarkRun(bookmark, true));
+        return this;
+    }
+
+    /// <summary>Appends the end of a bookmark.</summary>
+    public Paragraph BookmarkEnd(Bookmark bookmark)
+    {
+        if (bookmark is null) throw new ArgumentNullException(nameof(bookmark));
+        _runs.Add(Run.BookmarkRun(bookmark, false));
+        return this;
+    }
+
+    /// <summary>Appends <paramref name="text"/> inside a new bookmark named <paramref name="name"/>.</summary>
+    public Paragraph Bookmarked(string name, string text, TextFormat? format = null)
+    {
+        var b = new Bookmark(name);
+        BookmarkStart(b);
+        if (!string.IsNullOrEmpty(text)) Text(text, format);
+        return BookmarkEnd(b);
+    }
+
+    /// <summary>
+    /// Appends a field: begin, instruction, separate, the cached result (what shows until Word
+    /// updates the field) and end — e.g. <c>Field("REF Total \h", "1,234")</c>. Set
+    /// <paramref name="dirty"/> to have Word recalculate it when the document is opened.
+    /// </summary>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
+    public Paragraph Field(string instruction, string? cachedResult = null, TextFormat? format = null, bool dirty = false)
+    {
+        if (string.IsNullOrWhiteSpace(instruction)) throw new ArgumentException("Field instruction required.", nameof(instruction));
+        var f = new Field(" " + instruction.Trim() + " ") { Dirty = dirty };
+        return Field(f, cachedResult, format);
+    }
+
+    /// <summary>Appends a field from a <see cref="Word.Field"/> object with its cached result.</summary>
+    public Paragraph Field(Field field, string? cachedResult = null, TextFormat? format = null)
+    {
+        if (field is null) throw new ArgumentNullException(nameof(field));
+        _runs.Add(Run.FieldMarkRun(field, FieldMarkType.Begin, format));
+        _runs.Add(Run.FieldMarkRun(field, FieldMarkType.Separate, format));
+        if (!string.IsNullOrEmpty(cachedResult)) _runs.Add(new Run(cachedResult, format ?? TextFormat.None));
+        _runs.Add(Run.FieldMarkRun(field, FieldMarkType.End, format));
+        return this;
+    }
+
+    /// <summary>Appends one field marker (for fields whose result spans paragraphs, or built run by run).</summary>
+    public Paragraph FieldMarker(Field field, FieldMarkType type, TextFormat? format = null)
+    {
+        if (field is null) throw new ArgumentNullException(nameof(field));
+        if (!Enum.IsDefined(type)) throw new ArgumentOutOfRangeException(nameof(type));
+        _runs.Add(Run.FieldMarkRun(field, type, format));
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a DATE field (<c>DATE \@ "picture"</c>) with today's date as its cached result.
+    /// The picture uses Word's codes: d, dd, ddd, dddd, M, MM, MMM, MMMM, yy, yyyy, h, hh, H, HH, mm, ss, AM/PM.
+    /// </summary>
+    public Paragraph Date(string picture = "d MMMM yyyy", TextFormat? format = null)
+    {
+        if (string.IsNullOrWhiteSpace(picture) || picture.Contains('"')) throw new ArgumentException("A date picture without quotes is required.", nameof(picture));
+        return Field($"DATE \\@ \"{picture}\"", Internal.FieldFormat.FormatDate(DateTime.Now, picture), format);
+    }
+
+    /// <summary>Appends a REF field showing the text of bookmark <paramref name="bookmarkName"/> (with a link to it).</summary>
+    public Paragraph Ref(string bookmarkName, string? cachedResult = null, TextFormat? format = null)
+        => Field($"REF {Word.Bookmark.CheckName(bookmarkName)} \\h", cachedResult, format, dirty: cachedResult is null);
+
+    /// <summary>Appends a PAGEREF field showing the page number of bookmark <paramref name="bookmarkName"/>.</summary>
+    public Paragraph PageRef(string bookmarkName, string? cachedResult = null, TextFormat? format = null)
+        => Field($"PAGEREF {Word.Bookmark.CheckName(bookmarkName)} \\h", cachedResult, format, dirty: cachedResult is null);
+
+    /// <summary>Appends a SEQ field (figure / table numbering), e.g. <c>Seq("Figure", "1")</c> for "Figure 1".</summary>
+    public Paragraph Seq(string identifier, string? cachedResult = null, TextFormat? format = null)
+    {
+        if (string.IsNullOrWhiteSpace(identifier) || identifier.Any(char.IsWhiteSpace)) throw new ArgumentException("A SEQ identifier is one word.", nameof(identifier));
+        return Field($"SEQ {identifier} \\* ARABIC", cachedResult, format, dirty: cachedResult is null);
+    }
+
+    /// <summary>Appends a reference to a footnote or endnote (superscript number in the text).</summary>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
+    public Paragraph NoteReference(Note note, TextFormat? format = null)
+    {
+        if (note is null) throw new ArgumentNullException(nameof(note));
+        _runs.Add(Run.NoteReferenceRun(note, format, note.Kind == NoteKind.Footnote ? "FootnoteReference" : "EndnoteReference"));
+        return this;
+    }
+
+    /// <summary>Appends a note reference whose mark is <paramref name="customMark"/> (e.g. "*") instead of a number.</summary>
+    public Paragraph NoteReference(Note note, string customMark, TextFormat? format = null)
+    {
+        if (note is null) throw new ArgumentNullException(nameof(note));
+        if (string.IsNullOrEmpty(customMark)) throw new ArgumentException("Custom mark required.", nameof(customMark));
+        var style = note.Kind == NoteKind.Footnote ? "FootnoteReference" : "EndnoteReference";
+        _runs.Add(Run.NoteReferenceRun(note, format, style, customMarkFollows: true));
+        _runs.Add(new Run(customMark, format ?? TextFormat.None) { CharacterStyleId = style });
+        return this;
+    }
+
+    /// <summary>Appends the note's own mark (the number at the start of a note's first paragraph).</summary>
+    public Paragraph NoteMark(NoteKind kind = NoteKind.Footnote)
+    {
+        _runs.Add(Run.NoteMarkRun(kind == NoteKind.Footnote ? "FootnoteReference" : "EndnoteReference"));
+        return this;
+    }
+
+    /// <summary>Adds a footnote with <paramref name="text"/> to <paramref name="document"/> and its reference here.</summary>
+    public Paragraph Footnote(Document document, string text, TextFormat? noteFormat = null)
+    {
+        if (document is null) throw new ArgumentNullException(nameof(document));
+        return NoteReference(document.Footnotes.Add(text, noteFormat));
+    }
+
+    /// <summary>Adds an endnote with <paramref name="text"/> to <paramref name="document"/> and its reference here.</summary>
+    public Paragraph Endnote(Document document, string text, TextFormat? noteFormat = null)
+    {
+        if (document is null) throw new ArgumentNullException(nameof(document));
+        return NoteReference(document.Endnotes.Add(text, noteFormat));
+    }
+
+    /// <summary>Appends a symbol character (w:sym) from a symbol font, e.g. <c>Symbol("Wingdings", '\uF0FC')</c> for a check mark.</summary>
+    public Paragraph Symbol(string font, char code, TextFormat? format = null)
+    {
+        if (string.IsNullOrWhiteSpace(font)) throw new ArgumentException("Font required.", nameof(font));
+        _runs.Add(Run.SymbolRun(new SymbolChar(font, code), format ?? TextFormat.None, null));
+        return this;
+    }
+
     /// <summary>Appends a break: line (default), page, column, or a text-wrapping break that clears floating objects.</summary>
     public Paragraph Break(BreakType type = BreakType.Line, TextFormat? format = null)
     {
@@ -240,6 +382,14 @@ public sealed class Paragraph
         return this;
     }
 
+    /// <summary>Appends a text box run (inline, or floating anchored to this paragraph).</summary>
+    public Paragraph TextBox(TextBox textBox)
+    {
+        if (textBox is null) throw new ArgumentNullException(nameof(textBox));
+        _runs.Add(new Run(string.Empty, TextFormat.None) { TextBox = textBox });
+        return this;
+    }
+
     /// <summary>Appends an image run (inline, or floating anchored to this paragraph).</summary>
     public Paragraph Image(ImageSpec image)
     {
@@ -270,6 +420,10 @@ public sealed class Paragraph
     }
 
     internal void AddRun(Run run) => _runs.Add(run);
+
+    internal void InsertRun(int index, Run run) => _runs.Insert(index, run);
+
+    internal void ReplaceRun(int index, Run run) => _runs[index] = run;
 }
 
 /// <summary>
@@ -284,6 +438,39 @@ public sealed class Run
 
     /// <summary>Non-null when this run is an external hyperlink.</summary>
     public string? HyperlinkUrl { get; init; }
+
+    /// <summary>Non-null when this run links inside the document: the target bookmark's name (w:hyperlink/@w:anchor).</summary>
+    public string? HyperlinkAnchor { get; init; }
+
+    /// <summary>The link's tooltip (w:hyperlink/@w:tooltip), or null.</summary>
+    public string? HyperlinkTooltip { get; init; }
+
+    /// <summary>True when this run is a link (external or internal).</summary>
+    public bool IsLink => HyperlinkUrl is not null || HyperlinkAnchor is not null;
+
+    /// <summary>Non-null when this run is one end of a bookmark (a zero-width marker; <see cref="TextContent"/> is empty).</summary>
+    public BookmarkMark? Bookmark { get; private init; }
+
+    /// <summary>Non-null when this run is a field marker (begin / separate / end; <see cref="TextContent"/> is empty).</summary>
+    public FieldMark? FieldMark { get; private init; }
+
+    /// <summary>Non-null when this run is a footnote or endnote reference (the number in the text; <see cref="TextContent"/> is empty).</summary>
+    public Note? NoteReference { get; private init; }
+
+    /// <summary>For a note reference: the mark is the run text that follows instead of a number (w:customMarkFollows).</summary>
+    public bool CustomMarkFollows { get; private init; }
+
+    /// <summary>True when this run is the note's own mark inside a footnote or endnote (w:footnoteRef / w:endnoteRef).</summary>
+    public bool IsNoteMark { get; private init; }
+
+    /// <summary>Non-null when this run is a symbol character (w:sym; <see cref="TextContent"/> holds the character code).</summary>
+    public SymbolChar? Symbol { get; private init; }
+
+    /// <summary>Non-null when this run is a text box (inline, or floating anchored to the paragraph).</summary>
+    public TextBox? TextBox { get; init; }
+
+    /// <summary>True for marker runs that take no space: bookmark ends and field markers.</summary>
+    public bool IsMarker => Bookmark is not null || FieldMark is not null;
 
     /// <summary>Non-null when this run is a simple field; holds the field instruction
     /// (e.g. " PAGE ", " NUMPAGES ").</summary>
@@ -316,7 +503,7 @@ public sealed class Run
 
     /// <summary>The character style that applies: <see cref="CharacterStyleId"/>, else "Hyperlink" for a link added in code.</summary>
     internal string? EffectiveCharacterStyleId
-        => CharacterStyleId ?? (HyperlinkUrl is not null && HyperlinkStyleImplied ? "Hyperlink" : null);
+        => CharacterStyleId ?? (IsLink && HyperlinkStyleImplied ? "Hyperlink" : null);
 
     public Run(string text, TextFormat format)
     {
@@ -338,6 +525,31 @@ public sealed class Run
 
     internal static Run PositionalTabRun(PositionalTab tab, TextFormat format, string? characterStyleId = null)
         => new("\t", format) { PositionalTab = tab, CharacterStyleId = characterStyleId };
+
+    /// <summary>A copy with a different character style and/or link anchor (everything else equal).</summary>
+    internal Run CloneWith(string? characterStyleId, string? hyperlinkAnchor) => new(TextContent, Format)
+    {
+        HyperlinkUrl = HyperlinkUrl, HyperlinkAnchor = hyperlinkAnchor, HyperlinkTooltip = HyperlinkTooltip,
+        HyperlinkStyleImplied = HyperlinkStyleImplied, FieldInstruction = FieldInstruction, Image = Image,
+        CharacterStyleId = characterStyleId, Break = Break, IsTab = IsTab, PositionalTab = PositionalTab,
+        Bookmark = Bookmark, FieldMark = FieldMark, NoteReference = NoteReference, CustomMarkFollows = CustomMarkFollows,
+        IsNoteMark = IsNoteMark, Symbol = Symbol, TextBox = TextBox,
+    };
+
+    internal static Run BookmarkRun(Bookmark bookmark, bool isStart)
+        => new("", TextFormat.None) { Bookmark = new BookmarkMark(bookmark, isStart) };
+
+    internal static Run FieldMarkRun(Field field, FieldMarkType type, TextFormat? format = null, string? characterStyleId = null)
+        => new("", format ?? TextFormat.None) { FieldMark = new FieldMark(field, type), CharacterStyleId = characterStyleId };
+
+    internal static Run NoteReferenceRun(Note note, TextFormat? format, string? characterStyleId, bool customMarkFollows = false)
+        => new("", format ?? TextFormat.None) { NoteReference = note, CharacterStyleId = characterStyleId, CustomMarkFollows = customMarkFollows };
+
+    internal static Run NoteMarkRun(string? characterStyleId, TextFormat? format = null)
+        => new("", format ?? TextFormat.None) { IsNoteMark = true, CharacterStyleId = characterStyleId };
+
+    internal static Run SymbolRun(SymbolChar symbol, TextFormat format, string? characterStyleId)
+        => new(symbol.Code.ToString(), format) { Symbol = symbol, CharacterStyleId = characterStyleId };
 }
 
 /// <summary>A positional tab (w:ptab): where the text after it starts.</summary>

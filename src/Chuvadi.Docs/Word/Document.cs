@@ -31,7 +31,7 @@ namespace Chuvadi.Docs.Word;
 /// load → save round-trip. For filling a designed template while preserving everything in
 /// it, use <see cref="DocxTemplate"/> instead.
 /// </summary>
-public sealed class Document
+public sealed partial class Document
 {
     private readonly List<object> _blocks = new();  // Paragraph | DocTable
 
@@ -40,6 +40,8 @@ public sealed class Document
     {
         StylesXml.AddBuiltIns(Styles);
         Numbering = new NumberingCollection(this);
+        Footnotes = new NoteCollection(this, NoteKind.Footnote);
+        Endnotes = new NoteCollection(this, NoteKind.Endnote);
     }
 
     /// <summary>
@@ -112,10 +114,19 @@ public sealed class Document
         var result = new List<PlacedImage>();
         var sections = Sections;
         int sectionIndex = 0;
+        var seenBoxes = new HashSet<TextBox>(ReferenceEqualityComparer.Instance);
         void FromParagraph(Paragraph p, ImageHost host, Section section, HeaderFooterContent? hf, TableCellRef? cell)
+            => FromParagraphIn(p, host, section, hf, cell, null, 0);
+        void FromParagraphIn(Paragraph p, ImageHost host, Section section, HeaderFooterContent? hf, TableCellRef? cell, TextBox? box, int depth)
         {
             for (int i = 0; i < p.Runs.Count; i++)
-                if (p.Runs[i].Image is { } img) result.Add(new PlacedImage(img, p, p.Runs[i], i, host, section, hf, cell));
+            {
+                if (p.Runs[i].Image is { } img) result.Add(new PlacedImage(img, p, p.Runs[i], i, host, section, hf, cell) { TextBox = box });
+                // Pictures inside a text box: same story, with the box they sit in.
+                if (p.Runs[i].TextBox is { } inner && depth < 8 && seenBoxes.Add(inner))
+                    foreach (var b in inner.Blocks)
+                        if (b is Paragraph bp) FromParagraphIn(bp, host, section, hf, null, inner, depth + 1);
+            }
         }
         void FromTable(DocTable t, ImageHost host, Section section, HeaderFooterContent? hf, int depth)
         {
@@ -149,6 +160,22 @@ public sealed class Document
                     if (b is Paragraph hp) FromParagraph(hp, host, section, content, null);
                     else if (b is DocTable ht) FromTable(ht, host, section, content, 0);
                 }
+            }
+        // Notes: the section of the note's (first) reference.
+        var noteSection = new Dictionary<Note, Section>(ReferenceEqualityComparer.Instance);
+        foreach (var info in GetNoteReferences()) noteSection.TryAdd(info.Note, info.Section);
+        foreach (var notes in new[] { Footnotes, Endnotes })
+            foreach (var note in notes)
+            {
+                var host = note.Kind == NoteKind.Footnote ? ImageHost.Footnote : ImageHost.Endnote;
+                var section = noteSection.TryGetValue(note, out var ns) ? ns : Section;
+                int start = result.Count;
+                foreach (var b in note.Blocks)
+                {
+                    if (b is Paragraph np) FromParagraph(np, host, section, null, null);
+                    else if (b is DocTable nt) FromTable(nt, host, section, null, 0);
+                }
+                for (int i = start; i < result.Count; i++) result[i] = result[i] with { Note = note };
             }
         return result;
     }

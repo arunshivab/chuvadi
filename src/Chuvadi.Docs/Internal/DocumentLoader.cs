@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Xml;
 using Chuvadi.Docs.Word;
@@ -158,6 +160,9 @@ internal static class DocumentLoader
             break;
         }
 
+        LoadProperties(pkg, doc, options, ct);
+        LoadFontTable(pkg, documentUri, doc, options, ct);
+
         (Section, System.Collections.Generic.List<SectionXml.Reference>)? bodySectPr = null;
         using var raw = pkg.OpenPart(documentUri);
         using var s = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, documentUri);
@@ -165,6 +170,9 @@ internal static class DocumentLoader
         var mediaCache = new System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
         doc.LoadedMediaCache = mediaCache;
         var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache);
+        var loadContext = new LoadContext();
+        LoadNotes(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
+        var body = new StoryContext(loadContext, bodyImages);
 
         if (!r.Read()) return doc;
         while (!r.EOF)
@@ -174,9 +182,15 @@ internal static class DocumentLoader
                 if (r.LocalName == "tbl")
                 {
                     DocTable table;
-                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, bodyImages);
+                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, body);
                     r.Read();
                     doc.AddBlock(table);
+                    continue;
+                }
+                if (r.LocalName is "bookmarkStart" or "bookmarkEnd")
+                {
+                    if (BookmarkMarker(r, body) is { } marker) body.Pending.Add(marker);
+                    if (!r.Read()) break;
                     continue;
                 }
                 if (r.LocalName == "sectPr")
@@ -188,7 +202,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "p" && IsBodyLevel(r))
                 {
                     Paragraph p;
-                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, bodyImages);
+                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, body);
                     r.Read();
                     doc.AddBlock(p);
                     continue;
@@ -197,7 +211,8 @@ internal static class DocumentLoader
             if (!r.Read()) break;
         }
         EnsureWellFormed(r, documentUri);
-        LoadSections(pkg, documentUri, doc, bodySectPr, options, ct);
+        body.Finish();
+        LoadSections(pkg, documentUri, doc, bodySectPr, options, ct, loadContext);
         doc.LoadedMediaCache = null;
         // Word keeps even-page headers after "Different odd & even" is switched off: without the setting they stay hidden.
         doc.DifferentOddAndEvenPages ??= false;
@@ -222,6 +237,15 @@ internal static class DocumentLoader
                 case "evenAndOddHeaders": doc.DifferentOddAndEvenPages = RunProperties.OnOff(r) == true; break;
                 case "mirrorMargins": doc.MirrorMargins = RunProperties.OnOff(r) == true; break;
                 case "gutterAtTop": doc.GutterAtTop = RunProperties.OnOff(r) == true; break;
+                case "updateFields": doc.UpdateFieldsOnOpen = RunProperties.OnOff(r) == true; break;
+                case "footnotePr":
+                    using (var sub = r.ReadSubtree()) NotesXml.Read(sub, doc.FootnoteProperties);
+                    continue;
+                case "endnotePr":
+                    using (var sub = r.ReadSubtree()) NotesXml.Read(sub, doc.EndnoteProperties);
+                    continue;
+                case "embedTrueTypeFonts": doc.EmbedTrueTypeFonts = RunProperties.OnOff(r) == true; break;
+                case "saveSubsetFonts": doc.SaveSubsetFonts = RunProperties.OnOff(r) == true; break;
                 case "defaultTabStop":
                     // Twips; a zero, negative or absurd value is ignored (Word falls back to 720).
                     if (RunProperties.FromTwips(r.GetAttribute("val", W)) is double tab && tab > 0 && tab <= 1584)
@@ -238,7 +262,7 @@ internal static class DocumentLoader
     /// </summary>
     private static void LoadSections(OoxmlPackage pkg, string documentUri, Document doc,
         (Section Section, System.Collections.Generic.List<SectionXml.Reference> References)? bodySectPr,
-        DocxReaderOptions options, CancellationToken ct)
+        DocxReaderOptions options, CancellationToken ct, LoadContext loadContext)
     {
         var rels = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var rel in pkg.GetRelationships(documentUri))
@@ -254,7 +278,7 @@ internal static class DocumentLoader
                 if (!rels.TryGetValue(rf.RelId, out var uri)) continue;
                 if (!parts.TryGetValue(uri, out var part))
                 {
-                    try { part = LoadHeaderFooter(pkg, uri, options, ct, doc.LoadedMediaCache ?? new()); }
+                    try { part = LoadHeaderFooter(pkg, uri, options, ct, doc.LoadedMediaCache ?? new(), loadContext); }
                     catch (XmlException) { part = (new HeaderFooterContent(), null); } // a malformed header/footer loads blank
                     parts[uri] = part;
                 }
@@ -287,9 +311,225 @@ internal static class DocumentLoader
         if (bodySectPr is { } body) doc.SetFinalSection(Build(body));
     }
 
-    private static (HeaderFooterContent Content, TextWatermark? Watermark) LoadHeaderFooter(OoxmlPackage pkg, string uri,
+    /// <summary>word/fontTable.xml with embedded fonts (best effort: a malformed font table is ignored).</summary>
+    private static void LoadFontTable(OoxmlPackage pkg, string documentUri, Document doc, DocxReaderOptions options, CancellationToken ct)
+    {
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal || !rel.Type.EndsWith("/fontTable", StringComparison.Ordinal)) continue;
+            var uri = Resolve(documentUri, rel.Target);
+            Stream? raw = null;
+            try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (raw is null) return;
+            var targets = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var fr in pkg.GetRelationships(uri))
+                if (!fr.IsExternal && fr.Type.EndsWith("/font", StringComparison.Ordinal)) targets[fr.Id] = Resolve(uri, fr.Target);
+            (byte[] Bytes, string ContentType)? Embed(string relId)
+            {
+                if (!targets.TryGetValue(relId, out var target)) return null;
+                Stream? fs = null;
+                try { fs = pkg.OpenPart(target); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+                if (fs is null) return null;
+                using var gs = GuardedPartStream.Wrap(fs, options.MaxPartBytes, ct, target);
+                using var ms = new MemoryStream();
+                gs.CopyTo(ms);
+                var type = pkg.GetPart(target)?.ContentType ?? "";
+                return ms.Length >= 32 ? (ms.ToArray(), type) : null;
+            }
+            try
+            {
+                using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri);
+                using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, uri);
+                FontTableXml.Read(r, doc.Fonts, Embed);
+                EnsureWellFormed(r, uri);
+            }
+            catch (XmlException) { doc.Fonts.Clear(); }
+            return;
+        }
+    }
+
+    /// <summary>docProps core, app and custom properties (best effort: a malformed part is ignored).</summary>
+    private static void LoadProperties(OoxmlPackage pkg, Document doc, DocxReaderOptions options, CancellationToken ct)
+    {
+        var props = doc.Properties;
+        foreach (var rel in pkg.GetRelationships("/"))
+        {
+            if (rel.IsExternal) continue;
+            int kind = rel.Type.EndsWith("/core-properties", StringComparison.Ordinal) ? 0
+                : rel.Type.EndsWith("/extended-properties", StringComparison.Ordinal) ? 1
+                : rel.Type.EndsWith("/custom-properties", StringComparison.Ordinal) ? 2 : -1;
+            if (kind < 0) continue;
+            var uri = "/" + rel.Target.TrimStart('/');
+            Stream? raw = null;
+            try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (raw is null) continue;
+            try
+            {
+                using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri);
+                using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, uri);
+                var xd = new XmlDocument { XmlResolver = null };
+                xd.Load(r);
+                if (xd.DocumentElement is null) continue;
+                foreach (XmlNode node in xd.DocumentElement.ChildNodes)
+                {
+                    if (node is not XmlElement e) continue;
+                    if (kind == 2)
+                    {
+                        if (e.LocalName != "property" || props.Custom.Count >= 4096) continue;
+                        var name = e.GetAttribute("name");
+                        var v = e.ChildNodes.OfType<XmlElement>().FirstOrDefault();
+                        if (string.IsNullOrEmpty(name) || v is null) continue;
+                        var text = v.InnerText;
+                        object value = v.LocalName switch
+                        {
+                            "bool" => text.Trim() is "true" or "1",
+                            "i1" or "i2" or "i4" or "int" or "ui1" or "ui2" when int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) => i,
+                            "ui4" when uint.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var u) => u,
+                            "i8" or "ui8" when long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l) => l,
+                            "r4" or "r8" when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) => d,
+                            "decimal" or "cy" when decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var m) => m,
+                            "filetime" or "date" when DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var dt) => dt,
+                            _ => text,
+                        };
+                        props.Custom.Add(new(name, value));
+                        continue;
+                    }
+                    var content = e.InnerText;
+                    DateTime? Date() => DateTime.TryParse(content, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var dv) ? dv : null;
+                    if (kind == 0)
+                        switch (e.LocalName)
+                        {
+                            case "title": props.Title = content; break;
+                            case "subject": props.Subject = content; break;
+                            case "creator": props.Author = content; break;
+                            case "keywords": props.Keywords = content; break;
+                            case "description": props.Description = content; break;
+                            case "category": props.Category = content; break;
+                            case "contentStatus": props.ContentStatus = content; break;
+                            case "lastModifiedBy": props.LastModifiedBy = content; break;
+                            case "revision": props.Revision = content; break;
+                            case "language": props.Language = content; break;
+                            case "identifier": props.Identifier = content; break;
+                            case "version": props.Version = content; break;
+                            case "created": props.Created = Date(); break;
+                            case "modified": props.Modified = props.LoadedModified = Date(); break;
+                            case "lastPrinted": props.LastPrinted = Date(); break;
+                        }
+                    else
+                        switch (e.LocalName)
+                        {
+                            case "Company": props.Company = content; break;
+                            case "Manager": props.Manager = content; break;
+                            case "Template": props.Template = content; break;
+                            case "HyperlinkBase": props.HyperlinkBase = content; break;
+                        }
+                }
+            }
+            catch (XmlException) { }
+        }
+    }
+
+    /// <summary>
+    /// Footnotes and endnotes (word/footnotes.xml, endnotes.xml): every normal note with its
+    /// paragraphs and tables, by file id for the references in the body. Separators are not kept
+    /// (they are written fresh).
+    /// </summary>
+    private static void LoadNotes(OoxmlPackage pkg, string documentUri, Document doc, LoadContext loadContext,
         DocxReaderOptions options, CancellationToken ct,
         System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> mediaCache)
+    {
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal) continue;
+            NoteKind kind;
+            if (rel.Type.EndsWith("/footnotes", StringComparison.Ordinal)) kind = NoteKind.Footnote;
+            else if (rel.Type.EndsWith("/endnotes", StringComparison.Ordinal)) kind = NoteKind.Endnote;
+            else continue;
+            var uri = Resolve(documentUri, rel.Target);
+            var byId = kind == NoteKind.Footnote ? loadContext.Footnotes : loadContext.Endnotes;
+            if (byId.Count > 0) continue; // one part per kind
+            Stream? raw = null;
+            try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            if (raw is null) continue;
+            var collection = kind == NoteKind.Footnote ? doc.Footnotes : doc.Endnotes;
+            var images = new ImageSource(pkg, uri, options, ct, mediaCache);
+            string element = kind == NoteKind.Footnote ? "footnote" : "endnote";
+            try
+            {
+                ReadNotesPart(raw, uri, element, kind, collection, byId, loadContext, images, options, ct);
+            }
+            catch (XmlException)
+            {
+                // A malformed notes part loses its notes (references to them are dropped), not the document.
+                foreach (var n in byId.Values) collection.Remove(n);
+                byId.Clear();
+            }
+        }
+    }
+
+    private static void ReadNotesPart(Stream raw, string uri, string element, NoteKind kind, NoteCollection collection,
+        System.Collections.Generic.Dictionary<int, Note> byId, LoadContext loadContext, ImageSource images,
+        DocxReaderOptions options, CancellationToken ct)
+    {
+        {
+            using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri);
+            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, uri);
+            if (!r.Read()) return;
+            r.MoveToContent();
+            int noteDepth = r.Depth + 1;
+            while (r.Read())
+            {
+                if (r.NodeType != XmlNodeType.Element || r.Depth != noteDepth || r.NamespaceURI != W || r.LocalName != element) continue;
+                var type = r.GetAttribute("type", W);
+                bool normal = type is null or "normal";
+                if (!normal || !int.TryParse(r.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) || byId.ContainsKey(id)
+                    || byId.Count >= 65_536)
+                {
+                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    continue;
+                }
+                var note = new Note(kind) { LoadedId = id };
+                byId[id] = note;
+                collection.AddLoaded(note);
+                if (r.IsEmptyElement) continue;
+                var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
+                using (var n = r.ReadSubtree())
+                {
+                    n.Read();
+                    int childDepth = n.Depth + 1;
+                    bool more = n.Read();
+                    while (more)
+                    {
+                        if (n.NodeType == XmlNodeType.Element && n.Depth == childDepth && n.NamespaceURI == W)
+                        {
+                            if (n.LocalName == "p")
+                            {
+                                using (var sub = n.ReadSubtree()) note.Paragraphs.Add(LoadParagraph(sub, story));
+                                more = n.Read();
+                                continue;
+                            }
+                            if (n.LocalName == "tbl")
+                            {
+                                using (var sub = n.ReadSubtree()) note.AppendTable(LoadTable(sub, story));
+                                more = n.Read();
+                                continue;
+                            }
+                            if (n.LocalName is "bookmarkStart" or "bookmarkEnd" && BookmarkMarker(n, story) is { } marker)
+                                story.Pending.Add(marker);
+                        }
+                        more = n.Read();
+                    }
+                }
+                story.Finish();
+            }
+            EnsureWellFormed(r, uri);
+        }
+    }
+
+    private static (HeaderFooterContent Content, TextWatermark? Watermark) LoadHeaderFooter(OoxmlPackage pkg, string uri,
+        DocxReaderOptions options, CancellationToken ct,
+        System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> mediaCache, LoadContext loadContext)
     {
         var content = new HeaderFooterContent();
         Stream? raw = null;
@@ -309,6 +549,7 @@ internal static class DocumentLoader
             EnsureWellFormed(wr, uri);
         }
         var images = new ImageSource(pkg, uri, options, ct, mediaCache);
+        var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
         using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, ct, uri);
         if (!r.Read()) return (content, watermark);
         while (!r.EOF)
@@ -318,15 +559,21 @@ internal static class DocumentLoader
                 if (r.LocalName == "tbl")
                 {
                     DocTable table;
-                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, images);
+                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, story);
                     r.Read();
                     content.AppendTable(table);
+                    continue;
+                }
+                if (r.LocalName is "bookmarkStart" or "bookmarkEnd")
+                {
+                    if (BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
+                    if (!r.Read()) break;
                     continue;
                 }
                 if (r.LocalName == "p")
                 {
                     Paragraph p;
-                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, images);
+                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, story);
                     r.Read();
                     content.Add(p);
                     continue;
@@ -335,6 +582,7 @@ internal static class DocumentLoader
             if (!r.Read()) break;
         }
         EnsureWellFormed(r, uri);
+        story.Finish();
         return (content, watermark);
     }
 
@@ -460,28 +708,152 @@ internal static class DocumentLoader
     // is outside tables already; headers/footers are separate parts and never traversed.
     private static bool IsBodyLevel(XmlReader r) => true;
 
+    /// <summary>Document-wide load state: open bookmarks by file id, notes by file id.</summary>
+    internal sealed class LoadContext
+    {
+        public readonly System.Collections.Generic.Dictionary<int, Note> Footnotes = new();
+        public readonly System.Collections.Generic.Dictionary<int, Note> Endnotes = new();
+    }
+
+    /// <summary>One story (the body, a header/footer, a note): fields may span its paragraphs.</summary>
+    internal sealed class StoryContext
+    {
+        public StoryContext(LoadContext doc, ImageSource? images) { Doc = doc; Images = images; }
+        public LoadContext Doc { get; }
+        public ImageSource? Images { get; }
+        /// <summary>A note, header or footer: note references inside it are dropped (Word does not allow them).</summary>
+        public bool NoNoteReferences { get; init; }
+        /// <summary>Open bookmarks of this story by file id (a repeated id pairs with its latest start).</summary>
+        public readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<Bookmark>> OpenBookmarks = new(StringComparer.Ordinal);
+        /// <summary>Field begins ignored because the stack is at its cap (their ends are ignored too).</summary>
+        public int IgnoredFields;
+        /// <summary>The paragraph has only marker runs so far (a page break then becomes PageBreakBefore); runs checked up to <see cref="CheckedRuns"/>.</summary>
+        public bool OnlyMarkers;
+        public int CheckedRuns;
+
+        public bool OnlyMarkersSoFar(Paragraph p)
+        {
+            for (; CheckedRuns < p.Runs.Count; CheckedRuns++)
+                if (!p.Runs[CheckedRuns].IsMarker) OnlyMarkers = false;
+            return OnlyMarkers;
+        }
+        public readonly System.Collections.Generic.List<FieldFrame> Fields = new();
+        /// <summary>Bookmark markers met between paragraphs (body or table level), placed at the next paragraph's start.</summary>
+        public readonly System.Collections.Generic.List<Run> Pending = new();
+        public Paragraph? Last;
+
+        /// <summary>Markers still pending at the story's end go to its last paragraph.</summary>
+        public void Finish()
+        {
+            if (Pending.Count == 0 || Last is null) return;
+            foreach (var m in Pending) Last.AddRun(m);
+            Pending.Clear();
+        }
+    }
+
+    /// <summary>One open field (w:fldChar begin … end).</summary>
+    internal sealed class FieldFrame
+    {
+        public Field Field = new("");
+        /// <summary>The instruction so far: strings and nested fields.</summary>
+        public readonly System.Collections.Generic.List<object> Parts = new();
+        public string InstructionText
+        {
+            get
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var part in Parts) sb.Append(part is Field f ? f.CachedResult ?? "" : (string)part);
+                return sb.ToString();
+            }
+        }
+        public void AddInstruction(string text)
+        {
+            if (Parts.Count > 0 && Parts[^1] is string last) Parts[^1] = last + text;
+            else if (Parts.Count < 256) Parts.Add(text);
+        }
+        public void ApplyInstruction()
+        {
+            if (Parts.Exists(x => x is Field)) Field.SetInstructionParts(Parts);
+            else Field.Instruction = InstructionText;
+        }
+        public readonly System.Text.StringBuilder Result = new();
+        public bool Separated;
+        /// <summary>A field inside another field's instruction: kept as a nested part of that instruction.</summary>
+        public bool InInstruction;
+        /// <summary>A PAGE / NUMPAGES / SECTIONPAGES field: its result is captured into one field run.</summary>
+        public bool PageCapture;
+        /// <summary>Capture already emitted (the field continued past its paragraph).</summary>
+        public bool Done;
+        public TextFormat BeginFormat = TextFormat.None;
+        public string? BeginStyle;
+        public TextFormat? ResultFormat;
+        public string? ResultStyle;
+    }
+
+    /// <summary>The link a run sits in.</summary>
+    private sealed record LinkInfo(string? Url, string? Anchor, string? Tooltip);
+
     /// <summary>
     /// Loads one <c>w:p</c> subtree: paragraph properties from <c>w:pPr</c>, then every run
     /// (<c>w:r</c>) wherever it sits — directly, or inside hyperlinks, insertions, smart tags,
-    /// simple fields or content controls — with its full run formatting.
+    /// simple fields or content controls — with its full run formatting, bookmarks, fields and
+    /// note references.
     /// </summary>
-    internal static Paragraph LoadParagraph(XmlReader sub) => LoadParagraph(sub, null);
-
-    internal static Paragraph LoadParagraph(XmlReader sub, ImageSource? images)
+    internal static Paragraph LoadParagraph(XmlReader sub, StoryContext ctx)
     {
         var p = new Paragraph();
+        foreach (var m in ctx.Pending) p.AddRun(m);
+        ctx.Pending.Clear();
+        ctx.Last = p;
+        ctx.OnlyMarkers = true;
+        ctx.CheckedRuns = 0;
         if (!sub.Read()) return p; // positioned on <w:p>
-        var fields = new FieldState();
-        LoadParagraphContent(sub, p, fields, images, hyperlink: null);
+        LoadParagraphContent(sub, p, ctx, link: null);
         // A page field still open at the paragraph end (malformed, or ending in a later paragraph):
         // keep what was captured instead of losing it.
-        if (fields.Capturing && fields.Result.Length > 0)
-            p.AddRun(Run.Field(fields.Instruction.ToString(), fields.Result.ToString(), fields.Format, fields.StyleId));
+        foreach (var f in ctx.Fields)
+            if (f.PageCapture && !f.Done)
+            {
+                if (f.Result.Length > 0) p.AddRun(Run.Field(f.InstructionText, f.Result.ToString(), f.ResultFormat, f.ResultStyle));
+                f.Done = true;
+            }
+        // A field whose instruction never reached its separator cannot run on into the next paragraph
+        // (malformed; Word repairs it): drop it, and everything opened inside it, so the text that follows shows.
+        int unseparated = ctx.Fields.FindIndex(f => !f.Separated);
+        if (unseparated >= 0)
+        {
+            ctx.Fields.RemoveRange(unseparated, ctx.Fields.Count - unseparated);
+            ctx.IgnoredFields = 0;
+        }
         return p;
     }
 
-    /// <summary>Reads the descendants of the element the reader is on (a w:p, or a w:hyperlink inside one).</summary>
-    private static void LoadParagraphContent(XmlReader sub, Paragraph p, FieldState fields, ImageSource? images, string? hyperlink)
+    /// <summary>A bookmark marker from a w:bookmarkStart / w:bookmarkEnd (reader on it), or null.</summary>
+    internal static Run? BookmarkMarker(XmlReader r, StoryContext story)
+    {
+        var open = story.OpenBookmarks;
+        var id = r.GetAttribute("id", W);
+        if (id is null) return null;
+        if (r.LocalName == "bookmarkStart")
+        {
+            var name = r.GetAttribute("name", W);
+            if (string.IsNullOrEmpty(name)) return null;
+            var b = Bookmark.Loaded(name);
+            if (int.TryParse(r.GetAttribute("colFirst", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cf) && cf >= 0) b.ColumnFirst = cf;
+            if (int.TryParse(r.GetAttribute("colLast", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cl) && cl >= 0) b.ColumnLast = cl;
+            if (!open.TryGetValue(id, out var list)) open[id] = list = new System.Collections.Generic.List<Bookmark>();
+            if (list.Count < 1024) list.Add(b);
+            return Run.BookmarkRun(b, true);
+        }
+        if (!open.TryGetValue(id, out var starts) || starts.Count == 0) return null;
+        var started = starts[^1];
+        starts.RemoveAt(starts.Count - 1);
+        if (starts.Count == 0) open.Remove(id);
+        return Run.BookmarkRun(started, false);
+    }
+
+    /// <summary>Reads the descendants of the element the reader is on (a w:p, or a w:hyperlink / w:fldSimple inside one).</summary>
+    private static void LoadParagraphContent(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link)
     {
         while (sub.Read())
         {
@@ -501,54 +873,82 @@ internal static class DocumentLoader
                     using (sub.ReadSubtree()) { }
                     break;
                 case "pPr":
-                    if (hyperlink is null)
+                    if (link is null)
                         using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
                     else using (sub.ReadSubtree()) { }
                     break;
+                case "bookmarkStart":
+                case "bookmarkEnd":
+                    if (BookmarkMarker(sub, ctx) is { } marker) p.AddRun(marker);
+                    break;
                 case "hyperlink":
                 {
-                    // An external link (r:id → the part's hyperlink relationship; w:anchor appended
-                    // as a fragment). Internal links (w:anchor only) come with bookmarks.
-                    string? url = hyperlink;
+                    // An external link (r:id → the part's hyperlink relationship; a w:anchor with it is
+                    // appended as a fragment) or an internal one (w:anchor only: a bookmark name).
+                    string? url = link?.Url;
+                    string? anchorOnly = null;
+                    var anchor = sub.GetAttribute("anchor", W);
                     var relId = sub.GetAttribute("id", DocumentSerializer.R);
-                    if (relId is not null && images?.GetHyperlink(relId) is { } target)
-                    {
-                        var anchor = sub.GetAttribute("anchor", W);
+                    if (relId is not null && ctx.Images?.GetHyperlink(relId) is { } target)
                         url = string.IsNullOrEmpty(anchor) || target.Contains('#') ? target : target + "#" + anchor;
+                    else if (!string.IsNullOrEmpty(anchor) && relId is null)
+                    {
+                        url = null;
+                        anchorOnly = anchor;
                     }
+                    var tooltip = sub.GetAttribute("tooltip", W);
                     if (sub.IsEmptyElement) break;
+                    var inner = url is null && anchorOnly is null ? link : new LinkInfo(url, anchorOnly, tooltip);
                     using (var h = sub.ReadSubtree())
                     {
                         h.Read();
-                        LoadParagraphContent(h, p, fields, images, url);
+                        LoadParagraphContent(h, p, ctx, inner);
                     }
                     break;
                 }
                 case "r":
-                    using (var r = sub.ReadSubtree()) LoadRun(r, p, fields, images, hyperlink);
+                    using (var r = sub.ReadSubtree()) LoadRun(r, p, ctx, link);
                     break;
                 case "fldSimple":
                 {
                     var instr = sub.GetAttribute("instr", W);
-                    if (!IsPageField(instr)) break; // other fields: their result runs load as text
-                    var result = new System.Text.StringBuilder();
-                    TextFormat? fieldFormat = null;
-                    string? fieldStyle = null;
-                    using (var fs = sub.ReadSubtree())
+                    if (IsPageField(instr))
                     {
-                        bool adv = true;
-                        while (true)
+                        var result = new System.Text.StringBuilder();
+                        TextFormat? fieldFormat = null;
+                        string? fieldStyle = null;
+                        using (var fs = sub.ReadSubtree())
                         {
-                            if (adv && !fs.Read()) break;
-                            adv = true;
-                            if (fs.EOF) break;
-                            if (fs.NodeType != XmlNodeType.Element || fs.NamespaceURI != W) continue;
-                            if (fs.LocalName == "rPr" && fieldFormat is null)
-                                using (var rp = fs.ReadSubtree()) fieldFormat = RunProperties.Read(rp, out fieldStyle);
-                            else if (fs.LocalName == "t") { result.Append(fs.ReadElementContentAsString()); adv = false; }
+                            bool adv = true;
+                            while (true)
+                            {
+                                if (adv && !fs.Read()) break;
+                                adv = true;
+                                if (fs.EOF) break;
+                                if (fs.NodeType != XmlNodeType.Element || fs.NamespaceURI != W) continue;
+                                if (fs.LocalName == "rPr" && fieldFormat is null)
+                                    using (var rp = fs.ReadSubtree()) fieldFormat = RunProperties.Read(rp, out fieldStyle);
+                                else if (fs.LocalName == "t") { result.Append(fs.ReadElementContentAsString()); adv = false; }
+                            }
                         }
+                        p.AddRun(Run.Field(instr!, result.ToString(), fieldFormat, fieldStyle));
+                        break;
                     }
-                    p.AddRun(Run.Field(instr!, result.ToString(), fieldFormat, fieldStyle));
+                    // Any other simple field: markers around its result runs, written back as w:fldSimple.
+                    var field = new Field(instr ?? "")
+                    {
+                        Simple = true,
+                        Dirty = RunProperties.OnOff(sub, "dirty") == true,
+                        Locked = RunProperties.OnOff(sub, "fldLock") == true,
+                    };
+                    p.AddRun(Run.FieldMarkRun(field, FieldMarkType.Begin));
+                    if (!sub.IsEmptyElement)
+                        using (var fs = sub.ReadSubtree())
+                        {
+                            fs.Read();
+                            LoadParagraphContent(fs, p, ctx, link);
+                        }
+                    p.AddRun(Run.FieldMarkRun(field, FieldMarkType.End));
                     break;
                 }
             }
@@ -602,16 +1002,53 @@ internal static class DocumentLoader
         return word is "PAGE" or "NUMPAGES" or "SECTIONPAGES";
     }
 
-    /// <summary>Complex field (w:fldChar begin/separate/end + w:instrText) state across the runs of one paragraph.</summary>
-    private sealed class FieldState
+    /// <summary>The paragraphs and tables of a text box (w:txbxContent, reader on it); a story of its own for fields.</summary>
+    private static void LoadTextBoxContent(XmlReader r, TextBox box, StoryContext outer)
     {
-        public int Depth;
-        public bool Collecting;
-        public bool Capturing;
-        public readonly System.Text.StringBuilder Instruction = new();
-        public readonly System.Text.StringBuilder Result = new();
-        public TextFormat? Format;
-        public string? StyleId;
+        if (!r.Read()) return;
+        var story = new StoryContext(outer.Doc, outer.Images);
+        int childDepth = r.Depth + 1;
+        bool more = r.Read();
+        while (more)
+        {
+            if (r.NodeType == XmlNodeType.Element && r.Depth == childDepth && r.NamespaceURI == W)
+            {
+                if (r.LocalName == "p")
+                {
+                    using (var sub = r.ReadSubtree()) box.Paragraphs.Add(LoadParagraph(sub, story));
+                    more = r.Read();
+                    continue;
+                }
+                if (r.LocalName == "tbl")
+                {
+                    using (var sub = r.ReadSubtree()) box.AppendTable(LoadTable(sub, story));
+                    more = r.Read();
+                    continue;
+                }
+                if (r.LocalName is "bookmarkStart" or "bookmarkEnd" && BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
+            }
+            more = r.Read();
+        }
+        story.Finish();
+    }
+
+    /// <summary>Where run text goes while fields are open.</summary>
+    private enum TextSink { Normal, Capture, Instruction, Drop }
+
+    private static TextSink SinkOf(StoryContext ctx, out FieldFrame? frame)
+    {
+        frame = null;
+        if (ctx.Fields.Count == 0) return TextSink.Normal;
+        var top = ctx.Fields[^1];
+        if (top.InInstruction)
+        {
+            if (!top.Separated) return TextSink.Drop;
+            frame = top; // a nested instruction field's cached result
+            return TextSink.Instruction;
+        }
+        if (!top.Separated) return TextSink.Drop; // between begin and separate: only w:instrText counts
+        if (top.PageCapture && !top.Done) { frame = top; return TextSink.Capture; }
+        return TextSink.Normal;
     }
 
     /// <summary>
@@ -619,10 +1056,12 @@ internal static class DocumentLoader
     /// <see cref="Run"/> whose text carries <c>\t</c> and <c>\n</c> — exactly what the writer
     /// turns back into the same <c>w:t</c>/<c>w:tab</c>/<c>w:br</c> sequence, so a run
     /// round-trips as a single run. Page, column and text-wrapping breaks become explicit
-    /// <see cref="BreakType"/> runs.
+    /// <see cref="BreakType"/> runs; field characters, note references and symbols become their
+    /// own runs.
     /// </summary>
-    private static void LoadRun(XmlReader sub, Paragraph p, FieldState fields, ImageSource? images, string? hyperlink)
+    private static void LoadRun(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link)
     {
+        var images = ctx.Images;
         var format = TextFormat.None;
         string? charStyle = null;
         var text = new System.Text.StringBuilder();
@@ -634,12 +1073,17 @@ internal static class DocumentLoader
         {
             if (text.Length == 0 && !sawText) return;
             // A loaded link keeps exactly the run's own style (Word adds no Hyperlink style by itself).
-            p.AddRun(hyperlink is null
+            p.AddRun(link is null
                 ? new Run(text.ToString(), format) { CharacterStyleId = charStyle }
-                : new Run(text.ToString(), format) { CharacterStyleId = charStyle, HyperlinkUrl = hyperlink, HyperlinkStyleImplied = false });
+                : new Run(text.ToString(), format)
+                {
+                    CharacterStyleId = charStyle, HyperlinkUrl = link.Url, HyperlinkAnchor = link.Anchor,
+                    HyperlinkTooltip = link.Tooltip, HyperlinkStyleImplied = false,
+                });
             text.Clear();
             sawText = false;
         }
+        bool NormalText() => SinkOf(ctx, out _) == TextSink.Normal;
 
         // ReadElementContentAsString leaves the cursor on the NEXT node, so the loop only
         // advances when the previous step did not already do so.
@@ -677,7 +1121,7 @@ internal static class DocumentLoader
                 continue;
             }
 
-            if (images is not null && sub.LocalName == "drawing" && sub.NamespaceURI == W)
+            if (images is not null && sub.LocalName == "drawing" && sub.NamespaceURI == W && NormalText())
             {
                 // A picture becomes an image run in place (inline or floating, with its anchor
                 // properties); other drawings keep their text, flattened.
@@ -700,13 +1144,19 @@ internal static class DocumentLoader
                         if (d.NodeType == XmlNodeType.Element && d.Depth == depth && d.NamespaceURI == DocumentSerializer.WP
                             && d.LocalName is "inline" or "anchor")
                         {
-                            var pic = DrawingXml.Read(d);
+                            var pic = DrawingXml.Read(d, (tc, box) => LoadTextBoxContent(tc, box, ctx));
+                            if (pic.TextBox is { } tb)
+                            {
+                                p.AddRun(new Run("", TextFormat.None) { TextBox = tb });
+                                more = d.Read();
+                                continue;
+                            }
                             var media = pic.IsPicture && pic.EmbedRelId is { } er ? images.Get(er) : null;
-                            var link = pic.IsPicture && pic.LinkRelId is { } lr ? images.GetLink(lr) : null;
+                            var plink = pic.IsPicture && pic.LinkRelId is { } lr ? images.GetLink(lr) : null;
                             if (media is { } m)
-                                p.AddRun(new Run("", TextFormat.None) { Image = pic.ToImage(m.Bytes, m.ContentType, link) });
-                            else if (link is not null)
-                                p.AddRun(new Run("", TextFormat.None) { Image = pic.ToImage(Array.Empty<byte>(), ImageMetadata.ContentTypeForExtension(Path.GetExtension(link)) ?? "application/octet-stream", link) });
+                                p.AddRun(new Run("", TextFormat.None) { Image = pic.ToImage(m.Bytes, m.ContentType, plink) });
+                            else if (plink is not null)
+                                p.AddRun(new Run("", TextFormat.None) { Image = pic.ToImage(Array.Empty<byte>(), ImageMetadata.ContentTypeForExtension(Path.GetExtension(plink)) ?? "application/octet-stream", plink) });
                             else if (pic.Text.Length > 0)
                                 p.AddRun(new Run(pic.Text, TextFormat.None));
                             more = d.Read();
@@ -722,7 +1172,8 @@ internal static class DocumentLoader
             {
                 // Text boxes / shapes: keep their words, flattened (geometry is outside the model).
                 Flush();
-                AppendEmbeddedText(sub, p);
+                if (NormalText()) AppendEmbeddedText(sub, p);
+                else using (sub.ReadSubtree()) { }
                 continue;
             }
             if (sub.NamespaceURI != W) continue;
@@ -736,23 +1187,31 @@ internal static class DocumentLoader
                     using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out charStyle);
                     break;
                 case "t":
-                    if (fields.Capturing)
-                    {
-                        if (fields.Result.Length == 0 && fields.Format is null) { fields.Format = format; fields.StyleId = charStyle; }
-                        fields.Result.Append(sub.ReadElementContentAsString());
-                    }
-                    else
-                    {
-                        text.Append(sub.ReadElementContentAsString());
-                        sawText = true;
-                    }
+                {
+                    var value = sub.ReadElementContentAsString();
                     advance = false;
+                    switch (SinkOf(ctx, out var frame))
+                    {
+                        case TextSink.Capture:
+                            if (frame!.Result.Length == 0 && frame.ResultFormat is null) { frame.ResultFormat = format; frame.ResultStyle = charStyle; }
+                            frame.Result.Append(value);
+                            break;
+                        case TextSink.Instruction:
+                            if (frame!.Result.Length < 1_000_000) frame.Result.Append(value);
+                            break;
+                        case TextSink.Normal:
+                            text.Append(value);
+                            sawText = true;
+                            break;
+                    }
                     break;
+                }
                 case "instrText":
                 {
                     var instr = sub.ReadElementContentAsString();
-                    if (fields.Collecting && fields.Depth == 1) fields.Instruction.Append(instr);
                     advance = false;
+                    if (ctx.IgnoredFields == 0 && ctx.Fields.Count > 0 && ctx.Fields[^1] is { Separated: false } top)
+                        top.AddInstruction(instr);
                     break;
                 }
                 case "fldChar":
@@ -761,45 +1220,139 @@ internal static class DocumentLoader
                     Flush();
                     if (kind == "begin")
                     {
-                        fields.Depth++;
-                        if (fields.Depth == 1) { fields.Collecting = true; fields.Instruction.Clear(); }
-                    }
-                    else if (kind == "separate" && fields.Depth == 1)
-                    {
-                        fields.Collecting = false;
-                        if (IsPageField(fields.Instruction.ToString())) { fields.Capturing = true; fields.Result.Clear(); fields.Format = null; fields.StyleId = null; }
-                    }
-                    else if (kind == "end" && fields.Depth > 0)
-                    {
-                        if (fields.Depth == 1)
+                        if (ctx.Fields.Count >= 64 || ctx.IgnoredFields > 0)
                         {
-                            var instr = fields.Instruction.ToString();
-                            if (fields.Capturing || (fields.Collecting && IsPageField(instr)))
-                                p.AddRun(Run.Field(instr, fields.Result.ToString(), fields.Format, fields.StyleId));
-                            fields.Capturing = false;
-                            fields.Collecting = false;
+                            ctx.IgnoredFields++; // absurd nesting: the outer 64 fields are kept
+                            if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
+                            break;
                         }
-                        fields.Depth--;
+                        bool inInstruction = ctx.Fields.Count > 0 && (ctx.Fields[^1].InInstruction || !ctx.Fields[^1].Separated);
+                        var frame = new FieldFrame
+                        {
+                            InInstruction = inInstruction,
+                            BeginFormat = format,
+                            BeginStyle = charStyle,
+                            Field = new Field("")
+                            {
+                                Dirty = RunProperties.OnOff(sub, "dirty") == true,
+                                Locked = RunProperties.OnOff(sub, "fldLock") == true,
+                            },
+                        };
+                        ctx.Fields.Add(frame);
+                        // Legacy form-field data (w:ffData) and w:fldData: carried verbatim.
+                        if (!sub.IsEmptyElement)
+                            using (var fc = sub.ReadSubtree())
+                            {
+                                fc.Read();
+                                int dataDepth = fc.Depth + 1;
+                                bool more = fc.Read();
+                                while (more)
+                                {
+                                    if (fc.NodeType == XmlNodeType.Element && fc.Depth == dataDepth && frame.Field.RawData.Count < 4)
+                                    {
+                                        frame.Field.RawData.Add(fc.ReadOuterXml());
+                                        more = !fc.EOF;
+                                        continue;
+                                    }
+                                    more = fc.Read();
+                                }
+                            }
+                    }
+                    else if (kind == "separate" && ctx.Fields.Count > 0)
+                    {
+                        if (ctx.IgnoredFields > 0) break;
+                        var top = ctx.Fields[^1];
+                        if (top.Separated) break;
+                        top.Separated = true;
+                        if (top.InInstruction) break;
+                        var instr = top.InstructionText;
+                        if (IsPageField(instr) && !top.Parts.Exists(x => x is Field) && !ctx.Fields.Any(f => f != top && f.PageCapture)) { top.PageCapture = true; break; }
+                        top.ApplyInstruction();
+                        p.AddRun(Run.FieldMarkRun(top.Field, FieldMarkType.Begin, top.BeginFormat, top.BeginStyle));
+                        p.AddRun(Run.FieldMarkRun(top.Field, FieldMarkType.Separate, format, charStyle));
+                    }
+                    else if (kind == "end" && ctx.Fields.Count > 0)
+                    {
+                        if (ctx.IgnoredFields > 0) { ctx.IgnoredFields--; break; }
+                        var top = ctx.Fields[^1];
+                        ctx.Fields.RemoveAt(ctx.Fields.Count - 1);
+                        if (top.InInstruction)
+                        {
+                            // A nested instruction field: becomes a part of the enclosing field's instruction.
+                            if (ctx.Fields.Count > 0)
+                            {
+                                var nested = new Field("") { CachedResult = top.Result.ToString(), Dirty = top.Field.Dirty, Locked = top.Field.Locked };
+                                nested.RawData.AddRange(top.Field.RawData);
+                                if (top.Parts.Exists(x => x is Field)) nested.SetInstructionParts(top.Parts);
+                                else nested.Instruction = top.InstructionText;
+                                var parent = ctx.Fields[^1];
+                                if (parent.Parts.Count < 256) parent.Parts.Add(nested);
+                            }
+                            break;
+                        }
+                        var instr = top.InstructionText;
+                        if (top.PageCapture)
+                        {
+                            if (!top.Done) p.AddRun(Run.Field(instr, top.Result.ToString(), top.ResultFormat, top.ResultStyle));
+                        }
+                        else if (!top.Separated)
+                        {
+                            if (IsPageField(instr) && !top.Parts.Exists(x => x is Field)) p.AddRun(Run.Field(instr, "", null, null));
+                            else
+                            {
+                                top.ApplyInstruction();
+                                p.AddRun(Run.FieldMarkRun(top.Field, FieldMarkType.Begin, top.BeginFormat, top.BeginStyle));
+                                p.AddRun(Run.FieldMarkRun(top.Field, FieldMarkType.End, format, charStyle));
+                            }
+                        }
+                        else p.AddRun(Run.FieldMarkRun(top.Field, FieldMarkType.End, format, charStyle));
                     }
                     break;
                 }
+                case "footnoteReference":
+                case "endnoteReference":
+                {
+                    Flush();
+                    if (!NormalText() || ctx.NoNoteReferences) break;
+                    var notes = sub.LocalName == "footnoteReference" ? ctx.Doc.Footnotes : ctx.Doc.Endnotes;
+                    if (int.TryParse(sub.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var nid)
+                        && notes.TryGetValue(nid, out var note))
+                        p.AddRun(Run.NoteReferenceRun(note, format, charStyle, RunProperties.OnOff(sub, "customMarkFollows") == true));
+                    break;
+                }
+                case "footnoteRef":
+                case "endnoteRef":
+                    Flush();
+                    if (NormalText()) p.AddRun(Run.NoteMarkRun(charStyle, format));
+                    break;
+                case "sym":
+                {
+                    Flush();
+                    var font = sub.GetAttribute("font", W);
+                    var code = sub.GetAttribute("char", W);
+                    if (NormalText() && !string.IsNullOrEmpty(font) && code is { Length: > 0 and <= 4 }
+                        && int.TryParse(code, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var cp) && cp > 0)
+                        p.AddRun(Run.SymbolRun(new SymbolChar(font, (char)cp), format, charStyle));
+                    break;
+                }
                 case "tab":
-                    text.Append('\t');
+                    if (NormalText()) text.Append('\t');
                     break;
                 case "ptab":
                     Flush();
-                    p.AddRun(Run.PositionalTabRun(ReadPositionalTab(sub), format, charStyle));
+                    if (NormalText()) p.AddRun(Run.PositionalTabRun(ReadPositionalTab(sub), format, charStyle));
                     break;
                 case "cr":
-                    text.Append('\n');
+                    if (NormalText()) text.Append('\n');
                     break;
                 case "noBreakHyphen":
-                    text.Append('\u2011');
+                    if (NormalText()) text.Append('\u2011');
                     break;
                 case "softHyphen":
-                    text.Append('\u00AD');
+                    if (NormalText()) text.Append('\u00AD');
                     break;
                 case "br":
+                    if (!NormalText()) break;
                     var type = sub.GetAttribute("type", W);
                     var clear = sub.GetAttribute("clear", W);
                     if (type is null && clear is null)
@@ -808,7 +1361,7 @@ internal static class DocumentLoader
                         break;
                     }
                     Flush();
-                    if (type == "page" && p.Runs.Count == 0)
+                    if (type == "page" && !p.PageBreakBefore && ctx.OnlyMarkersSoFar(p))
                         p.PageBreakBefore = true; // the shape Document.AddPageBreak writes
                     else
                         p.AddRun(Run.BreakRun(ParseBreak(type, clear), format, charStyle));
@@ -910,7 +1463,11 @@ internal static class DocumentLoader
         },
     };
 
-    private static DocTable LoadTable(XmlReader sub, ImageSource? images) => TableXml.Read(sub, s => LoadParagraph(s, images));
+    private static DocTable LoadTable(XmlReader sub, StoryContext story)
+        => TableXml.Read(sub, s => LoadParagraph(s, story), m =>
+        {
+            if (BookmarkMarker(m, story) is { } marker) story.Pending.Add(marker);
+        });
 
     /// <summary>The media a part's pictures refer to (r:embed → bytes and type), read once each, within the part-size limit.</summary>
     internal sealed class ImageSource

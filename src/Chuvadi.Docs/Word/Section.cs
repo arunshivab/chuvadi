@@ -267,8 +267,11 @@ public sealed class Section
     /// <summary>Loader: the header types ("default", "first", "even") that carried the watermark in the file; null = all that apply.</summary>
     internal HashSet<string>? WatermarkSlots { get; set; }
 
-    /// <summary>footnotePr / endnotePr carried verbatim from a loaded file (modelled with notes).</summary>
-    internal List<string> RawNoteProperties { get; } = new();
+    /// <summary>This section's footnote numbering and placement (w:footnotePr); unset members follow <see cref="Document.FootnoteProperties"/>.</summary>
+    public NoteProperties FootnoteProperties { get; private set; } = new();
+
+    /// <summary>This section's endnote numbering (w:endnotePr); unset members follow <see cref="Document.EndnoteProperties"/>.</summary>
+    public NoteProperties EndnoteProperties { get; private set; } = new();
 
     /// <summary>
     /// A copy of the layout settings (page, columns, numbering, borders…) without headers,
@@ -283,7 +286,8 @@ public sealed class Section
             TextDirection = TextDirection, RightToLeft = RightToLeft, RightToLeftGutter = RightToLeftGutter,
             FormProtection = FormProtection, NoEndnotes = NoEndnotes, Grid = Grid?.Clone(), TitlePage = TitlePage,
         };
-        c.RawNoteProperties.AddRange(RawNoteProperties);
+        c.FootnoteProperties = FootnoteProperties.Clone();
+        c.EndnoteProperties = EndnoteProperties.Clone();
         return c;
     }
 

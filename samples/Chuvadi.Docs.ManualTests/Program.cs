@@ -40,6 +40,7 @@ public static class Program
             ("Templates", TemplatesTests.Run),
             ("TemplateFixes", TemplateFixesTests.Run),
             ("LoaderHandoff", LoaderHandoffTests.Run),
+            ("FieldsNotes", FieldsNotesTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;
