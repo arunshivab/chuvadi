@@ -24,7 +24,7 @@ namespace Chuvadi.Print.ManualTests
         public FakeIppPrinter(Action<IppAttributeGroup>? configure = null)
         {
             Port = FreePort();
-            _listener.Prefixes.Add("http://127.0.0.1:" + Port + "/");
+            _listener.Prefixes.Add("http://localhost:" + Port + "/");
             _listener.Start();
             PrinterAttributes = DefaultAttributes(Uri);
             configure?.Invoke(PrinterAttributes);
@@ -33,7 +33,7 @@ namespace Chuvadi.Print.ManualTests
         }
 
         public int Port { get; }
-        public string Uri => "ipp://127.0.0.1:" + Port + "/ipp/print";
+        public string Uri => "ipp://localhost:" + Port + "/ipp/print";
         public IppAttributeGroup PrinterAttributes { get; }
 
         /// <summary>When set, the next Print-Job is answered with this status (then cleared).</summary>
