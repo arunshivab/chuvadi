@@ -22,24 +22,69 @@ internal static class ParagraphProperties
     /// autoSpaceDN, bidi, adjustRightInd, snapToGrid, spacing, ind, contextualSpacing,
     /// mirrorIndents, jc, textAlignment, outlineLvl, rPr.
     /// </summary>
-    public static void Write(XmlWriter x, Paragraph p, NumberingXml.Plan? numbering, Action<XmlWriter>? sectPr = null)
+    public static void Write(XmlWriter x, Paragraph p, NumberingXml.Plan? numbering, Action<XmlWriter>? sectPr = null,
+        Func<RevisionMark, string>? revisionId = null)
     {
         var f = p.Format;
         var styleId = p.StyleId;
         bool hasStyle = styleId != "Normal";
         var num = numbering?.For(p);
-        bool needed = hasStyle || num is not null || !f.IsDefault || sectPr is not null;
+        bool tracked = revisionId is not null && (p.MarkRevision is not null || p.FormatChange is not null || p.MarkFormatChange is not null);
+        bool needed = hasStyle || num is not null || !f.IsDefault || sectPr is not null || tracked;
         if (!needed) return;
 
         x.WriteStartElement("pPr", W);
         if (hasStyle) Val(x, "pStyle", styleId);
-        WriteBody(x, f, num);
+        Action<XmlWriter>? markHead = revisionId is not null && p.MarkRevision is { } mr
+            ? w => WriteRevisionStart(w, mr.Type == RevisionType.Delete ? "del" : "ins", mr, revisionId(mr), close: true)
+            : null;
+        Action<XmlWriter>? markTail = revisionId is not null && p.MarkFormatChange is { } mfc
+            ? w => WriteRunFormatChange(w, mfc, revisionId(mfc.Mark))
+            : null;
+        WriteBody(x, f, num, markHead, markTail: markTail);
         sectPr?.Invoke(x); // CT_PPr: … rPr, sectPr, pPrChange
+        if (revisionId is not null && p.FormatChange is { } change)
+        {
+            WriteRevisionStart(x, "pPrChange", change.Mark, revisionId(change.Mark), close: false);
+            x.WriteStartElement("pPr", W);
+            if (change.OldStyleId is { } os) Val(x, "pStyle", os);
+            // The old numbering is written back as loaded; a list that no longer exists is left out.
+            (int? NumId, int? Level)? oldNum = change.OldNumbering is var (oid, olvl)
+                ? oid is null or 0 ? (oid, olvl)
+                  : numbering?.IdOf(change.OldList) is int nid ? (nid, olvl) : null
+                : null;
+            WriteBody(x, change.OldFormat, oldNum, null, includeMark: false);
+            x.WriteEndElement();
+            x.WriteEndElement();
+        }
         x.WriteEndElement();
     }
 
+    /// <summary>w:rPrChange: the old run properties (CT_RPrOriginal, without a nested change).</summary>
+    internal static void WriteRunFormatChange(XmlWriter x, RunFormatChange change, string id)
+    {
+        WriteRevisionStart(x, "rPrChange", change.Mark, id, close: false);
+        x.WriteStartElement("rPr", W);
+        RunProperties.WriteChildren(x, change.OldFormat, change.OldCharacterStyleId);
+        x.WriteEndElement();
+        x.WriteEndElement();
+    }
+
+    /// <summary>Starts a tracked-change element (w:ins, w:del, w:pPrChange, w:rPrChange…) with id, author and date.</summary>
+    internal static void WriteRevisionStart(XmlWriter x, string element, RevisionMark mark, string id, bool close)
+    {
+        x.WriteStartElement(element, W);
+        x.WriteAttributeString("id", W, id);
+        x.WriteAttributeString("author", W, mark.Author);
+        if (mark.Date is DateTime d)
+            x.WriteAttributeString("date", W, (d.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(d, DateTimeKind.Utc) : d.ToUniversalTime())
+                .ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+        if (close) x.WriteEndElement();
+    }
+
     /// <summary>Writes the pPr children for a format (no pStyle) — reusable by style definitions and list levels.</summary>
-    internal static void WriteBody(XmlWriter x, ParagraphFormat f, (int? NumId, int? Level)? numbering = null)
+    internal static void WriteBody(XmlWriter x, ParagraphFormat f, (int? NumId, int? Level)? numbering = null,
+        Action<XmlWriter>? markHead = null, bool includeMark = true, Action<XmlWriter>? markTail = null)
     {
         Toggle(x, "keepNext", f.KeepWithNext);
         Toggle(x, "keepLines", f.KeepLinesTogether);
@@ -148,7 +193,8 @@ internal static class ParagraphProperties
             Val(x, "outlineLvl", ol.ToString(CultureInfo.InvariantCulture));
         }
 
-        if (f.MarkFormat is { IsDefault: false } mark) RunProperties.Write(x, mark);
+        if (includeMark && (f.MarkFormat is { IsDefault: false } || markHead is not null || markTail is not null))
+            RunProperties.Write(x, f.MarkFormat ?? TextFormat.None, null, markHead, markTail);
     }
 
     /// <summary>
@@ -243,13 +289,46 @@ internal static class ParagraphProperties
                     using (var tb = sub.ReadSubtree()) ReadTabs(tb, f);
                     break;
                 case "rPr":
-                    using (var rp = sub.ReadSubtree()) f.MarkFormat = RunProperties.Read(rp, out _);
+                {
+                    TextFormat mark;
+                    RevisionMark? markRevision;
+                    RunFormatChange? markChange;
+                    using (var rp = sub.ReadSubtree()) mark = RunProperties.Read(rp, out _, out markChange, out markRevision);
+                    f.MarkFormat = mark.IsDefault ? null : mark;
+                    if (markRevision is not null) p.MarkRevision = markRevision;
+                    if (markChange is not null) p.MarkFormatChange = markChange;
                     break;
+                }
+                case "pPrChange":
+                {
+                    var changeMark = RunProperties.ReadRevisionMark(sub, RevisionType.FormatChange);
+                    var old = new Paragraph();
+                    bool sawStyle = false;
+                    if (!sub.IsEmptyElement)
+                        using (var ch = sub.ReadSubtree())
+                        {
+                            ch.Read();
+                            while (ch.Read())
+                                if (ch.NodeType == XmlNodeType.Element && ch.NamespaceURI == W && ch.LocalName == "pPr")
+                                {
+                                    using (var inner = ch.ReadSubtree()) Read(inner, old);
+                                    break;
+                                }
+                        }
+                    sawStyle = old.StyleId != "Normal";
+                    p.FormatChange = new ParagraphFormatChange(changeMark, old.Format, sawStyle ? old.StyleId : null)
+                    {
+                        OldNumbering = old.LoadedNumId is not null || old.LoadedListLevelExplicit
+                            ? (old.LoadedNumId, old.LoadedListLevelExplicit ? old.ListLevel : null)
+                            : null,
+                    };
+                    break;
+                }
                 case "sectPr":
                     using (var sp = sub.ReadSubtree()) p.LoadedSection = SectionXml.Read(sp);
                     break;
                 default:
-                    // pPrChange (history), framePr, cnfStyle, divId…: not part of the model.
+                    // framePr, cnfStyle, divId…: not part of the model.
                     if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
                     break;
             }

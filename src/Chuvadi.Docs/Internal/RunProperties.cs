@@ -22,10 +22,25 @@ internal static class RunProperties
     /// outline, shadow, emboss, imprint, noProof, vanish, color, spacing, w, kern, position,
     /// sz, szCs, highlight, u, shd, vertAlign, rtl, cs, lang.
     /// </summary>
-    public static void Write(XmlWriter x, TextFormat f, string? characterStyleId = null)
+    public static void Write(XmlWriter x, TextFormat f, string? characterStyleId = null) => Write(x, f, characterStyleId, null, null);
+
+    /// <summary>
+    /// Writes w:rPr with optional leading content (a paragraph mark's w:ins / w:del, first in
+    /// CT_ParaRPr) and trailing content (w:rPrChange, last); written whenever any is present.
+    /// </summary>
+    public static void Write(XmlWriter x, TextFormat f, string? characterStyleId, Action<XmlWriter>? head, Action<XmlWriter>? tail)
     {
-        if (f.IsDefault && characterStyleId is null) return;
+        if (f.IsDefault && characterStyleId is null && head is null && tail is null) return;
         x.WriteStartElement("rPr", W);
+        head?.Invoke(x);
+        WriteChildren(x, f, characterStyleId);
+        tail?.Invoke(x);
+        x.WriteEndElement(); // rPr
+    }
+
+    /// <summary>The rPr children of a format (no rPr element), in CT_RPr order.</summary>
+    internal static void WriteChildren(XmlWriter x, TextFormat f, string? characterStyleId)
+    {
 
         if (characterStyleId is not null) Val(x, "rStyle", characterStyleId);
 
@@ -117,7 +132,6 @@ internal static class RunProperties
             x.WriteEndElement();
         }
 
-        x.WriteEndElement(); // rPr
     }
 
     /// <summary>
@@ -125,9 +139,17 @@ internal static class RunProperties
     /// ReadSubtree) into a <see cref="TextFormat"/>. Unknown children are ignored.
     /// Also returns the character style id (w:rStyle) when present.
     /// </summary>
-    public static TextFormat Read(XmlReader sub, out string? characterStyleId)
+    public static TextFormat Read(XmlReader sub, out string? characterStyleId) => Read(sub, out characterStyleId, out _, out _);
+
+    /// <summary>
+    /// Reads a w:rPr subtree, also returning a tracked formatting change (w:rPrChange, with the old
+    /// formatting) and, for a paragraph mark's rPr, a tracked insertion / deletion of the mark.
+    /// </summary>
+    public static TextFormat Read(XmlReader sub, out string? characterStyleId, out RunFormatChange? formatChange, out RevisionMark? markRevision)
     {
         characterStyleId = null;
+        formatChange = null;
+        markRevision = null;
         bool b = false, i = false, u = false, strike = false;
         var explicitlyOff = RunToggles.None;
         string? ascii = null, hAnsi = null, eastAsia = null, cs = null, color = null, highlight = null;
@@ -146,9 +168,40 @@ internal static class RunProperties
         byte? tint = null, shade = null;
 
         if (!sub.Read()) return TextFormat.None;
+        int ownDepth = sub.Depth + 1;
         while (sub.Read())
         {
             if (sub.NodeType != XmlNodeType.Element || sub.NamespaceURI != W) continue;
+            if (sub.Depth == ownDepth)
+            {
+                if (sub.LocalName == "rPrChange")
+                {
+                    // The formatting before a tracked change: read on its own (its children are not this run's).
+                    var mark = ReadRevisionMark(sub, RevisionType.FormatChange);
+                    TextFormat old = TextFormat.None;
+                    string? oldStyle = null;
+                    if (!sub.IsEmptyElement)
+                        using (var ch = sub.ReadSubtree())
+                        {
+                            ch.Read();
+                            while (ch.Read())
+                                if (ch.NodeType == XmlNodeType.Element && ch.NamespaceURI == W && ch.LocalName == "rPr")
+                                {
+                                    using (var inner = ch.ReadSubtree()) old = Read(inner, out oldStyle);
+                                    break;
+                                }
+                        }
+                    formatChange = new RunFormatChange(mark, old, oldStyle);
+                    continue;
+                }
+                if (sub.LocalName is "ins" or "del" or "moveFrom" or "moveTo")
+                {
+                    markRevision = ReadRevisionMark(sub, sub.LocalName is "ins" or "moveTo" ? RevisionType.Insert : RevisionType.Delete);
+                    markRevision.IsMove = sub.LocalName is "moveFrom" or "moveTo";
+                    continue;
+                }
+            }
+            else if (sub.Depth > ownDepth) continue; // inside an unknown child
             switch (sub.LocalName)
             {
                 case "rStyle": characterStyleId = Attr(sub, "val"); break;
@@ -423,6 +476,14 @@ internal static class RunProperties
         "0" or "false" or "off" => false,
         _ => true,
     };
+
+    /// <summary>w:author / w:date of a tracked-change element (reader on it).</summary>
+    internal static RevisionMark ReadRevisionMark(XmlReader r, RevisionType type)
+    {
+        DateTime? date = DateTime.TryParse(r.GetAttribute("date", W), CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var d) ? d : null;
+        return RevisionMark.Loaded(type, r.GetAttribute("author", W), date);
+    }
 
     /// <summary>An ST_OnOff attribute other than w:val: null when absent.</summary>
     internal static bool? OnOff(XmlReader r, string attribute) => r.GetAttribute(attribute, W) switch

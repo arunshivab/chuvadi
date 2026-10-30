@@ -41,6 +41,7 @@ public static class Program
             ("TemplateFixes", TemplateFixesTests.Run),
             ("LoaderHandoff", LoaderHandoffTests.Run),
             ("FieldsNotes", FieldsNotesTests.Run),
+            ("CommentsRevisions", CommentsRevisionsTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

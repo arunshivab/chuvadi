@@ -171,6 +171,7 @@ internal static class DocumentLoader
         doc.LoadedMediaCache = mediaCache;
         var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache);
         var loadContext = new LoadContext();
+        LoadComments(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
         LoadNotes(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
         var body = new StoryContext(loadContext, bodyImages);
 
@@ -187,7 +188,7 @@ internal static class DocumentLoader
                     doc.AddBlock(table);
                     continue;
                 }
-                if (r.LocalName is "bookmarkStart" or "bookmarkEnd")
+                if (r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd")
                 {
                     if (BookmarkMarker(r, body) is { } marker) body.Pending.Add(marker);
                     if (!r.Read()) break;
@@ -238,6 +239,7 @@ internal static class DocumentLoader
                 case "mirrorMargins": doc.MirrorMargins = RunProperties.OnOff(r) == true; break;
                 case "gutterAtTop": doc.GutterAtTop = RunProperties.OnOff(r) == true; break;
                 case "updateFields": doc.UpdateFieldsOnOpen = RunProperties.OnOff(r) == true; break;
+                case "trackRevisions": doc.TrackRevisions = RunProperties.OnOff(r) == true; break;
                 case "footnotePr":
                     using (var sub = r.ReadSubtree()) NotesXml.Read(sub, doc.FootnoteProperties);
                     continue;
@@ -468,6 +470,117 @@ internal static class DocumentLoader
         }
     }
 
+    private const string W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
+    private const string W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
+
+    /// <summary>
+    /// Comments (word/comments.xml) with their content, and from commentsExtended.xml (Word 2013+)
+    /// which are done and which reply to which. A malformed comments part loses its comments only.
+    /// </summary>
+    private static void LoadComments(OoxmlPackage pkg, string documentUri, Document doc, LoadContext loadContext,
+        DocxReaderOptions options, CancellationToken ct,
+        System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> mediaCache)
+    {
+        string? commentsUri = null, extendedUri = null;
+        foreach (var rel in pkg.GetRelationships(documentUri))
+        {
+            if (rel.IsExternal) continue;
+            if (rel.Type.EndsWith("/comments", StringComparison.Ordinal)) commentsUri ??= Resolve(documentUri, rel.Target);
+            else if (rel.Type.EndsWith("/commentsExtended", StringComparison.Ordinal)) extendedUri ??= Resolve(documentUri, rel.Target);
+        }
+        if (commentsUri is null) return;
+        Stream? raw = null;
+        try { raw = pkg.OpenPart(commentsUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+        if (raw is null) return;
+        var byParaId = new System.Collections.Generic.Dictionary<string, Comment>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var images = new ImageSource(pkg, commentsUri, options, ct, mediaCache);
+            using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, commentsUri);
+            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, commentsUri);
+            if (!r.Read()) return;
+            r.MoveToContent();
+            int depth = r.Depth + 1;
+            while (r.Read())
+            {
+                if (r.NodeType != XmlNodeType.Element || r.Depth != depth || r.NamespaceURI != W || r.LocalName != "comment") continue;
+                if (!int.TryParse(r.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) || loadContext.Comments.ContainsKey(id)
+                    || loadContext.Comments.Count >= 65_536)
+                {
+                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    continue;
+                }
+                var mark = RunProperties.ReadRevisionMark(r, RevisionType.Insert); // author and date
+                var c = new Comment(mark.Author) { Date = mark.Date, Initials = r.GetAttribute("initials", W), LoadedId = id };
+                loadContext.Comments[id] = c;
+                doc.Comments.AddLoaded(c);
+                if (r.IsEmptyElement) continue;
+                var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
+                using (var n = r.ReadSubtree())
+                {
+                    n.Read();
+                    int childDepth = n.Depth + 1;
+                    bool more = n.Read();
+                    while (more)
+                    {
+                        if (n.NodeType == XmlNodeType.Element && n.Depth == childDepth && n.NamespaceURI == W)
+                        {
+                            if (n.LocalName == "p")
+                            {
+                                var paraId = n.GetAttribute("paraId", W14);
+                                if (paraId is not null) c.LoadedParaId = paraId; // the last paragraph's id names the comment
+                                using (var sub = n.ReadSubtree()) c.Paragraphs.Add(LoadParagraph(sub, story));
+                                more = n.Read();
+                                continue;
+                            }
+                            if (n.LocalName == "tbl")
+                            {
+                                using (var sub = n.ReadSubtree()) c.AppendTable(LoadTable(sub, story));
+                                more = n.Read();
+                                continue;
+                            }
+                        }
+                        more = n.Read();
+                    }
+                }
+                story.Finish();
+                if (c.LoadedParaId is { } pid) byParaId[pid] = c;
+            }
+            EnsureWellFormed(r, commentsUri);
+        }
+        catch (XmlException)
+        {
+            // A malformed comments part: no comment is kept (their anchors in the text are dropped with them).
+            doc.Comments.Clear();
+            loadContext.Comments.Clear();
+            return;
+        }
+        if (extendedUri is null || byParaId.Count == 0) return;
+        Stream? ext = null;
+        try { ext = pkg.OpenPart(extendedUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+        if (ext is null) return;
+        try
+        {
+            using var gs = GuardedPartStream.Wrap(ext, options.MaxPartBytes, ct, extendedUri);
+            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, extendedUri);
+            while (r.Read())
+            {
+                if (r.NodeType != XmlNodeType.Element || r.NamespaceURI != W15 || r.LocalName != "commentEx") continue;
+                if (r.GetAttribute("paraId", W15) is not { } pid || !byParaId.TryGetValue(pid, out var c)) continue;
+                c.Done = r.GetAttribute("done", W15) is "1" or "true";
+                if (r.GetAttribute("paraIdParent", W15) is { } parent && byParaId.TryGetValue(parent, out var pc) && !ReferenceEquals(pc, c))
+                {
+                    // Guard against cycles: a parent chain must end.
+                    var walk = pc;
+                    int guard = 0;
+                    while (walk is not null && !ReferenceEquals(walk, c) && guard++ < 1000) walk = walk.Parent;
+                    if (walk is null) c.Parent = pc;
+                }
+            }
+        }
+        catch (XmlException) { }
+    }
+
     private static void ReadNotesPart(Stream raw, string uri, string element, NoteKind kind, NoteCollection collection,
         System.Collections.Generic.Dictionary<int, Note> byId, LoadContext loadContext, ImageSource images,
         DocxReaderOptions options, CancellationToken ct)
@@ -515,7 +628,7 @@ internal static class DocumentLoader
                                 more = n.Read();
                                 continue;
                             }
-                            if (n.LocalName is "bookmarkStart" or "bookmarkEnd" && BookmarkMarker(n, story) is { } marker)
+                            if (n.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd" && BookmarkMarker(n, story) is { } marker)
                                 story.Pending.Add(marker);
                         }
                         more = n.Read();
@@ -564,7 +677,7 @@ internal static class DocumentLoader
                     content.AppendTable(table);
                     continue;
                 }
-                if (r.LocalName is "bookmarkStart" or "bookmarkEnd")
+                if (r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd")
                 {
                     if (BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
                     if (!r.Read()) break;
@@ -681,6 +794,8 @@ internal static class DocumentLoader
     {
         foreach (var p in DocumentSerializer.AllParagraphs(doc))
         {
+            if (p.FormatChange is { OldNumbering: (int oldId and not 0, _) } pfc && doc.Numbering.TryGetList(oldId, out var oldList))
+                pfc.OldList = oldList;
             if (p.LoadedNumId is not int id)
             {
                 // w:numPr with only w:ilvl: the level for numbering that comes from the style.
@@ -713,6 +828,7 @@ internal static class DocumentLoader
     {
         public readonly System.Collections.Generic.Dictionary<int, Note> Footnotes = new();
         public readonly System.Collections.Generic.Dictionary<int, Note> Endnotes = new();
+        public readonly System.Collections.Generic.Dictionary<int, Comment> Comments = new();
     }
 
     /// <summary>One story (the body, a header/footer, a note): fields may span its paragraphs.</summary>
@@ -834,6 +950,12 @@ internal static class DocumentLoader
         var open = story.OpenBookmarks;
         var id = r.GetAttribute("id", W);
         if (id is null) return null;
+        if (r.LocalName is "commentRangeStart" or "commentRangeEnd")
+        {
+            // Comment ranges: by the comment's id in comments.xml (unknown comments are dropped).
+            return int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cid) && story.Doc.Comments.TryGetValue(cid, out var comment)
+                ? Run.CommentRangeRun(comment, r.LocalName == "commentRangeStart") : null;
+        }
         if (r.LocalName == "bookmarkStart")
         {
             var name = r.GetAttribute("name", W);
@@ -853,7 +975,8 @@ internal static class DocumentLoader
     }
 
     /// <summary>Reads the descendants of the element the reader is on (a w:p, or a w:hyperlink / w:fldSimple inside one).</summary>
-    private static void LoadParagraphContent(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link)
+    private static void LoadParagraphContent(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link, RevisionMark? revision = null,
+        RevisionMark? outerInsertion = null)
     {
         while (sub.Read())
         {
@@ -866,12 +989,26 @@ internal static class DocumentLoader
             if (sub.NamespaceURI != W) continue;
             switch (sub.LocalName)
             {
-                case "moveFrom":
+                case "ins":
+                case "moveTo":
                 case "del":
-                    // Moved-away / deleted content: not part of the current text. (Revision
-                    // reading is a later phase; skipping avoids showing moved text twice.)
-                    using (sub.ReadSubtree()) { }
+                case "moveFrom":
+                {
+                    // Tracked insertions and deletions (moves are kept as insertions / deletions).
+                    var mark = RunProperties.ReadRevisionMark(sub, sub.LocalName is "ins" or "moveTo" ? RevisionType.Insert : RevisionType.Delete);
+                    mark.IsMove = sub.LocalName is "moveTo" or "moveFrom";
+                    if (sub.IsEmptyElement) break;
+                    // A deletion inside an insertion (one reviewer inserted, another deleted) keeps both.
+                    var insertion = mark.Type == RevisionType.Delete
+                        ? (revision is { Type: RevisionType.Insert } ? revision : outerInsertion)
+                        : null;
+                    using (var rv = sub.ReadSubtree())
+                    {
+                        rv.Read();
+                        LoadParagraphContent(rv, p, ctx, link, mark, insertion);
+                    }
                     break;
+                }
                 case "pPr":
                     if (link is null)
                         using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
@@ -879,6 +1016,8 @@ internal static class DocumentLoader
                     break;
                 case "bookmarkStart":
                 case "bookmarkEnd":
+                case "commentRangeStart":
+                case "commentRangeEnd":
                     if (BookmarkMarker(sub, ctx) is { } marker) p.AddRun(marker);
                     break;
                 case "hyperlink":
@@ -902,12 +1041,12 @@ internal static class DocumentLoader
                     using (var h = sub.ReadSubtree())
                     {
                         h.Read();
-                        LoadParagraphContent(h, p, ctx, inner);
+                        LoadParagraphContent(h, p, ctx, inner, revision, outerInsertion);
                     }
                     break;
                 }
                 case "r":
-                    using (var r = sub.ReadSubtree()) LoadRun(r, p, ctx, link);
+                    using (var r = sub.ReadSubtree()) LoadRun(r, p, ctx, link, revision, outerInsertion);
                     break;
                 case "fldSimple":
                 {
@@ -917,6 +1056,7 @@ internal static class DocumentLoader
                         var result = new System.Text.StringBuilder();
                         TextFormat? fieldFormat = null;
                         string? fieldStyle = null;
+                        RevisionMark? fieldRevision = revision;
                         using (var fs = sub.ReadSubtree())
                         {
                             bool adv = true;
@@ -928,10 +1068,17 @@ internal static class DocumentLoader
                                 if (fs.NodeType != XmlNodeType.Element || fs.NamespaceURI != W) continue;
                                 if (fs.LocalName == "rPr" && fieldFormat is null)
                                     using (var rp = fs.ReadSubtree()) fieldFormat = RunProperties.Read(rp, out fieldStyle);
-                                else if (fs.LocalName == "t") { result.Append(fs.ReadElementContentAsString()); adv = false; }
+                                else if (fs.LocalName is "t" or "delText") { result.Append(fs.ReadElementContentAsString()); adv = false; }
+                                else if (fs.LocalName is "ins" or "del" or "moveTo" or "moveFrom" && fs.Depth > 0)
+                                {
+                                    // A tracked change around the field's result run (inside w:fldSimple).
+                                    fieldRevision = RunProperties.ReadRevisionMark(fs, fs.LocalName is "ins" or "moveTo" ? RevisionType.Insert : RevisionType.Delete);
+                                    fieldRevision.IsMove = fs.LocalName is "moveTo" or "moveFrom";
+                                }
                             }
                         }
-                        p.AddRun(Run.Field(instr!, result.ToString(), fieldFormat, fieldStyle));
+                        var fieldRun = Run.Field(instr!, result.ToString(), fieldFormat, fieldStyle);
+                        p.AddRun(fieldRevision is null ? fieldRun : fieldRun.WithRevision(fieldRevision, null));
                         break;
                     }
                     // Any other simple field: markers around its result runs, written back as w:fldSimple.
@@ -946,7 +1093,7 @@ internal static class DocumentLoader
                         using (var fs = sub.ReadSubtree())
                         {
                             fs.Read();
-                            LoadParagraphContent(fs, p, ctx, link);
+                            LoadParagraphContent(fs, p, ctx, link, revision, outerInsertion);
                         }
                     p.AddRun(Run.FieldMarkRun(field, FieldMarkType.End));
                     break;
@@ -1025,7 +1172,7 @@ internal static class DocumentLoader
                     more = r.Read();
                     continue;
                 }
-                if (r.LocalName is "bookmarkStart" or "bookmarkEnd" && BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
+                if (r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd" && BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
             }
             more = r.Read();
         }
@@ -1059,7 +1206,23 @@ internal static class DocumentLoader
     /// <see cref="BreakType"/> runs; field characters, note references and symbols become their
     /// own runs.
     /// </summary>
-    private static void LoadRun(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link)
+    private static void LoadRun(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link, RevisionMark? revision = null,
+        RevisionMark? outerInsertion = null)
+    {
+        int firstRun = p.Runs.Count;
+        RunFormatChange? formatChange = null;
+        LoadRunCore(sub, p, ctx, link, ref formatChange);
+        // A tracked insertion / deletion and a tracked formatting change apply to every run read from this w:r.
+        if (revision is not null || formatChange is not null)
+            for (int i = firstRun; i < p.Runs.Count; i++)
+            {
+                var run = p.Runs[i].WithRevision(revision ?? p.Runs[i].Revision, formatChange ?? p.Runs[i].FormatChange);
+                if (outerInsertion is not null && revision is { Type: RevisionType.Delete }) run = run.WithInsertedDeletion(revision, outerInsertion);
+                p.ReplaceRun(i, run);
+            }
+    }
+
+    private static void LoadRunCore(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link, ref RunFormatChange? formatChange)
     {
         var images = ctx.Images;
         var format = TextFormat.None;
@@ -1184,9 +1347,10 @@ internal static class DocumentLoader
                     // rPr belongs first in a run; if (invalidly) text came before it, that text
                     // keeps the formatting it was read with.
                     Flush();
-                    using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out charStyle);
+                    using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out charStyle, out formatChange, out _);
                     break;
                 case "t":
+                case "delText":
                 {
                     var value = sub.ReadElementContentAsString();
                     advance = false;
@@ -1207,6 +1371,7 @@ internal static class DocumentLoader
                     break;
                 }
                 case "instrText":
+                case "delInstrText":
                 {
                     var instr = sub.ReadElementContentAsString();
                     advance = false;
@@ -1320,6 +1485,18 @@ internal static class DocumentLoader
                         p.AddRun(Run.NoteReferenceRun(note, format, charStyle, RunProperties.OnOff(sub, "customMarkFollows") == true));
                     break;
                 }
+                case "commentReference":
+                {
+                    Flush();
+                    if (NormalText() && int.TryParse(sub.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cid)
+                        && ctx.Doc.Comments.TryGetValue(cid, out var comment))
+                        p.AddRun(Run.CommentReferenceRun(comment, format, charStyle));
+                    break;
+                }
+                case "annotationRef":
+                    Flush();
+                    if (NormalText()) p.AddRun(Run.AnnotationMarkRun(charStyle, format));
+                    break;
                 case "footnoteRef":
                 case "endnoteRef":
                     Flush();

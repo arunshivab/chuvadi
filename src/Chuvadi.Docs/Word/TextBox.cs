@@ -21,6 +21,8 @@ public sealed class TextBox
 {
     private readonly List<(Paragraph? After, DocTable Table)> _tables = new();
 
+    internal bool RemoveTableInternal(DocTable t) => _tables.RemoveAll(e => ReferenceEquals(e.Table, t)) > 0;
+
     /// <summary>Inline (in the line of text) or floating (anchored to the paragraph).</summary>
     public ImagePlacement Placement { get; set; } = ImagePlacement.Floating;
 

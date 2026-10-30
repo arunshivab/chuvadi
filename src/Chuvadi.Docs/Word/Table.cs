@@ -49,6 +49,9 @@ public sealed class DocTable
 
     public IReadOnlyList<TableRow> Rows => _rows;
 
+    /// <summary>Accept/reject: removes rows (one pass).</summary>
+    internal void RemoveRows(HashSet<TableRow> rows) => _rows.RemoveAll(rows.Contains);
+
     public DocTable(int columns)
     {
         if (columns < 1) throw new ArgumentOutOfRangeException(nameof(columns));
@@ -128,6 +131,19 @@ public sealed class TableRow
 
     /// <summary>Hide the row (w:hidden in trPr).</summary>
     public bool? Hidden { get; set; }
+
+    private RevisionMark? _revision;
+
+    /// <summary>A tracked insertion or deletion of the whole row (w:trPr/w:ins|w:del); null = not tracked.</summary>
+    public RevisionMark? Revision
+    {
+        get => _revision;
+        set
+        {
+            if (value is { Type: RevisionType.FormatChange }) throw new ArgumentException("A row revision is an insertion or a deletion.", nameof(value));
+            _revision = value;
+        }
+    }
 
     /// <summary>Grid columns skipped before the first cell (w:gridBefore) — for ragged tables.</summary>
     public int GridBefore { get; set; }
@@ -213,6 +229,8 @@ public sealed class TableCell
     private readonly List<(Paragraph? After, DocTable Table)> _nested = new();
 
     public List<Paragraph> Paragraphs { get; } = new();
+
+    internal bool RemoveTableInternal(DocTable t) => _nested.RemoveAll(e => ReferenceEquals(e.Table, t)) > 0;
 
     /// <summary>How many grid columns this cell spans (default 1).</summary>
     public int ColumnSpan { get; set; } = 1;

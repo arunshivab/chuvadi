@@ -225,6 +225,8 @@ public sealed class Note
 
     internal Note(NoteKind kind) { Kind = kind; }
 
+    internal bool RemoveTableInternal(DocTable t) => _tables.RemoveAll(e => ReferenceEquals(e.Table, t)) > 0;
+
     /// <summary>Footnote or endnote.</summary>
     public NoteKind Kind { get; }
 
