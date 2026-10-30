@@ -15,6 +15,7 @@ namespace Chuvadi.Print.ManualTests
             var all = new List<Action>(A1Groups());
             all.AddRange(A2Groups());
             all.AddRange(A3Groups());
+            all.AddRange(A4Groups());
             return all;
         }
 

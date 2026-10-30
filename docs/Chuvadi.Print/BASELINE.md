@@ -17,10 +17,13 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   previous ones.
 - **P05 — Bounded memory.** Pages rasterise one at a time and are released before the next; memory does
   not scale with document size. `ImageFileTarget` holds one sheet image at a time;
-  `WindowsPrinterTarget` sends each page to GDI in bands of a few megabytes.
+  `WindowsPrinterTarget` sends each page to GDI in bands of a few megabytes; `IppPrinterTarget` composes one
+  sheet at a time and spools the PWG Raster stream to a temporary file, not memory.
 - **P06 — One audit event per job** (AERB / NABH): exactly one `PrintAuditEvent` per `PrintTo`, whether
   the job is printed, fails or is cancelled.
 - **P07 — Agents dial out only.** No inbound port on the workstation. (Arrives with the service layer.)
+  The IPP client (A4) only makes outbound requests to printers; an IPP *server* (for the "Chuvadi PDF"
+  product) lives outside the library and binds to loopback unless deliberately configured otherwise.
 - **P08 — Portable core builds and tests on Linux; Windows code is namespace-confined.**
   *(Amended 2026-10-28, decision D-12.)* `Chuvadi.Print` is a single plain `net10.0` assembly. All
   Windows-specific code lives in the `Chuvadi.Print.Windows` namespace, is marked
@@ -35,7 +38,8 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   (all paper sizes, all orientations, all duplex modes, all colour modes, all scale modes, all nine
   content alignments, all page-selection styles, both margin references, all three monochrome
   conversions, all copy-handling modes, all four rotations; on Windows: every driver paper, tray, media
-  type, resolution and quality preset, and all three paper-matching modes).
+  type, resolution and quality preset, and all three paper-matching modes; over IPP: every RFC 8010 value
+  type, all three PWG Raster colour spaces, all four sheet-back modes, and both raster and document paths).
 
 ## Layer status
 
@@ -44,9 +48,11 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - **A2** — `PrintJob` orchestration: `IPageRasterizer` abstraction, page layout, print plan
   (copies, collation, duplex sheets, blank backs), print targets, pixel conversion, `ImageFileTarget`
   (PNG), spool envelope v2 with job metadata, auto-rotate. (0.2.0)
-- **A3 (this layer)** — `Chuvadi.Print.Windows`: printer discovery (`WindowsPrinters`), driver
+- **A3** — `Chuvadi.Print.Windows`: printer discovery (`WindowsPrinters`), driver
   capabilities, and `WindowsPrinterTarget` printing through the GDI spooler. (0.3.0)
-- **A4** — IPP encoder/decoder and `IppPrinterTarget`: driverless printing to network printers on any OS.
+- **A4 (this layer)** — `Chuvadi.Print.Ipp`: IPP encoder/decoder, `IppClient`, PWG Raster writer/reader,
+  `IppPrinterTarget` (rendered pages as PWG Raster) and `IppDocumentTarget` (PDF passthrough via the new
+  core `PrintJob.SubmitTo` / `IDocumentTarget`): driverless printing on any OS. (0.4.0)
 - **A5 — Chuvadi.Print.Pdf** — separate package: `IPageRasterizer` over Chuvadi.Pdf and a vector-imposition
   `PdfFileTarget` (print-to-PDF), once Chuvadi.Pdf is buildable with this repo.
 - **Product: "Chuvadi PDF" virtual printer** — separate product consuming the Chuvadi.Print nupkg
@@ -67,3 +73,6 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   sheets (alignment, scale, orientation, colour, duplex, margins) for visual verification.
 - `-- --windows-printer "<name>" [--windows-output <folder>]` additionally prints an 11-job proof set
   to a Windows printer (or, with an output folder, to one file per job).
+- `--preview` also writes the pages an IPP printer would receive (decoded PWG Raster) under `07-ipp-raster`;
+  `-- --ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]` sends a 6-job proof set (and a PDF) to a
+  real IPP Everywhere printer.

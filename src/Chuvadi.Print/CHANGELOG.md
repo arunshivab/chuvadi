@@ -1,5 +1,19 @@
 # Chuvadi.Print — Changelog
 
+## 0.4.0 (unreleased)
+
+A4: driverless printing over IPP (`Chuvadi.Print.Ipp`), on any OS, pure BCL (System.Net.Http only).
+
+- **IPP encoding** (RFC 8010): `IppMessage` (requests and responses, any version), `IppAttributeGroup` (with `Set` / `Remove`), `IppAttribute` (1setOf), `IppValue` for every value type — integer, boolean, enum, octetString, dateTime, resolution, rangeOfInteger, collections (nested, 1setOf), text/name with and without language, keyword, uri, uriScheme, charset, naturalLanguage, mimeMediaType, out-of-band values, and unknown or extension tags kept as raw bytes so a decoded message re-encodes byte for byte. `IppTag`, `IppOperation`, `IppStatusCode`, `IppJobState`, `IppPrinterState`, `IppPrintQuality`.
+- **IppClient**: ipp://, ipps://, http://, https:// (ipp/ipps default to port 631); Get-Printer-Attributes, Print-Job, Validate-Job, Create-Job, Send-Document, Get-Job-Attributes, Cancel-Job, Get-Jobs, and raw `Send` for any operation. `IppClientOptions`: user name, natural language, IPP version, timeout, credentials, acceptance of self-signed printer certificates. `IppException` carries the IPP status and response.
+- **IppPrinterCapabilities**: formats, sides, media (with sources and types), colour modes, copies, collation, scaling, quality, orientations, resolutions, PWG Raster types/resolutions/sheet-back, margins, state; every raw attribute is kept.
+- **PWG Raster** (PWG 5102.4): `PwgRasterWriter` and `PwgRasterReader` (black_1, sgray_8, srgb_8; PackBits-style line compression with line repeats and white fill), `PwgPageHeader`.
+- **IppPrinterTarget** (`IPrintTarget`): prints rendered pages as PWG Raster. Chooses the raster resolution under `MaxRasterDpi`, turns landscape sheets to portrait feed, applies the printer's duplex back-side transform (`PwgSheetBack`, overridable), spools to a temporary file (one sheet in memory), then one Print-Job.
+- **IppDocumentTarget** (`IDocumentTarget`): passes the original PDF through to printers that accept it, with the settings as job attributes.
+- **Job ticket mapping** (`IppJobTicket`, `IppJobOptions`): copies and collation, sides, PWG media names (`PwgMediaNames`) or `media-col` with tray and media type, colour mode (bi-level for monochrome when offered), quality, resolution; in document mode also orientation, page-ranges and print-scaling. Settings IPP cannot express are listed in `LastApproximations`, or fail the job with `Strict`.
+- **Core**: `IDocumentTarget`, `DocumentSubmission` and `PrintJob.SubmitTo(target)` send the document itself (no rasterising) with exactly one audit event; a configured rasteriser is used only to count pages.
+- **Verification**: codec and raster round trips, header offsets, mapping rules, and end-to-end jobs against an in-process IPP printer (`FakeIppPrinter`); ManualTests `--preview` also writes the decoded IPP pages as PNG; `--ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]` sends the proof set (and a PDF) to a real printer.
+
 ## 0.3.0 (unreleased)
 
 A3: printing to Windows printers through the GDI spooler (`Chuvadi.Print.Windows`).

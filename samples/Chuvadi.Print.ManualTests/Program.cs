@@ -10,6 +10,9 @@ namespace Chuvadi.Print.ManualTests
         ///   --preview &lt;folder&gt;            also write PNG sheet images for visual verification
         ///   --windows-printer "&lt;name&gt;"     also print the proof set to that Windows printer
         ///   --windows-output &lt;folder&gt;     with --windows-printer: write each job to a file in this folder
+        ///   --ipp-printer &lt;uri&gt;          also send the proof set to an IPP Everywhere printer (PWG Raster)
+        ///   --ipp-pdf &lt;file&gt;             with --ipp-printer: also pass this PDF through unchanged
+        ///   --ipp-insecure                 with --ipp-printer: accept the printer's self-signed TLS certificate (ipps)
         /// </summary>
         public static int Main(string[] args)
         {
@@ -42,6 +45,7 @@ namespace Chuvadi.Print.ManualTests
                 try
                 {
                     int files = PreviewScenarios.WriteAll(previewFolder);
+                    files += IppPrintScenarios.WritePreview(System.IO.Path.Combine(previewFolder, "07-ipp-raster"));
                     Console.WriteLine("Preview: " + files + " PNG files written under " + System.IO.Path.GetFullPath(previewFolder));
                 }
                 catch (Exception ex)
@@ -71,6 +75,21 @@ namespace Chuvadi.Print.ManualTests
                         Console.WriteLine("FAIL  Windows printer -> " + ex.Message);
                         failed++;
                     }
+                }
+            }
+
+            string? ippPrinter = Option(args, "--ipp-printer", null);
+            if (ippPrinter is not null)
+            {
+                try
+                {
+                    int jobs = IppPrintScenarios.PrintToPrinter(ippPrinter, Option(args, "--ipp-pdf", null), Array.IndexOf(args, "--ipp-insecure") >= 0);
+                    Console.WriteLine("IPP printer: " + jobs + " jobs sent to " + ippPrinter);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("FAIL  IPP printer -> " + ex.Message);
+                    failed++;
                 }
             }
 
