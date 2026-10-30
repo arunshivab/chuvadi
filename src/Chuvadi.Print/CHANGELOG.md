@@ -1,5 +1,17 @@
 # Chuvadi.Print — Changelog
 
+## 0.3.0 (unreleased)
+
+A3: printing to Windows printers through the GDI spooler (`Chuvadi.Print.Windows`).
+
+- **Single assembly, plain net10.0** (BASELINE P08 amended, decision D-12): Windows code lives in the `Chuvadi.Print.Windows` namespace, is marked `[SupportedOSPlatform("windows")]`, and reaches `winspool.drv` / `gdi32.dll` through P/Invoke only. No native binaries, no `net10.0-windows` target; Linux builds and tests are unchanged.
+- **Discovery**: `WindowsPrinters.List(includeConnections)`, `Get`, `Exists`, `DefaultPrinterName`, `SetDefault`; `PrinterInfo` with server, share, port, driver, comment, location, `PrinterAttributes`, `PrinterStatus` (every spooler flag) and job count.
+- **Capabilities**: `WindowsPrinters.GetCapabilities(name, settings)` returns every driver paper (`PrinterPaper`), tray (`PrinterBin`), media type (`PrinterMediaType`) and resolution (`PrinterResolution`), maximum copies, collation, duplex, colour, landscape rotation, custom-size limits, and the device geometry for those settings (resolution, sheet, hard margins). `ToTargetCapabilities(maxRasterDpi)` feeds the A2 planner.
+- **WindowsPrinterTarget** (`IPrintTarget`): maps `PrintSettings` to the driver's DEVMODE (paper, orientation, duplex, colour, copies and collation when the driver makes them) plus tray, media type, resolution or `PrintQuality` preset; `PaperMatching` (ExactOrCustom, ExactOnly, CustomOnly); `OutputFileName` (print to file; with "Microsoft Print to PDF" writes a PDF without a dialog); `MaxRasterDpi` (default 300) bounds page bitmaps on high-resolution devices; `StrictCapabilities` fails the job when the driver cannot honour the paper or duplex, otherwise prints and drops blank backs on simplex printers; `LastSpoolJobId`, `LastDeviceSheet`. Fluent `With*` for each.
+- **Drawing**: pages are placed at their planned position with `StretchDIBits` from top-down 32-, 24-, 8- (gray palette) or 1-bit (white/black palette) DIBs, in bands of about 4 MB; HALFTONE stretching for colour and gray, COLORONCOLOR for bi-level.
+- **Errors**: `WindowsPrintException` (with `NativeErrorCode`), `PrinterNotFoundException`; on non-Windows `PlatformNotSupportedException`.
+- **Verification**: portable unit tests for DEVMODE editing (offsets, flags, short DEVMODEs, driver-private bytes), paper matching, geometry and DIB banding; Windows-only tests and a verification group that print through "Microsoft Print to PDF" to a file; ManualTests `--windows-printer "<name>" [--windows-output <folder>]` prints an 11-job proof set; groups that do not apply report SKIP.
+
 ## 0.2.0 (unreleased)
 
 A2: `PrintJob` orchestration with pluggable rasterisation.

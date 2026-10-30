@@ -48,4 +48,14 @@ public class VerificationGroupTests
     [Fact] public void SpoolEnvelopeStillReadsVersion1() => VerificationGroups.SpoolEnvelopeStillReadsVersion1();
     [Fact] public void MonochromeConversionsProduceDistinctOutput() => VerificationGroups.MonochromeConversionsProduceDistinctOutput();
     [Fact] public void ImageFileTargetWritesValidPngs() => VerificationGroups.ImageFileTargetWritesValidPngs();
+
+    // ---- A3: Windows (pass trivially where they do not apply)
+    [Fact] public void WindowsPrintersAreDiscoverable() => RunUnlessSkipped(VerificationGroups.WindowsPrintersAreDiscoverable);
+    [Fact] public void WindowsPrintToPdfWritesFile() => RunUnlessSkipped(VerificationGroups.WindowsPrintToPdfWritesFile);
+
+    private static void RunUnlessSkipped(Action group)
+    {
+        try { group(); }
+        catch (VerificationSkippedException) { }
+    }
 }

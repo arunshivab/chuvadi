@@ -5,12 +5,15 @@ namespace Chuvadi.Print.ManualTests
     public static class Program
     {
         /// <summary>
-        /// Runs every verification group. With <c>--preview &lt;folder&gt;</c>, also writes PNG sheet
-        /// images for visual verification of layout, orientation, scaling, colour and duplex.
+        /// Runs every verification group (groups that do not apply on this machine report SKIP).
+        /// Options:
+        ///   --preview &lt;folder&gt;            also write PNG sheet images for visual verification
+        ///   --windows-printer "&lt;name&gt;"     also print the proof set to that Windows printer
+        ///   --windows-output &lt;folder&gt;     with --windows-printer: write each job to a file in this folder
         /// </summary>
         public static int Main(string[] args)
         {
-            int passed = 0, failed = 0;
+            int passed = 0, failed = 0, skipped = 0;
             foreach (var test in VerificationGroups.All())
             {
                 try
@@ -19,6 +22,11 @@ namespace Chuvadi.Print.ManualTests
                     Console.WriteLine("PASS  " + test.Method.Name);
                     passed++;
                 }
+                catch (VerificationSkippedException skip)
+                {
+                    Console.WriteLine("SKIP  " + test.Method.Name + " (" + skip.Message + ")");
+                    skipped++;
+                }
                 catch (Exception ex)
                 {
                     Console.WriteLine("FAIL  " + test.Method.Name + " -> " + ex.Message);
@@ -26,9 +34,9 @@ namespace Chuvadi.Print.ManualTests
                 }
             }
             Console.WriteLine();
-            Console.WriteLine("Total: " + (passed + failed) + "  Passed: " + passed + "  Failed: " + failed);
+            Console.WriteLine("Total: " + (passed + failed + skipped) + "  Passed: " + passed + "  Failed: " + failed + "  Skipped: " + skipped);
 
-            string? previewFolder = PreviewFolder(args);
+            string? previewFolder = Option(args, "--preview", "print-preview");
             if (previewFolder is not null)
             {
                 try
@@ -43,15 +51,38 @@ namespace Chuvadi.Print.ManualTests
                 }
             }
 
+            string? printer = Option(args, "--windows-printer", null);
+            if (printer is not null)
+            {
+                if (!OperatingSystem.IsWindows())
+                {
+                    Console.WriteLine("FAIL  --windows-printer needs Windows");
+                    failed++;
+                }
+                else
+                {
+                    try
+                    {
+                        int jobs = WindowsPrintScenarios.PrintAll(printer, Option(args, "--windows-output", null));
+                        Console.WriteLine("Windows printer: " + jobs + " jobs sent to '" + printer + "'");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("FAIL  Windows printer -> " + ex.Message);
+                        failed++;
+                    }
+                }
+            }
+
             return failed == 0 ? 0 : 1;
         }
 
-        private static string? PreviewFolder(string[] args)
+        private static string? Option(string[] args, string name, string? valueWhenMissing)
         {
             for (int i = 0; i < args.Length; i++)
             {
-                if (args[i] == "--preview")
-                    return i + 1 < args.Length ? args[i + 1] : "print-preview";
+                if (args[i] == name)
+                    return i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[i + 1] : valueWhenMissing;
             }
             return null;
         }
