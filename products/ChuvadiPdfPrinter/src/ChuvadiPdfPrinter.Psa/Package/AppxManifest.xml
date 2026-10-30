@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chuvadi PDF - Print Support App (PSA v4) virtual printers. Windows 11 24H2 (10.0.26100) or later.
+  Packaged by scripts\build-psa.ps1. The Publisher must equal the subject of the signing certificate
+  (build-psa.ps1 -Publisher, default CN=Chuvadi); the script rewrites it if you choose another.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:printsupport2="http://schemas.microsoft.com/appx/manifest/printsupport/windows10/2"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap printsupport2 rescap">
+
+  <Identity Name="Chuvadi.PdfPrinter" Publisher="CN=Chuvadi" Version="0.1.0.0" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>ms-resource:AppDisplayName</DisplayName>
+    <PublisherDisplayName>Chuvadi</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.26100.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="ChuvadiPdf" Executable="ChuvadiPdfAgent.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="ms-resource:AppDisplayName"
+        Description="ms-resource:AppDescription"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png"
+        AppListEntry="none" />
+      <Extensions>
+        <printsupport2:Extension Category="windows.printSupportVirtualPrinterWorkflow" EntryPoint="ChuvadiPdfPrinter.Psa.VirtualPrinterTask">
+          <printsupport2:PrintSupportVirtualPrinter
+            DisplayName="ms-resource:SaveAsPrinterName"
+            PrinterUri="chuvadi-pdf:save-as"
+            PreferredInputFormat="application/oxps"
+            OutputFileTypes="pdf"
+            PdcFile="Config\ChuvadiPdf.pdc.xml">
+            <printsupport2:SupportedFormats>
+              <printsupport2:SupportedFormat Type="application/oxps" MaxVersion="1.0" />
+              <printsupport2:SupportedFormat Type="application/pdf" MaxVersion="1.7" />
+            </printsupport2:SupportedFormats>
+          </printsupport2:PrintSupportVirtualPrinter>
+        </printsupport2:Extension>
+        <printsupport2:Extension Category="windows.printSupportVirtualPrinterWorkflow" EntryPoint="ChuvadiPdfPrinter.Psa.VirtualPrinterTask">
+          <printsupport2:PrintSupportVirtualPrinter
+            DisplayName="ms-resource:AutoSavePrinterName"
+            PrinterUri="chuvadi-pdf:auto-save"
+            PreferredInputFormat="application/oxps"
+            PdcFile="Config\ChuvadiPdf.pdc.xml">
+            <printsupport2:SupportedFormats>
+              <printsupport2:SupportedFormat Type="application/oxps" MaxVersion="1.0" />
+              <printsupport2:SupportedFormat Type="application/pdf" MaxVersion="1.7" />
+            </printsupport2:SupportedFormats>
+          </printsupport2:PrintSupportVirtualPrinter>
+        </printsupport2:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Extensions>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>WinRT.Host.dll</Path>
+        <ActivatableClass ActivatableClassId="ChuvadiPdfPrinter.Psa.VirtualPrinterTask" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+  </Extensions>
+</Package>
