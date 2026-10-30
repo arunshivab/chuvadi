@@ -403,7 +403,7 @@ internal static class DocumentSerializer
                 x.WriteAttributeString("id", R, relId);
                 x.WriteAttributeString("history", W, "1");
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, characterStyleId: run.CharacterStyleId ?? "Hyperlink");
+                RunProperties.Write(x, run.Format, characterStyleId: run.EffectiveCharacterStyleId);
                 WriteText(x, run.TextContent);
                 x.WriteEndElement();
                 x.WriteEndElement();
@@ -416,12 +416,35 @@ internal static class DocumentSerializer
             x.WriteStartElement("r", W);
             RunProperties.Write(x, run.Format, run.CharacterStyleId);
             if (run.Break is BreakType bt) WriteBreak(x, bt);
+            else if (run.PositionalTab is { } ptab) WritePositionalTab(x, ptab);
             else if (run.IsTab) { x.WriteStartElement("tab", W); x.WriteEndElement(); }
             else WriteText(x, run.TextContent);
             x.WriteEndElement();
         }
 
         x.WriteEndElement(); // p
+    }
+
+    private static void WritePositionalTab(XmlWriter x, PositionalTab tab)
+    {
+        // CT_PTab: alignment, relativeTo and leader are all required.
+        x.WriteStartElement("ptab", W);
+        x.WriteAttributeString("relativeTo", W, tab.RelativeTo == PositionalTabBase.Indent ? "indent" : "margin");
+        x.WriteAttributeString("alignment", W, tab.Alignment switch
+        {
+            PositionalTabAlignment.Center => "center",
+            PositionalTabAlignment.Right => "right",
+            _ => "left",
+        });
+        x.WriteAttributeString("leader", W, tab.Leader switch
+        {
+            TabLeader.Dot => "dot",
+            TabLeader.Hyphen => "hyphen",
+            TabLeader.Underscore => "underscore",
+            TabLeader.MiddleDot => "middleDot",
+            _ => "none",
+        });
+        x.WriteEndElement();
     }
 
     // ---- Drawing (image) emission ----------------------------------------------------
@@ -634,7 +657,7 @@ internal static class DocumentSerializer
         x.WriteStartDocument(standalone: true);
         x.WriteStartElement("w", "settings", W);
 
-        // CT_Settings order: … mirrorMargins, …, gutterAtTop, …, documentProtection, …, evenAndOddHeaders …
+        // CT_Settings order: … mirrorMargins, …, gutterAtTop, …, documentProtection, …, defaultTabStop, …, evenAndOddHeaders …
         if (doc.MirrorMargins) { x.WriteStartElement("mirrorMargins", W); x.WriteEndElement(); }
         if (doc.GutterAtTop) { x.WriteStartElement("gutterAtTop", W); x.WriteEndElement(); }
 
@@ -663,6 +686,13 @@ internal static class DocumentSerializer
                 Chuvadi.Internal.Crypto.PasswordHasher.DefaultSpinCount.ToString(CultureInfo.InvariantCulture));
             x.WriteAttributeString("hash", W, hash);
             x.WriteAttributeString("salt", W, Convert.ToBase64String(salt));
+            x.WriteEndElement();
+        }
+
+        if (doc.DefaultTabStopPt is double tab)
+        {
+            x.WriteStartElement("defaultTabStop", W);
+            x.WriteAttributeString("val", W, RunProperties.Twips(tab));
             x.WriteEndElement();
         }
 
@@ -771,8 +801,7 @@ internal static class DocumentSerializer
             ids.Add(p.StyleId);
             foreach (var r in p.Runs)
             {
-                if (r.CharacterStyleId is not null) ids.Add(r.CharacterStyleId);
-                else if (r.HyperlinkUrl is not null) ids.Add("Hyperlink");
+                if (r.EffectiveCharacterStyleId is { } sid) ids.Add(sid);
             }
         }
         return ids;

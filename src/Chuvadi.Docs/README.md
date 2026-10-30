@@ -61,6 +61,7 @@ doc.AddParagraph().Text("நோயாளி அறிக்கை — Patient re
 
 doc.AddParagraph().Text("H").Text("2", TextFormat.SubscriptText).Text("O, E = mc").Text("2", TextFormat.SuperscriptText);
 doc.AddParagraph().Text("Ref:").Tab().Text("APL/2026/0042");
+doc.Footer.Add(new Paragraph("Confidential").PositionalTab(PositionalTabAlignment.Right).PageNumber());   // right edge, whatever the tab stops
 doc.AddParagraph("Apulki Medical Center\nBaner, Pune");        // \n → line break
 doc.AddParagraph().Text("Part 1").Break(BreakType.Page).Text("Part 2");
 ```
@@ -235,7 +236,42 @@ DocxTemplate.Fill("invoice-template.docx", "invoice-0042.docx", new Dictionary<s
 });
 ```
 
-Everything in the template is preserved byte-for-byte except the replaced text — images, styles, themes, tables. Line feeds and tabs inside a value become line breaks and tabs in the same run. Placeholders are replaced in the body, headers, footers, footnotes, and endnotes. Word frequently splits typed text across runs; spanning placeholders are detected and consolidated automatically (such a paragraph takes its first run's formatting). Unmatched placeholders are left as-is so they're visible during review.
+Everything in the template is preserved byte-for-byte except the replaced text — images, styles, themes, tables. Line feeds and tabs inside a value become line breaks and tabs in the same run. Placeholders are replaced in the body, headers, footers, footnotes, and endnotes. Word frequently splits typed text across runs; a split placeholder is gathered into its first run and the surrounding runs keep their own formatting. Unmatched placeholders are left as-is so they're visible during review.
+
+### Repeating rows, blocks and conditions
+
+```
+| Test             | Result      | Unit              |        ← header row, untouched
+| {{#Tests}}{{Name}} | {{Result}} | {{Unit}}{{/Tests}} |      ← repeated once per test
+
+{{#Groups}}                    ← marker paragraphs: the paragraphs/tables between repeat
+Heading: {{Title}}
+  …a table with its own {{#Tests}} rows (nested repeat, item scope)…
+{{/Groups}}
+
+{{?Urgent}}URGENT{{/Urgent}}{{^Urgent}}routine{{/Urgent}}     ← inline conditions
+Tags: {{#Tags}}[{{.}}]{{/Tags}}                               ← inline repeat of plain values
+{{Customer.Name}}                                             ← nested object
+```
+
+```csharp
+var data = new TemplateData()
+    .Set("Patient", "R. Kumar")
+    .SetFlag("Urgent", true)
+    .Set("Flag", TemplateValue.Formatted("HIGH", new TextFormat { Bold = true, ColorHex = "C00000" }))
+    .SetImage("Logo", ImageSpec.FromFile("logo.png", widthPt: 80, heightPt: 40));
+foreach (var t in tests)
+    data.AddItem("Tests").Set("Name", t.Name).Set("Result", t.Value).Set("Unit", t.Unit);
+
+DocxTemplate.Fill("report-template.docx", "report.docx", data,
+    new TemplateOptions { Strict = true });                   // throws DocxTemplateException listing every missing value
+
+DocxTemplate.Fill(templateStream, outputStream, data);         // streams (non-seekable input is fine)
+var placeholders = DocxTemplate.GetPlaceholders("report-template.docx");   // names, kinds, nesting, part
+var problems = DocxTemplate.CheckTemplate("report-template.docx");        // unpaired / misplaced markers
+```
+
+A repeat expands table rows when its markers are in table rows (one row, a group of rows, rows inside content controls, or a one-cell row holding the whole block), paragraphs and tables when the markers stand in their own paragraphs, and run text when both markers are in one paragraph. Lookups follow the template's nesting outwards, so outer values work inside items. Filled values are never read as template syntax, so user text containing `{{…}}` stays as typed. Formatted values are layered over the placeholder's own formatting; images can be set per item, and a picture in the template whose alt text equals an image key gets its picture swapped.
 
 Encrypted templates and encrypted output both work:
 
@@ -268,7 +304,7 @@ Every open applies resource limits **before anything is decompressed**, and the 
 | `MaxEntries` | 10,000 zip entries | at open |
 | `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | at open |
 | `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | at open |
-| `MaxSpinCount` | 500,000 (encrypted files; key derivation can't be interrupted) | at open |
+| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | at open |
 | `MaxXmlDepth` | 256 nested elements | while reading |
 | `MaxPartBytes` | none | while reading |
 
@@ -360,6 +396,8 @@ var loaded = Document.Load("secret.docx", "S3cret!");
 ```
 
 Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` reference implementation. Integrity (HMAC-SHA512) is verified on every decrypt.
+
+On Windows, real-time antivirus (Microsoft Defender) scans an encrypted Office file when it is opened, by trying the default Office password, which runs the full key derivation at the file's declared spin count. That happens inside the operating system's file-open call, before the library reads a byte, so neither `MaxSpinCount` nor the `CancellationToken` can shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine, then milliseconds once the scan result was cached. Both limits apply in full to the library's own work, and to streams that are already open or held in memory.
 
 There is also cooperative "restrict editing" protection — `doc.Protect("pass", DocumentProtectionMode.ReadOnly)` — which, like Excel's sheet protection, signals intent but does not encrypt; anyone can still read the content.
 

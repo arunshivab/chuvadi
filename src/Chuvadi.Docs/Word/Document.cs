@@ -321,6 +321,26 @@ public sealed class Document
     /// <summary>Put the gutter at the top of the page instead of the side (settings w:gutterAtTop).</summary>
     public bool GutterAtTop { get; set; }
 
+    private double? _defaultTabStop;
+
+    /// <summary>
+    /// Spacing of the automatic tab stops beyond the last set one (settings w:defaultTabStop), in
+    /// points. Null = not stated (Word uses 36pt, half an inch); see <see cref="EffectiveDefaultTabStopPt"/>.
+    /// </summary>
+    public double? DefaultTabStopPt
+    {
+        get => _defaultTabStop;
+        set
+        {
+            if (value is double d && (!(d > 0) || d > 1584))
+                throw new ArgumentOutOfRangeException(nameof(value), d, "The default tab stop must be between 0 and 1584pt.");
+            _defaultTabStop = value;
+        }
+    }
+
+    /// <summary>The default tab stop spacing a paginator should use: <see cref="DefaultTabStopPt"/>, else 36pt.</summary>
+    public double EffectiveDefaultTabStopPt => _defaultTabStop ?? 36;
+
     internal bool EffectiveOddAndEven
     {
         get

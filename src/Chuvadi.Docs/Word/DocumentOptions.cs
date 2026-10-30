@@ -13,12 +13,22 @@ public sealed class PageSetup
 {
     private PageSize _size = PageSize.A4;
 
-    /// <summary>Preset size or <see cref="PageSize.Custom"/>. Changing it clears <see cref="PaperCode"/>.</summary>
+    /// <summary>Preset size or <see cref="PageSize.Custom"/>. Changing it clears <see cref="PaperCode"/>. Setting it makes <see cref="SizeStated"/> true.</summary>
     public PageSize Size
     {
         get => _size;
-        set { if (value != _size) PaperCode = null; _size = value; }
+        set { if (value != _size) PaperCode = null; _size = value; SizeStated = true; }
     }
+
+    /// <summary>
+    /// True when the page size is stated: always for documents built in code; for a loaded
+    /// document, true only when its w:sectPr has a w:pgSz with a valid width and height. When
+    /// false, <see cref="Size"/> still holds A4 (so nothing breaks), but the document itself said
+    /// nothing: Word then uses its own default size (Letter in the US, A4 elsewhere), and a
+    /// paginator should do the same. Setting <see cref="Size"/> or a custom size makes it true;
+    /// while it is false and the orientation is portrait, saving writes no w:pgSz (as loaded).
+    /// </summary>
+    public bool SizeStated { get; set; } = true;
     public PageOrientation Orientation { get; set; } = PageOrientation.Portrait;
 
     private double? _customWidth, _customHeight;
@@ -27,14 +37,14 @@ public sealed class PageSetup
     public double? CustomWidthPt
     {
         get => _customWidth;
-        set { CheckDimension(value); if (value != _customWidth) PaperCode = null; _customWidth = value; }
+        set { CheckDimension(value); if (value != _customWidth) PaperCode = null; _customWidth = value; SizeStated = true; }
     }
 
     /// <summary>Portrait height in points for <see cref="PageSize.Custom"/> (0–1584pt).</summary>
     public double? CustomHeightPt
     {
         get => _customHeight;
-        set { CheckDimension(value); if (value != _customHeight) PaperCode = null; _customHeight = value; }
+        set { CheckDimension(value); if (value != _customHeight) PaperCode = null; _customHeight = value; SizeStated = true; }
     }
 
     private static void CheckDimension(double? v)

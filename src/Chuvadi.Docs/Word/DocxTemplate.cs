@@ -105,69 +105,139 @@ public static class DocxTemplate
         EncryptionOptions? outputEncryption,
         DocxReaderOptions? readOptions,
         System.Threading.CancellationToken cancellationToken = default)
+        => Fill(inputPath, outputPath, TemplateData.From(textValues, imageValues),
+            new TemplateOptions { Password = password, OutputEncryption = outputEncryption, ReadOptions = readOptions }, cancellationToken);
+
+    /// <summary>
+    /// Fills a template file with <paramref name="data"/>: values, formatted values, images,
+    /// repeating blocks (<c>{{#Items}}</c> … <c>{{/Items}}</c>) and conditions (<c>{{?Flag}}</c>,
+    /// <c>{{^Flag}}</c>). See <see cref="TemplateData"/> for the syntax.
+    /// </summary>
+    public static void Fill(string inputPath, string outputPath, TemplateData data, TemplateOptions? options = null,
+        System.Threading.CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(inputPath)) throw new ArgumentException("Input path required.", nameof(inputPath));
         if (string.IsNullOrEmpty(outputPath)) throw new ArgumentException("Output path required.", nameof(outputPath));
-        textValues ??= new Dictionary<string, string>();
-        imageValues ??= new Dictionary<string, ImageSpec>();
+        byte[] filled;
+        using (var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            filled = FillToBytes(input, data, options, cancellationToken);
+        File.WriteAllBytes(outputPath, filled);
+    }
 
-        // Templates get the same resource limits as DocxReader (zip bomb, nesting depth, spin
-        // count, input size) — a template can arrive from an upload or a database too.
+    /// <summary>
+    /// Fills a template read from <paramref name="template"/> (any stream; left open) and writes the
+    /// result to <paramref name="output"/> (left open). Nothing is written when filling fails or is cancelled.
+    /// </summary>
+    public static void Fill(Stream template, Stream output, TemplateData data, TemplateOptions? options = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (template is null) throw new ArgumentNullException(nameof(template));
+        if (output is null) throw new ArgumentNullException(nameof(output));
+        var filled = FillToBytes(template, data, options, cancellationToken);
+        output.Write(filled, 0, filled.Length);
+        output.Flush();
+    }
+
+    /// <summary>Every placeholder in a template, in document order per part, with its kind and enclosing blocks.</summary>
+    public static IReadOnlyList<TemplatePlaceholder> GetPlaceholders(string path, string? password = null, DocxReaderOptions? readOptions = null)
+    {
+        if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return GetPlaceholders(input, password, readOptions);
+    }
+
+    /// <summary>Every placeholder in a template read from a stream (left open).</summary>
+    public static IReadOnlyList<TemplatePlaceholder> GetPlaceholders(Stream template, string? password = null, DocxReaderOptions? readOptions = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (template is null) throw new ArgumentNullException(nameof(template));
         var limits = readOptions ?? new DocxReaderOptions();
-        var ct = cancellationToken;
-        ct.ThrowIfCancellationRequested();
-
-        using var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        PackageGuard.EnsureSeekable(input, limits, ct, out _);
-
-        // Obtain the plaintext package bytes (decrypting when needed).
-        byte[] packageBytes;
-        if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(input))
+        var lim = new FillLimits(limits, cancellationToken);
+        var packageBytes = ReadPackage(template, password, limits, cancellationToken);
+        var result = new List<TemplatePlaceholder>();
+        using var zipIn = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
+        foreach (var entry in OrderedTextParts(zipIn))
         {
-            packageBytes = PackageGuard.Decrypt(input, password, limits, ct);
+            var xml = LoadXml(entry, lim);
+            result.AddRange(new TemplateEngine(xml, entry.FullName, new TemplateOptions(), null, cancellationToken: cancellationToken).List());
         }
+        return result;
+    }
+
+    /// <summary>
+    /// Checks a template without filling it and returns every problem a fill would meet whatever
+    /// the data: block markers without a partner, and blocks whose markers cannot form a block
+    /// (inline within one paragraph, marker paragraphs, or table rows). Empty = no problems.
+    /// </summary>
+    public static IReadOnlyList<string> CheckTemplate(string path, string? password = null, DocxReaderOptions? readOptions = null)
+    {
+        if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return CheckTemplate(input, password, readOptions);
+    }
+
+    /// <summary>Checks a template read from a stream (left open); see <see cref="CheckTemplate(string, string?, DocxReaderOptions?)"/>.</summary>
+    public static IReadOnlyList<string> CheckTemplate(Stream template, string? password = null, DocxReaderOptions? readOptions = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (template is null) throw new ArgumentNullException(nameof(template));
+        var limits = readOptions ?? new DocxReaderOptions();
+        var lim = new FillLimits(limits, cancellationToken);
+        var packageBytes = ReadPackage(template, password, limits, cancellationToken);
+        var result = new List<string>();
+        using var zipIn = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
+        foreach (var entry in OrderedTextParts(zipIn))
+        {
+            var xml = LoadXml(entry, lim);
+            result.AddRange(new TemplateEngine(xml, entry.FullName, new TemplateOptions(), null, cancellationToken: cancellationToken).Check());
+        }
+        return result;
+    }
+
+    private static byte[] ReadPackage(Stream input, string? password, DocxReaderOptions limits, System.Threading.CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var seekable = PackageGuard.EnsureSeekable(input, limits, ct, out var buffered);
+        using var _ = buffered;
+        byte[] packageBytes;
+        if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(seekable))
+            packageBytes = PackageGuard.Decrypt(seekable, password, limits, ct);
         else
         {
-            using var ms = PackageGuard.CopyBounded(input, limits, ct);
+            using var ms = PackageGuard.CopyBounded(seekable, limits, ct);
             packageBytes = ms.ToArray();
         }
-
         using (var scan = new MemoryStream(packageBytes, writable: false))
             PackageGuard.Scan(scan, limits, ct);
+        return packageBytes;
+    }
+
+    private static byte[] FillToBytes(Stream input, TemplateData data, TemplateOptions? options, System.Threading.CancellationToken ct)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        options ??= new TemplateOptions();
+        options.Validate();
+        // Templates get the same resource limits as DocxReader (zip bomb, nesting depth, spin
+        // count, input size) — a template can arrive from an upload or a database too.
+        var limits = options.ReadOptions ?? new DocxReaderOptions();
+        var packageBytes = ReadPackage(input, options.Password, limits, ct);
         var fillLimits = new FillLimits(limits, ct);
 
-        // Transform into a new package in memory.
         byte[] filled;
         using (var inPkg = new MemoryStream(packageBytes, writable: false))
         using (var outPkg = new MemoryStream())
         {
-            FillPackage(inPkg, outPkg, textValues, imageValues, fillLimits);
+            FillPackage(inPkg, outPkg, data, options, fillLimits);
             filled = outPkg.ToArray();
         }
 
-        // Write output (optionally encrypted).
-        if (outputEncryption is null)
-        {
-            File.WriteAllBytes(outputPath, filled);
-        }
-        else
-        {
-            if (string.IsNullOrEmpty(outputEncryption.Password))
-                throw new ArgumentException("Encryption password cannot be empty.", nameof(outputEncryption));
-            var tempPath = Path.Combine(Path.GetTempPath(), $"chuvadi_docs_tpl_{Guid.NewGuid():N}.tmp");
-            try
-            {
-                File.WriteAllBytes(tempPath, filled);
-                using var spoolRead = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                    output, spoolRead, spoolRead.Length, outputEncryption.Password, outputEncryption.SpinCount);
-            }
-            finally
-            {
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            }
-        }
+        if (options.OutputEncryption is not { } enc) return filled;
+        if (string.IsNullOrEmpty(enc.Password))
+            throw new ArgumentException("Encryption password cannot be empty.", nameof(options));
+        using var plain = new MemoryStream(filled, writable: false);
+        using var encrypted = new MemoryStream();
+        Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(encrypted, plain, plain.Length, enc.Password, enc.SpinCount, ct);
+        return encrypted.ToArray();
     }
 
     // ---- Package transform -----------------------------------------------------------
@@ -183,11 +253,7 @@ public static class DocxTemplate
     /// <summary>Read limits and cancellation for one Fill call, threaded to every part read.</summary>
     private sealed record FillLimits(DocxReaderOptions Options, System.Threading.CancellationToken Ct);
 
-    private static void FillPackage(
-        Stream packageIn, Stream packageOut,
-        IReadOnlyDictionary<string, string> textValues,
-        IReadOnlyDictionary<string, ImageSpec> imageValues,
-        FillLimits lim)
+    private static void FillPackage(Stream packageIn, Stream packageOut, TemplateData data, TemplateOptions options, FillLimits lim)
     {
         // ---- PASS 1: read text-bearing parts + their .rels, compute all edits ----
 
@@ -203,58 +269,82 @@ public static class DocxTemplate
                 if (stem.Length > 5 && int.TryParse(stem.AsSpan(5), out var n)) mediaSeq = Math.Max(mediaSeq, n);
             }
         }
-        int globalDrawingId = 1000; // high base to avoid clashing with template docPr ids
+        // Parts are loaded first so ids already in use anywhere are known: drawing ids (wp:docPr)
+        // and bookmark ids must stay unique across the document, also when an output is used as
+        // a template again.
+        var parts = new List<(ZipArchiveEntry Entry, XmlDocument Xml)>();
+        foreach (var entry in OrderedTextParts(zipIn))
+        {
+            lim.Ct.ThrowIfCancellationRequested();
+            parts.Add((entry, LoadXml(entry, lim)));
+        }
+        int maxDrawingId = 0, maxBookmarkId = -1;
+        foreach (var (_, xml) in parts) ScanIds(xml, ref maxDrawingId, ref maxBookmarkId);
+        int globalDrawingId = Math.Max(1000, maxDrawingId); // high base to avoid clashing with template docPr ids
+        int bookmarkId = maxBookmarkId;
 
         var rewrittenParts = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         var partInsertions = new Dictionary<string, List<ImageInsertion>>(StringComparer.Ordinal);
         var newMedia = new List<(string MediaName, byte[] Bytes)>();
+        var mediaByBytes = new Dictionary<byte[], string>(ReferenceEqualityComparer.Instance); // same image → one media part
         var replaceMediaBytes = new Dictionary<string, byte[]>(StringComparer.Ordinal); // full media path -> new bytes
         var neededExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var problems = new List<string>();
 
-        // Map each text-bearing part to its .rels (for resolving blip targets, alt-text replace).
-        foreach (var entry in zipIn.Entries.ToList())
+        // Top-level images also replace template pictures by alt text.
+        var rootImages = new Dictionary<string, ImageSpec>(StringComparer.Ordinal);
+        foreach (var key in data.Keys)
+            if (data[key] is ImageSpec img) rootImages[key] = img;
+
+        foreach (var (entry, xml) in parts)
         {
-            if (!IsTextBearingPart(entry.FullName)) continue;
-
             var relsPath = RelsPathFor(entry.FullName);
             lim.Ct.ThrowIfCancellationRequested();
             var relTargets = ReadRelationshipTargets(zipIn, relsPath, lim); // relId -> target media path (full)
 
-            var xml = LoadXml(entry, lim);
-
-            // Text replacement (existing behaviour). Remember which w:t nodes changed so that
-            // line feeds / tabs inside FILLED values can become w:br / w:tab afterwards —
-            // untouched template text is never altered.
-            var changedTextNodes = ReplaceText(xml, textValues);
-
-            // Image: replace-by-alt-text (swap bytes of an existing drawing's media).
-            if (imageValues.Count > 0)
-                ApplyAltTextImageReplacement(xml, imageValues, entry.FullName, relTargets, replaceMediaBytes);
-
-            // Image: text-to-image insertion ({{key}} -> inline/floating drawing).
-            if (imageValues.Count > 0)
+            var insertions = new List<ImageInsertion>();
+            var relByMedia = new Dictionary<string, string>(StringComparer.Ordinal);
+            int relSeq = 0;
+            XmlElement MakeImageRun(ImageSpec img)
             {
-                var insertions = ApplyImagePlaceholders(
-                    xml, imageValues,
-                    allocMedia: (img) =>
-                    {
-                        mediaSeq++;
-                        var ext = ImageMetadata.ExtensionFor(img.ContentType);
-                        neededExtensions.Add(ext);
-                        var mediaName = $"image{mediaSeq}.{ext}";
-                        newMedia.Add((mediaName, img.Bytes));
-                        return mediaName;
-                    },
-                    nextDrawingId: () => ++globalDrawingId);
-
-                if (insertions.Count > 0)
-                    partInsertions[entry.FullName] = insertions;
+                if (!mediaByBytes.TryGetValue(img.Bytes, out var mediaName))
+                {
+                    mediaSeq++;
+                    var ext = ImageMetadata.ExtensionFor(img.ContentType);
+                    neededExtensions.Add(ext);
+                    mediaName = $"image{mediaSeq}.{ext}";
+                    newMedia.Add((mediaName, img.Bytes));
+                    mediaByBytes[img.Bytes] = mediaName;
+                }
+                if (!relByMedia.TryGetValue(mediaName, out var relId))
+                {
+                    // A relationship id the part does not use yet.
+                    do relId = "rIdTplImg" + (++relSeq); while (relTargets.ContainsKey(relId));
+                    relByMedia[mediaName] = relId;
+                    insertions.Add(new ImageInsertion { RelId = relId, MediaName = mediaName, Image = img, DrawingId = 0 });
+                }
+                return BuildDrawingRun(xml, img, relId, ++globalDrawingId);
             }
 
-            ExpandControlCharacters(changedTextNodes);
+            // Blocks, values (text, formatted, images). Only the touched runs change; untouched
+            // template text is never altered.
+            var engine = new TemplateEngine(xml, entry.FullName, options, MakeImageRun,
+                () => ++globalDrawingId, () => ++bookmarkId, lim.Ct);
+            engine.Run(data);
+            problems.AddRange(engine.Problems);
+
+            // Image: replace-by-alt-text (swap bytes of an existing drawing's media).
+            if (rootImages.Count > 0)
+                ApplyAltTextImageReplacement(xml, rootImages, entry.FullName, relTargets, replaceMediaBytes);
+
+            if (insertions.Count > 0) partInsertions[entry.FullName] = insertions;
+
+            // Line feeds / tabs inside FILLED values become w:br / w:tab.
+            ExpandControlCharacters(engine.ChangedText);
 
             rewrittenParts[entry.FullName] = SaveXml(xml);
         }
+        if (problems.Count > 0) throw new DocxTemplateException(problems);
 
         // ---- PASS 2: write the output package ----
 
@@ -317,50 +407,26 @@ public static class DocxTemplate
             WriteEntry(zipOut, "word/media/" + mediaName, bytes);
     }
 
-    // ---- Text replacement (unchanged behaviour) --------------------------------------
-
-    private static HashSet<XmlElement> ReplaceText(XmlDocument xml, IReadOnlyDictionary<string, string> values)
+    /// <summary>The largest drawing id (wp:docPr/@id) and bookmark id (w:bookmarkStart/@w:id) in a part.</summary>
+    private static void ScanIds(XmlDocument xml, ref int maxDrawingId, ref int maxBookmarkId)
     {
-        var changed = new HashSet<XmlElement>();
-        if (values.Count == 0) return changed;
-        var ns = new XmlNamespaceManager(xml.NameTable);
-        ns.AddNamespace("w", W);
-
-        var paragraphs = xml.SelectNodes("//w:p", ns);
-        if (paragraphs is null) return changed;
-
-        foreach (XmlNode p in paragraphs)
+        if (xml.DocumentElement is null) return;
+        var stack = new Stack<XmlNode>();
+        stack.Push(xml.DocumentElement);
+        while (stack.Count > 0)
         {
-            var textNodes = p.SelectNodes(".//w:t", ns);
-            if (textNodes is null || textNodes.Count == 0) continue;
-
-            foreach (XmlNode t in textNodes)
+            var n = stack.Pop();
+            if (n is XmlElement e)
             {
-                var before = t.InnerText;
-                var after = ReplaceAll(before, values);
-                if (after != before)
-                {
-                    t.InnerText = after;
-                    changed.Add((XmlElement)t);
-                }
+                if (e.LocalName == "docPr" && e.NamespaceURI == WP
+                    && int.TryParse(e.GetAttribute("id"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var d))
+                    maxDrawingId = Math.Max(maxDrawingId, d);
+                else if (e.LocalName is "bookmarkStart" or "bookmarkEnd" && e.NamespaceURI == W
+                    && int.TryParse(e.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var b))
+                    maxBookmarkId = Math.Max(maxBookmarkId, b);
             }
-
-            var combined = ConcatText(textNodes);
-            if (ContainsCompletePlaceholder(combined))
-            {
-                var replaced = ReplaceAll(combined, values);
-                if (replaced != combined)
-                {
-                    var first = (XmlElement)textNodes[0]!;
-                    first.InnerText = replaced;
-                    first.SetAttribute("space", "http://www.w3.org/XML/1998/namespace", "preserve");
-                    changed.Add(first);
-                    for (int i = 1; i < textNodes.Count; i++)
-                        textNodes[i]!.InnerText = string.Empty;
-                }
-            }
+            for (var c = n.FirstChild; c is not null; c = c.NextSibling) stack.Push(c);
         }
-        return changed;
     }
 
     /// <summary>
@@ -407,107 +473,6 @@ public static class DocxTemplate
             if (start < text.Length) AddText(text.Substring(start));
             parent.RemoveChild(t);
         }
-    }
-
-    // ---- Image: text-to-image insertion ----------------------------------------------
-
-    private static List<ImageInsertion> ApplyImagePlaceholders(
-        XmlDocument xml,
-        IReadOnlyDictionary<string, ImageSpec> imageValues,
-        Func<ImageSpec, string> allocMedia,
-        Func<int> nextDrawingId)
-    {
-        var result = new List<ImageInsertion>();
-        var ns = new XmlNamespaceManager(xml.NameTable);
-        ns.AddNamespace("w", W);
-
-        var paragraphs = xml.SelectNodes("//w:p", ns);
-        if (paragraphs is null) return result;
-
-        foreach (XmlNode p in paragraphs.Cast<XmlNode>().ToList())
-        {
-            var textNodes = p.SelectNodes(".//w:t", ns)?.Cast<XmlNode>().ToList();
-            if (textNodes is null || textNodes.Count == 0) continue;
-
-            var combined = ConcatText(textNodes);
-            // Does this paragraph contain any image placeholder?
-            string? hitKey = null;
-            foreach (var key in imageValues.Keys)
-                if (combined.Contains("{{" + key + "}}", StringComparison.Ordinal)) { hitKey = key; break; }
-            if (hitKey is null) continue;
-
-            // Consolidate paragraph text into the first run's w:t, blank the rest.
-            var firstT = (XmlElement)textNodes[0];
-            firstT.InnerText = combined;
-            firstT.SetAttribute("space", "http://www.w3.org/XML/1998/namespace", "preserve");
-            for (int i = 1; i < textNodes.Count; i++) textNodes[i].InnerText = string.Empty;
-
-            // The run that owns firstT is where we splice the image(s).
-            var ownerRun = AncestorRun(firstT);
-            if (ownerRun?.ParentNode is null) continue;
-
-            // Repeatedly split out each image placeholder in this paragraph's consolidated text.
-            var parentOfRun = ownerRun.ParentNode;
-
-            // Re-emit the paragraph's consolidated text as alternating text/image runs.
-            var pieces = SplitByImageKeys(firstT.InnerText, imageValues.Keys);
-            // Remove original owner run; rebuild.
-            var template = ownerRun;
-            var newNodes = new List<XmlNode>();
-            foreach (var piece in pieces)
-            {
-                if (piece.IsImage)
-                {
-                    var img = imageValues[piece.Key!];
-                    var mediaName = allocMedia(img);
-                    var relId = "rIdTplImg" + (result.Count + 1);
-                    int drawingId = nextDrawingId();
-                    result.Add(new ImageInsertion { RelId = relId, MediaName = mediaName, Image = img, DrawingId = drawingId });
-
-                    var drawingRun = BuildDrawingRun(xml, img, relId, drawingId);
-                    newNodes.Add(drawingRun);
-                }
-                else if (piece.Text.Length > 0)
-                {
-                    var textRun = (XmlElement)template.CloneNode(deep: true);
-                    SetRunText(textRun, piece.Text);
-                    newNodes.Add(textRun);
-                }
-            }
-
-            foreach (var n in newNodes) parentOfRun.InsertBefore(n, template);
-            parentOfRun.RemoveChild(template);
-        }
-        return result;
-    }
-
-
-    private readonly record struct Piece(bool IsImage, string Text, string? Key);
-
-    private static List<Piece> SplitByImageKeys(string text, IEnumerable<string> keys)
-    {
-        var keyList = keys.ToList();
-        var pieces = new List<Piece>();
-        int i = 0;
-        while (i < text.Length)
-        {
-            int bestPos = -1; string? bestKey = null;
-            foreach (var key in keyList)
-            {
-                var token = "{{" + key + "}}";
-                int pos = text.IndexOf(token, i, StringComparison.Ordinal);
-                if (pos >= 0 && (bestPos < 0 || pos < bestPos)) { bestPos = pos; bestKey = key; }
-            }
-            if (bestPos < 0)
-            {
-                pieces.Add(new Piece(false, text[i..], null));
-                break;
-            }
-            if (bestPos > i) pieces.Add(new Piece(false, text[i..bestPos], null));
-            pieces.Add(new Piece(true, string.Empty, bestKey));
-            i = bestPos + ("{{" + bestKey + "}}").Length;
-        }
-        return pieces;
     }
 
     // ---- Image: replace-by-alt-text --------------------------------------------------
@@ -668,6 +633,11 @@ public static class DocxTemplate
 
     // ---- Zip + XML helpers -----------------------------------------------------------
 
+    /// <summary>Text-bearing parts in a stable order (document first, then headers, footers, notes).</summary>
+    private static IEnumerable<ZipArchiveEntry> OrderedTextParts(ZipArchive zip)
+        => zip.Entries.Where(e => IsTextBearingPart(e.FullName)).OrderBy(e => e.FullName == "word/document.xml" ? 0 : 1)
+            .ThenBy(e => e.FullName, StringComparer.Ordinal).ToList();
+
     private static bool IsTextBearingPart(string entryName)
         => entryName is "word/document.xml" or "word/footnotes.xml" or "word/endnotes.xml"
            || (entryName.StartsWith("word/header", StringComparison.Ordinal) && entryName.EndsWith(".xml", StringComparison.Ordinal))
@@ -730,60 +700,6 @@ public static class DocxTemplate
         using var inS = src.Open();
         using var outS = outEntry.Open();
         inS.CopyTo(outS);
-    }
-
-    private static XmlElement? AncestorRun(XmlNode node)
-    {
-        var cur = node.ParentNode;
-        while (cur is not null)
-        {
-            if (cur.LocalName == "r" && cur.NamespaceURI == W) return (XmlElement)cur;
-            cur = cur.ParentNode;
-        }
-        return null;
-    }
-
-    private static void SetRunText(XmlElement run, string text)
-    {
-        var ns = new XmlNamespaceManager(run.OwnerDocument.NameTable);
-        ns.AddNamespace("w", W);
-        var t = run.SelectSingleNode(".//w:t", ns) as XmlElement;
-        if (t is null)
-        {
-            t = run.OwnerDocument.CreateElement("w", "t", W);
-            run.AppendChild(t);
-        }
-        t.InnerText = text;
-        t.SetAttribute("space", "http://www.w3.org/XML/1998/namespace", "preserve");
-    }
-
-    private static string ConcatText(System.Collections.IEnumerable textNodes)
-    {
-        var sb = new StringBuilder();
-        foreach (XmlNode t in textNodes) sb.Append(t.InnerText);
-        return sb.ToString();
-    }
-
-    private static string ConcatText(XmlNodeList textNodes)
-    {
-        var sb = new StringBuilder();
-        foreach (XmlNode t in textNodes) sb.Append(t.InnerText);
-        return sb.ToString();
-    }
-
-    private static bool ContainsCompletePlaceholder(string s)
-    {
-        int open = s.IndexOf("{{", StringComparison.Ordinal);
-        if (open < 0) return false;
-        return s.IndexOf("}}", open + 2, StringComparison.Ordinal) >= 0;
-    }
-
-    private static string ReplaceAll(string text, IReadOnlyDictionary<string, string> values)
-    {
-        if (text.IndexOf("{{", StringComparison.Ordinal) < 0) return text;
-        foreach (var (key, value) in values)
-            text = text.Replace("{{" + key + "}}", value, StringComparison.Ordinal);
-        return text;
     }
 
     private static string Escape(string s)
