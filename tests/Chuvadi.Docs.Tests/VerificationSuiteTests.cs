@@ -144,11 +144,23 @@ public class VerificationSuiteTests
         Assert.Throws<DocxFormatException>(() => DocxReader.Open(path));
     }
 
+    /// <summary>Compile guard (D-38): a bare null binds without ambiguity on every overload set that grew in a minor version.</summary>
+    [Fact]
+    public void NullArguments_BindWithoutAmbiguity()
+    {
+        Assert.ThrowsAny<System.ArgumentException>(() => DocxTemplate.GetPlaceholders(null!));
+        Assert.ThrowsAny<System.ArgumentException>(() => DocxTemplate.CheckTemplate(null!));
+        Assert.ThrowsAny<System.ArgumentException>(() => DocxTemplate.Fill("in.docx", "out.docx", null!, null));
+        var data = new TemplateData().Set("Key", null);
+        Assert.Null(data["Key"]);
+        Assert.Throws<System.ArgumentNullException>(() => data.SetItems("Items", null!));
+    }
+
     [Fact]
     public void Template_MissingValueDictionary_Throws()
     {
         Assert.ThrowsAny<System.ArgumentException>(() =>
-            DocxTemplate.Fill("in.docx", "out.docx", (IReadOnlyDictionary<string, string>)null!));
+            DocxTemplate.Fill("in.docx", "out.docx", null!));
     }
 
     [Fact]

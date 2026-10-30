@@ -1,6 +1,16 @@
 # Chuvadi.Docs — Changelog
 
-## Unreleased
+## 1.5.1 (2026-10-28)
+
+Source compatibility fix (D-38: no source breaks in minor versions).
+
+- `DocxTemplate.Fill(input, output, null)` compiles again and binds to the text-values overload, as before 1.5.0 (the `TemplateData` overloads made a bare `null` ambiguous). The pre-existing overload carries `[OverloadResolutionPriority(1)]`.
+- The same applies to the other overload sets added in 1.5.0: `GetPlaceholders(null)` and `CheckTemplate(null)` bind to the path overloads, `TemplateData.Set(key, null)` sets an empty text value, and `SetItems(name, null)` binds to the item overload (both throw or behave as documented instead of failing to compile). Overload sets from 1.3–1.4 (`NumberingCollection.Contains` / `Remove`) were new together and have no earlier calls to break; `Document.Load`, `DocxReader.Open`, `SaveTo` and `AddParagraph` are unchanged since 1.1.
+- A compile-guard test keeps these calls as written.
+
+## 1.5.0 (2026-10-28)
+
+Exact image anchoring (pictures as runs with their full geometry, read back by Document.Load), template blocks (repeating rows and blocks, conditions, nested data, formatted values), and the loader additions a paginator needs (hyperlink targets, positional tabs, stated page size, default tab stop).
 
 ### Images: exact anchoring (6b)
 

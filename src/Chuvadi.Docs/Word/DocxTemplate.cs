@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
 using Chuvadi.Docs.Internal;
@@ -61,6 +62,11 @@ public static class DocxTemplate
     private const string CtNs = "http://schemas.openxmlformats.org/package/2006/content-types";
 
     /// <summary>Fills a template with text values only (backwards-compatible overload).</summary>
+    /// <remarks>
+    /// Preferred by overload resolution, so a bare <c>null</c> third argument binds here as it did
+    /// before the <see cref="TemplateData"/> overloads existed (and throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    [OverloadResolutionPriority(1)]
     public static void Fill(
         string inputPath,
         string outputPath,
@@ -139,6 +145,7 @@ public static class DocxTemplate
     }
 
     /// <summary>Every placeholder in a template, in document order per part, with its kind and enclosing blocks.</summary>
+    [OverloadResolutionPriority(1)] // GetPlaceholders(null) binds to the path overload (ArgumentException), not ambiguous
     public static IReadOnlyList<TemplatePlaceholder> GetPlaceholders(string path, string? password = null, DocxReaderOptions? readOptions = null)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
@@ -169,6 +176,7 @@ public static class DocxTemplate
     /// the data: block markers without a partner, and blocks whose markers cannot form a block
     /// (inline within one paragraph, marker paragraphs, or table rows). Empty = no problems.
     /// </summary>
+    [OverloadResolutionPriority(1)] // CheckTemplate(null) binds to the path overload (ArgumentException), not ambiguous
     public static IReadOnlyList<string> CheckTemplate(string path, string? password = null, DocxReaderOptions? readOptions = null)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
