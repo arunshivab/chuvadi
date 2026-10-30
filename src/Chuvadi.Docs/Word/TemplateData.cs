@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Chuvadi.Docs.Word;
 
@@ -37,6 +38,7 @@ public sealed class TemplateData
     public IReadOnlyCollection<string> Keys => _values.Keys;
 
     /// <summary>Sets a text value. Line feeds become line breaks and tabs become tabs in the output.</summary>
+    [OverloadResolutionPriority(1)] // Set(key, null) clears to an empty text value instead of being ambiguous with Set(string, TemplateValue).
     public TemplateData Set(string key, string? value)
     {
         _values[CheckKey(key)] = value;
@@ -96,6 +98,7 @@ public sealed class TemplateData
     }
 
     /// <summary>Sets the items of a collection (replacing any). Each item's scope falls back to this one.</summary>
+    [OverloadResolutionPriority(1)] // SetItems(name, null) binds here (ArgumentNullException) instead of being ambiguous.
     public TemplateData SetItems(string collection, IEnumerable<TemplateData> items)
     {
         if (items is null) throw new ArgumentNullException(nameof(items));
