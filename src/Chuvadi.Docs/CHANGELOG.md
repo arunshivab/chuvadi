@@ -1,5 +1,23 @@
 # Chuvadi.Docs — Changelog
 
+## Unreleased
+
+### Images: exact anchoring (6b)
+
+- **Document.Load reads pictures into the paragraph model**: each DrawingML picture becomes an image `Run` (`Run.Image`) at its exact place — inline in the text flow, or floating on its anchor paragraph — in the body, tables, nested tables, headers and footers. Previously loaded documents dropped their pictures on save (only `Document.Images` listed them). Load → save reproduces document.xml and headers exactly for files written by Chuvadi.Docs.
+- **Full anchor geometry** on `FloatingPosition`: per-side distances from text (`DistanceTopPt` … , `EffectiveDistances`), wrap side (`WrapSide`: both, left, right, largest), wrap outline (`WrapPolygon`, edited flag), layout in table cell, simple absolute position (`UseSimplePosition`, `SimplePositionXPt/YPt`), plus the existing anchors, offsets, alignments, wrap type, behind/in front, z-order (`RelativeHeight`), lock and overlap.
+- **Picture properties** on `ImageSpec`: `Crop` (`ImageCrop`, a:srcRect), `RotationDegrees`, `FlipHorizontal`, `FlipVertical`, `EffectExtent`, `InlineDistance`, `Name`, `Title`, `Hidden` — written and read back.
+- **`Document.GetImagePlacements()`**: every picture with its paragraph (the anchor for floating pictures), run and run index, host (body/header/footer), section, header/footer object and table cell — what a paginator needs to place each image; use `GetEffectiveParagraphFormat` for the anchor paragraph.
+- One parser and writer for pictures everywhere (`Document.SaveTo`, `Document.Load`, `DocxTemplate`, `DocxReader.Images()`): `ImageInfo` gains `Crop`, `RotationDegrees`, flips and `EffectExtent`, and its `Position` now carries the full geometry; template image placeholders write crop/rotation/wrap details too.
+- **Percentage positions and sizes** (Word 2010+): `FloatingPosition.HorizontalOffsetPercent` / `VerticalOffsetPercent` (wp14:pctPosHOffset/V) and `ImageSpec.RelativeWidth` / `RelativeHeight` (`RelativeSize`: percent of page/margin frames, wp14:sizeRelH/V) are read and written back as Word writes them — mc:AlternateContent with a wp14 Choice and an absolute Fallback.
+- **Linked pictures**: `ImageSpec.LinkUrl` (a:blip/@r:link with an external relationship) — a linked-only picture keeps its place and size with empty `Bytes`; "link and save" keeps both. Media in formats the library does not recognise (WebP is now recognised) are kept as opaque bytes instead of being dropped.
+- **Markup compatibility**: run-level mc:AlternateContent takes the first Choice whose `Requires` namespaces are understood, else the Fallback.
+- Only a drawing's own properties are read: a text box or group that contains a picture keeps its text and is not mistaken for that picture. Drawings that are not pictures (charts, SmartArt, shapes, groups, text boxes) keep their text as before (they are not image runs and are not written back); `DocxReader.Images()` still lists the first picture of a group or text box.
+- `behindDoc` is kept for every wrap type (it was written only with Wrap None).
+- Hostile values are clamped on load (negative sizes and distances, crops leaving nothing visible, huge polygons, stray elements inside position values); a picture whose media is missing is skipped. `DocxReader.Images()` (and so `Document.Images`) reads each media part once however many drawings show it.
+- `Document.SaveTo(path)` writes to a temporary file beside the target and replaces the target only when the save succeeds — a failing save no longer leaves a truncated file or destroys the file being overwritten.
+- Behaviour notes: the same picture bytes used several times are now stored as one media part (smaller files; document.xml unchanged); a loaded picture's default name ("Picture N") is renumbered on save; VML pictures (`w:pict`, Word 2003 style) still load as text only.
+
 ## 1.4.0 (2026-10-28)
 
 Lists (the full numbering model and Word-compatible list labels) and sections (multiple sections, columns, per-section headers and footers, page numbering, watermarks), both read back by Document.Load.

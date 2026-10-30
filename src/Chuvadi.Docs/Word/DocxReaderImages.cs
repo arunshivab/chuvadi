@@ -147,76 +147,22 @@ public sealed partial class DocxReader
         }
     }
 
+    private readonly Dictionary<string, byte[]> _mediaBytes = new(StringComparer.Ordinal);
+
     /// <summary>Parses a wp:inline or wp:anchor element into an <see cref="ImageInfo"/>.</summary>
     private ImageInfo? ParseDrawing(XmlReader r, Dictionary<string, string> relToMedia, ImageHost host, CancellationToken ct,
         int? tableIndex, int? rowIndex, int? colIndex, string? anchorText)
     {
-        bool floating = r.LocalName == "anchor";
-        long cx = 0, cy = 0;
-        string? embedRelId = null;
-        string? altText = null;
-
-        // Floating attributes captured for FloatingPosition.
-        var pos = floating ? new FloatingPosition() : null;
-        if (floating)
-        {
-            var behind = r.GetAttribute("behindDoc");
-            var allowOverlap = r.GetAttribute("allowOverlap");
-            var locked = r.GetAttribute("locked");
-            if (behind == "1") pos!.BehindText = true;
-            pos!.AllowOverlap = allowOverlap != "0";
-            pos.LockAnchor = locked == "1";
-        }
-
-        using (var sub = r.ReadSubtree())
-        {
-            sub.Read();
-            while (sub.Read())
-            {
-                if (sub.NodeType != XmlNodeType.Element) continue;
-
-                if (sub.NamespaceURI == DocumentSerializer.WP)
-                {
-                    switch (sub.LocalName)
-                    {
-                        case "extent":
-                            long.TryParse(sub.GetAttribute("cx"), out cx);
-                            long.TryParse(sub.GetAttribute("cy"), out cy);
-                            break;
-                        case "docPr":
-                            altText = sub.GetAttribute("descr");
-                            break;
-                        case "positionH" when pos is not null:
-                            pos.HorizontalAnchor = ParseHAnchor(sub.GetAttribute("relativeFrom"));
-                            ReadPosition(sub, isHorizontal: true, pos);
-                            continue;
-                        case "positionV" when pos is not null:
-                            pos.VerticalAnchor = ParseVAnchor(sub.GetAttribute("relativeFrom"));
-                            ReadPosition(sub, isHorizontal: false, pos);
-                            continue;
-                        case "wrapNone" when pos is not null:
-                            pos.Wrap = TextWrap.None;
-                            break;
-                        case "wrapSquare" when pos is not null:
-                            pos.Wrap = TextWrap.Square;
-                            break;
-                        case "wrapTight" when pos is not null:
-                            pos.Wrap = TextWrap.Tight;
-                            break;
-                        case "wrapThrough" when pos is not null:
-                            pos.Wrap = TextWrap.Through;
-                            break;
-                        case "wrapTopAndBottom" when pos is not null:
-                            pos.Wrap = TextWrap.TopAndBottom;
-                            break;
-                    }
-                }
-                else if (sub.NamespaceURI == DocumentSerializer.A && sub.LocalName == "blip")
-                {
-                    embedRelId = sub.GetAttribute("embed", DocumentSerializer.R);
-                }
-            }
-        }
+        // Same parser as Document.Load: full anchor geometry (distances, wrap side and polygon,
+        // simple position, layout in cell), crop, rotation and flips.
+        var pic = DrawingXml.Read(r);
+        // Pictures; for groups and text boxes holding pictures, their first picture (as before 1.5).
+        var embedRelId = pic.IsPicture ? pic.EmbedRelId : pic.FirstBlipRelId;
+        if (embedRelId is null) return null;
+        bool floating = pic.Placement == ImagePlacement.Floating;
+        var pos = pic.Position;
+        long cx = (long)Math.Round(pic.WidthPt * DocumentSerializer.EmuPerPoint), cy = (long)Math.Round(pic.HeightPt * DocumentSerializer.EmuPerPoint);
+        var altText = pic.AltText;
 
         if (embedRelId is null || !relToMedia.TryGetValue(embedRelId, out var mediaUri))
             return null;
@@ -224,14 +170,18 @@ public sealed partial class DocxReader
         // Media bytes go through the same per-part cap and cancellation check as XML parts.
         // A missing or unreadable media part skips the image; limit breaches and
         // cancellation propagate.
-        byte[] bytes;
-        Stream? ps = TryOpenPart(mediaUri, ct);
-        if (ps is null) return null;
-        using (ps)
+        // One byte array per media part, however many drawings show it.
+        if (!_mediaBytes.TryGetValue(mediaUri, out var bytes))
         {
-            using var ms = new MemoryStream();
-            ps.CopyTo(ms);
-            bytes = ms.ToArray();
+            Stream? ps = TryOpenPart(mediaUri, ct);
+            if (ps is null) return null;
+            using (ps)
+            {
+                using var ms = new MemoryStream();
+                ps.CopyTo(ms);
+                bytes = ms.ToArray();
+            }
+            _mediaBytes[mediaUri] = bytes;
         }
 
         var contentType = ImageMetadata.DetectContentType(bytes)
@@ -254,75 +204,12 @@ public sealed partial class DocxReader
             TableRow = rowIndex,
             TableColumn = colIndex,
             AnchorParagraphText = anchorText,
+            Crop = pic.Crop,
+            RotationDegrees = pic.RotationDegrees,
+            FlipHorizontal = pic.FlipH,
+            FlipVertical = pic.FlipV,
+            EffectExtent = pic.EffectExtent,
         };
     }
 
-    private static void ReadPosition(XmlReader positionElem, bool isHorizontal, FloatingPosition pos)
-    {
-        using var sub = positionElem.ReadSubtree();
-        sub.Read();
-        while (sub.Read())
-        {
-            if (sub.NodeType != XmlNodeType.Element || sub.NamespaceURI != DocumentSerializer.WP) continue;
-            if (sub.LocalName == "posOffset")
-            {
-                var text = sub.ReadElementContentAsString();
-                if (long.TryParse(text, out var emu))
-                {
-                    double pt = emu / (double)DocumentSerializer.EmuPerPoint;
-                    if (isHorizontal) pos.HorizontalOffsetPt = pt; else pos.VerticalOffsetPt = pt;
-                }
-            }
-            else if (sub.LocalName == "align")
-            {
-                var text = sub.ReadElementContentAsString();
-                if (isHorizontal)
-                    pos.HAlign = text switch
-                    {
-                        "left" => HorizontalAlignment.Left,
-                        "center" => HorizontalAlignment.Center,
-                        "right" => HorizontalAlignment.Right,
-                        "inside" => HorizontalAlignment.Inside,
-                        "outside" => HorizontalAlignment.Outside,
-                        _ => null,
-                    };
-                else
-                    pos.VAlign = text switch
-                    {
-                        "top" => VerticalAlignment.Top,
-                        "center" => VerticalAlignment.Center,
-                        "bottom" => VerticalAlignment.Bottom,
-                        "inside" => VerticalAlignment.Inside,
-                        "outside" => VerticalAlignment.Outside,
-                        _ => null,
-                    };
-            }
-        }
-    }
-
-    private static HorizontalAnchor ParseHAnchor(string? v) => v switch
-    {
-        "page" => HorizontalAnchor.Page,
-        "margin" => HorizontalAnchor.Margin,
-        "column" => HorizontalAnchor.Column,
-        "character" => HorizontalAnchor.Character,
-        "leftMargin" => HorizontalAnchor.LeftMargin,
-        "rightMargin" => HorizontalAnchor.RightMargin,
-        "insideMargin" => HorizontalAnchor.InsideMargin,
-        "outsideMargin" => HorizontalAnchor.OutsideMargin,
-        _ => HorizontalAnchor.Column,
-    };
-
-    private static VerticalAnchor ParseVAnchor(string? v) => v switch
-    {
-        "page" => VerticalAnchor.Page,
-        "margin" => VerticalAnchor.Margin,
-        "line" => VerticalAnchor.Line,
-        "paragraph" => VerticalAnchor.Paragraph,
-        "topMargin" => VerticalAnchor.TopMargin,
-        "bottomMargin" => VerticalAnchor.BottomMargin,
-        "insideMargin" => VerticalAnchor.InsideMargin,
-        "outsideMargin" => VerticalAnchor.OutsideMargin,
-        _ => VerticalAnchor.Paragraph,
-    };
 }

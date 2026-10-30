@@ -559,110 +559,20 @@ public static class DocxTemplate
 
     private static XmlElement BuildDrawingRun(XmlDocument doc, ImageSpec image, string relId, int drawingId)
     {
-        long cx = (long)Math.Round(image.WidthPt * DocumentSerializer.EmuPerPoint);
-        long cy = (long)Math.Round(image.HeightPt * DocumentSerializer.EmuPerPoint);
-        string name = $"Picture {drawingId}";
-        string altAttr = image.AltText is null ? "" : $" descr=\"{Escape(image.AltText)}\"";
-
-        string innerPlacement;
-        if (image.Placement == ImagePlacement.Floating && image.Position is not null)
-            innerPlacement = BuildAnchorXml(image.Position, cx, cy, drawingId, name, altAttr, relId);
-        else
-            innerPlacement = BuildInlineXml(cx, cy, drawingId, name, altAttr, relId);
-
-        string runXml =
-            $"<w:r xmlns:w=\"{W}\"><w:drawing xmlns:wp=\"{WP}\" xmlns:a=\"{A}\" xmlns:pic=\"{PIC}\" xmlns:r=\"{R}\">{innerPlacement}</w:drawing></w:r>";
-
+        // The same DrawingML writer as Document.SaveTo (crop, rotation, wrap polygon… included).
+        var sb = new StringBuilder();
+        using (var x = XmlWriter.Create(sb, new XmlWriterSettings { OmitXmlDeclaration = true }))
+        {
+            x.WriteStartElement("w", "root", W);
+            x.WriteAttributeString("xmlns", "wp", null, WP);
+            x.WriteAttributeString("xmlns", "r", null, R);
+            DrawingXml.WriteRun(x, image, relId, drawingId);
+            x.WriteEndElement();
+        }
         var frag = new XmlDocument();
-        frag.LoadXml(runXml);
-        return (XmlElement)doc.ImportNode(frag.DocumentElement!, deep: true);
+        frag.LoadXml(sb.ToString());
+        return (XmlElement)doc.ImportNode(frag.DocumentElement!.FirstChild!, deep: true);
     }
-
-    private static string BuildInlineXml(long cx, long cy, int id, string name, string altAttr, string relId)
-        => $"<wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">" +
-           $"<wp:extent cx=\"{cx}\" cy=\"{cy}\"/>" +
-           $"<wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/>" +
-           $"<wp:docPr id=\"{id}\" name=\"{Escape(name)}\"{altAttr}/>" +
-           GraphicFrameLocksXml() +
-           GraphicXml(cx, cy, name, relId) +
-           $"</wp:inline>";
-
-    private static string BuildAnchorXml(FloatingPosition pos, long cx, long cy, int id, string name, string altAttr, string relId)
-    {
-        long dist = (long)Math.Round(pos.DistanceFromTextPt * DocumentSerializer.EmuPerPoint);
-        long relHeight = pos.RelativeHeight ?? (251658240L + id);
-        string behind = pos.Wrap == TextWrap.None && pos.BehindText ? "1" : "0";
-
-        string hPos = pos.HAlign is HorizontalAlignment ha
-            ? $"<wp:align>{HAlignValue(ha)}</wp:align>"
-            : $"<wp:posOffset>{(long)Math.Round(pos.HorizontalOffsetPt * DocumentSerializer.EmuPerPoint)}</wp:posOffset>";
-        string vPos = pos.VAlign is VerticalAlignment va
-            ? $"<wp:align>{VAlignValue(va)}</wp:align>"
-            : $"<wp:posOffset>{(long)Math.Round(pos.VerticalOffsetPt * DocumentSerializer.EmuPerPoint)}</wp:posOffset>";
-
-        return $"<wp:anchor distT=\"{dist}\" distB=\"{dist}\" distL=\"{dist}\" distR=\"{dist}\" " +
-               $"simplePos=\"0\" relativeHeight=\"{relHeight}\" behindDoc=\"{behind}\" " +
-               $"locked=\"{(pos.LockAnchor ? "1" : "0")}\" layoutInCell=\"1\" allowOverlap=\"{(pos.AllowOverlap ? "1" : "0")}\">" +
-               $"<wp:simplePos x=\"0\" y=\"0\"/>" +
-               $"<wp:positionH relativeFrom=\"{HAnchorValue(pos.HorizontalAnchor)}\">{hPos}</wp:positionH>" +
-               $"<wp:positionV relativeFrom=\"{VAnchorValue(pos.VerticalAnchor)}\">{vPos}</wp:positionV>" +
-               $"<wp:extent cx=\"{cx}\" cy=\"{cy}\"/>" +
-               $"<wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/>" +
-               WrapXml(pos.Wrap) +
-               $"<wp:docPr id=\"{id}\" name=\"{Escape(name)}\"{altAttr}/>" +
-               GraphicFrameLocksXml() +
-               GraphicXml(cx, cy, name, relId) +
-               $"</wp:anchor>";
-    }
-
-    private static string WrapXml(TextWrap wrap) => wrap switch
-    {
-        TextWrap.None => "<wp:wrapNone/>",
-        TextWrap.Square => "<wp:wrapSquare wrapText=\"bothSides\"/>",
-        TextWrap.Tight => "<wp:wrapTight wrapText=\"bothSides\"><wp:wrapPolygon edited=\"0\"><wp:start x=\"0\" y=\"0\"/><wp:lineTo x=\"0\" y=\"21600\"/><wp:lineTo x=\"21600\" y=\"21600\"/><wp:lineTo x=\"21600\" y=\"0\"/><wp:lineTo x=\"0\" y=\"0\"/></wp:wrapPolygon></wp:wrapTight>",
-        TextWrap.Through => "<wp:wrapThrough wrapText=\"bothSides\"><wp:wrapPolygon edited=\"0\"><wp:start x=\"0\" y=\"0\"/><wp:lineTo x=\"0\" y=\"21600\"/><wp:lineTo x=\"21600\" y=\"21600\"/><wp:lineTo x=\"21600\" y=\"0\"/><wp:lineTo x=\"0\" y=\"0\"/></wp:wrapPolygon></wp:wrapThrough>",
-        TextWrap.TopAndBottom => "<wp:wrapTopAndBottom/>",
-        _ => "<wp:wrapSquare wrapText=\"bothSides\"/>",
-    };
-
-    private static string GraphicFrameLocksXml()
-        => "<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect=\"1\"/></wp:cNvGraphicFramePr>";
-
-    private static string GraphicXml(long cx, long cy, string name, string relId)
-        => $"<a:graphic><a:graphicData uri=\"{PIC}\">" +
-           $"<pic:pic>" +
-           $"<pic:nvPicPr><pic:cNvPr id=\"0\" name=\"{Escape(name)}\"/><pic:cNvPicPr/></pic:nvPicPr>" +
-           $"<pic:blipFill><a:blip r:embed=\"{relId}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>" +
-           $"<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm>" +
-           $"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>" +
-           $"</pic:pic></a:graphicData></a:graphic>";
-
-    private static string HAnchorValue(HorizontalAnchor a) => a switch
-    {
-        HorizontalAnchor.Page => "page", HorizontalAnchor.Margin => "margin", HorizontalAnchor.Column => "column",
-        HorizontalAnchor.Character => "character", HorizontalAnchor.LeftMargin => "leftMargin",
-        HorizontalAnchor.RightMargin => "rightMargin", HorizontalAnchor.InsideMargin => "insideMargin",
-        HorizontalAnchor.OutsideMargin => "outsideMargin", _ => "column",
-    };
-    private static string VAnchorValue(VerticalAnchor a) => a switch
-    {
-        VerticalAnchor.Page => "page", VerticalAnchor.Margin => "margin", VerticalAnchor.Line => "line",
-        VerticalAnchor.Paragraph => "paragraph", VerticalAnchor.TopMargin => "topMargin",
-        VerticalAnchor.BottomMargin => "bottomMargin", VerticalAnchor.InsideMargin => "insideMargin",
-        VerticalAnchor.OutsideMargin => "outsideMargin", _ => "paragraph",
-    };
-    private static string HAlignValue(HorizontalAlignment a) => a switch
-    {
-        HorizontalAlignment.Left => "left", HorizontalAlignment.Center => "center", HorizontalAlignment.Right => "right",
-        HorizontalAlignment.Inside => "inside", HorizontalAlignment.Outside => "outside", _ => "left",
-    };
-    private static string VAlignValue(VerticalAlignment a) => a switch
-    {
-        VerticalAlignment.Top => "top", VerticalAlignment.Center => "center", VerticalAlignment.Bottom => "bottom",
-        VerticalAlignment.Inside => "inside", VerticalAlignment.Outside => "outside", _ => "top",
-    };
-
-    // ---- Relationship + content-type injection ---------------------------------------
 
     private static Dictionary<string, string> ReadRelationshipTargets(ZipArchive zip, string relsPath, FillLimits lim)
     {

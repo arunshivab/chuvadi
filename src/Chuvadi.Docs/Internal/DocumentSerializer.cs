@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Xml;
 using Chuvadi.Docs.Word;
 using Chuvadi.Internal;
@@ -97,6 +98,16 @@ internal static class DocumentSerializer
         }
 
         public int NextDrawingId() => _nextDrawingId();
+
+        public List<(string RelId, string Url)> ImageLinks { get; } = new();
+
+        /// <summary>An external relationship for a linked picture.</summary>
+        public string AddImageLink(string url)
+        {
+            var id = $"rIdImgLink{ImageLinks.Count + 1}";
+            ImageLinks.Add((id, url));
+            return id;
+        }
     }
 
     public static void Write(Stream output, Document doc)
@@ -111,12 +122,16 @@ internal static class DocumentSerializer
         var mediaParts = new List<(string Uri, ImageSpec Image)>();
         int mediaCounter = 0;
         int drawingIdCounter = 0;
+        var mediaByBytes = new Dictionary<byte[], string>(ReferenceEqualityComparer.Instance);
         string RegisterMedia(ImageSpec img)
         {
+            // The same picture bytes (e.g. a loaded image used in several places) become one media part.
+            if (mediaByBytes.TryGetValue(img.Bytes, out var existing)) return existing;
             mediaCounter++;
             var ext = ImageMetadata.ExtensionFor(img.ContentType);
             var uri = $"/word/media/image{mediaCounter}.{ext}";
             mediaParts.Add((uri, img));
+            mediaByBytes[img.Bytes] = uri;
             return uri;
         }
         int NextDrawingId() => ++drawingIdCounter;
@@ -170,6 +185,7 @@ internal static class DocumentSerializer
             x.WriteStartDocument(standalone: true);
             x.WriteStartElement("w", "document", W);
             x.WriteAttributeString("xmlns", "r", null, R);
+            if (doc.GetImagePlacements().Any(i => i.Host == ImageHost.Body && DrawingXml.NeedsWp14(i.Image))) DeclareWp14(x);
             x.WriteStartElement("body", W);
 
             object? previous = null;
@@ -253,6 +269,7 @@ internal static class DocumentSerializer
             x.WriteStartDocument(standalone: true);
             x.WriteStartElement("w", isHeader ? "hdr" : "ftr", W);
             x.WriteAttributeString("xmlns", "r", null, R);
+            if (AllParagraphsOf(content).Any(p => p.Runs.Any(r => r.Image is { } im && DrawingXml.NeedsWp14(im)))) DeclareWp14(x);
             if (watermark is not null)
             {
                 x.WriteAttributeString("xmlns", "v", null, Vml);
@@ -323,6 +340,8 @@ internal static class DocumentSerializer
                 pkg.AddExternalRelationship(ctx.PartUri, url, RelHyperlink, relId);
             foreach (var (relId, mediaUri) in ctx.Images)
                 pkg.AddRelationship(ctx.PartUri, mediaUri, RelImage, relId);
+            foreach (var (relId, url) in ctx.ImageLinks)
+                pkg.AddExternalRelationship(ctx.PartUri, url, RelImage, relId);
         }
         WriteContextRels(bodyCtx);
         foreach (var ctx in hfContexts) WriteContextRels(ctx);
@@ -410,290 +429,10 @@ internal static class DocumentSerializer
     /// <summary>Writes a run containing a w:drawing: inline or floating (wp:anchor).</summary>
     private static void WriteDrawingRun(XmlWriter x, ImageSpec image, PartContext ctx)
     {
-        var relId = ctx.AddImage(image);
-        int docPrId = ctx.NextDrawingId();
-        long cx = (long)Math.Round(image.WidthPt * EmuPerPoint);
-        long cy = (long)Math.Round(image.HeightPt * EmuPerPoint);
-        string name = $"Picture {docPrId}";
-        string? alt = image.AltText;
-
-        x.WriteStartElement("r", W);
-        x.WriteStartElement("drawing", W);
-
-        if (image.Placement == ImagePlacement.Floating && image.Position is not null)
-            WriteAnchor(x, image.Position, cx, cy, docPrId, name, alt, relId);
-        else
-            WriteInline(x, cx, cy, docPrId, name, alt, relId);
-
-        x.WriteEndElement(); // drawing
-        x.WriteEndElement(); // r
+        string? embed = image.Bytes.Length > 0 || image.LinkUrl is null ? ctx.AddImage(image) : null;
+        string? link = image.LinkUrl is { } url ? ctx.AddImageLink(url) : null;
+        DrawingXml.WriteRun(x, image, embed, ctx.NextDrawingId(), link);
     }
-
-    private static void WriteInline(XmlWriter x, long cx, long cy, int docPrId, string name, string? alt, string relId)
-    {
-        x.WriteStartElement("wp", "inline", WP);
-        x.WriteAttributeString("distT", "0");
-        x.WriteAttributeString("distB", "0");
-        x.WriteAttributeString("distL", "0");
-        x.WriteAttributeString("distR", "0");
-        WriteExtent(x, cx, cy);
-        WriteEffectExtent(x);
-        WriteDocPr(x, docPrId, name, alt);
-        WriteGraphicFrameLocks(x);
-        WriteGraphic(x, cx, cy, name, relId);
-        x.WriteEndElement(); // inline
-    }
-
-    private static void WriteAnchor(XmlWriter x, FloatingPosition pos, long cx, long cy,
-        int docPrId, string name, string? alt, string relId)
-    {
-        long dist = (long)Math.Round(pos.DistanceFromTextPt * EmuPerPoint);
-        x.WriteStartElement("wp", "anchor", WP);
-        x.WriteAttributeString("distT", dist.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("distB", dist.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("distL", dist.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("distR", dist.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("simplePos", "0");
-        x.WriteAttributeString("relativeHeight",
-            (pos.RelativeHeight ?? (251658240L + docPrId)).ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("behindDoc", pos.Wrap == TextWrap.None && pos.BehindText ? "1" : "0");
-        x.WriteAttributeString("locked", pos.LockAnchor ? "1" : "0");
-        x.WriteAttributeString("layoutInCell", "1");
-        x.WriteAttributeString("allowOverlap", pos.AllowOverlap ? "1" : "0");
-
-        x.WriteStartElement("wp", "simplePos", WP);
-        x.WriteAttributeString("x", "0");
-        x.WriteAttributeString("y", "0");
-        x.WriteEndElement();
-
-        // Horizontal position.
-        x.WriteStartElement("wp", "positionH", WP);
-        x.WriteAttributeString("relativeFrom", HorizontalAnchorValue(pos.HorizontalAnchor));
-        if (pos.HAlign is HorizontalAlignment ha)
-        {
-            x.WriteStartElement("wp", "align", WP);
-            x.WriteString(ha switch
-            {
-                HorizontalAlignment.Left => "left",
-                HorizontalAlignment.Center => "center",
-                HorizontalAlignment.Right => "right",
-                HorizontalAlignment.Inside => "inside",
-                HorizontalAlignment.Outside => "outside",
-                _ => "left",
-            });
-            x.WriteEndElement();
-        }
-        else
-        {
-            x.WriteStartElement("wp", "posOffset", WP);
-            x.WriteString(((long)Math.Round(pos.HorizontalOffsetPt * EmuPerPoint)).ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-        }
-        x.WriteEndElement(); // positionH
-
-        // Vertical position.
-        x.WriteStartElement("wp", "positionV", WP);
-        x.WriteAttributeString("relativeFrom", VerticalAnchorValue(pos.VerticalAnchor));
-        if (pos.VAlign is VerticalAlignment va)
-        {
-            x.WriteStartElement("wp", "align", WP);
-            x.WriteString(va switch
-            {
-                VerticalAlignment.Top => "top",
-                VerticalAlignment.Center => "center",
-                VerticalAlignment.Bottom => "bottom",
-                VerticalAlignment.Inside => "inside",
-                VerticalAlignment.Outside => "outside",
-                _ => "top",
-            });
-            x.WriteEndElement();
-        }
-        else
-        {
-            x.WriteStartElement("wp", "posOffset", WP);
-            x.WriteString(((long)Math.Round(pos.VerticalOffsetPt * EmuPerPoint)).ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-        }
-        x.WriteEndElement(); // positionV
-
-        WriteExtent(x, cx, cy);
-        WriteEffectExtent(x);
-        WriteWrap(x, pos);
-        WriteDocPr(x, docPrId, name, alt);
-        WriteGraphicFrameLocks(x);
-        WriteGraphic(x, cx, cy, name, relId);
-        x.WriteEndElement(); // anchor
-    }
-
-    private static void WriteWrap(XmlWriter x, FloatingPosition pos)
-    {
-        switch (pos.Wrap)
-        {
-            case TextWrap.None:
-                x.WriteStartElement("wp", "wrapNone", WP);
-                x.WriteEndElement();
-                break;
-            case TextWrap.Square:
-                x.WriteStartElement("wp", "wrapSquare", WP);
-                x.WriteAttributeString("wrapText", "bothSides");
-                x.WriteEndElement();
-                break;
-            case TextWrap.Tight:
-                x.WriteStartElement("wp", "wrapTight", WP);
-                x.WriteAttributeString("wrapText", "bothSides");
-                WriteDefaultWrapPolygon(x);
-                x.WriteEndElement();
-                break;
-            case TextWrap.Through:
-                x.WriteStartElement("wp", "wrapThrough", WP);
-                x.WriteAttributeString("wrapText", "bothSides");
-                WriteDefaultWrapPolygon(x);
-                x.WriteEndElement();
-                break;
-            case TextWrap.TopAndBottom:
-                x.WriteStartElement("wp", "wrapTopAndBottom", WP);
-                x.WriteEndElement();
-                break;
-        }
-    }
-
-    private static void WriteDefaultWrapPolygon(XmlWriter x)
-    {
-        // A simple rectangular wrap polygon (full extent) — Tight/Through still need one.
-        x.WriteStartElement("wp", "wrapPolygon", WP);
-        x.WriteAttributeString("edited", "0");
-        void Pt(string elem, long xx, long yy)
-        {
-            x.WriteStartElement("wp", elem, WP);
-            x.WriteAttributeString("x", xx.ToString(CultureInfo.InvariantCulture));
-            x.WriteAttributeString("y", yy.ToString(CultureInfo.InvariantCulture));
-            x.WriteEndElement();
-        }
-        Pt("start", 0, 0);
-        Pt("lineTo", 0, 21600);
-        Pt("lineTo", 21600, 21600);
-        Pt("lineTo", 21600, 0);
-        Pt("lineTo", 0, 0);
-        x.WriteEndElement();
-    }
-
-    private static void WriteExtent(XmlWriter x, long cx, long cy)
-    {
-        x.WriteStartElement("wp", "extent", WP);
-        x.WriteAttributeString("cx", cx.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("cy", cy.ToString(CultureInfo.InvariantCulture));
-        x.WriteEndElement();
-    }
-
-    private static void WriteEffectExtent(XmlWriter x)
-    {
-        x.WriteStartElement("wp", "effectExtent", WP);
-        x.WriteAttributeString("l", "0");
-        x.WriteAttributeString("t", "0");
-        x.WriteAttributeString("r", "0");
-        x.WriteAttributeString("b", "0");
-        x.WriteEndElement();
-    }
-
-    private static void WriteDocPr(XmlWriter x, int id, string name, string? alt)
-    {
-        x.WriteStartElement("wp", "docPr", WP);
-        x.WriteAttributeString("id", id.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("name", name);
-        if (!string.IsNullOrEmpty(alt)) x.WriteAttributeString("descr", alt);
-        x.WriteEndElement();
-    }
-
-    private static void WriteGraphicFrameLocks(XmlWriter x)
-    {
-        x.WriteStartElement("wp", "cNvGraphicFramePr", WP);
-        x.WriteStartElement("a", "graphicFrameLocks", A);
-        x.WriteAttributeString("xmlns", "a", null, A);
-        x.WriteAttributeString("noChangeAspect", "1");
-        x.WriteEndElement();
-        x.WriteEndElement();
-    }
-
-    private static void WriteGraphic(XmlWriter x, long cx, long cy, string name, string relId)
-    {
-        x.WriteStartElement("a", "graphic", A);
-        x.WriteAttributeString("xmlns", "a", null, A);
-        x.WriteStartElement("a", "graphicData", A);
-        x.WriteAttributeString("uri", PIC);
-
-        x.WriteStartElement("pic", "pic", PIC);
-        x.WriteAttributeString("xmlns", "pic", null, PIC);
-
-        // nvPicPr
-        x.WriteStartElement("pic", "nvPicPr", PIC);
-        x.WriteStartElement("pic", "cNvPr", PIC);
-        x.WriteAttributeString("id", "0");
-        x.WriteAttributeString("name", name);
-        x.WriteEndElement();
-        x.WriteStartElement("pic", "cNvPicPr", PIC);
-        x.WriteEndElement();
-        x.WriteEndElement(); // nvPicPr
-
-        // blipFill
-        x.WriteStartElement("pic", "blipFill", PIC);
-        x.WriteStartElement("a", "blip", A);
-        x.WriteAttributeString("r", "embed", R, relId);
-        x.WriteEndElement();
-        x.WriteStartElement("a", "stretch", A);
-        x.WriteStartElement("a", "fillRect", A);
-        x.WriteEndElement();
-        x.WriteEndElement();
-        x.WriteEndElement(); // blipFill
-
-        // spPr
-        x.WriteStartElement("pic", "spPr", PIC);
-        x.WriteStartElement("a", "xfrm", A);
-        x.WriteStartElement("a", "off", A);
-        x.WriteAttributeString("x", "0");
-        x.WriteAttributeString("y", "0");
-        x.WriteEndElement();
-        x.WriteStartElement("a", "ext", A);
-        x.WriteAttributeString("cx", cx.ToString(CultureInfo.InvariantCulture));
-        x.WriteAttributeString("cy", cy.ToString(CultureInfo.InvariantCulture));
-        x.WriteEndElement();
-        x.WriteEndElement(); // xfrm
-        x.WriteStartElement("a", "prstGeom", A);
-        x.WriteAttributeString("prst", "rect");
-        x.WriteStartElement("a", "avLst", A);
-        x.WriteEndElement();
-        x.WriteEndElement(); // prstGeom
-        x.WriteEndElement(); // spPr
-
-        x.WriteEndElement(); // pic
-        x.WriteEndElement(); // graphicData
-        x.WriteEndElement(); // graphic
-    }
-
-    private static string HorizontalAnchorValue(HorizontalAnchor a) => a switch
-    {
-        HorizontalAnchor.Page => "page",
-        HorizontalAnchor.Margin => "margin",
-        HorizontalAnchor.Column => "column",
-        HorizontalAnchor.Character => "character",
-        HorizontalAnchor.LeftMargin => "leftMargin",
-        HorizontalAnchor.RightMargin => "rightMargin",
-        HorizontalAnchor.InsideMargin => "insideMargin",
-        HorizontalAnchor.OutsideMargin => "outsideMargin",
-        _ => "column",
-    };
-
-    private static string VerticalAnchorValue(VerticalAnchor a) => a switch
-    {
-        VerticalAnchor.Page => "page",
-        VerticalAnchor.Margin => "margin",
-        VerticalAnchor.Line => "line",
-        VerticalAnchor.Paragraph => "paragraph",
-        VerticalAnchor.TopMargin => "topMargin",
-        VerticalAnchor.BottomMargin => "bottomMargin",
-        VerticalAnchor.InsideMargin => "insideMargin",
-        VerticalAnchor.OutsideMargin => "outsideMargin",
-        _ => "paragraph",
-    };
 
     /// <summary>
     /// Writes run content as <c>w:t</c> segments, turning line feeds (<c>\n</c>, <c>\r\n</c>,
@@ -759,6 +498,26 @@ internal static class DocumentSerializer
 
     private static void WriteTable(XmlWriter x, DocTable t, PartContext ctx)
         => TableXml.Write(x, t, (w, p) => WriteParagraph(w, p, ctx));
+
+    /// <summary>
+    /// Declares wp14 and mc on a part's root: readers resolve mc:Choice/@Requires prefixes there
+    /// (as Word writes them), and mark wp14 ignorable.
+    /// </summary>
+    private static void DeclareWp14(XmlWriter x)
+    {
+        x.WriteAttributeString("xmlns", "mc", null, "http://schemas.openxmlformats.org/markup-compatibility/2006");
+        x.WriteAttributeString("xmlns", "wp14", null, DrawingXml.Wp14);
+        x.WriteAttributeString("mc", "Ignorable", "http://schemas.openxmlformats.org/markup-compatibility/2006", "wp14");
+    }
+
+    private static IEnumerable<Paragraph> AllParagraphsOf(HeaderFooterContent content)
+    {
+        foreach (var b in content.Blocks)
+        {
+            if (b is Paragraph p) yield return p;
+            else if (b is DocTable t) foreach (var tp in TableParagraphs(t, 0)) yield return tp;
+        }
+    }
 
     // ---- Watermark ---------------------------------------------------------------------
 
