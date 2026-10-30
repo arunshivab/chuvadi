@@ -159,6 +159,16 @@ public sealed class ParagraphFormat
     /// <summary>A deep copy (borders and tab stops are copied; immutable values are shared).</summary>
     public ParagraphFormat Clone() => new ParagraphFormat().ApplyFrom(this);
 
+    /// <summary>Makes every value equal to <paramref name="other"/>'s (unset values included).</summary>
+    internal void CopyAllFrom(ParagraphFormat other)
+    {
+        foreach (var prop in typeof(ParagraphFormat).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            if (prop.CanWrite && prop.GetIndexParameters().Length == 0) prop.SetValue(this, prop.GetValue(other));
+        Borders = other.Borders?.Clone(); // mutable: never shared
+        TabStops.Clear();
+        TabStops.AddRange(other.TabStops);
+    }
+
     /// <summary>
     /// Copies every value that is SET (non-null; non-empty for tab stops) on
     /// <paramref name="other"/> onto this format, leaving the rest untouched. Tab stops are

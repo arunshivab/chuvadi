@@ -242,6 +242,19 @@ doc.Append(Document.Load("annexure.docx"), new AppendOptions { StartSection = Se
 
 Loaded documents keep their footnotes, endnotes, bookmarks, fields, text boxes, floating tables, embedded fonts and properties through load → save.
 
+### Comments and tracked changes
+
+```csharp
+var note = doc.Comments.Add("Dr. Arun Shiva", "Please confirm the dose.");
+doc.AddParagraph("The dose is ").Commented("2 Gy per fraction", note);
+doc.Comments.Reply(note, "Physicist", "Confirmed against the plan.").Done = true;
+
+doc.TrackRevisions = true;
+doc.AddParagraph("Dose: ").TrackedDelete("2 Gy", "Reviewer").TrackedInsert("1.8 Gy", "Reviewer");
+foreach (var r in doc.GetRevisions()) Console.WriteLine($"{r.Mark.Type} by {r.Mark.Author}");
+doc.AcceptAllRevisions();                                       // or RejectAllRevisions()
+```
+
 ## Fill a template (the recommended way to generate reports)
 
 Design `invoice-template.docx` in Word — logo, fonts, layout, everything — with `{{Placeholders}}` where values go:

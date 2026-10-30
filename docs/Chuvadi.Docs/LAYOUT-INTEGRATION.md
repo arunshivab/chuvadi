@@ -1,6 +1,6 @@
 # Chuvadi.Docs — integration guide for a paginator (Chuvadi.Layout)
 
-This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.6.0** (Phase 8: fields, footnotes/endnotes, bookmarks, text boxes, floating tables, embedded fonts; earlier: exact image anchoring, hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Word` namespace.
+This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.6.0** (Phase 9: comments and tracked changes; Phase 8: fields, footnotes/endnotes, bookmarks, text boxes, floating tables, embedded fonts; earlier: exact image anchoring, hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Word` namespace.
 
 ## 1. Load
 
@@ -45,6 +45,8 @@ Each `Run` is one `w:r`:
 - U+2011 is a non-breaking hyphen and U+00AD a soft hyphen.
 - `Run.HyperlinkUrl` is the target of an external link (`w:hyperlink` → its relationship; a `w:anchor` is appended as `#fragment`). Loaded links carry exactly the style the file gave them — use `GetEffectiveRunFormat`, which adds no Hyperlink style to a loaded link (a link added in code with `Paragraph.Hyperlink` does get it).
 - Zero-width marker runs (`Run.IsMarker`): `Run.Bookmark` (bookmark ends) and `Run.FieldMark` (field begin / separate / end). Skip them when measuring.
+- Tracked changes: to lay out the final view, skip runs with `Run.IsDeleted` (deleted text); `Run.Revision` (insert / delete, author, date) and `Run.FormatChange` / `Paragraph.FormatChange` (old formatting) are for markup views. `Paragraph.MarkRevision` of type Delete means that, accepted, the paragraph joins the next one. `doc.AcceptAllRevisions()` gives a clean copy to lay out. Rows with `TableRow.Revision` of type Delete are deleted rows (skip them for the final view).
+- Comments: `Run.CommentRange` markers are zero-width; `Run.CommentReference` is the balloon anchor (no glyph in the final view); comment content is in `doc.Comments`.
 - `Run.NoteReference`: a footnote/endnote reference (draw its label from `doc.GetNoteReferences()`, superscript via the reference style); `Run.IsNoteMark`: the note's own number at the start of a note.
 - `Run.Symbol`: a symbol character — draw `Symbol.Code` in `Symbol.Font` (`TextContent` holds the code).
 - `Run.TextBox`: a text box (see section 7a).
@@ -134,7 +136,6 @@ Drawings that are not pictures (charts, SmartArt, shapes, groups, text boxes) ar
 
 | Not available | Comes with |
 |---|---|
-| Comments and tracked changes | Phase 9 |
 | Content-control boundaries | the sdt content is loaded; the control itself is not kept |
 | Shapes other than text boxes, groups, charts, SmartArt, VML text boxes | their text is flattened into the paragraph; geometry is not kept |
 | Paragraph frames (`w:framePr`) | not modelled |

@@ -21,10 +21,10 @@ internal static class TableXml
     /// <summary>Word's maximum number of grid columns in a table.</summary>
     internal const int MaxColumns = 63;
 
-    public static void Write(XmlWriter x, DocTable t, Action<XmlWriter, Paragraph> writeParagraph)
-        => Write(x, t, writeParagraph, new HashSet<DocTable>(ReferenceEqualityComparer.Instance));
+    public static void Write(XmlWriter x, DocTable t, Action<XmlWriter, Paragraph> writeParagraph, Func<RevisionMark, string>? revisionId = null)
+        => Write(x, t, writeParagraph, new HashSet<DocTable>(ReferenceEqualityComparer.Instance), revisionId);
 
-    private static void Write(XmlWriter x, DocTable t, Action<XmlWriter, Paragraph> writeParagraph, HashSet<DocTable> open)
+    private static void Write(XmlWriter x, DocTable t, Action<XmlWriter, Paragraph> writeParagraph, HashSet<DocTable> open, Func<RevisionMark, string>? revisionId)
     {
         // A table reachable from inside itself would recurse forever (stack overflow kills the
         // process); refuse it with a catchable exception instead.
@@ -45,7 +45,7 @@ internal static class TableXml
         foreach (var row in t.Rows)
         {
             x.WriteStartElement("tr", W);
-            WriteRowPr(x, row);
+            WriteRowPr(x, row, revisionId);
 
             int col = Math.Clamp(row.GridBefore, 0, t.Columns);
             int end = t.Columns - Math.Clamp(row.GridAfter, 0, t.Columns - col);
@@ -63,7 +63,7 @@ internal static class TableXml
                 foreach (var block in cell.Blocks)
                 {
                     if (block is Paragraph p) { writeParagraph(x, p); lastWasParagraph = true; }
-                    else if (block is DocTable nested) { Write(x, nested, writeParagraph, open); lastWasParagraph = false; }
+                    else if (block is DocTable nested) { Write(x, nested, writeParagraph, open, revisionId); lastWasParagraph = false; }
                 }
                 if (!lastWasParagraph) { x.WriteStartElement("p", W); x.WriteEndElement(); }
 
@@ -139,11 +139,12 @@ internal static class TableXml
         x.WriteEndElement(); // tblPr
     }
 
-    private static void WriteRowPr(XmlWriter x, TableRow row)
+    private static void WriteRowPr(XmlWriter x, TableRow row, Func<RevisionMark, string>? revisionId)
     {
+        bool tracked = row.Revision is not null && revisionId is not null;
         bool any = row.IsHeader || row.HeightPt is not null || row.CantSplit is not null || row.Alignment is not null
             || row.Hidden is not null || row.GridBefore > 0 || row.GridAfter > 0 || row.WidthBefore is not null
-            || row.WidthAfter is not null || row.CellSpacingPt is not null;
+            || row.WidthAfter is not null || row.CellSpacingPt is not null || tracked;
         if (!any) return;
         x.WriteStartElement("trPr", W);
         int columns = row.Cells.Count;
@@ -170,6 +171,8 @@ internal static class TableXml
         if (row.CellSpacingPt is double sp) WriteWidth(x, "tblCellSpacing", TableWidth.Points(sp));
         if (row.Alignment is TableAlignment a) Val(x, "jc", AlignToken(a));
         Toggle(x, "hidden", row.Hidden);
+        // CT_TrPr: the base properties, then ins / del.
+        if (tracked) ParagraphProperties.WriteRevisionStart(x, row.Revision!.Type == RevisionType.Delete ? "del" : "ins", row.Revision, revisionId!(row.Revision), close: true);
         x.WriteEndElement();
     }
 
@@ -358,6 +361,7 @@ internal static class TableXml
                 CantSplit = r.Props.CantSplit,
                 Alignment = r.Props.Alignment,
                 Hidden = r.Props.Hidden,
+                Revision = r.Props.Revision,
                 GridBefore = start,
                 GridAfter = columns - contentEnd,
             };
@@ -408,7 +412,7 @@ internal static class TableXml
     }
 
     /// <summary>Range markers (bookmarks) that may sit between rows and cells; the caller places them.</summary>
-    private static bool IsRangeMarker(XmlReader r) => r.NamespaceURI == W && r.LocalName is "bookmarkStart" or "bookmarkEnd";
+    private static bool IsRangeMarker(XmlReader r) => r.NamespaceURI == W && r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd";
 
     private static PendingRow ReadRow(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker)
     {
@@ -463,6 +467,10 @@ internal static class TableXml
                 case "tblHeader": row.IsHeader = RunProperties.OnOff(r) == true; sawHeader?.Invoke(); break;
                 case "jc": row.Alignment = ParseAlign(Attr(r, "val")); break;
                 case "hidden": row.Hidden = RunProperties.OnOff(r); break;
+                case "ins":
+                case "del":
+                    row.Revision = RunProperties.ReadRevisionMark(r, r.LocalName == "ins" ? RevisionType.Insert : RevisionType.Delete);
+                    break;
                 default:
                     if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
                     break;
@@ -497,6 +505,8 @@ internal static class TableXml
                     break;
                 case "bookmarkStart":
                 case "bookmarkEnd":
+                case "commentRangeStart":
+                case "commentRangeEnd":
                     marker?.Invoke(r);
                     break;
                 default:

@@ -327,6 +327,8 @@ public sealed partial class Document
         Numbering.AdoptAll(copy.Numbering);
         foreach (var note in copy.Footnotes) Footnotes.AddMoved(note);
         foreach (var note in copy.Endnotes) Endnotes.AddMoved(note);
+        foreach (var comment in copy.Comments) Comments.AddMoved(comment);
+        if (copy.Comments.Count > 0) EnsureCommentStyles();
         if (copy.Footnotes.Count > 0) EnsureNoteStyles(NoteKind.Footnote);
         if (copy.Endnotes.Count > 0) EnsureNoteStyles(NoteKind.Endnote);
         foreach (var font in copy.Fonts)

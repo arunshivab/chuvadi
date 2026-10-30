@@ -51,7 +51,15 @@ public sealed class Paragraph
     }
 
     /// <summary>All paragraph-level formatting (spacing, indents, borders, tabs…). Owned by this paragraph.</summary>
-    public ParagraphFormat Format { get; } = new();
+    public ParagraphFormat Format { get; private set; } = new();
+
+    /// <summary>Restores old direct formatting in place (rejecting a tracked format change); the paragraph mark's formatting is kept.</summary>
+    internal void ReplaceFormat(ParagraphFormat format)
+    {
+        var mark = Format.MarkFormat;
+        Format.CopyAllFrom(format);
+        Format.MarkFormat = mark;
+    }
 
     /// <summary>
     /// Horizontal alignment — a shortcut for <see cref="ParagraphFormat.Alignment"/>
@@ -411,17 +419,97 @@ public sealed class Paragraph
         return this;
     }
 
-    /// <summary>All run text concatenated (fields contribute their placeholder value "1").</summary>
+    /// <summary>All run text concatenated (fields contribute their placeholder value "1"; tracked deletions are left out).</summary>
     public string GetText()
     {
         var sb = new StringBuilder();
-        foreach (var r in _runs) sb.Append(r.TextContent);
+        foreach (var r in _runs) if (!r.IsDeleted) sb.Append(r.TextContent);
         return sb.ToString();
+    }
+
+    /// <summary>A tracked formatting change of this paragraph: the formatting before it (null = none).</summary>
+    public ParagraphFormatChange? FormatChange { get; set; }
+
+    private RevisionMark? _markRevision;
+
+    /// <summary>
+    /// A tracked insertion or deletion of the paragraph mark (null = not tracked). A deleted mark
+    /// joins this paragraph with the next one when the change is accepted.
+    /// </summary>
+    public RevisionMark? MarkRevision
+    {
+        get => _markRevision;
+        set
+        {
+            if (value is { Type: RevisionType.FormatChange }) throw new ArgumentException("A paragraph-mark revision is an insertion or a deletion.", nameof(value));
+            _markRevision = value;
+        }
+    }
+
+    /// <summary>A tracked formatting change of the paragraph mark (w:rPrChange in the mark's rPr): the mark's old formatting.</summary>
+    public RunFormatChange? MarkFormatChange { get; set; }
+
+    /// <summary>Appends text as a tracked insertion by <paramref name="author"/>.</summary>
+    public Paragraph TrackedInsert(string text, string author, TextFormat? format = null, DateTime? date = null)
+    {
+        if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text required.", nameof(text));
+        _runs.Add(new Run(text, format ?? TextFormat.None) { Revision = RevisionMark.Insert(author, date) });
+        return this;
+    }
+
+    /// <summary>Appends text as a tracked deletion by <paramref name="author"/> (struck through in Word until accepted).</summary>
+    public Paragraph TrackedDelete(string text, string author, TextFormat? format = null, DateTime? date = null)
+    {
+        if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text required.", nameof(text));
+        _runs.Add(new Run(text, format ?? TextFormat.None) { Revision = RevisionMark.Delete(author, date) });
+        return this;
+    }
+
+    /// <summary>Appends text whose formatting change from <paramref name="oldFormat"/> is tracked.</summary>
+    public Paragraph TrackedFormat(string text, TextFormat format, TextFormat oldFormat, string author, DateTime? date = null)
+    {
+        if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text required.", nameof(text));
+        _runs.Add(new Run(text, format ?? TextFormat.None) { FormatChange = new RunFormatChange(RevisionMark.Format(author, date), oldFormat ?? TextFormat.None, null) });
+        return this;
+    }
+
+    /// <summary>Appends the start of a commented range.</summary>
+    public Paragraph CommentStart(Comment comment)
+    {
+        _runs.Add(Run.CommentRangeRun(comment ?? throw new ArgumentNullException(nameof(comment)), true));
+        return this;
+    }
+
+    /// <summary>Appends the end of a commented range.</summary>
+    public Paragraph CommentEnd(Comment comment)
+    {
+        _runs.Add(Run.CommentRangeRun(comment ?? throw new ArgumentNullException(nameof(comment)), false));
+        return this;
+    }
+
+    /// <summary>Appends a comment's anchor (Word shows the balloon here; normally right after the range end).</summary>
+    public Paragraph CommentReference(Comment comment)
+    {
+        _runs.Add(Run.CommentReferenceRun(comment ?? throw new ArgumentNullException(nameof(comment))));
+        return this;
+    }
+
+    /// <summary>Appends <paramref name="text"/> commented with <paramref name="comment"/>: range start, text, range end and anchor.</summary>
+    public Paragraph Commented(string text, Comment comment, TextFormat? format = null)
+    {
+        CommentStart(comment);
+        if (!string.IsNullOrEmpty(text)) Text(text, format);
+        CommentEnd(comment);
+        return CommentReference(comment);
     }
 
     internal void AddRun(Run run) => _runs.Add(run);
 
     internal void InsertRun(int index, Run run) => _runs.Insert(index, run);
+
+    internal void RemoveRunAt(int index) => _runs.RemoveAt(index);
+
+    internal void PrependRuns(IEnumerable<Run> runs) => _runs.InsertRange(0, runs);
 
     internal void ReplaceRun(int index, Run run) => _runs[index] = run;
 }
@@ -469,8 +557,42 @@ public sealed class Run
     /// <summary>Non-null when this run is a text box (inline, or floating anchored to the paragraph).</summary>
     public TextBox? TextBox { get; init; }
 
-    /// <summary>True for marker runs that take no space: bookmark ends and field markers.</summary>
-    public bool IsMarker => Bookmark is not null || FieldMark is not null;
+    private readonly RevisionMark? _revision;
+
+    /// <summary>A tracked insertion or deletion of this run (null = not tracked).</summary>
+    public RevisionMark? Revision
+    {
+        get => _revision;
+        init
+        {
+            if (value is { Type: RevisionType.FormatChange }) throw new ArgumentException("A run revision is an insertion or a deletion; use FormatChange for formatting.", nameof(value));
+            _revision = value;
+        }
+    }
+
+    /// <summary>
+    /// For a deleted run that was itself a tracked insertion (one reviewer inserted, another deleted):
+    /// the insertion. Rejecting all changes removes such a run.
+    /// </summary>
+    public RevisionMark? InsertedRevision { get; init; }
+
+    /// <summary>A tracked formatting change of this run: the formatting before it (null = none).</summary>
+    public RunFormatChange? FormatChange { get; init; }
+
+    /// <summary>True when the run is tracked as deleted (it shows only in "markup" views; <see cref="Paragraph.GetText"/> leaves it out).</summary>
+    public bool IsDeleted => Revision is { Type: RevisionType.Delete };
+
+    /// <summary>Non-null when this run is one end of a commented range (a zero-width marker).</summary>
+    public CommentRangeMark? CommentRange { get; private init; }
+
+    /// <summary>Non-null when this run is a comment's anchor (w:commentReference).</summary>
+    public Comment? CommentReference { get; private init; }
+
+    /// <summary>True when this run is the comment's own mark inside a comment (w:annotationRef).</summary>
+    public bool IsAnnotationMark { get; private init; }
+
+    /// <summary>True for marker runs that take no space: bookmark ends, field markers and comment range ends.</summary>
+    public bool IsMarker => Bookmark is not null || FieldMark is not null || CommentRange is not null;
 
     /// <summary>Non-null when this run is a simple field; holds the field instruction
     /// (e.g. " PAGE ", " NUMPAGES ").</summary>
@@ -526,15 +648,52 @@ public sealed class Run
     internal static Run PositionalTabRun(PositionalTab tab, TextFormat format, string? characterStyleId = null)
         => new("\t", format) { PositionalTab = tab, CharacterStyleId = characterStyleId };
 
-    /// <summary>A copy with a different character style and/or link anchor (everything else equal).</summary>
-    internal Run CloneWith(string? characterStyleId, string? hyperlinkAnchor) => new(TextContent, Format)
+    /// <summary>A copy with the given format, style, anchor, revision and format change (everything else equal).</summary>
+    internal Run Rebuild(TextFormat format, string? characterStyleId, string? hyperlinkAnchor, RevisionMark? revision, RunFormatChange? formatChange)
+        => new(TextContent, format)
+        {
+            HyperlinkUrl = HyperlinkUrl, HyperlinkAnchor = hyperlinkAnchor, HyperlinkTooltip = HyperlinkTooltip,
+            HyperlinkStyleImplied = HyperlinkStyleImplied, FieldInstruction = FieldInstruction, Image = Image,
+            CharacterStyleId = characterStyleId, Break = Break, IsTab = IsTab, PositionalTab = PositionalTab,
+            Bookmark = Bookmark, FieldMark = FieldMark, NoteReference = NoteReference, CustomMarkFollows = CustomMarkFollows,
+            IsNoteMark = IsNoteMark, Symbol = Symbol, TextBox = TextBox, Revision = revision, FormatChange = formatChange,
+            CommentRange = CommentRange, CommentReference = CommentReference, IsAnnotationMark = IsAnnotationMark,
+            InsertedRevision = revision is { Type: RevisionType.Delete } ? InsertedRevision : null,
+        };
+
+    /// <summary>A copy that is deleted text inside an insertion.</summary>
+    internal Run WithInsertedDeletion(RevisionMark deletion, RevisionMark insertion)
     {
-        HyperlinkUrl = HyperlinkUrl, HyperlinkAnchor = hyperlinkAnchor, HyperlinkTooltip = HyperlinkTooltip,
-        HyperlinkStyleImplied = HyperlinkStyleImplied, FieldInstruction = FieldInstruction, Image = Image,
-        CharacterStyleId = characterStyleId, Break = Break, IsTab = IsTab, PositionalTab = PositionalTab,
-        Bookmark = Bookmark, FieldMark = FieldMark, NoteReference = NoteReference, CustomMarkFollows = CustomMarkFollows,
-        IsNoteMark = IsNoteMark, Symbol = Symbol, TextBox = TextBox,
-    };
+        var c = Rebuild(Format, CharacterStyleId, HyperlinkAnchor, deletion, FormatChange);
+        return new Run(c.TextContent, c.Format)
+        {
+            HyperlinkUrl = c.HyperlinkUrl, HyperlinkAnchor = c.HyperlinkAnchor, HyperlinkTooltip = c.HyperlinkTooltip,
+            HyperlinkStyleImplied = c.HyperlinkStyleImplied, FieldInstruction = c.FieldInstruction, Image = c.Image,
+            CharacterStyleId = c.CharacterStyleId, Break = c.Break, IsTab = c.IsTab, PositionalTab = c.PositionalTab,
+            Bookmark = c.Bookmark, FieldMark = c.FieldMark, NoteReference = c.NoteReference, CustomMarkFollows = c.CustomMarkFollows,
+            IsNoteMark = c.IsNoteMark, Symbol = c.Symbol, TextBox = c.TextBox, Revision = deletion, FormatChange = c.FormatChange,
+            CommentRange = c.CommentRange, CommentReference = c.CommentReference, IsAnnotationMark = c.IsAnnotationMark,
+            InsertedRevision = insertion,
+        };
+    }
+
+    /// <summary>A copy with a different character style and/or link anchor.</summary>
+    internal Run CloneWith(string? characterStyleId, string? hyperlinkAnchor) => Rebuild(Format, characterStyleId, hyperlinkAnchor, Revision, FormatChange);
+
+    /// <summary>A copy with a different revision and formatting change.</summary>
+    internal Run WithRevision(RevisionMark? revision, RunFormatChange? formatChange) => Rebuild(Format, CharacterStyleId, HyperlinkAnchor, revision, formatChange);
+
+    /// <summary>A copy with the old formatting restored (rejecting a format change).</summary>
+    internal Run WithFormat(TextFormat format, string? characterStyleId) => Rebuild(format, characterStyleId, HyperlinkAnchor, Revision, null);
+
+    internal static Run CommentRangeRun(Comment comment, bool isStart)
+        => new("", TextFormat.None) { CommentRange = new CommentRangeMark(comment, isStart) };
+
+    internal static Run CommentReferenceRun(Comment comment, TextFormat? format = null, string? characterStyleId = "CommentReference")
+        => new("", format ?? TextFormat.None) { CommentReference = comment, CharacterStyleId = characterStyleId };
+
+    internal static Run AnnotationMarkRun(string? characterStyleId = "CommentReference", TextFormat? format = null)
+        => new("", format ?? TextFormat.None) { IsAnnotationMark = true, CharacterStyleId = characterStyleId };
 
     internal static Run BookmarkRun(Bookmark bookmark, bool isStart)
         => new("", TextFormat.None) { Bookmark = new BookmarkMark(bookmark, isStart) };

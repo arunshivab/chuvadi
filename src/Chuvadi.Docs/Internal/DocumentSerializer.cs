@@ -24,6 +24,8 @@ internal static class DocumentSerializer
 {
     internal const string W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     internal const string R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    internal const string W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
+    internal const string W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
 
     private const string CtDocument = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
     private const string CtStyles = "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
@@ -39,6 +41,10 @@ internal static class DocumentSerializer
     private const string RelFootnotes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes";
     private const string RelEndnotes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes";
     private const string RelCustom = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties";
+    private const string CtComments = "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml";
+    private const string CtCommentsExtended = "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml";
+    private const string RelComments = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
+    private const string RelCommentsExtended = "http://schemas.microsoft.com/office/2011/relationships/commentsExtended";
     private const string CtFontTable = "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
     private const string RelFontTable = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable";
     private const string RelFont = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
@@ -85,6 +91,12 @@ internal static class DocumentSerializer
 
         /// <summary>Only the body may hold note references (Word rejects them in notes, headers and footers).</summary>
         public bool AllowNoteReferences { get; init; }
+
+        /// <summary>Comment anchors may be written (body and notes; not comments, headers or footers).</summary>
+        public bool AllowCommentReferences { get; init; }
+
+        /// <summary>w14:paraId to write on paragraphs (the comments part names comments by their last paragraph).</summary>
+        public Dictionary<Paragraph, string>? ParaIds { get; init; }
         public List<(string RelId, string MediaUri)> Images { get; } = new();
 
         private readonly Func<ImageSpec, string> _registerMedia;
@@ -139,6 +151,11 @@ internal static class DocumentSerializer
         private readonly Dictionary<string, Bookmark> _names = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<Bookmark, string> _written = new(ReferenceEqualityComparer.Instance);
         public readonly Dictionary<Note, int> NoteIds = new(ReferenceEqualityComparer.Instance);
+        public readonly Dictionary<Comment, int> CommentIds = new(ReferenceEqualityComparer.Instance);
+        /// <summary>Replies with no markers of their own: written next to their comment's markers.</summary>
+        public readonly Dictionary<Comment, List<Comment>> RepliesWithoutMarkers = new(ReferenceEqualityComparer.Instance);
+        private int _revisionId;
+        public string NextRevisionId() => (_revisionId++).ToString(CultureInfo.InvariantCulture);
 
         /// <summary>A new id for each start (a bookmark object used twice gets two ids), with a name unique in the file.</summary>
         public (int Id, string Name) StartBookmark(Bookmark b)
@@ -204,7 +221,25 @@ internal static class DocumentSerializer
         foreach (var n in doc.Footnotes) state.NoteIds[n] = ++noteId;
         noteId = 0;
         foreach (var n in doc.Endnotes) state.NoteIds[n] = ++noteId;
-        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, AllowNoteReferences = true };
+        int commentId = 0;
+        foreach (var c in doc.Comments) state.CommentIds[c] = commentId++;
+        if (doc.Comments.Any(c => c.Parent is not null))
+        {
+            var marked = new HashSet<Comment>(ReferenceEqualityComparer.Instance);
+            foreach (var para in AllParagraphs(doc))
+                foreach (var r in para.Runs)
+                {
+                    if (r.CommentRange is { } cr) marked.Add(cr.Comment);
+                    if (r.CommentReference is { } cref) marked.Add(cref);
+                }
+            foreach (var c in doc.Comments)
+                if (c.Parent is { } parent && !marked.Contains(c) && state.CommentIds.ContainsKey(parent))
+                {
+                    if (!state.RepliesWithoutMarkers.TryGetValue(parent, out var l)) state.RepliesWithoutMarkers[parent] = l = new List<Comment>();
+                    l.Add(c);
+                }
+        }
+        var bodyCtx = new PartContext("/word/document.xml", RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, AllowNoteReferences = true, AllowCommentReferences = true };
 
         // ---- header/footer plan: one part per non-empty (or explicitly blank, or watermarked) slot of each section ----
         bool oddEven = doc.EffectiveOddAndEven;
@@ -403,11 +438,92 @@ internal static class DocumentSerializer
             if (notes.Count == 0) continue;
             bool foot = notes.Kind == NoteKind.Footnote;
             var uri = foot ? "/word/footnotes.xml" : "/word/endnotes.xml";
-            var nctx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, NoteKind = notes.Kind };
+            var nctx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, NoteKind = notes.Kind, AllowCommentReferences = true };
             noteContexts.Add(nctx);
             using var s = pkg.CreatePart(uri, foot ? CtFootnotes : CtEndnotes);
             using var x = CreateXml(s);
             WriteNotes(x, notes, nctx);
+        }
+
+        // ---- comments (+ commentsExtended for done flags and replies) ----
+        PartContext? commentsCtx = null;
+        bool commentsExtended = false;
+        if (doc.Comments.Count > 0)
+        {
+            var paraIds = new Dictionary<Paragraph, string>(ReferenceEqualityComparer.Instance);
+            var commentParaId = new Dictionary<Comment, string>(ReferenceEqualityComparer.Instance);
+            int seq = 0;
+            foreach (var c in doc.Comments)
+            {
+                var id = (0x10000000 + seq++).ToString("X8", CultureInfo.InvariantCulture);
+                // Word names a comment by its last paragraph: a trailing table gets an empty paragraph after it, which carries the id.
+                if (c.Blocks.Count > 0 && c.Blocks[^1] is Paragraph last) paraIds[last] = id;
+                commentParaId[c] = id;
+            }
+            commentsCtx = new PartContext("/word/comments.xml", RegisterMedia, NextDrawingId) { Numbering = numbering, State = state, ParaIds = paraIds };
+            using (var s = pkg.CreatePart("/word/comments.xml", CtComments))
+            using (var x = CreateXml(s))
+            {
+                x.WriteStartDocument(standalone: true);
+                x.WriteStartElement("w", "comments", W);
+                x.WriteAttributeString("xmlns", "r", null, R);
+                x.WriteAttributeString("xmlns", "mc", null, "http://schemas.openxmlformats.org/markup-compatibility/2006");
+                x.WriteAttributeString("xmlns", "w14", null, W14);
+                if (doc.Comments.SelectMany(c => c.Blocks).OfType<Paragraph>().Any(p => p.Runs.Any(r => r.Image is { } im && DrawingXml.NeedsWp14(im))))
+                    x.WriteAttributeString("xmlns", "wp14", null, DrawingXml.Wp14);
+                x.WriteAttributeString("mc", "Ignorable", "http://schemas.openxmlformats.org/markup-compatibility/2006",
+                    doc.Comments.SelectMany(c => c.Blocks).OfType<Paragraph>().Any(p => p.Runs.Any(r => r.Image is { } im && DrawingXml.NeedsWp14(im))) ? "w14 wp14" : "w14");
+                foreach (var c in doc.Comments)
+                {
+                    x.WriteStartElement("comment", W);
+                    x.WriteAttributeString("id", W, state.CommentIds[c].ToString(CultureInfo.InvariantCulture));
+                    x.WriteAttributeString("author", W, c.Author);
+                    if (c.Date is DateTime cd)
+                        x.WriteAttributeString("date", W, (cd.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(cd, DateTimeKind.Utc) : cd.ToUniversalTime())
+                            .ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+                    if (!string.IsNullOrEmpty(c.Initials)) x.WriteAttributeString("initials", W, c.Initials);
+                    object? previous = null;
+                    foreach (var block in c.Blocks)
+                    {
+                        if (block is Paragraph cp) WriteParagraph(x, cp, commentsCtx);
+                        else if (block is DocTable ct)
+                        {
+                            if (previous is DocTable) WriteEmptyParagraph(x);
+                            WriteTable(x, ct, commentsCtx);
+                        }
+                        previous = block;
+                    }
+                    if (previous is null or DocTable)
+                    {
+                        x.WriteStartElement("p", W);
+                        x.WriteAttributeString("w14", "paraId", W14, commentParaId[c]);
+                        x.WriteEndElement();
+                    }
+                    x.WriteEndElement();
+                }
+                x.WriteEndElement();
+                x.WriteEndDocument();
+            }
+            commentsExtended = doc.Comments.Any(c => c.Done || c.Parent is not null);
+            if (commentsExtended)
+            {
+                using var s = pkg.CreatePart("/word/commentsExtended.xml", CtCommentsExtended);
+                using var x = CreateXml(s);
+                x.WriteStartDocument(standalone: true);
+                x.WriteStartElement("w15", "commentsEx", W15);
+                x.WriteAttributeString("xmlns", "mc", null, "http://schemas.openxmlformats.org/markup-compatibility/2006");
+                x.WriteAttributeString("mc", "Ignorable", "http://schemas.openxmlformats.org/markup-compatibility/2006", "w15");
+                foreach (var c in doc.Comments)
+                {
+                    x.WriteStartElement("w15", "commentEx", W15);
+                    x.WriteAttributeString("w15", "paraId", W15, commentParaId[c]);
+                    if (c.Parent is { } parent && commentParaId.TryGetValue(parent, out var pp)) x.WriteAttributeString("w15", "paraIdParent", W15, pp);
+                    x.WriteAttributeString("w15", "done", W15, c.Done ? "1" : "0");
+                    x.WriteEndElement();
+                }
+                x.WriteEndElement();
+                x.WriteEndDocument();
+            }
         }
 
         // ---- media parts (binary) ----
@@ -439,6 +555,8 @@ internal static class DocumentSerializer
             pkg.AddRelationship("/word/document.xml", part.Uri, part.RelType, part.RelId);
         if (doc.Footnotes.Count > 0) pkg.AddRelationship("/word/document.xml", "/word/footnotes.xml", RelFootnotes, "rIdFootnotes");
         if (doc.Endnotes.Count > 0) pkg.AddRelationship("/word/document.xml", "/word/endnotes.xml", RelEndnotes, "rIdEndnotes");
+        if (doc.Comments.Count > 0) pkg.AddRelationship("/word/document.xml", "/word/comments.xml", RelComments, "rIdComments");
+        if (commentsExtended) pkg.AddRelationship("/word/document.xml", "/word/commentsExtended.xml", RelCommentsExtended, "rIdCommentsExtended");
 
         // Per-part hyperlink + image relationships (body and each header/footer).
         void WriteContextRels(PartContext ctx)
@@ -453,6 +571,7 @@ internal static class DocumentSerializer
         WriteContextRels(bodyCtx);
         foreach (var ctx in hfContexts) WriteContextRels(ctx);
         foreach (var ctx in noteContexts) WriteContextRels(ctx);
+        if (commentsCtx is not null) WriteContextRels(commentsCtx);
 
         pkg.Close();
     }
@@ -469,9 +588,10 @@ internal static class DocumentSerializer
         Action<XmlWriter>? sectPr = null)
     {
         x.WriteStartElement("p", W);
+        if (ctx?.ParaIds is { } ids && ids.TryGetValue(p, out var paraId)) x.WriteAttributeString("w14", "paraId", W14, paraId);
 
         // pPr — paragraph properties in schema order (see ParagraphProperties).
-        ParagraphProperties.Write(x, p, ctx?.Numbering, sectPr);
+        ParagraphProperties.Write(x, p, ctx?.Numbering, sectPr, ctx is null ? null : _ => ctx.State.NextRevisionId());
         leadingRuns?.Invoke(x);
 
         if (p.PageBreakBefore)
@@ -506,38 +626,69 @@ internal static class DocumentSerializer
             }
         }
 
+        bool deleting = false;
+        void OpenRevision(RevisionMark mark)
+            => ParagraphProperties.WriteRevisionStart(x, mark.Type == RevisionType.Delete ? "del" : "ins", mark, ctx!.State.NextRevisionId(), close: false);
+
+        // Opens a run's tracked change (an insertion around a deletion when both are recorded); returns how many elements to close.
+        int OpenRunRevision(Run run)
+        {
+            if (run.Revision is null || ctx is null) return 0;
+            int n = 0;
+            if (run.Revision.Type == RevisionType.Delete && run.InsertedRevision is not null) { OpenRevision(run.InsertedRevision); n++; }
+            OpenRevision(run.Revision);
+            return n + 1;
+        }
+
+        void Close(int n) { for (int k = 0; k < n; k++) x.WriteEndElement(); }
+
         for (int index = 0; index < p.Runs.Count; index++)
         {
-            var run = p.Runs[index];
+            var current = p.Runs[index];
+            // Tracked insertions / deletions wrap their run (links and simple fields place it themselves or keep it out).
+            bool wrap = ctx is not null && current.Revision is not null && current.Bookmark is null && current.CommentRange is null
+                        && !current.IsLink && current.FieldInstruction is null && current.FieldMark is not { Field.Simple: true };
+            deleting = current.Revision is { Type: RevisionType.Delete } && ctx is not null;
+            // Text one reviewer inserted and another deleted: w:ins around w:del, as Word writes it.
+            int opened = wrap ? OpenRunRevision(current) : 0;
+            WriteOneRun(current);
+            Close(opened);
+        }
+
+        void WriteOneRun(Run run)
+        {
             if (run.FieldInstruction is not null)
             {
                 // <w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>
                 x.WriteStartElement("fldSimple", W);
                 x.WriteAttributeString("instr", W, run.FieldInstruction);
+                // A tracked change goes inside the simple field, around its result run.
+                int fieldOpened = OpenRunRevision(run);
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, run.CharacterStyleId);
-                WriteText(x, run.TextContent);
+                WriteRunPr(x, run, run.CharacterStyleId, ctx);
+                WriteText(x, run.TextContent, deleting);
                 x.WriteEndElement();
+                Close(fieldOpened);
                 x.WriteEndElement();
-                continue;
+                return;
             }
 
             if (run.Image is not null && ctx is not null)
             {
                 WriteDrawingRun(x, run.Image, ctx);
-                continue;
+                return;
             }
 
             if (run.TextBox is { } box)
             {
                 // Word does not allow a text box inside a text box: nested boxes are not written.
                 if (ctx is not null && ctx.TextBoxDepth == 0) WriteTextBoxRun(x, box, ctx);
-                continue;
+                return;
             }
 
             if (run.Bookmark is { } bm)
             {
-                if (ctx is null) continue;
+                if (ctx is null) return;
                 if (bm.IsStart)
                 {
                     var (bid, bname) = ctx.State.StartBookmark(bm.Bookmark);
@@ -554,7 +705,50 @@ internal static class DocumentSerializer
                     x.WriteAttributeString("id", W, eid.ToString(CultureInfo.InvariantCulture));
                     x.WriteEndElement();
                 }
-                continue;
+                return;
+            }
+
+            if (run.CommentRange is { } range)
+            {
+                if (ctx is null) return;
+                void Range(Comment c)
+                {
+                    if (!ctx.State.CommentIds.TryGetValue(c, out var cid)) return;
+                    x.WriteStartElement(range.IsStart ? "commentRangeStart" : "commentRangeEnd", W);
+                    x.WriteAttributeString("id", W, cid.ToString(CultureInfo.InvariantCulture));
+                    x.WriteEndElement();
+                }
+                Range(range.Comment);
+                if (ctx.State.RepliesWithoutMarkers.TryGetValue(range.Comment, out var replies)) foreach (var reply in replies) Range(reply);
+                return;
+            }
+
+            if (run.CommentReference is { } commented)
+            {
+                if (ctx is null || !ctx.AllowCommentReferences) return; // body and notes only (not comments, headers or footers)
+                void Reference(Comment c)
+                {
+                    if (!ctx.State.CommentIds.TryGetValue(c, out var cid)) return;
+                    x.WriteStartElement("r", W);
+                    WriteRunPr(x, run, run.CharacterStyleId, ctx);
+                    x.WriteStartElement("commentReference", W);
+                    x.WriteAttributeString("id", W, cid.ToString(CultureInfo.InvariantCulture));
+                    x.WriteEndElement();
+                    x.WriteEndElement();
+                }
+                Reference(commented);
+                if (ctx.State.RepliesWithoutMarkers.TryGetValue(commented, out var replies)) foreach (var reply in replies) Reference(reply);
+                return;
+            }
+
+            if (run.IsAnnotationMark)
+            {
+                x.WriteStartElement("r", W);
+                WriteRunPr(x, run, run.CharacterStyleId, ctx);
+                x.WriteStartElement("annotationRef", W);
+                x.WriteEndElement();
+                x.WriteEndElement();
+                return;
             }
 
             if (run.FieldMark is { } mark)
@@ -572,10 +766,10 @@ internal static class DocumentSerializer
                     }
                     else if (mark.Type == FieldMarkType.End && simpleOpen is not null && simpleOpen.Remove(field))
                         x.WriteEndElement();
-                    continue;
+                    return;
                 }
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                WriteRunPr(x, run, run.CharacterStyleId, ctx);
                 x.WriteStartElement("fldChar", W);
                 x.WriteAttributeString("fldCharType", W, mark.Type switch
                 {
@@ -593,55 +787,55 @@ internal static class DocumentSerializer
                 x.WriteEndElement();
                 if (mark.Type == FieldMarkType.Begin)
                 {
-                    WriteInstruction(x, field, run, 0);
+                    WriteInstruction(x, field, run, 0, deleting);
                     // A simple field written in complex form (its markers did not nest): its result needs a separator.
                     if (field.Simple)
                     {
                         x.WriteStartElement("r", W);
-                        RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                        WriteRunPr(x, run, run.CharacterStyleId, ctx);
                         x.WriteStartElement("fldChar", W);
                         x.WriteAttributeString("fldCharType", W, "separate");
                         x.WriteEndElement();
                         x.WriteEndElement();
                     }
                 }
-                continue;
+                return;
             }
 
             if (run.NoteReference is { } note)
             {
                 // A removed note, or a reference outside the body: nothing is written (Word rejects both).
-                if (ctx is null || !ctx.AllowNoteReferences || !ctx.State.NoteIds.TryGetValue(note, out var nid)) continue;
+                if (ctx is null || !ctx.AllowNoteReferences || !ctx.State.NoteIds.TryGetValue(note, out var nid)) return;
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                WriteRunPr(x, run, run.CharacterStyleId, ctx);
                 x.WriteStartElement(note.Kind == NoteKind.Footnote ? "footnoteReference" : "endnoteReference", W);
                 if (run.CustomMarkFollows) x.WriteAttributeString("customMarkFollows", W, "1");
                 x.WriteAttributeString("id", W, nid.ToString(CultureInfo.InvariantCulture));
                 x.WriteEndElement();
                 x.WriteEndElement();
-                continue;
+                return;
             }
 
             if (run.IsNoteMark)
             {
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                WriteRunPr(x, run, run.CharacterStyleId, ctx);
                 x.WriteStartElement(ctx?.NoteKind == NoteKind.Endnote ? "endnoteRef" : "footnoteRef", W);
                 x.WriteEndElement();
                 x.WriteEndElement();
-                continue;
+                return;
             }
 
             if (run.Symbol is { } sym && !run.IsLink)
             {
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, run.CharacterStyleId);
+                WriteRunPr(x, run, run.CharacterStyleId, ctx);
                 x.WriteStartElement("sym", W);
                 x.WriteAttributeString("font", W, sym.Font);
                 x.WriteAttributeString("char", W, ((int)sym.Code).ToString("X4", CultureInfo.InvariantCulture));
                 x.WriteEndElement();
                 x.WriteEndElement();
-                continue;
+                return;
             }
 
             if (run.IsLink && ctx is not null)
@@ -651,24 +845,28 @@ internal static class DocumentSerializer
                 if (run.HyperlinkAnchor is not null) x.WriteAttributeString("anchor", W, run.HyperlinkAnchor);
                 if (run.HyperlinkTooltip is not null) x.WriteAttributeString("tooltip", W, run.HyperlinkTooltip);
                 x.WriteAttributeString("history", W, "1");
+                // A tracked change goes inside the link (w:ins / w:del cannot hold a w:hyperlink).
+                int linkOpened = OpenRunRevision(run);
                 x.WriteStartElement("r", W);
-                RunProperties.Write(x, run.Format, characterStyleId: run.EffectiveCharacterStyleId);
-                WriteText(x, run.TextContent);
+                WriteRunPr(x, run, run.EffectiveCharacterStyleId, ctx);
+                WriteText(x, run.TextContent, deleting);
                 x.WriteEndElement();
+                Close(linkOpened);
                 x.WriteEndElement();
-                continue;
+                return;
             }
 
             // Skip empty non-image runs (e.g. an image run reached without a context).
-            if (run.Image is not null) continue;
+            if (run.Image is not null) return;
 
             x.WriteStartElement("r", W);
-            RunProperties.Write(x, run.Format, run.CharacterStyleId);
+            WriteRunPr(x, run, run.CharacterStyleId, ctx);
             if (run.Break is BreakType bt) WriteBreak(x, bt);
             else if (run.PositionalTab is { } ptab) WritePositionalTab(x, ptab);
             else if (run.IsTab) { x.WriteStartElement("tab", W); x.WriteEndElement(); }
-            else WriteText(x, run.TextContent);
+            else WriteText(x, run.TextContent, deleting);
             x.WriteEndElement();
+        
         }
 
         // A simple field left open (its end was elsewhere): close it so the XML stays well formed.
@@ -845,14 +1043,17 @@ internal static class DocumentSerializer
     /// <c>\r</c>) into <c>w:br</c> and tab characters into <c>w:tab</c> — the elements Word
     /// itself uses. A literal control character inside <c>w:t</c> would render as a space.
     /// </summary>
-    internal static void WriteText(XmlWriter x, string text)
+    internal static void WriteText(XmlWriter x, string text) => WriteText(x, text, false);
+
+    /// <summary>Writes run content; in a tracked deletion the text goes in w:delText.</summary>
+    internal static void WriteText(XmlWriter x, string text, bool deleted)
     {
         int start = 0;
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
             if (c != '\n' && c != '\r' && c != '\t') continue;
-            if (i > start) WriteTextSegment(x, text.Substring(start, i - start));
+            if (i > start) WriteTextSegment(x, text.Substring(start, i - start), deleted);
             if (c == '\t')
             {
                 x.WriteStartElement("tab", W);
@@ -867,12 +1068,12 @@ internal static class DocumentSerializer
             start = i + 1;
         }
         if (start < text.Length || text.Length == 0)
-            WriteTextSegment(x, start == 0 ? text : text.Substring(start));
+            WriteTextSegment(x, start == 0 ? text : text.Substring(start), deleted);
     }
 
-    private static void WriteTextSegment(XmlWriter x, string text)
+    private static void WriteTextSegment(XmlWriter x, string text, bool deleted = false)
     {
-        x.WriteStartElement("t", W);
+        x.WriteStartElement(deleted ? "delText" : "t", W);
         if (text.Length > 0 && (char.IsWhiteSpace(text[0]) || char.IsWhiteSpace(text[^1])))
             x.WriteAttributeString("xml", "space", null, "preserve");
         x.WriteString(text);
@@ -903,7 +1104,7 @@ internal static class DocumentSerializer
     }
 
     private static void WriteTable(XmlWriter x, DocTable t, PartContext ctx)
-        => TableXml.Write(x, t, (w, p) => WriteParagraph(w, p, ctx));
+        => TableXml.Write(x, t, (w, p) => WriteParagraph(w, p, ctx), _ => ctx.State.NextRevisionId());
 
     /// <summary>
     /// Declares wp14 and mc on a part's root: readers resolve mc:Choice/@Requires prefixes there
@@ -925,8 +1126,17 @@ internal static class DocumentSerializer
         }
     }
 
+    /// <summary>A run's rPr, with its tracked formatting change (w:rPrChange) when it has one.</summary>
+    private static void WriteRunPr(XmlWriter x, Run run, string? characterStyleId, PartContext? ctx)
+    {
+        if (run.FormatChange is { } change && ctx is not null)
+            RunProperties.Write(x, run.Format, characterStyleId, null,
+                w => ParagraphProperties.WriteRunFormatChange(w, change, ctx.State.NextRevisionId()));
+        else RunProperties.Write(x, run.Format, characterStyleId);
+    }
+
     /// <summary>The instruction runs of a field: text as w:instrText, nested fields as complete fields with their cached result.</summary>
-    private static void WriteInstruction(XmlWriter x, Field field, Run run, int depth)
+    private static void WriteInstruction(XmlWriter x, Field field, Run run, int depth, bool deleted = false)
     {
         foreach (var part in field.InstructionParts)
         {
@@ -935,7 +1145,7 @@ internal static class DocumentSerializer
                 if (text.Length == 0) continue;
                 x.WriteStartElement("r", W);
                 RunProperties.Write(x, run.Format, run.CharacterStyleId);
-                x.WriteStartElement("instrText", W);
+                x.WriteStartElement(deleted ? "delInstrText" : "instrText", W);
                 x.WriteAttributeString("xml", "space", null, "preserve");
                 x.WriteString(text);
                 x.WriteEndElement();
@@ -959,13 +1169,13 @@ internal static class DocumentSerializer
                     x.WriteEndElement();
                 }
                 Char("begin", true);
-                WriteInstruction(x, nested, run, depth + 1);
+                WriteInstruction(x, nested, run, depth + 1, deleted);
                 Char("separate", false);
                 if (!string.IsNullOrEmpty(nested.CachedResult))
                 {
                     x.WriteStartElement("r", W);
                     RunProperties.Write(x, run.Format, run.CharacterStyleId);
-                    WriteText(x, nested.CachedResult);
+                    WriteText(x, nested.CachedResult, deleted);
                     x.WriteEndElement();
                 }
                 Char("end", false);
@@ -1147,6 +1357,7 @@ internal static class DocumentSerializer
         if (doc.SaveSubsetFonts) { x.WriteStartElement("saveSubsetFonts", W); x.WriteEndElement(); }
         if (doc.MirrorMargins) { x.WriteStartElement("mirrorMargins", W); x.WriteEndElement(); }
         if (doc.GutterAtTop) { x.WriteStartElement("gutterAtTop", W); x.WriteEndElement(); }
+        if (doc.TrackRevisions) { x.WriteStartElement("trackRevisions", W); x.WriteEndElement(); }
 
         if (doc.IsProtected)
         {
@@ -1387,6 +1598,13 @@ internal static class DocumentSerializer
                     else if (b is DocTable nt)
                         foreach (var tp in TableParagraphs(nt, 0)) yield return tp;
                 }
+        foreach (var c in doc.Comments)
+            foreach (var b in c.Blocks)
+            {
+                if (b is Paragraph cp) yield return cp;
+                else if (b is DocTable ct)
+                    foreach (var tp in TableParagraphs(ct, 0)) yield return tp;
+            }
     }
 
     /// <summary>Every distinct header/footer of every section.</summary>
