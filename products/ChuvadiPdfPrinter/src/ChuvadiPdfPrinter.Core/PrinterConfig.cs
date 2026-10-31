@@ -20,7 +20,7 @@ namespace ChuvadiPdfPrinter
     /// <summary>The kind of printer a finished PDF is also sent to.</summary>
     public enum ForwardKind
     {
-        /// <summary>An installed Windows printer (Chuvadi.Print.Windows). Needs a PDF rasteriser (Chuvadi.Print.Pdf).</summary>
+        /// <summary>An installed Windows printer: the PDF is rendered by Chuvadi.Print.Pdf and printed through the GDI spooler.</summary>
         WindowsPrinter,
         /// <summary>An IPP printer that accepts PDF; the PDF is passed through unchanged.</summary>
         Ipp
@@ -44,6 +44,62 @@ namespace ChuvadiPdfPrinter
 
         /// <summary>Accept a self-signed certificate (ipps:// only).</summary>
         public bool AcceptAnyServerCertificate { get; set; }
+
+        /// <summary>
+        /// Windows printers: the sheet size. "Auto" (default) uses the paper that matches the PDF's first page
+        /// (A4 when nothing matches); or a name: A0-A6, B4, B5, Letter, Legal, Tabloid, Ledger, Executive, Statement.
+        /// </summary>
+        public string Paper { get; set; } = "Auto";
+
+        /// <summary>Windows printers: Color (default), Grayscale or Monochrome.</summary>
+        public Chuvadi.Print.ColorMode Color { get; set; } = Chuvadi.Print.ColorMode.Color;
+
+        /// <summary>Windows printers: how pages are scaled onto the sheet. Default ShrinkToFit (actual size unless too large).</summary>
+        public Chuvadi.Print.ScaleMode Scale { get; set; } = Chuvadi.Print.ScaleMode.ShrinkToFit;
+
+        /// <summary>Windows printers: highest resolution pages are rendered at, in dpi. Default 300.</summary>
+        public double MaxRasterDpi { get; set; } = 300;
+
+        private static readonly (string Name, Chuvadi.Print.PaperSize Size)[] Papers =
+        {
+            ("A0", Chuvadi.Print.PaperSize.A0), ("A1", Chuvadi.Print.PaperSize.A1), ("A2", Chuvadi.Print.PaperSize.A2),
+            ("A3", Chuvadi.Print.PaperSize.A3), ("A4", Chuvadi.Print.PaperSize.A4), ("A5", Chuvadi.Print.PaperSize.A5),
+            ("A6", Chuvadi.Print.PaperSize.A6), ("B4", Chuvadi.Print.PaperSize.B4), ("B5", Chuvadi.Print.PaperSize.B5),
+            ("Letter", Chuvadi.Print.PaperSize.Letter), ("Legal", Chuvadi.Print.PaperSize.Legal),
+            ("Tabloid", Chuvadi.Print.PaperSize.Tabloid), ("Ledger", Chuvadi.Print.PaperSize.Ledger),
+            ("Executive", Chuvadi.Print.PaperSize.Executive), ("Statement", Chuvadi.Print.PaperSize.Statement)
+        };
+
+        /// <summary>True when <see cref="Paper"/> is "Auto" or a known name.</summary>
+        public bool IsPaperValid() =>
+            string.Equals(Paper, "Auto", StringComparison.OrdinalIgnoreCase) || Array.Exists(Papers, p => string.Equals(p.Name, Paper, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// The sheet for this target. For "Auto", <paramref name="firstPage"/> supplies the document's first page
+        /// size (either orientation; within 2 mm), falling back to A4.
+        /// </summary>
+        public Chuvadi.Print.PaperSize ResolvePaper(Func<Chuvadi.Print.PageDimensions?> firstPage)
+        {
+            if (firstPage is null) throw new ArgumentNullException(nameof(firstPage));
+            foreach (var (name, size) in Papers)
+                if (string.Equals(name, Paper, StringComparison.OrdinalIgnoreCase)) return size;
+            if (!string.Equals(Paper, "Auto", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Unknown paper '" + Paper + "'.");
+
+            const double tolerance = 2 * 72 / 25.4;
+            if (firstPage() is Chuvadi.Print.PageDimensions page)
+            {
+                double shortSide = Math.Min(page.WidthPoints, page.HeightPoints);
+                double longSide = Math.Max(page.WidthPoints, page.HeightPoints);
+                foreach (var (_, size) in Papers)
+                {
+                    double s = Math.Min(size.WidthPoints, size.HeightPoints);
+                    double l = Math.Max(size.WidthPoints, size.HeightPoints);
+                    if (Math.Abs(s - shortSide) <= tolerance && Math.Abs(l - longSide) <= tolerance) return size;
+                }
+            }
+            return Chuvadi.Print.PaperSize.A4;
+        }
     }
 
     /// <summary>
@@ -167,6 +223,8 @@ namespace ChuvadiPdfPrinter
             {
                 if (string.IsNullOrWhiteSpace(f.Printer)) problems.Add("A ForwardTo entry has no Printer.");
                 if (f.Copies < 1) problems.Add("ForwardTo '" + f.Printer + "' needs at least 1 copy.");
+                if (!f.IsPaperValid()) problems.Add("ForwardTo '" + f.Printer + "' has an unknown Paper '" + f.Paper + "'.");
+                if (!(f.MaxRasterDpi >= 72 && f.MaxRasterDpi <= 1200)) problems.Add("ForwardTo '" + f.Printer + "' MaxRasterDpi must be 72..1200.");
             }
             return problems;
         }
