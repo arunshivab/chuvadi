@@ -412,6 +412,86 @@ namespace Chuvadi.Print
             };
         }
 
+        // ----------------------------------------------------------------- document submission
+
+        /// <summary>
+        /// Hands the document itself (not rendered pages) with its settings to a target that lays it out on
+        /// its own, such as an IPP printer that accepts PDF. No rasteriser is needed; when one is configured
+        /// it is used only to count pages (for page-range mapping and the audit trail). Records exactly one
+        /// audit event.
+        /// </summary>
+        /// <returns>
+        /// The outcome. <see cref="PrintResult.PagesPrinted"/> is the number of selected pages when the page
+        /// count is known, otherwise 0; impressions and sheets are produced by the target and reported as 0.
+        /// Failures and cancellation are reported here unless <see cref="PrintJobOptions.ThrowOnFailure"/> is set.
+        /// </returns>
+        public PrintResult SubmitTo(IDocumentTarget target, CancellationToken cancellationToken = default)
+        {
+            if (target is null) throw new ArgumentNullException(nameof(target));
+            PrintJobOptions options = _options.Clone();
+            PrintSettings settings = _settings.Clone();
+            Guid jobId = JobId;
+            DateTimeOffset startedAt = DateTimeOffset.UtcNow;
+            int? pageCount = null;
+            int selected = 0;
+            PrintJobStatus status;
+            Exception? failure = null;
+
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (settings.Copies < 1) throw new InvalidOperationException("PrintSettings.Copies must be at least 1.");
+                if (options.Rasterizer is not null)
+                {
+                    using IRasterDocument document = options.Rasterizer.Open(_pdf)
+                        ?? throw new InvalidOperationException("The rasteriser returned no document.");
+                    pageCount = document.PageCount;
+                    selected = settings.Pages.Resolve(pageCount.Value).Count;
+                }
+                target.Submit(new DocumentSubmission(jobId, DocumentTitle, UserName, TenantId, settings, _pdf,
+                                                     "application/pdf", pageCount), cancellationToken);
+                status = PrintJobStatus.Printed;
+            }
+            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+            {
+                status = PrintJobStatus.Cancelled;
+                failure = ex;
+            }
+            catch (Exception ex)
+            {
+                status = PrintJobStatus.Failed;
+                failure = ex;
+            }
+
+            string? error = status == PrintJobStatus.Failed ? failure!.Message : null;
+            options.AuditSink.Record(new PrintAuditEvent
+            {
+                JobId = jobId,
+                DocumentTitle = DocumentTitle,
+                PageCount = selected,
+                Copies = settings.Copies,
+                PrinterName = SafeName(target),
+                MachineName = Environment.MachineName,
+                UserName = UserName,
+                Status = status,
+                StartedAt = startedAt,
+                CompletedAt = DateTimeOffset.UtcNow,
+                TenantId = TenantId,
+                Error = error
+            });
+
+            if (failure is not null && options.ThrowOnFailure)
+                ExceptionDispatchInfo.Capture(failure).Throw();
+
+            return new PrintResult
+            {
+                JobId = jobId,
+                Status = status,
+                PagesPrinted = status == PrintJobStatus.Printed ? selected : 0,
+                Error = error
+            };
+        }
+
         // ----------------------------------------------------------------- spool
 
         /// <summary>The spool envelope for this job: PDF, a snapshot of the settings, and the metadata.</summary>
@@ -484,11 +564,15 @@ namespace Chuvadi.Print
             }
         }
 
-        private static string SafeName(IPrintTarget target)
+        private static string SafeName(IPrintTarget target) => SafeName(() => target.Name);
+
+        private static string SafeName(IDocumentTarget target) => SafeName(() => target.Name);
+
+        private static string SafeName(Func<string> name)
         {
             try
             {
-                return target.Name ?? string.Empty;
+                return name() ?? string.Empty;
             }
             catch
             {

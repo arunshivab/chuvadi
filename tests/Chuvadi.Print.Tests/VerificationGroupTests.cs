@@ -53,6 +53,12 @@ public class VerificationGroupTests
     [Fact] public void WindowsPrintersAreDiscoverable() => RunUnlessSkipped(VerificationGroups.WindowsPrintersAreDiscoverable);
     [Fact] public void WindowsPrintToPdfWritesFile() => RunUnlessSkipped(VerificationGroups.WindowsPrintToPdfWritesFile);
 
+    // ---- A4: IPP
+    [Fact] public void IppMessagesRoundTrip() => VerificationGroups.IppMessagesRoundTrip();
+    [Fact] public void PwgRasterRoundTrips() => VerificationGroups.PwgRasterRoundTrips();
+    [Fact] public void IppRasterJobReachesPrinter() => VerificationGroups.IppRasterJobReachesPrinter();
+    [Fact] public void IppPdfJobPassesThrough() => VerificationGroups.IppPdfJobPassesThrough();
+
     private static void RunUnlessSkipped(Action group)
     {
         try { group(); }
