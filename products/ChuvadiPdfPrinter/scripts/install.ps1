@@ -25,13 +25,16 @@
 [CmdletBinding()]
 param(
     [ValidateSet("Auto", "Queue", "Psa", "Both")][string]$Mode = "Auto",
-    [string]$SourceFolder = (Join-Path (Split-Path -Parent $PSScriptRoot) "out"),
+    [string]$SourceFolder = "",
     [string]$QueueName = "Chuvadi PDF",
     [string]$PipeName = "ChuvadiPdfPrinter",
     [string]$OutputFolder = "%PUBLIC%\Documents\Chuvadi PDF"
 )
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty while it evaluates parameter defaults, so the default
+# source folder (products\ChuvadiPdfPrinter\out, next to this scripts folder) is worked out here instead.
+if ([string]::IsNullOrEmpty($SourceFolder)) { $SourceFolder = Join-Path (Split-Path -Parent $PSScriptRoot) "out" }
 $serviceName = "ChuvadiPdfAgent"
 $installDir = Join-Path $env:ProgramFiles "Chuvadi\PdfPrinter"
 $dataDir = Join-Path $env:ProgramData "Chuvadi\PdfPrinter"
