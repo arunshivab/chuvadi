@@ -19,11 +19,18 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   not scale with document size. `ImageFileTarget` holds one sheet image at a time;
   `WindowsPrinterTarget` sends each page to GDI in bands of a few megabytes; `IppPrinterTarget` composes one
   sheet at a time and spools the PWG Raster stream to a temporary file, not memory.
-- **P06 — One audit event per job** (AERB / NABH): exactly one `PrintAuditEvent` per `PrintTo`, whether
-  the job is printed, fails or is cancelled.
-- **P07 — Agents dial out only.** No inbound port on the workstation. (Arrives with the service layer.)
-  The IPP client (A4) only makes outbound requests to printers; an IPP *server* (for the "Chuvadi PDF"
-  product) lives outside the library and binds to loopback unless deliberately configured otherwise.
+- **P06 — One audit event per job** (AERB / NABH): exactly one `PrintAuditEvent` per `PrintTo` /
+  `SubmitTo`, whether the job is printed, fails or is cancelled. Remotely (A6) the agent's event travels to
+  the hub with the final status and the hub records it once into the host's sink; a job that ends on the
+  hub (cancelled while queued, leases exhausted) or before printing on the agent (unknown printer, payload
+  unusable, interrupted) gets exactly one synthesized event instead. Repeated final reports are ignored.
+- **P07 — Agents dial out only.** No inbound port on the workstation. `PrintAgent` (A6) only makes
+  outbound HTTPS requests to the `PrintHub` its host application embeds (long poll, payload download,
+  status reports); the hub never connects to an agent. Agents authenticate with a per-agent bearer token
+  (stored hashed on the hub, rotated without reinstalling, revocable at once); plain HTTP is refused
+  except to loopback or when explicitly allowed. The IPP client (A4) likewise only makes outbound requests
+  to printers; an IPP *server* (for the "Chuvadi PDF" product) lives outside the library and binds to
+  loopback unless deliberately configured otherwise. *(Decision D-26.)*
 - **P08 — Portable core builds and tests on Linux; Windows code is namespace-confined.**
   *(Amended 2026-10-28, decision D-12.)* `Chuvadi.Print` is a single plain `net10.0` assembly. All
   Windows-specific code lives in the `Chuvadi.Print.Windows` namespace, is marked
@@ -50,7 +57,7 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   (PNG), spool envelope v2 with job metadata, auto-rotate. (0.2.0)
 - **A3** — `Chuvadi.Print.Windows`: printer discovery (`WindowsPrinters`), driver
   capabilities, and `WindowsPrinterTarget` printing through the GDI spooler. (0.3.0)
-- **A4 (this layer)** — `Chuvadi.Print.Ipp`: IPP encoder/decoder, `IppClient`, PWG Raster writer/reader,
+- **A4** — `Chuvadi.Print.Ipp`: IPP encoder/decoder, `IppClient`, PWG Raster writer/reader,
   `IppPrinterTarget` (rendered pages as PWG Raster) and `IppDocumentTarget` (PDF passthrough via the new
   core `PrintJob.SubmitTo` / `IDocumentTarget`): driverless printing on any OS. (0.4.0)
 - **A5 — Chuvadi.Print.Pdf** — separate package: `IPageRasterizer` over Chuvadi.Pdf and a vector-imposition
@@ -58,7 +65,13 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - **Product: "Chuvadi PDF" virtual printer** — separate product consuming the Chuvadi.Print nupkg
   (decision D-11): a Print Support App virtual printer on Windows 11, a "Microsoft Print to PDF" queue
   fallback on Windows 10, an IPP server later. No v3/v4 driver, port monitor or print processor.
-- **A6** — print agent / service layer (P07).
+- **A6 (this layer)** — `Chuvadi.Print.Remote` (decision D-26): `PrintHub`, a host-agnostic hub protocol
+  handler the host app embeds (LiPi Connect is the reference host) behind any web stack; `PrintAgent`, which
+  dials out, long-polls, downloads with resume and SHA-256 check, prints through any `IPrintTarget` /
+  `IDocumentTarget` and reports progress and the outcome; per-agent tokens with rotation and revocation
+  (`TokenAgentAuthenticator`); pluggable job storage (`IPrintJobStore`: durable `FileJobStore`,
+  `InMemoryJobStore`); leases with expiry and retry limits; idempotent job ids; a crash-safe agent journal
+  so a job is never printed twice. Wire protocol v1. (0.5.0)
 
 ## Build & test conventions (inherited from the monorepo)
 
@@ -76,3 +89,6 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - `--preview` also writes the pages an IPP printer would receive (decoded PWG Raster) under `07-ipp-raster`;
   `-- --ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]` sends a 6-job proof set (and a PDF) to a
   real IPP Everywhere printer.
+- Remote (A6) groups run a real hub and agent over HTTP on localhost (`HubHttpListenerHost`, which can also
+  cut a download short to prove resume) and in process (`PrintHubMessageHandler`), with a hand-moved clock
+  (`ManualClock`) for lease expiry.

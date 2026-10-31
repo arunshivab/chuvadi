@@ -59,6 +59,20 @@ public class VerificationGroupTests
     [Fact] public void IppRasterJobReachesPrinter() => VerificationGroups.IppRasterJobReachesPrinter();
     [Fact] public void IppPdfJobPassesThrough() => VerificationGroups.IppPdfJobPassesThrough();
 
+    // ---- A6: remote hub and agent
+    [Fact] public void RemoteJobPrintsOverHttpAndAuditsOnce() => VerificationGroups.RemoteJobPrintsOverHttpAndAuditsOnce();
+    [Fact] public void RemoteSubmitIsIdempotent() => VerificationGroups.RemoteSubmitIsIdempotent();
+    [Fact] public void RemoteDownloadResumesAfterCut() => VerificationGroups.RemoteDownloadResumesAfterCut();
+    [Fact] public void RemoteLeaseExpiryRequeuesThenFails() => VerificationGroups.RemoteLeaseExpiryRequeuesThenFails();
+    [Fact] public void RemoteInterruptedJobIsNotReprinted() => VerificationGroups.RemoteInterruptedJobIsNotReprinted();
+    [Fact] public void RemoteCancelQueuedAndInFlight() => VerificationGroups.RemoteCancelQueuedAndInFlight();
+    [Fact] public void RemoteTokenRotatesAndRevokes() => VerificationGroups.RemoteTokenRotatesAndRevokes();
+    [Fact] public void RemoteFileStoreSurvivesRestart() => VerificationGroups.RemoteFileStoreSurvivesRestart();
+    [Fact] public void RemoteProtocolRejectsBadRequests() => VerificationGroups.RemoteProtocolRejectsBadRequests();
+    [Fact] public void RemoteAgentDemandsHttps() => VerificationGroups.RemoteAgentDemandsHttps();
+    [Fact] public void RemoteDocumentTargetPassesPdfThrough() => VerificationGroups.RemoteDocumentTargetPassesPdfThrough();
+    [Fact] public void RemoteUnknownPrinterFailsOnce() => VerificationGroups.RemoteUnknownPrinterFailsOnce();
+
     private static void RunUnlessSkipped(Action group)
     {
         try { group(); }
