@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Chuvadi PDF - Print Support App (PSA v4) virtual printers. Windows 11 24H2 (10.0.26100) or later.
-  Packaged by scripts\build-psa.ps1. The Publisher must equal the subject of the signing certificate
-  (build-psa.ps1 -Publisher, default CN=Chuvadi); the script rewrites it if you choose another.
+  Packaged by scripts\build.ps1 -Psa. The Publisher must equal the subject of the signing certificate
+  (build.ps1 -Publisher, default CN=Chuvadi); the script rewrites it if you choose another.
+  A windows.printSupportVirtualPrinterWorkflow extension requires desktop4:SupportsMultipleInstances="true"
+  on its Application (MakeAppx error 80080204 otherwise).
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
   xmlns:printsupport2="http://schemas.microsoft.com/appx/manifest/printsupport/windows10/2"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap printsupport2 rescap">
@@ -28,7 +31,8 @@
   </Resources>
 
   <Applications>
-    <Application Id="ChuvadiPdf" Executable="ChuvadiPdfAgent.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="ChuvadiPdf" Executable="ChuvadiPdfAgent.exe" EntryPoint="Windows.FullTrustApplication"
+      desktop4:SupportsMultipleInstances="true">
       <uap:VisualElements
         DisplayName="ms-resource:AppDisplayName"
         Description="ms-resource:AppDescription"
