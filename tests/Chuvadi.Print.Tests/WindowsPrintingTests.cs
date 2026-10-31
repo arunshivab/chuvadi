@@ -67,8 +67,8 @@ public class WindowsPrintingTests
             Assert.Single(sink.Events);
             Assert.Equal(PdfPrinter, sink.Events[0].PrinterName);
             bool written = WaitForPdf(path, VerificationGroups.SpoolFileTimeoutMs);
-            // A freshly started GitHub runner has once needed more than a minute for its first spooled PDF:
-            // CI waits 3 minutes and then lets this one check go; on real PCs a missing file always fails
+            // The first spooled job on a fresh GitHub runner sometimes produces no file at all (waiting longer
+            // does not help): CI lets this one check go; on real PCs a missing file always fails
             // (also checked by ManualTests and WINDOWS-VERIFICATION.md).
             if (!written && VerificationGroups.OnHostedCi) return;
             Assert.True(written, "PDF not written: " + path);

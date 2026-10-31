@@ -18,16 +18,17 @@ namespace Chuvadi.Print.ManualTests
 
         /// <summary>
         /// True on a GitHub Actions runner. There the spooler usually writes the "Microsoft Print to PDF" file
-        /// within seconds, but a freshly started runner has once taken longer than a minute for its first job.
-        /// So CI waits longer (<see cref="SpoolFileTimeoutMs"/>) and, if the file still has not appeared, reports
-        /// the file check as skipped instead of failed. Everything Chuvadi.Print does (StartDoc, pages, EndDoc,
-        /// job id, audit) is still checked there, and on real PCs a missing file always fails.
+        /// within seconds, but the first spooled job on a freshly started runner sometimes produces no file at all
+        /// (seen in 2 of the first 3 CI runs; a later job on the same runner then wrote its PDF). Waiting longer
+        /// does not help, so CI waits the normal time and then reports the file check as skipped instead of failed.
+        /// Everything Chuvadi.Print does (StartDoc, pages, EndDoc, job id, audit) is still checked there, and on
+        /// real PCs a missing file always fails.
         /// </summary>
         public static bool OnHostedCi =>
             string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>How long to wait for a spooled PDF: 3 minutes on hosted CI, 1 minute elsewhere.</summary>
-        public static int SpoolFileTimeoutMs => OnHostedCi ? 180_000 : 60_000;
+        /// <summary>How long to wait for a spooled PDF (1 minute, on CI and on real PCs).</summary>
+        public static int SpoolFileTimeoutMs => 60_000;
 
         private static Action[] A3Groups() => new Action[]
         {
@@ -65,7 +66,7 @@ namespace Chuvadi.Print.ManualTests
                 {
                     if (OnHostedCi)
                         throw new VerificationSkippedException("spooler job " + target.LastSpoolJobId +
-                            " accepted; no PDF from this CI runner's spooler within 3 minutes (checked on real PCs instead)");
+                            " accepted; this CI runner's spooler wrote no PDF within 1 minute (checked on real PCs instead)");
                     Require(false, "PDF written by the spooler: " + path);
                 }
             }

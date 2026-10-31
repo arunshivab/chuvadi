@@ -69,13 +69,17 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - **Product: "Chuvadi PDF" virtual printer** — separate product consuming the Chuvadi.Print nupkg
   (decision D-11): a Print Support App virtual printer on Windows 11, a "Microsoft Print to PDF" queue
   fallback on Windows 10, an IPP server later. No v3/v4 driver, port monitor or print processor.
-- **A6 (this layer)** — `Chuvadi.Print.Remote` (decision D-26): `PrintHub`, a host-agnostic hub protocol
+- **A6** — `Chuvadi.Print.Remote` (decision D-26): `PrintHub`, a host-agnostic hub protocol
   handler the host app embeds (LiPi Connect is the reference host) behind any web stack; `PrintAgent`, which
   dials out, long-polls, downloads with resume and SHA-256 check, prints through any `IPrintTarget` /
   `IDocumentTarget` and reports progress and the outcome; per-agent tokens with rotation and revocation
   (`TokenAgentAuthenticator`); pluggable job storage (`IPrintJobStore`: durable `FileJobStore`,
   `InMemoryJobStore`); leases with expiry and retry limits; idempotent job ids; a crash-safe agent journal
   so a job is never printed twice. Wire protocol v1. (0.5.0)
+
+- **1.0.0-rc.1 (this release)**: A1–A6 complete, public API frozen for 1.x (additive changes only).
+  User guide: [GUIDE.md](GUIDE.md). Release gate: [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md), then the
+  tag `print-v1.0.0`.
 
 ## Build & test conventions (inherited from the monorepo)
 

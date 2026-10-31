@@ -17,10 +17,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>ChuvadiPdfPrinter</RootNamespace>
     <AssemblyName>ChuvadiPdfPrinter.Core</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <IsPackable>false</IsPackable>
     <UseChuvadiPrintPackage Condition="'$(UseChuvadiPrintPackage)' == ''">false</UseChuvadiPrintPackage>
-    <ChuvadiPrintPackageVersion Condition="'$(ChuvadiPrintPackageVersion)' == ''">0.5.0</ChuvadiPrintPackageVersion>
+    <ChuvadiPrintPackageVersion Condition="'$(ChuvadiPrintPackageVersion)' == ''">1.0.0-rc.1</ChuvadiPrintPackageVersion>
     <ChuvadiPrintPdfPackageVersion Condition="'$(ChuvadiPrintPdfPackageVersion)' == ''">0.1.0</ChuvadiPrintPdfPackageVersion>
   </PropertyGroup>
 

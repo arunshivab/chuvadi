@@ -2,7 +2,7 @@
 
 Pure-BCL printing for .NET — zero NuGet dependencies, part of the [Chuvadi](https://github.com/arunshivab/chuvadi) family.
 
-What v0.5 gives you:
+What v1.0 gives you:
 
 - **Device-independent print settings** with every choice exposed: page selection, copies, collation, duplex, colour, all paper sizes, all four orientations, six scale modes, nine alignments, margins, auto-rotate, silent printing.
 - **`PrintJob`**: plans the job, renders one page at a time (memory does not grow with document length), lays each page out on the sheet, converts colour, and sends it to a print target. One audit event per job.
@@ -121,5 +121,7 @@ using var agent = new PrintAgent(new PrintAgentOptions
 });
 await agent.RunAsync(stoppingToken);              // reconnects on its own
 ```
+
+Full guide: [docs/Chuvadi.Print/GUIDE.md](https://github.com/arunshivab/chuvadi/blob/main/docs/Chuvadi.Print/GUIDE.md).
 
 MIT licensed.
