@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Chuvadi PDF virtual printer - core logic. Plain net10.0, no Windows APIs except the
+    [SupportedOSPlatform("windows")] forwarder, so almost everything is unit-tested on any OS.
+
+    Chuvadi.Print is referenced as a project by default (monorepo development). Build with
+    -p:UseChuvadiPrintPackage=true to consume the Chuvadi.Print nupkg instead (decision D-11);
+    the package must then be available from a configured NuGet source (e.g. the local dist folder).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>ChuvadiPdfPrinter</RootNamespace>
+    <AssemblyName>ChuvadiPdfPrinter.Core</AssemblyName>
+    <Version>0.1.0</Version>
+    <IsPackable>false</IsPackable>
+    <UseChuvadiPrintPackage Condition="'$(UseChuvadiPrintPackage)' == ''">false</UseChuvadiPrintPackage>
+    <ChuvadiPrintPackageVersion Condition="'$(ChuvadiPrintPackageVersion)' == ''">0.4.0</ChuvadiPrintPackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseChuvadiPrintPackage)' != 'true'">
+    <ProjectReference Include="..\..\..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseChuvadiPrintPackage)' == 'true'">
+    <PackageReference Include="Chuvadi.Print" Version="$(ChuvadiPrintPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ChuvadiPdfPrinter.Tests" />
+  </ItemGroup>
+
+</Project>

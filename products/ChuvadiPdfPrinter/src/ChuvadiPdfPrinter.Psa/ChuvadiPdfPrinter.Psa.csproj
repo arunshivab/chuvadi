@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Windows 11 (24H2, build 26100+) Print Support App virtual printers: "Chuvadi PDF" (Save As) and
+    "Chuvadi PDF (Auto-save)". This is the background task, authored as a C#/WinRT component.
+
+    On Windows the project builds as a WinRT component (CsWinRT) for packaging by scripts\build-psa.ps1.
+    On other systems it compiles as a plain library against the same Windows SDK projection, so the task
+    code is type-checked everywhere; the component and MSIX can only be produced on Windows.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>ChuvadiPdfPrinter.Psa</RootNamespace>
+    <AssemblyName>ChuvadiPdfPrinter.Psa</AssemblyName>
+    <Version>0.1.0</Version>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+    <CsWinRTComponent>true</CsWinRTComponent>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ChuvadiPdfPrinter.Core\ChuvadiPdfPrinter.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Package\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" LinkBase="Package" />
+  </ItemGroup>
+
+</Project>
