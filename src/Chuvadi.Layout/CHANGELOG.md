@@ -2,6 +2,21 @@
 
 ## 0.1.0 (unreleased)
 
+D-116 A5 (substitutes) and the Q6 / Q7 answers:
+
+- Chuvadi.Layout.Fonts adds Gelasio 1.008 (Regular, Bold, Italic, Bold Italic) for Georgia and Selawik 1.01 (Regular,
+  Bold, Light, Semilight, Semibold) for Segoe UI: 29 faces, 8,264,644 bytes (+838,008). Selawik Light and Semilight
+  both state weight 300; each is found by its own family ("Selawik Light", "Selawik Semilight"), which "Segoe UI
+  Light" and "Segoe UI Semilight" map to (tested). Georgia → Gelasio and Segoe UI → Selawik replace Liberation Serif
+  and Liberation Sans as the first substitute; both stay non-metric (`NonMetricFontSubstitution`) until measured
+  against the real fonts with the new `ManualTests --compare-metrics` (read-only, run on Windows).
+- "Noto Sans Tamil" and "Noto Sans Devanagari" map to LiPi Sans Tamil / Devanagari as metric-compatible substitutes
+  (measured: identical widths and vertical metrics, Regular and Bold).
+- New warning `MetricFontSubstitution` (Info, once per family) for every metric-compatible substitution (Calibri →
+  Carlito, Arial → Liberation Sans, Noto Sans Tamil → LiPi Sans Tamil, ...), so no substitution is silent.
+- Output: no page or SVG changes in the corpus and fixtures (none asks for Georgia, Segoe UI or Noto); 86 of 88 files
+  gain one to five `MetricFontSubstitution` Info warnings.
+
 D-116 A4 (font search order and embedded subset fonts):
 
 - Search order: fonts embedded in the document, then installed fonts (with `AllowSystemFonts`), then `FontSources`,

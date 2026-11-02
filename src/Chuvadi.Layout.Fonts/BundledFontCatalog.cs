@@ -16,6 +16,10 @@ namespace Chuvadi.Layout.Fonts
             ("Carlito-BoldItalic.ttf", "Carlito", "Carlito", "Bold Italic", "Carlito Bold Italic", "Carlito-BoldItalic", 700, true, 5),
             ("Carlito-Italic.ttf", "Carlito", "Carlito", "Italic", "Carlito Italic", "Carlito-Italic", 400, true, 5),
             ("Carlito-Regular.ttf", "Carlito", "Carlito", "Regular", "Carlito Regular", "Carlito-Regular", 400, false, 5),
+            ("Gelasio-Bold.ttf", "Gelasio", "Gelasio", "Bold", "Gelasio Bold", "Gelasio-Bold", 700, false, 5),
+            ("Gelasio-BoldItalic.ttf", "Gelasio", "Gelasio", "Bold Italic", "Gelasio Bold Italic", "Gelasio-BoldItalic", 700, true, 5),
+            ("Gelasio-Italic.ttf", "Gelasio", "Gelasio", "Italic", "Gelasio Italic", "Gelasio-Italic", 400, true, 5),
+            ("Gelasio-Regular.ttf", "Gelasio", "Gelasio", "Regular", "Gelasio Regular", "Gelasio-Regular", 400, false, 5),
             ("LiberationMono-Bold.ttf", "Liberation Mono", "Liberation Mono", "Bold", "Liberation Mono Bold", "LiberationMono-Bold", 700, false, 5),
             ("LiberationMono-BoldItalic.ttf", "Liberation Mono", "Liberation Mono", "Bold Italic", "Liberation Mono Bold Italic", "LiberationMono-BoldItalic", 700, true, 5),
             ("LiberationMono-Italic.ttf", "Liberation Mono", "Liberation Mono", "Italic", "Liberation Mono Italic", "LiberationMono-Italic", 400, true, 5),
@@ -28,6 +32,14 @@ namespace Chuvadi.Layout.Fonts
             ("LiberationSerif-BoldItalic.ttf", "Liberation Serif", "Liberation Serif", "Bold Italic", "Liberation Serif Bold Italic", "LiberationSerif-BoldItalic", 700, true, 5),
             ("LiberationSerif-Italic.ttf", "Liberation Serif", "Liberation Serif", "Italic", "Liberation Serif Italic", "LiberationSerif-Italic", 400, true, 5),
             ("LiberationSerif-Regular.ttf", "Liberation Serif", "Liberation Serif", "Regular", "Liberation Serif", "LiberationSerif", 400, false, 5),
+            // Selawik's Light, Semilight and Semibold are separate legacy families in their Windows names ("Selawik
+            // Light", ...; typographic family "Selawik"). Light and Semilight both state weight 300, so they are found
+            // by family, one file each, never by weight (D-116 A5): "Segoe UI Light" maps to "Selawik Light".
+            ("selawk.ttf", "Selawik", "Selawik", "Regular", "Selawik", "Selawik-Regular", 400, false, 5),
+            ("selawkb.ttf", "Selawik", "Selawik", "Bold", "Selawik Bold", "Selawik-Bold", 700, false, 5),
+            ("selawkl.ttf", "Selawik Light", "Selawik", "Regular", "Selawik Light", "Selawik-Light", 300, false, 5),
+            ("selawksb.ttf", "Selawik Semibold", "Selawik", "Regular", "Selawik Semibold", "Selawik-Semibold", 600, false, 5),
+            ("selawksl.ttf", "Selawik Semilight", "Selawik", "Regular", "Selawik Semilight", "Selawik-Semilight", 300, false, 5),
         };
     }
 }

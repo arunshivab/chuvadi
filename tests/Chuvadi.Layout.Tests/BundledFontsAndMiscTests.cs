@@ -9,7 +9,7 @@ public class BundledFontsTests
     public void Every_catalog_entry_loads_and_matches_its_parsed_identity()
     {
         IReadOnlyList<FontFaceDescriptor> faces = BundledFontSource.Instance.GetFaces();
-        Assert.Equal(20, faces.Count);
+        Assert.Equal(29, faces.Count);
         foreach (FontFaceDescriptor d in faces)
         {
             FontFace f = BundledFontSource.Instance.LoadFace(d);
@@ -26,7 +26,7 @@ public class BundledFontsTests
     [Fact]
     public void Pack_has_four_styles_of_each_metric_compatible_family()
     {
-        foreach (string family in new[] { "Liberation Sans", "Liberation Serif", "Liberation Mono", "Carlito", "Caladea" })
+        foreach (string family in new[] { "Liberation Sans", "Liberation Serif", "Liberation Mono", "Carlito", "Caladea", "Gelasio" })
         {
             List<FontFaceDescriptor> styles = BundledFontSource.Instance.GetFaces().Where(f => f.FamilyName == family).ToList();
             Assert.Equal(4, styles.Count);
@@ -64,6 +64,41 @@ public class BundledFontsTests
         Assert.Throws<ArgumentException>(() => BundledFontSource.ReadResource("Nope.ttf"));
         // The LiPi files are no longer in this pack (D-113, D-115).
         Assert.Throws<ArgumentException>(() => BundledFontSource.ReadResource("LiPi-Sans-Tamil-Regular.ttf"));
+    }
+
+    [Theory]
+    [InlineData("Segoe UI", 400, "selawk.ttf", 400)]
+    [InlineData("Segoe UI", 700, "selawkb.ttf", 700)]
+    [InlineData("Segoe UI Light", 400, "selawkl.ttf", 300)]
+    [InlineData("Segoe UI Semilight", 400, "selawksl.ttf", 300)]
+    [InlineData("Segoe UI Semibold", 400, "selawksb.ttf", 600)]
+    [InlineData("Selawik", 300, "selawk.ttf", 400)]
+    [InlineData("Selawik Light", 400, "selawkl.ttf", 300)]
+    [InlineData("Selawik Semilight", 400, "selawksl.ttf", 300)]
+    public void Selawik_faces_are_mapped_by_file(string requested, int weight, string file, int faceWeight)
+    {
+        // D-116 A5 / Q7: Light and Semilight both state weight 300; each is found by its own family, one file each.
+        FontResolver r = TestFonts.BundledResolver();
+        FontResolution res = r.Resolve(new FontRequest(requested, weight));
+        Assert.Equal(file, res.Face.SourceName);
+        Assert.Equal(faceWeight, res.Face.Weight);
+        Assert.False(res.SyntheticBold);
+        Assert.Equal(requested.StartsWith("Segoe", StringComparison.Ordinal) ? FontMatchKind.Substitute : FontMatchKind.Exact, res.Kind);
+    }
+
+    [Fact]
+    public void Georgia_maps_to_gelasio_and_noto_indic_to_lipi()
+    {
+        FontResolver r = TestFonts.BundledResolver();
+        FontResolution georgia = r.Resolve(new FontRequest("Georgia", 700, true));
+        Assert.Equal("Gelasio Bold Italic", georgia.Face.FullName);
+        Assert.Equal(FontMatchKind.Substitute, georgia.Kind);   // non-metric until measured against Georgia
+        FontResolution tamil = r.Resolve(new FontRequest("Noto Sans Tamil", 700));
+        Assert.Equal("LiPi Sans Tamil Bold", tamil.Face.FullName);
+        Assert.Equal(FontMatchKind.MetricCompatibleSubstitute, tamil.Kind);
+        FontResolution deva = r.Resolve(new FontRequest("Noto Sans Devanagari"));
+        Assert.Equal("LiPi Sans Devanagari", deva.Face.FamilyName);
+        Assert.True(deva.IsMetricFaithful);
     }
 
     [Fact]

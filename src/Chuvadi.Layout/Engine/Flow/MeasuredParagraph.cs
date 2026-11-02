@@ -602,6 +602,11 @@ namespace Chuvadi.Layout.Engine.Flow
                 ctx.Warn(LayoutWarningCodes.NonMetricFontSubstitution, LayoutWarningSeverity.Fidelity,
                     $"'{family}' is not available; '{r.Face.FamilyName}' is used and is not metric-compatible, so line and page breaks may differ.", family);
             }
+            else if (r.Kind == FontMatchKind.MetricCompatibleSubstitute)
+            {
+                ctx.Warn(LayoutWarningCodes.MetricFontSubstitution, LayoutWarningSeverity.Info,
+                    $"'{family}' is not available; the metric-compatible '{r.Face.FamilyName}' is used (same advance widths and line metrics), so line and page breaks are kept.", family);
+            }
             return r;
         }
 

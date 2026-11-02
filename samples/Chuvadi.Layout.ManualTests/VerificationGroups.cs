@@ -42,7 +42,7 @@ namespace Chuvadi.Layout.ManualTests
                 Check(f.FamilyName == d.FamilyName && f.Weight == d.Weight && f.IsItalic == d.IsItalic, "catalog mismatch for " + d.Key);
                 n++;
             }
-            Check(n == 20, "expected 20 bundled faces, got " + n);
+            Check(n == 29, "expected 29 bundled faces, got " + n);
             Check(BuiltInFontSource.Instance.GetFaces().Count == 22, "expected 22 built-in LiPi faces");
         }
 

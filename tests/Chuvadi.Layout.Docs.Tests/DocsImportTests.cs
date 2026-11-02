@@ -549,7 +549,8 @@ public class DocsWordFixtureTests
         Assert.Equal(7, images.Count);
         LayoutBox header = page.Boxes.First(b => b.Kind == LayoutBoxKind.Header);
         Assert.Equal(3, images.Count(i => i.Destination.Bottom <= header.Rect.Bottom + 0.5));
-        Assert.Empty(doc.Warnings);
+        // Only the Info notes of metric-compatible substitutions (Calibri → Carlito; D-116 Q6), nothing that changes the output.
+        Assert.All(doc.Warnings, w => Assert.Equal(LayoutWarningCodes.MetricFontSubstitution, w.Code));
     }
 
     [Fact]

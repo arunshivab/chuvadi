@@ -51,8 +51,9 @@ public class FontResolverTests
     [Fact]
     public void Non_metric_substitute_is_flagged()
     {
+        // D-116 A5: Segoe UI → Selawik (closer design; non-metric until measured), Liberation Sans after it.
         FontResolution res = TestFonts.BundledResolver().Resolve(new FontRequest("Segoe UI"));
-        Assert.Equal("Liberation Sans", res.Face.FamilyName);
+        Assert.Equal("Selawik", res.Face.FamilyName);
         Assert.Equal(FontMatchKind.Substitute, res.Kind);
         Assert.False(res.IsMetricFaithful);
     }
@@ -223,5 +224,37 @@ public class FontSearchOrderTests
         using LaidOutDocument laid = LayOut("Hello world", out _);
         laid.GetPage(0);
         Assert.DoesNotContain(laid.Warnings, w => w.Code == LayoutWarningCodes.EmbeddedFontMissingGlyphs);
+    }
+}
+
+/// <summary>D-116 A5 / Q6: every metric-compatible substitution is announced, at Info, once per family.</summary>
+public class MetricSubstitutionWarningTests
+{
+    [Fact]
+    public void Metric_compatible_substitutions_raise_an_info_warning_once_per_family()
+    {
+        CharacterFormat calibri = new CharacterFormat { FontFamily = "Calibri", FontSize = 11 };
+        CharacterFormat tamil = new CharacterFormat { FontFamily = "Noto Sans Tamil", FontSize = 11 };
+        FlowDocument doc = Flow.Doc(
+            FlowParagraph.Of("One", calibri, new ParagraphFormat()),
+            FlowParagraph.Of("Two", calibri, new ParagraphFormat()),
+            FlowParagraph.Of("தமிழ்", tamil, new ParagraphFormat()));
+        using LaidOutDocument laid = DocumentLayout.Open(doc, Flow.Options());
+        laid.GetPage(0);
+        List<LayoutWarning> metric = laid.Warnings.Where(w => w.Code == LayoutWarningCodes.MetricFontSubstitution).ToList();
+        Assert.Equal(2, metric.Count);
+        Assert.All(metric, w => Assert.Equal(LayoutWarningSeverity.Info, w.Severity));
+        Assert.Contains(metric, w => w.Location == "Calibri" && w.Message.Contains("'Carlito'", StringComparison.Ordinal));
+        Assert.Contains(metric, w => w.Location == "Noto Sans Tamil" && w.Message.Contains("'LiPi Sans Tamil'", StringComparison.Ordinal));
+        Assert.DoesNotContain(laid.Warnings, w => w.Code == LayoutWarningCodes.NonMetricFontSubstitution);
+    }
+
+    [Fact]
+    public void An_exact_family_raises_no_substitution_warning()
+    {
+        FlowDocument doc = Flow.Doc(FlowParagraph.Of("Carlito itself", new CharacterFormat { FontFamily = "Carlito", FontSize = 11 }, new ParagraphFormat()));
+        using LaidOutDocument laid = DocumentLayout.Open(doc, Flow.Options());
+        laid.GetPage(0);
+        Assert.DoesNotContain(laid.Warnings, w => w.Code is LayoutWarningCodes.MetricFontSubstitution or LayoutWarningCodes.NonMetricFontSubstitution);
     }
 }

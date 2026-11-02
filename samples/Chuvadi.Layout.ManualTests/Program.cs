@@ -13,6 +13,9 @@ namespace Chuvadi.Layout.ManualTests
         ///   --font-report           prints how the Office core fonts resolve, with and without system fonts,
         ///                           and their Excel max-digit width and Word line height (run on Windows to compare
         ///                           real Calibri/Cambria/Arial with the bundled metric-compatible substitutes).
+        ///   --compare-metrics [dir] compares installed fonts (default C:\Windows\Fonts; read only) with their
+        ///                           substitutes per codepoint: Georgia/Gelasio, Segoe UI/Selawik, the Office core fonts,
+        ///                           Noto Sans Tamil and Devanagari/LiPi (D-116 A5).
         /// </summary>
         public static int Main(string[] args)
         {
@@ -42,6 +45,11 @@ namespace Chuvadi.Layout.ManualTests
             if (HasFlag(args, "--font-report"))
             {
                 FontReport.Write(Console.Out);
+            }
+
+            if (HasFlag(args, "--compare-metrics"))
+            {
+                MetricCompare.Write(Console.Out, Value(args, "--compare-metrics", @"C:\Windows\Fonts") ?? @"C:\Windows\Fonts");
             }
 
             string? previewFolder = Value(args, "--preview", "layout-preview");
