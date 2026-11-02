@@ -6,6 +6,9 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   `<ProjectReference>`, and does not use `shared/Chuvadi.Internal`. Only the BCL (including
   `CodePagesEncodingProvider` for legacy mail charsets). The CI grep over `src/` and `shared/` enforces
   the no-third-party rule.
+  Code provenance (D-53, D-106): the Markdown parser and part of the HTML renderer follow the cmark and
+  cmark-gfm C sources; their licence ships in `THIRD-PARTY-NOTICES.txt` until a clean-room rewrite from
+  the CommonMark and GFM specifications replaces that code and the notice is removed.
 - **M02 — Untrusted input is the normal case.** Every public entry point takes a `CancellationToken`
   and honours `MarkupLimits`. No input can cause a stack overflow (all tree walks are iterative; nesting
   past `MaxNestingDepth` is flattened, not rejected), super-linear time (parser work budget, linear
