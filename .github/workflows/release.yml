@@ -4,11 +4,14 @@ name: Release
 #   git tag -s sheets-v1.1.1 -m "Chuvadi.Sheets 1.1.1" && git push origin sheets-v1.1.1
 #   git tag -s docs-v1.0.0   -m "Chuvadi.Docs 1.0.0"   && git push origin docs-v1.0.0
 #   git tag -s print-v0.1.0  -m "Chuvadi.Print 0.1.0"  && git push origin print-v0.1.0
+#   git tag -s layout-v0.1.0        -m "Chuvadi.Layout 0.1.0"        && git push origin layout-v0.1.0
+#   git tag -s layout-fonts-v0.1.0  -m "Chuvadi.Layout.Fonts 0.1.0"  && git push origin layout-fonts-v0.1.0
+#   git tag -s layout-markup-v0.1.0 -m "Chuvadi.Layout.Markup 0.1.0" && git push origin layout-markup-v0.1.0
 # The prefix selects which package is built, tested, packed, and released.
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*", "print-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*", "layout-v*", "layout-fonts-v*", "layout-markup-v*"]
 
 permissions:
   contents: write
@@ -32,6 +35,9 @@ jobs:
             sheets-v*) NAME="Chuvadi.Sheets" ;;
             docs-v*)   NAME="Chuvadi.Docs" ;;
             print-v*)  NAME="Chuvadi.Print" ;;
+            layout-v*)        NAME="Chuvadi.Layout" ;;
+            layout-fonts-v*)  NAME="Chuvadi.Layout.Fonts" ;;
+            layout-markup-v*) NAME="Chuvadi.Layout.Markup" ;;
             *) echo "::error::Unrecognized tag prefix: $TAG"; exit 1 ;;
           esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
@@ -50,9 +56,12 @@ jobs:
           dotnet test tests/Chuvadi.Sheets.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Docs.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Print.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Layout.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Layout.Markup.Tests -c Release --no-build
           dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
       - name: Pack ${{ steps.pkg.outputs.name }}
         run: dotnet pack "src/${{ steps.pkg.outputs.name }}/${{ steps.pkg.outputs.name }}.csproj" -c Release --no-build

@@ -8,6 +8,9 @@
 |---|---|---|
 | **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v1.1.2 |
 | **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v1.0.0 |
+| **[Chuvadi.Layout](src/Chuvadi.Layout/README.md)** | page layout of docx, xlsx and text into fixed pages (display list, SVG) | v0.1.0 (preview) |
+| **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible, Indic) | v0.1.0 (preview) |
+| **[Chuvadi.Layout.Markup](src/Chuvadi.Layout.Markup/README.md)** | Markdown and sanitized HTML (mail, pages) layout through Chuvadi.Markup | v0.1.0 (preview) |
 | [Chuvadi.Pdf](https://github.com/arunshivab/chuvadi-pdf) | pdf | v2.7.0 (separate repo) |
 
 ## Shared foundation
@@ -30,6 +33,14 @@ doc.SaveTo("report.docx");
 // Word templates: design in Word, fill from code
 DocxTemplate.Fill("invoice-template.docx", "invoice-0042.docx",
     new Dictionary<string, string> { ["Total"] = "Rs 54,000.00" });
+
+// Layout: paginate a Word or Excel file into pages (SVG here; PDF through Chuvadi.Layout.Pdf)
+using var laidOut = DocumentLayout.Open(File.OpenRead("report.docx"));
+for (int i = 0; i < laidOut.ResolvePageCount(); i++)
+{
+    using var svg = File.Create($"page-{i + 1}.svg");
+    LayoutSvg.Write(laidOut.GetPage(i), svg);
+}
 ```
 
 ## Verification
@@ -38,7 +49,7 @@ Every package ships with an xUnit suite plus an end-to-end manual verification s
 
 ## Releases
 
-Per-package tags: `sheets-v1.1.1`, `docs-v1.0.0`. See [RELEASING.md](RELEASING.md).
+Per-package tags: `sheets-v1.1.1`, `docs-v1.0.0`, `layout-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`. See [RELEASING.md](RELEASING.md).
 
 ## License
 
