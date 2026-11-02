@@ -1,16 +1,17 @@
 using Chuvadi.Docs.Word;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Fonts;
-using Chuvadi.Layout.Import;
+using Chuvadi.Layout.Docs;
+using Chuvadi.Layout.Tests;
 using Chuvadi.Layout.Model;
 
-namespace Chuvadi.Layout.Tests;
+namespace Chuvadi.Layout.Docs.Tests;
 
 /// <summary>Chuvadi.Docs 1.6.0 content through the docx importer: notes, revisions, comments, symbols, text boxes, floating tables, embedded fonts.</summary>
-public class DocxImport160Tests
+public class DocsImport160Tests
 {
     private static LaidOutDocument Lay(Document doc, LayoutOptions? options = null)
-        => DocumentLayout.OpenDocx(new MemoryStream(DocxImportTests.Save(doc)), null, options ?? DocxImportTests.Options());
+        => DocsLayout.Open(new MemoryStream(DocsImportTests.Save(doc)), null, options ?? DocsImportTests.Options());
 
     private static string AllText(LaidOutDocument doc)
         => string.Join("\n", Enumerable.Range(0, doc.ResolvePageCount()).Select(i => doc.GetPage(i).GetText()));
@@ -98,7 +99,7 @@ public class DocxImport160Tests
         Assert.DoesNotContain("A comment.", text, StringComparison.Ordinal);
 
         // A Document passed in directly is not changed: deleted runs are skipped instead.
-        using LaidOutDocument direct = DocumentLayout.Open(d, null, DocxImportTests.Options());
+        using LaidOutDocument direct = DocsLayout.Open(d, null, DocsImportTests.Options());
         Assert.Contains("Dose 50 Gy daily.", direct.GetPage(0).GetText(), StringComparison.Ordinal);
         Assert.Contains(d.Blocks.OfType<Paragraph>().First().Runs, r => r.IsDeleted);
     }
@@ -168,7 +169,7 @@ public class DocxImport160Tests
         t.Format.FloatingPosition = new TableFloatingPosition { HorizontalAnchor = TableFloatAnchor.Margin, XPt = 200 };
         t.AddRow("cell");
         List<LayoutWarning> warnings = new List<LayoutWarning>();
-        FlowDocument flow = DocxImportTests.Import(d, null, warnings);
+        FlowDocument flow = DocsImportTests.Import(d, null, warnings);
         FlowTable ft = flow.Sections[0].Blocks.OfType<FlowTable>().Single();
         Assert.Equal(200, ft.Format.Indent, 3);
         Assert.Contains(warnings, w => w.Message.Contains("Floating tables", StringComparison.Ordinal));

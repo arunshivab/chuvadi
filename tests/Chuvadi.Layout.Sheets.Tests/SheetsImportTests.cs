@@ -1,15 +1,16 @@
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Fonts;
-using Chuvadi.Layout.Import;
+using Chuvadi.Layout.Sheets;
+using Chuvadi.Layout.Tests;
 using Chuvadi.Layout.Model;
 using Chuvadi.Sheets.Excel;
 using CellAddress = Chuvadi.Layout.Model.CellAddress;
 using SheetsBorderStyle = Chuvadi.Sheets.Excel.BorderStyle;
 
-namespace Chuvadi.Layout.Tests;
+namespace Chuvadi.Layout.Sheets.Tests;
 
 /// <summary>Workbooks written with Chuvadi.Sheets, read back through the xlsx importer (L7).</summary>
-public class XlsxImportTests
+public class SheetsImportTests
 {
     internal static LayoutOptions Options()
     {
@@ -25,8 +26,8 @@ public class XlsxImportTests
         return ms.ToArray();
     }
 
-    internal static GridWorkbook Import(Workbook wb, XlsxImportOptions? o = null, List<LayoutWarning>? warnings = null)
-        => XlsxImporter.Import(new MemoryStream(Save(wb)), o, Options(), warnings is null ? null : warnings.Add);
+    internal static GridWorkbook Import(Workbook wb, SheetsImportOptions? o = null, List<LayoutWarning>? warnings = null)
+        => SheetsImporter.Import(new MemoryStream(Save(wb)), o, Options(), warnings is null ? null : warnings.Add);
 
     internal static Workbook Sample()
     {
@@ -123,7 +124,7 @@ public class XlsxImportTests
         Assert.Equal(612, ImportWithCulture(Sample(), "es-MX").Sheets[0].PageSetup.PaperWidth, 1);
         Assert.Equal(595.3, ImportWithCulture(Sample(), "en-IN").Sheets[0].PageSetup.PaperWidth, 1);
         Assert.Equal(595.3, ImportWithCulture(Sample(), "en-GB").Sheets[0].PageSetup.PaperWidth, 1);
-        Assert.Equal(612, Import(Sample(), new XlsxImportOptions { DefaultPaperSizeCode = 1 }).Sheets[0].PageSetup.PaperWidth, 1);
+        Assert.Equal(612, Import(Sample(), new SheetsImportOptions { DefaultPaperSizeCode = 1 }).Sheets[0].PageSetup.PaperWidth, 1);
         Assert.Equal(PaperDefaults.Letter, PaperDefaults.ForCulture(new System.Globalization.CultureInfo("en")));
     }
 
@@ -131,7 +132,7 @@ public class XlsxImportTests
     {
         LayoutOptions o = Options();
         o.Culture = new System.Globalization.CultureInfo(culture);
-        return XlsxImporter.Import(new MemoryStream(Save(wb)), null, o);
+        return SheetsImporter.Import(new MemoryStream(Save(wb)), null, o);
     }
 
     [Fact]
@@ -156,8 +157,8 @@ public class XlsxImportTests
         GridSheet g = Assert.Single(book.Sheets);
         Assert.True(g.Rows[3].Hidden);
         Assert.True(g.Columns[1].Hidden);
-        Assert.Equal(2, Import(wb, new XlsxImportOptions { IncludeHiddenSheets = true }).Sheets.Count);
-        Assert.Equal("Secret", Import(wb, new XlsxImportOptions { SheetNames = new[] { "secret" }, IncludeHiddenSheets = true }).Sheets[0].Name);
+        Assert.Equal(2, Import(wb, new SheetsImportOptions { IncludeHiddenSheets = true }).Sheets.Count);
+        Assert.Equal("Secret", Import(wb, new SheetsImportOptions { SheetNames = new[] { "secret" }, IncludeHiddenSheets = true }).Sheets[0].Name);
     }
 
     [Fact]
@@ -195,7 +196,7 @@ public class XlsxImportTests
         Assert.Equal(0.9, large.Length, 3); // Excel's default maximum length is 90%
         Assert.Equal(LayoutColor.FromHex("638EC6"), large.Color);
 
-        GridSheet plain = Import(wb, new XlsxImportOptions { ApplyConditionalFormats = false }).Sheets[0];
+        GridSheet plain = Import(wb, new SheetsImportOptions { ApplyConditionalFormats = false }).Sheets[0];
         Assert.Null(plain.GetCell(3, 0)!.Style.Fill);
         Assert.Null(plain.GetCell(4, 1)!.DataBar);
     }
@@ -210,13 +211,13 @@ public class XlsxImportTests
         Assert.Null(g.GetCell(2, 1)!.Style.Fill);
         Assert.Equal(LayoutColor.Black, g.GetCell(2, 1)!.Style.Font.Color);
         Assert.Equal(LayoutColor.Black, g.GetCell(2, 2)!.Style.BorderTop.Color);
-        Assert.Equal(LayoutColor.FromHex("FFFF00"), Import(wb, new XlsxImportOptions { HonourBlackAndWhite = false }).Sheets[0].GetCell(2, 1)!.Style.Fill);
+        Assert.Equal(LayoutColor.FromHex("FFFF00"), Import(wb, new SheetsImportOptions { HonourBlackAndWhite = false }).Sheets[0].GetCell(2, 1)!.Style.Fill);
     }
 
     [Fact]
     public void Open_sniffs_xlsx_and_lays_it_out()
     {
-        using LaidOutDocument doc = DocumentLayout.Open(new MemoryStream(Save(Sample())), LayoutSourceFormat.Auto, Options());
+        using LaidOutDocument doc = SheetsLayout.Open(new MemoryStream(Save(Sample())), null, Options());
         Assert.Equal(LayoutSourceFormat.Xlsx, doc.Source.Format);
         Assert.Equal(1, doc.ResolvePageCount());
         string text = doc.GetPage(0).GetText();
@@ -228,15 +229,15 @@ public class XlsxImportTests
     public void Encrypted_workbooks_need_the_password()
     {
         // Sample(), encrypted with password "secret" (Fixtures/encrypted/sample-secret.xlsx), read from memory only.
-        byte[] enc = DocxImportTests.Encrypted("sample-secret.xlsx").ToArray();
-        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => DocumentLayout.Open(new MemoryStream(enc), LayoutSourceFormat.Auto, Options()));
+        byte[] enc = EncryptedFixtures.Open("sample-secret.xlsx").ToArray();
+        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(enc), null, Options()));
         Assert.Contains("Password", ex.Message, StringComparison.Ordinal);
         LayoutOptions o = Options();
         o.Password = "secret";
-        using LaidOutDocument doc = DocumentLayout.Open(new MemoryStream(enc), LayoutSourceFormat.Auto, o);
+        using LaidOutDocument doc = SheetsLayout.Open(new MemoryStream(enc), null, o);
         Assert.Contains("Schedule of Charges", doc.GetPage(0).GetText(), StringComparison.Ordinal);
         o.Password = "wrong";
-        Assert.Throws<LayoutFormatException>(() => DocumentLayout.Open(new MemoryStream(enc), LayoutSourceFormat.Auto, o));
+        Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(enc), null, o));
     }
 
     [Fact]
@@ -244,7 +245,7 @@ public class XlsxImportTests
     {
         byte[] bytes = Save(Sample());
         Array.Resize(ref bytes, bytes.Length / 2);
-        Assert.Throws<LayoutFormatException>(() => DocumentLayout.OpenXlsx(new MemoryStream(bytes), null, Options()));
+        Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(bytes), null, Options()));
     }
 
     [Fact]
@@ -269,14 +270,14 @@ public class XlsxImportTests
 }
 
 /// <summary>Excel-produced workbooks from the Apache POI corpus (Fixtures/xlsx, Apache-2.0).</summary>
-public class XlsxExcelFixtureTests
+public class SheetsExcelFixtureTests
 {
     private static LaidOutDocument Open(string file, List<LayoutWarning>? _ = null)
     {
         LayoutOptions o = Flow.Options();
         o.Now = new DateTimeOffset(2026, 10, 28, 9, 0, 0, TimeSpan.FromHours(5.5));
         using FileStream fs = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "xlsx", file));
-        return DocumentLayout.Open(fs, LayoutSourceFormat.Auto, o);
+        return SheetsLayout.Open(fs, null, o);
     }
 
     [Fact]
@@ -314,7 +315,7 @@ public class XlsxExcelFixtureTests
     [Fact]
     public void Icon_sets_are_carried_and_drawn()
     {
-        GridWorkbook book = XlsxImporter.Import(File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "xlsx", "ConditionalFormattingSamples.xlsx")), null, XlsxImportTests.Options());
+        GridWorkbook book = SheetsImporter.Import(File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "xlsx", "ConditionalFormattingSamples.xlsx")), null, SheetsImportTests.Options());
         List<GridIcon> icons = book.Sheets.SelectMany(sh => sh.Cells().Select(c => c.Cell.Icon)).OfType<GridIcon>().ToList();
         Assert.NotEmpty(icons);
         Assert.Contains(icons, i => i.IconSet == "3Arrows");
@@ -333,7 +334,7 @@ public class XlsxExcelFixtureTests
         }
         GridWorkbook wb = new GridWorkbook();
         wb.Sheets.Add(sheet);
-        using LaidOutDocument doc = DocumentLayout.Open(wb, XlsxImportTests.Options());
+        using LaidOutDocument doc = DocumentLayout.Open(wb, SheetsImportTests.Options());
         LaidOutPage page = doc.GetPage(0);
         Assert.True(page.DisplayList.OfType<PathOp>().Count() >= 15);
         Assert.Contains(doc.Warnings, w => w.Code == Chuvadi.Layout.Engine.LayoutWarningCodes.IconSetApproximated);
@@ -346,15 +347,15 @@ public class XlsxExcelFixtureTests
         Sheet s = wb.AddSheet("RTL");
         s.Cell("A1").Value = "First";
         s.Cell("C1").Value = "Third";
-        GridSheet ltrSheet = XlsxImportTests.Import(wb).Sheets[0];
+        GridSheet ltrSheet = SheetsImportTests.Import(wb).Sheets[0];
         Assert.False(ltrSheet.RightToLeft);
         s.RightToLeft = true;
-        GridSheet rtlSheet = XlsxImportTests.Import(wb).Sheets[0];
+        GridSheet rtlSheet = SheetsImportTests.Import(wb).Sheets[0];
         Assert.True(rtlSheet.RightToLeft);
 
         static (double A, double C) Positions(Workbook book)
         {
-            using LaidOutDocument doc = DocumentLayout.Open(new MemoryStream(XlsxImportTests.Save(book)), LayoutSourceFormat.Auto, XlsxImportTests.Options());
+            using LaidOutDocument doc = SheetsLayout.Open(new MemoryStream(SheetsImportTests.Save(book)), null, SheetsImportTests.Options());
             List<LayoutBox> cells = doc.GetPage(0).Boxes.Where(b => b.Kind == LayoutBoxKind.SheetCell).ToList();
             return (cells.Single(b => b.Path.EndsWith("!A1", StringComparison.Ordinal)).Rect.X, cells.Single(b => b.Path.EndsWith("!C1", StringComparison.Ordinal)).Rect.X);
         }
@@ -373,7 +374,7 @@ public class XlsxExcelFixtureTests
         s.Cell("A1").Value = "shown";
         s.Cell("A3").Value = "also shown";
         s.Format.ZeroHeight = true;
-        GridSheet g = XlsxImportTests.Import(wb).Sheets[0];
+        GridSheet g = SheetsImportTests.Import(wb).Sheets[0];
         Assert.True(g.RowsHiddenByDefault);
         Assert.False(g.Rows[0].Hidden);
         Assert.False(g.Rows[2].Hidden);
@@ -381,7 +382,7 @@ public class XlsxExcelFixtureTests
 
         GridWorkbook book = new GridWorkbook();
         book.Sheets.Add(g);
-        using LaidOutDocument doc = DocumentLayout.Open(book, XlsxImportTests.Options());
+        using LaidOutDocument doc = DocumentLayout.Open(book, SheetsImportTests.Options());
         List<LayoutBox> cells = doc.GetPage(0).Boxes.Where(b => b.Kind == LayoutBoxKind.SheetCell).ToList();
         double y1 = cells.Single(b => b.Path.EndsWith("!A1", StringComparison.Ordinal)).Rect.Bottom;
         double y3 = cells.Single(b => b.Path.EndsWith("!A3", StringComparison.Ordinal)).Rect.Y;
@@ -395,10 +396,10 @@ public class XlsxExcelFixtureTests
         Sheet s = wb.AddSheet("F");
         s.Cell("A1").Value = 2.0;
         s.Cell("A2").Formula = "A1*3";
-        GridSheet values = XlsxImportTests.Import(wb).Sheets[0];
+        GridSheet values = SheetsImportTests.Import(wb).Sheets[0];
         Assert.NotEqual("=A1*3", values.GetCell(1, 0)?.DisplayText);
         s.View.ShowFormulas = true;
-        GridSheet formulas = XlsxImportTests.Import(wb).Sheets[0];
+        GridSheet formulas = SheetsImportTests.Import(wb).Sheets[0];
         GridCell f = formulas.GetCell(1, 0)!;
         Assert.Equal("=A1*3", f.DisplayText);
         Assert.Equal(CellHorizontalAlignment.Left, f.Style.HorizontalAlignment);
@@ -418,7 +419,7 @@ public class XlsxExcelFixtureTests
         s.Cell("A4").Value = 1234.5;
         s.Cell("A4").Style = new CellStyleBuilder().Format("_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)").Build();
         s.Columns[1].Width = 20;
-        GridSheet g = XlsxImportTests.Import(wb).Sheets[0]; // through a saved file: what Excel would hand over
+        GridSheet g = SheetsImportTests.Import(wb).Sheets[0]; // through a saved file: what Excel would hand over
 
         GridCell rich = g.GetCell(0, 0)!;
         Assert.Equal(2, rich.Runs!.Count);
@@ -436,7 +437,7 @@ public class XlsxExcelFixtureTests
 
         GridWorkbook book = new GridWorkbook();
         book.Sheets.Add(g);
-        using LaidOutDocument doc = DocumentLayout.Open(book, XlsxImportTests.Options());
+        using LaidOutDocument doc = DocumentLayout.Open(book, SheetsImportTests.Options());
         LaidOutPage page = doc.GetPage(0);
         Assert.Contains(page.DisplayList.OfType<LinkOp>(), l => l.Uri == "https://example.org/");
         Assert.Contains(page.DisplayList.OfType<LinkOp>(), l => l.Anchor == "'R'!A1");
@@ -456,12 +457,12 @@ public class XlsxExcelFixtureTests
         s.Cell("A1").Value = "noted";
         s.Comments.Add(new CellComment("A1", "Reviewer", "Reviewer:\nCheck this value") { Visible = true, Anchor = new CommentAnchor(2, 15, 1, 10, 4, 15, 5, 4) });
         s.PageSetup.CellComments = PrintCellComments.AtEnd;
-        GridWorkbook atEnd = XlsxImporter.Import(wb, null, XlsxImportTests.Options());
+        GridWorkbook atEnd = SheetsImporter.Import(wb, null, SheetsImportTests.Options());
         Assert.Equal(2, atEnd.Sheets.Count);
         Assert.StartsWith("Cell: A1\nComment: Reviewer:", atEnd.Sheets[1].GetCell(0, 0)!.DisplayText, StringComparison.Ordinal);
 
         s.PageSetup.CellComments = PrintCellComments.AsDisplayed;
-        GridWorkbook shown = XlsxImporter.Import(wb, null, XlsxImportTests.Options());
+        GridWorkbook shown = SheetsImporter.Import(wb, null, SheetsImportTests.Options());
         GridDrawing box = Assert.Single(shown.Sheets[0].Drawings);
         Assert.Equal(GridDrawingKind.Shape, box.Kind);
         Assert.Contains("Check this value", box.Text, StringComparison.Ordinal);
@@ -471,17 +472,17 @@ public class XlsxExcelFixtureTests
     [Fact]
     public void Printer_specific_paper_codes_fall_back_to_the_culture_paper()
     {
-        Workbook wb = XlsxImportTests.Sample();
+        Workbook wb = SheetsImportTests.Sample();
         wb.Sheets[0].PageSetup.PaperSizeCode = 256; // a driver-defined code
         List<LayoutWarning> warnings = new List<LayoutWarning>();
-        LayoutOptions india = XlsxImportTests.Options();
+        LayoutOptions india = SheetsImportTests.Options();
         india.Culture = new System.Globalization.CultureInfo("en-IN");
-        GridWorkbook a4 = XlsxImporter.Import(new MemoryStream(XlsxImportTests.Save(wb)), null, india, warnings.Add);
+        GridWorkbook a4 = SheetsImporter.Import(new MemoryStream(SheetsImportTests.Save(wb)), null, india, warnings.Add);
         Assert.Equal(595.3, a4.Sheets[0].PageSetup.PaperWidth, 1);
         Assert.Contains(warnings, w => w.Message.Contains("256", StringComparison.Ordinal));
-        LayoutOptions us = XlsxImportTests.Options();
+        LayoutOptions us = SheetsImportTests.Options();
         us.Culture = new System.Globalization.CultureInfo("en-US");
-        Assert.Equal(612, XlsxImporter.Import(new MemoryStream(XlsxImportTests.Save(wb)), null, us).Sheets[0].PageSetup.PaperWidth, 1);
+        Assert.Equal(612, SheetsImporter.Import(new MemoryStream(SheetsImportTests.Save(wb)), null, us).Sheets[0].PageSetup.PaperWidth, 1);
     }
 
     [Fact]
@@ -492,7 +493,7 @@ public class XlsxExcelFixtureTests
         sheet.Drawings.Add(new GridDrawing(GridDrawingKind.Shape) { Geometry = "line", X = 10, Y = 10, Width = 100, Height = 50, Line = LayoutColor.Black, FlipVertical = true });
         GridWorkbook wb = new GridWorkbook();
         wb.Sheets.Add(sheet);
-        using LaidOutDocument doc = DocumentLayout.Open(wb, XlsxImportTests.Options());
+        using LaidOutDocument doc = DocumentLayout.Open(wb, SheetsImportTests.Options());
         StrokeLineOp line = doc.GetPage(0).DisplayList.OfType<StrokeLineOp>().Single(l => l.X2 - l.X1 > 50);
         Assert.True(line.Y1 > line.Y2, "a vertically flipped line rises from left to right");
     }

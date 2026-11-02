@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Shared helpers of the Layout tests. -->
+  <ItemGroup>
+    <Compile Include="..\Chuvadi.Layout.Tests\Flow.cs" Link="Shared\Flow.cs" />
+    <Compile Include="..\Chuvadi.Layout.Tests\TestFonts.cs" Link="Shared\TestFonts.cs" />
+    <Compile Include="..\Chuvadi.Layout.Docs.Tests\EncryptedFixtures.cs" Link="Shared\EncryptedFixtures.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\xlsx\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Encrypted packages are embedded and read through a MemoryStream, never opened from a path (D-44). -->
+    <EmbeddedResource Include="Fixtures\encrypted\*.xlsx" LogicalName="Chuvadi.Layout.Sheets.Tests.Encrypted.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- NOTE: the SHIPPED LIBRARIES remain strictly pure-BCL (no PackageReference).
+       Test tooling below is dev-time only and never ships. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Sheets\Chuvadi.Layout.Sheets.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+  </ItemGroup>
+
+</Project>

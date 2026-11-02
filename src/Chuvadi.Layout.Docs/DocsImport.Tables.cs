@@ -5,9 +5,9 @@ using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
 using D = Chuvadi.Docs.Word;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
-    internal sealed partial class DocxImport
+    internal sealed partial class DocsImport
     {
         // Word's default cell margins (tblCellMar): 0.08 inch left and right, none top and bottom.
         private const double DefaultCellMarginSide = 5.4;
@@ -42,7 +42,7 @@ namespace Chuvadi.Layout.Import
 
         private FlowTable Table(D.DocTable t, int depth, double width)
         {
-            LayoutLimits.Check(nameof(LayoutLimits.MaxNestingDepth), _lo.Limits.MaxNestingDepth, depth);
+            Shared.Check(nameof(LayoutLimits.MaxNestingDepth), _lo.Limits.MaxNestingDepth, depth);
             D.TableFormat tf = _doc.GetEffectiveTableFormat(t);
             double indent = tf.IndentPt ?? 0;
             FlowTable ft = new FlowTable

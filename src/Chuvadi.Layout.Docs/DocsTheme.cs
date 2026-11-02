@@ -7,13 +7,13 @@ using Chuvadi.Layout.Drawing;
 using DocsThemeColor = Chuvadi.Docs.Word.ThemeColor;
 using DocsThemeFont = Chuvadi.Docs.Word.ThemeFont;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
     /// <summary>
     /// The colour and font schemes of a document's theme (word/theme/theme1.xml), for resolving theme colours, tints,
     /// shades and theme fonts. Without a theme part, the Office 2013–2022 default theme applies.
     /// </summary>
-    internal sealed class DocxTheme
+    internal sealed class DocsTheme
     {
         private readonly Dictionary<string, LayoutColor> _colors = new Dictionary<string, LayoutColor>(StringComparer.Ordinal)
         {
@@ -38,9 +38,9 @@ namespace Chuvadi.Layout.Import
         private string? _majorComplex;
         private string? _minorComplex;
 
-        public static DocxTheme Parse(byte[]? themeXml)
+        public static DocsTheme Parse(byte[]? themeXml)
         {
-            DocxTheme t = new DocxTheme();
+            DocsTheme t = new DocsTheme();
             if (themeXml is null || themeXml.Length == 0)
             {
                 return t;

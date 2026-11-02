@@ -32,7 +32,7 @@ namespace Chuvadi.Layout.ManualTests
             rows.Add(Measure("table 5000 rows x 5", () => DocumentLayout.Open(BigTable(5000), PreviewScenarios.Options()), 100));
             rows.Add(Measure("grid 100k cells", () => DocumentLayout.Open(Grid(20_000, 5), PreviewScenarios.Options()), 100));
             byte[] xlsx = Xlsx(20_000, 5);
-            rows.Add(Measure("xlsx 100k cells (import)", () => DocumentLayout.OpenXlsx(new MemoryStream(xlsx), null, PreviewScenarios.Options()), 1500));
+            rows.Add(Measure("xlsx 100k cells (import)", () => Chuvadi.Layout.Sheets.SheetsLayout.Open(new MemoryStream(xlsx), null, PreviewScenarios.Options()), 1500));
 
             output.WriteLine();
             output.WriteLine("Performance (ms; first page = open to page 1 drawn; per page = average over all pages built again)");

@@ -15,7 +15,7 @@ namespace Chuvadi.Layout.ManualTests
 
         private static void L7_XlsxShowcasePrintsLikeExcel()
         {
-            using LaidOutDocument doc = DocumentLayout.OpenXlsx(new MemoryStream(PreviewScenarios.XlsxShowcase()), null, PreviewScenarios.XlsxOptions());
+            using LaidOutDocument doc = Chuvadi.Layout.Sheets.SheetsLayout.Open(new MemoryStream(PreviewScenarios.XlsxShowcase()), null, PreviewScenarios.XlsxOptions());
             int n = doc.ResolvePageCount();
             Check(n == 2, "xlsx showcase pages: " + n);
             for (int i = 0; i < n; i++)

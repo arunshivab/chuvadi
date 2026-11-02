@@ -2,6 +2,21 @@
 
 ## 0.1.0 (unreleased)
 
+D-115 / D-121 (the importers as their own packages):
+
+- The engine no longer references Chuvadi.Docs or Chuvadi.Sheets. The docx importer is Chuvadi.Layout.Docs
+  (`DocsLayout`, `DocsImporter`, `DocsImportOptions`; were `DocumentLayout.OpenDocx`, `DocxImporter`,
+  `DocxImportOptions`), the xlsx importer is Chuvadi.Layout.Sheets (`SheetsLayout`, `SheetsImporter`,
+  `SheetsImportOptions`; were `DocumentLayout.OpenXlsx`, `XlsxImporter`, `XlsxImportOptions`), and
+  Chuvadi.Layout.Documents (`AutoDetectLayout.Open`) keeps the one-call open for every format, encrypted files
+  included. `DocumentLayout.Open(Stream)` lays out text and, for a docx, an xlsx or an encrypted Office file, throws
+  `LayoutFormatException` naming the package (it used to lay them out).
+- New: `DocumentLayout.Open(GridWorkbook, LayoutSourceFormat, importWarnings, options, ct)`, the grid twin of the
+  flow overload, so importers outside the engine report their format and warnings.
+- The importer tests moved with their code (Chuvadi.Layout.Docs.Tests, .Sheets.Tests, .Documents.Tests); the counts
+  add up to the former total plus three new detection tests. No output change: corpus, fixtures, SVG hashes,
+  warnings and font reports identical.
+
 D-113 / D-115 (built-in fonts from Chuvadi.Fonts):
 
 - Chuvadi.Layout references the new Chuvadi.Fonts package and adds its 22 LiPi Sans faces to every resolver as the

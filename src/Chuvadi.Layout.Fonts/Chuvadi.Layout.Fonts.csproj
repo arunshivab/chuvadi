@@ -31,6 +31,9 @@
     <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Pdf.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Docs.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Sheets.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Documents.Tests" />
   </ItemGroup>
 
   <ItemGroup>

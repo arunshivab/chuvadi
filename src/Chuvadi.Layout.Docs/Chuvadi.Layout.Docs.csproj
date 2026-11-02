@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.Docs</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.Docs</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Layout.Docs</Product>
+    <Description>Word document (.docx) importer for Chuvadi.Layout, on Chuvadi.Docs: lays out a document the way Word lays it out (sections, headers and footers, lists, paragraphs, runs, tables, pictures, watermarks, footnotes and endnotes, tracked changes as accepted, text boxes, floating tables, embedded fonts), encrypted documents included. Values are never altered. Pure BCL.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>layout;pagination;docx;word;document;typesetting</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <ProjectReference Include="..\Chuvadi.Docs\Chuvadi.Docs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Docs.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

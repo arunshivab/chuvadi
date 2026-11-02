@@ -6,43 +6,6 @@ using Chuvadi.Layout.Model;
 
 namespace Chuvadi.Layout.Tests;
 
-internal static class Flow
-{
-    public static LayoutOptions Options()
-    {
-        LayoutOptions o = new LayoutOptions { Now = new DateTimeOffset(2026, 10, 28, 9, 30, 0, TimeSpan.FromHours(5.5)) };
-        o.FontSources.Add(BundledFontSource.Instance);
-        return o;
-    }
-
-    public static CharacterFormat Calibri11 { get; } = new CharacterFormat { FontFamily = "Calibri", FontSize = 11 };
-
-    public static FlowDocument Doc(params FlowBlock[] blocks)
-    {
-        FlowDocument d = new FlowDocument();
-        FlowSection s = new FlowSection();
-        foreach (FlowBlock b in blocks)
-        {
-            s.Blocks.Add(b);
-        }
-        d.Sections.Add(s);
-        return d;
-    }
-
-    public static FlowParagraph P(string text, ParagraphFormat? pf = null, CharacterFormat? cf = null)
-        => FlowParagraph.Of(text, cf ?? Calibri11, pf ?? new ParagraphFormat());
-
-    public static double LineHeight(string file, double size)
-    {
-        FontFace f = TestFonts.Face(file);
-        return f.ToPoints(f.WindowsMetrics.LineHeight, size);
-    }
-
-    public static List<LayoutBox> Lines(LaidOutPage p) => p.Boxes.Where(b => b.Kind == LayoutBoxKind.Line).ToList();
-
-    public static IEnumerable<GlyphRunOp> Runs(LaidOutPage p) => p.DisplayList.OfType<GlyphRunOp>();
-}
-
 public class FlowBasicsTests
 {
     [Fact]
@@ -583,9 +546,9 @@ public class TextImportTests
         Assert.Equal(LayoutSourceFormat.Text, DocumentLayout.Sniff(Encoding.ASCII.GetBytes("hello")));
         byte[] docxLike = new byte[] { 0x50, 0x4B, 0x03, 0x04 }.Concat(Encoding.ASCII.GetBytes("....word/document.xml")).ToArray();
         Assert.Equal(LayoutSourceFormat.Docx, DocumentLayout.Sniff(docxLike));
-        // Sniffed as a document, then rejected cleanly by the docx importer (not a real package).
+        // Sniffed as a document; the engine names the package that lays it out (D-115).
         LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => DocumentLayout.Open(new MemoryStream(docxLike), LayoutSourceFormat.Auto, Flow.Options()));
-        Assert.Contains("document could not be read", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Chuvadi.Layout.Docs", ex.Message, StringComparison.Ordinal);
         Assert.Throws<LayoutFormatException>(() => DocumentLayout.Sniff(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0, 0, 0, 0 }));
     }
 

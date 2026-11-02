@@ -11,10 +11,10 @@ using SheetsBorder = Chuvadi.Sheets.Excel.Border;
 using SheetsUnderline = Chuvadi.Sheets.Excel.UnderlineStyle;
 using LayoutUnderline = Chuvadi.Layout.Model.UnderlineStyle;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Sheets
 {
-    /// <summary>Settings for <see cref="XlsxImporter"/>.</summary>
-    public sealed record XlsxImportOptions
+    /// <summary>Settings for <see cref="SheetsImporter"/>.</summary>
+    public sealed record SheetsImportOptions
     {
         /// <summary>Sheets to import, by name, in this order. Null imports every sheet in workbook order.</summary>
         public IReadOnlyList<string>? SheetNames { get; init; }
@@ -57,7 +57,7 @@ namespace Chuvadi.Layout.Import
     /// effective style (cell, then row, then column), merges, column widths and row heights, page setup, print
     /// areas and titles, manual page breaks, conditional formats, pictures, shapes and chart placeholders.
     /// </summary>
-    public static class XlsxImporter
+    public static class SheetsImporter
     {
         private static readonly HashSet<string> ErrorLiterals = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -67,20 +67,20 @@ namespace Chuvadi.Layout.Import
         /// <summary>Reads an .xlsx (or an encrypted one, with <see cref="LayoutOptions.Password"/>) and builds the grid IR.</summary>
         /// <exception cref="LayoutFormatException">The data is not a readable workbook, or the password is missing or wrong.</exception>
         /// <exception cref="LayoutLimitExceededException">The workbook exceeds a <see cref="LayoutLimits"/> limit.</exception>
-        public static GridWorkbook Import(Stream source, XlsxImportOptions? options = null, LayoutOptions? layoutOptions = null,
+        public static GridWorkbook Import(Stream source, SheetsImportOptions? options = null, LayoutOptions? layoutOptions = null,
             Action<LayoutWarning>? warning = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(source);
             layoutOptions ??= new LayoutOptions();
-            options ??= new XlsxImportOptions();
+            options ??= new SheetsImportOptions();
             Workbook wb = Load(source, options, layoutOptions, cancellationToken);
             return Import(wb, options, layoutOptions, warning, cancellationToken);
         }
 
         /// <summary>Loads a workbook with Chuvadi.Sheets under <paramref name="layoutOptions"/>' limits, mapping its errors to Layout's.</summary>
-        internal static Workbook Load(Stream source, XlsxImportOptions? options, LayoutOptions layoutOptions, CancellationToken cancellationToken)
+        internal static Workbook Load(Stream source, SheetsImportOptions? options, LayoutOptions layoutOptions, CancellationToken cancellationToken)
         {
-            options ??= new XlsxImportOptions();
+            options ??= new SheetsImportOptions();
             LayoutLimits limits = layoutOptions.Limits;
             XlsxReaderOptions ro = new XlsxReaderOptions
             {
@@ -115,11 +115,11 @@ namespace Chuvadi.Layout.Import
         }
 
         /// <summary>Builds the grid IR from a workbook already loaded with Chuvadi.Sheets (load it with <c>IncludeStyledEmptyCells = true</c> so that formatted empty cells print).</summary>
-        public static GridWorkbook Import(Workbook workbook, XlsxImportOptions? options = null, LayoutOptions? layoutOptions = null,
+        public static GridWorkbook Import(Workbook workbook, SheetsImportOptions? options = null, LayoutOptions? layoutOptions = null,
             Action<LayoutWarning>? warning = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(workbook);
-            options ??= new XlsxImportOptions();
+            options ??= new SheetsImportOptions();
             layoutOptions ??= new LayoutOptions();
             Importer imp = new Importer(workbook, options, layoutOptions, warning ?? (_ => { }), cancellationToken);
             return imp.Run();
@@ -128,7 +128,7 @@ namespace Chuvadi.Layout.Import
         private sealed class Importer
         {
             private readonly Workbook _wb;
-            private readonly XlsxImportOptions _o;
+            private readonly SheetsImportOptions _o;
             private readonly LayoutOptions _lo;
             private readonly Action<LayoutWarning> _warn;
             private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
@@ -142,7 +142,7 @@ namespace Chuvadi.Layout.Import
             private bool _hyperlinks;
             private string _sheetName = string.Empty;
 
-            public Importer(Workbook wb, XlsxImportOptions o, LayoutOptions lo, Action<LayoutWarning> warn, CancellationToken ct)
+            public Importer(Workbook wb, SheetsImportOptions o, LayoutOptions lo, Action<LayoutWarning> warn, CancellationToken ct)
             {
                 _wb = wb;
                 _o = o;
@@ -170,7 +170,7 @@ namespace Chuvadi.Layout.Import
                                 break;
                             }
                         }
-                        sheets.Add(found ?? throw new ArgumentException($"The workbook has no sheet named '{n}'.", nameof(XlsxImportOptions.SheetNames)));
+                        sheets.Add(found ?? throw new ArgumentException($"The workbook has no sheet named '{n}'.", nameof(SheetsImportOptions.SheetNames)));
                     }
                 }
                 else
@@ -346,7 +346,7 @@ namespace Chuvadi.Layout.Import
                     {
                         _ct.ThrowIfCancellationRequested();
                     }
-                    LayoutLimits.Check(nameof(LayoutLimits.MaxCellsPerSheet), _lo.Limits.MaxCellsPerSheet, count);
+                    Shared.Check(nameof(LayoutLimits.MaxCellsPerSheet), _lo.Limits.MaxCellsPerSheet, count);
                     if (cell.Row is < 1 or > 1048576 || cell.Column is < 1 or > 16384)
                     {
                         Warn(LayoutWarningCodes.UnsupportedFeature, LayoutWarningSeverity.ContentLoss, "A cell outside Excel's grid was skipped.");
@@ -382,7 +382,7 @@ namespace Chuvadi.Layout.Import
                     {
                         if (pic.GetImageBytes() is { Length: > 0 } bytes)
                         {
-                            LayoutLimits.Check(nameof(LayoutLimits.MaxResourceBytes), _lo.Limits.MaxResourceBytes, bytes.LongLength);
+                            Shared.Check(nameof(LayoutLimits.MaxResourceBytes), _lo.Limits.MaxResourceBytes, bytes.LongLength);
                             pictures[pic.Id] = new GridHeaderFooterPicture(LayoutImage.FromEncoded(bytes), pic.WidthPoints, pic.HeightPoints);
                         }
                     }
@@ -998,7 +998,7 @@ namespace Chuvadi.Layout.Import
                     byte[]? bytes = d.GetImageBytes();
                     if (bytes is { Length: > 0 })
                     {
-                        LayoutLimits.Check(nameof(LayoutLimits.MaxResourceBytes), _lo.Limits.MaxResourceBytes, bytes.LongLength);
+                        Shared.Check(nameof(LayoutLimits.MaxResourceBytes), _lo.Limits.MaxResourceBytes, bytes.LongLength);
                         image = LayoutImage.FromEncoded(bytes);
                     }
                 }

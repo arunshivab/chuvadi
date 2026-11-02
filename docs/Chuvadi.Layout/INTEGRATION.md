@@ -17,12 +17,16 @@ dotnet run -c Release --project staging\samples\Chuvadi.Layout.Viewer -- upload.
 
 | Package | What it gives | Used by |
 |---|---|---|
-| Chuvadi.Layout | `DocumentLayout.Open*`, `LaidOutDocument`, display lists, **`LayoutSvg`** (SVG writer, pure BCL) | both |
-| Chuvadi.Layout.Fonts | `BundledFontSource`: OFL metric-compatible faces and Indic faces | both |
+| Chuvadi.Layout | `DocumentLayout.Open*` (models and text), `LaidOutDocument`, display lists, **`LayoutSvg`** (SVG writer, pure BCL), the built-in LiPi fonts (through Chuvadi.Fonts) | both |
+| Chuvadi.Layout.Docs | `DocsLayout`: Word documents through Chuvadi.Docs | both |
+| Chuvadi.Layout.Sheets | `SheetsLayout`: Excel workbooks through Chuvadi.Sheets | both |
+| Chuvadi.Layout.Documents | `AutoDetectLayout`: one call for docx, xlsx (encrypted too) and text, format detected | both |
+| Chuvadi.Fonts | `FontPack`: the LiPi Sans files (Latin and nine Indic scripts); Layout uses them as its built-in fonts | both |
+| Chuvadi.Layout.Fonts | `BundledFontSource`: OFL metric-compatible faces for the Office fonts | both |
 | Chuvadi.Layout.Markup | `MarkdownLayout` and `HtmlLayout`: Markdown, and sanitized HTML (mail, pages), into the same `LaidOutDocument` | both |
 | Chuvadi.Layout.Pdf | `PdfShaper` (Indic shaping), `ToPng`, `ToPdf`, `ToSvg` (delegates to `LayoutSvg`). Source in `staging/src/Chuvadi.Layout.Pdf` (D-37): it takes chuvadi-pdf as pinned packages, so it is built outside `Chuvadi.slnx` and CI until chuvadi-pdf joins the monorepo | both |
 
-Opening a document does almost no work. `DocumentLayout.Open` reads the source and lays out pages only when they are
+Opening a document does almost no work. `AutoDetectLayout.Open` (or `DocsLayout.Open`, `SheetsLayout.Open`) reads the source and lays out pages only when they are
 asked for. Each `GetPage(i)` lays out as far as page *i* and no further. Laid-out pages are kept in a small cache
 (`LayoutOptions.PageCacheSize`, default 8), and everything else can be rebuilt. A `LaidOutDocument` is safe to use from
 several threads: one thread can run `ResolvePageCount` while another calls `GetPage`.
@@ -34,7 +38,7 @@ var options = new LayoutOptions
     Shaper = new PdfShaper(),               // Tamil, Devanagari and other complex scripts
 };
 options.FontSources.Add(BundledFontSource.Instance);
-using LaidOutDocument doc = DocumentLayout.Open(stream, LayoutSourceFormat.Auto, options, ct);
+using LaidOutDocument doc = AutoDetectLayout.Open(stream, LayoutSourceFormat.Auto, options, ct);   // Chuvadi.Layout.Documents
 LaidOutPage page = doc.GetPage(0, ct);
 ```
 
@@ -80,7 +84,7 @@ the page is laid out.
 
 ### Recommended flow
 
-1. **Open on a background thread.** `DocumentLayout.Open(stream, Auto, options, ct)`:
+1. **Open on a background thread.** `AutoDetectLayout.Open(stream, Auto, options, ct)` (Chuvadi.Layout.Documents):
    - give it the document's file stream, or bytes the app already holds;
    - set `AllowSystemFonts = true` so the user's installed fonts are used, and keep `BundledFontSource` as the fallback;
    - set `UseEmbeddedFonts = true` (the default).
@@ -154,7 +158,7 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
     options.FontSources.Add(BundledFontSource.Instance);
 
     using var input = new MemoryStream(upload, writable: false);
-    using LaidOutDocument doc = DocumentLayout.Open(input, LayoutSourceFormat.Auto, options, cts.Token);
+    using LaidOutDocument doc = AutoDetectLayout.Open(input, LayoutSourceFormat.Auto, options, cts.Token);
     var pngs = new List<byte[]>();
     foreach (LaidOutPage page in doc.GetPages(cts.Token))
     {
@@ -227,8 +231,8 @@ Tighten them further with `Clone()` and set the values you need. Compressed pack
 
 ## Documents (docx) in short
 
-`DocumentLayout.Open` sniffs a docx; `DocumentLayout.OpenDocx(stream, DocxImportOptions, LayoutOptions)` takes options,
-and `DocumentLayout.Open(Chuvadi.Docs.Word.Document, ...)` lays out a document already loaded or built.
+`AutoDetectLayout.Open` sniffs a docx; `DocsLayout.Open(stream, DocsImportOptions, LayoutOptions)` (Chuvadi.Layout.Docs)
+takes options, and `DocsLayout.Open(Chuvadi.Docs.Word.Document, ...)` lays out a document already loaded or built.
 
 - `PageCount` starts from the page count Word recorded (docProps/app.xml) and becomes exact when the forward pass ends.
 - Watermarks, headers and footers (with Word's linking), list numbers, tables and floating pictures are laid out.
@@ -297,4 +301,4 @@ This applies to:
 - plain text;
 - docx sections without `w:pgSz` (Chuvadi.Docs reports it as `PageSetup.SizeStated == false`, since 1.5.0).
 
-To override it, use `XlsxImportOptions.DefaultPaperSizeCode` for xlsx or `TextImportOptions.Page` for text.
+To override it, use `SheetsImportOptions.DefaultPaperSizeCode` for xlsx or `TextImportOptions.Page` for text.

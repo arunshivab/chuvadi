@@ -6,7 +6,8 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using Chuvadi.Layout.Fonts;
-using Chuvadi.Layout.Import;
+using Chuvadi.Layout.Documents;
+using Chuvadi.Layout.Sheets;
 using Chuvadi.Layout.Pdf;
 
 namespace Chuvadi.Layout.Viewer
@@ -96,10 +97,10 @@ namespace Chuvadi.Layout.Viewer
             string ext = Path.GetExtension(s.File).ToLowerInvariant();
             using LaidOutDocument doc = ext switch
             {
-                ".xlsx" when s.PaperCode is int paper => DocumentLayout.OpenXlsx(fs, new XlsxImportOptions { DefaultPaperSizeCode = paper }, options, ct),
+                ".xlsx" when s.PaperCode is int paper => SheetsLayout.Open(fs, new SheetsImportOptions { DefaultPaperSizeCode = paper }, options, ct),
                 ".md" or ".markdown" => Chuvadi.Layout.Markup.MarkdownLayout.Open(fs, null, options, null, ct),
                 ".html" or ".htm" => Chuvadi.Layout.Markup.HtmlLayout.Open(fs, null, options, ct),
-                _ => DocumentLayout.Open(fs, LayoutSourceFormat.Auto, options, ct),
+                _ => AutoDetectLayout.Open(fs, LayoutSourceFormat.Auto, options, ct),
             };
             double openMs = total.Elapsed.TotalMilliseconds;
             log.WriteLine($"{s.File}: {doc.Source.Format}, opened in {openMs:0} ms; page count so far {doc.PageCount}{(doc.IsPageCountFinal ? string.Empty : " (estimate)")}");

@@ -6,9 +6,9 @@ using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
 using D = Chuvadi.Docs.Word;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
-    internal sealed partial class DocxImport
+    internal sealed partial class DocsImport
     {
         // ---- Images ----
 
@@ -44,7 +44,7 @@ namespace Chuvadi.Layout.Import
             LayoutImage image;
             if (img.Bytes is { Length: > 0 } bytes)
             {
-                LayoutLimits.Check(nameof(LayoutLimits.MaxResourceBytes), _lo.Limits.MaxResourceBytes, bytes.LongLength);
+                Shared.Check(nameof(LayoutLimits.MaxResourceBytes), _lo.Limits.MaxResourceBytes, bytes.LongLength);
                 image = LayoutImage.FromEncoded(bytes);
             }
             else

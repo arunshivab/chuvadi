@@ -5,9 +5,9 @@ using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
 using D = Chuvadi.Docs.Word;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
-    internal sealed partial class DocxImport
+    internal sealed partial class DocsImport
     {
         // ---- Paragraphs ----
 
@@ -272,7 +272,7 @@ namespace Chuvadi.Layout.Import
             {
                 Warn(LayoutWarningCodes.UnsupportedFeature, LayoutWarningSeverity.Fidelity, "Outline, shadow, emboss and engrave text effects are drawn as plain text.");
             }
-            LayoutColor? background = Highlight(f.Highlight) ?? Shade(f.Shading) ?? (f.ShadingHex is string sh && DocxTheme.TryHex(sh, out LayoutColor shc) ? shc : null);
+            LayoutColor? background = Highlight(f.Highlight) ?? Shade(f.Shading) ?? (f.ShadingHex is string sh && DocsTheme.TryHex(sh, out LayoutColor shc) ? shc : null);
             // Automatic colour ("auto" or none): black, or white over a dark background, as Word draws it.
             LayoutColor color = TextColor(f.ThemeColor, f.ThemeColorTint, f.ThemeColorShade, f.ColorHex)
                 ?? (IsDark(background ?? _behind) ? LayoutColor.White : LayoutColor.Black);
@@ -289,7 +289,7 @@ namespace Chuvadi.Layout.Import
                 ComplexScriptBold = f.BoldComplexScript,
                 ComplexScriptItalic = f.ItalicComplexScript,
                 Underline = Underline(f.EffectiveUnderline),
-                UnderlineColor = f.UnderlineColorHex is string uc && DocxTheme.TryHex(uc, out LayoutColor ul) ? ul : null,
+                UnderlineColor = f.UnderlineColorHex is string uc && DocsTheme.TryHex(uc, out LayoutColor ul) ? ul : null,
                 Strikethrough = f.Strikethrough,
                 DoubleStrikethrough = f.DoubleStrikethrough == true,
                 Color = color,
@@ -347,7 +347,7 @@ namespace Chuvadi.Layout.Import
             {
                 return _theme.Color(t, tint, shade);
             }
-            return hex is not null && DocxTheme.TryHex(hex, out LayoutColor c) ? c : null;
+            return hex is not null && DocsTheme.TryHex(hex, out LayoutColor c) ? c : null;
         }
 
         private static LayoutColor? Highlight(string? name) => name switch
@@ -382,8 +382,8 @@ namespace Chuvadi.Layout.Import
             {
                 return null;
             }
-            LayoutColor? fill = s.ThemeFill is D.ThemeColor tf ? _theme.Color(tf) : s.FillHex is string fh && DocxTheme.TryHex(fh, out LayoutColor f) ? f : null;
-            LayoutColor pattern = s.ColorHex is string ch && DocxTheme.TryHex(ch, out LayoutColor pc) ? pc : LayoutColor.Black;
+            LayoutColor? fill = s.ThemeFill is D.ThemeColor tf ? _theme.Color(tf) : s.FillHex is string fh && DocsTheme.TryHex(fh, out LayoutColor f) ? f : null;
+            LayoutColor pattern = s.ColorHex is string ch && DocsTheme.TryHex(ch, out LayoutColor pc) ? pc : LayoutColor.Black;
             double share;
             switch (s.Pattern)
             {

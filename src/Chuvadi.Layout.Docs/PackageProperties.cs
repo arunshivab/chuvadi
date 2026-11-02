@@ -4,7 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Xml;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
     /// <summary>
     /// Reads the page count and title an Office application recorded in an unencrypted package

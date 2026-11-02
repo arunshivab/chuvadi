@@ -32,11 +32,13 @@ document is the reference for the library; changes to it go through a PR like co
 | D-17 | Layout owns a neutral page display list. It does not expose chuvadi-pdf types. The consumer requirements were corrected accordingly. |
 | D-18 | The PDF/SVG/PNG adapter is `Chuvadi.Layout.Pdf` in the monorepo (under `staging/` since D-37). It stays out of `Chuvadi.slnx` and CI. It starts with the one-page-PDF route. |
 | D-29 | Projects never reference a sibling repository's source clone; nupkgs in the local NuGet feed are the handoff. The adapter, its tests and the acceptance harness take chuvadi-pdf as version-pinned PackageReferences (`staging/src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`) through a `nuget.config` scoped to each of those projects. |
-| D-30 | When a source states no paper size, it follows the region of `LayoutOptions.Culture`, the way Windows printer defaults do: Letter for US, PR, CA, MX, PH, BZ, CL, CO, CR, GT, NI, PA, SV and VE; A4 everywhere else, including the invariant culture (`PaperDefaults`). This applies to xlsx sheets (`XlsxImportOptions.DefaultPaperSizeCode` remains an explicit override), docx sections without `w:pgSz` (`PageSetup.SizeStated == false`, Chuvadi.Docs 1.5.0; orientation is kept), and plain text (`TextImportOptions.Page`). |
+| D-30 | When a source states no paper size, it follows the region of `LayoutOptions.Culture`, the way Windows printer defaults do: Letter for US, PR, CA, MX, PH, BZ, CL, CO, CR, GT, NI, PA, SV and VE; A4 everywhere else, including the invariant culture (`PaperDefaults`). This applies to xlsx sheets (`SheetsImportOptions.DefaultPaperSizeCode` remains an explicit override), docx sections without `w:pgSz` (`PageSetup.SizeStated == false`, Chuvadi.Docs 1.5.0; orientation is kept), and plain text (`TextImportOptions.Page`). |
 | D-31 | SVG is written by the core library (`Chuvadi.Layout.Drawing.LayoutSvg`, pure BCL), not through a PDF round trip. Glyphs are drawn from their TrueType outlines, with an invisible text layer for selection and search. Reason: chuvadi-pdf's SVG renderer derives characters from glyph ids, and shaped runs have no ToUnicode, so browsers showed the wrong letters. The adapter's `ToSvg` delegates to it; `ToSvgViaPdf` is kept for comparison. |
 | D-36 | Sheets' copy of the shared `OoxmlPackage` is canonical. Apply order: Docs p1b, shared-ooxml, Sheets 1.7.0, then Docs 6b onward. |
 | D-37 | Everything that takes chuvadi-pdf as packages lives under `staging/` (`staging/src/Chuvadi.Layout.Pdf`, `staging/tests/Chuvadi.Layout.Pdf.Tests`, `staging/tests/Chuvadi.Layout.Acceptance.Tests`, `staging/samples/Chuvadi.Layout.Acceptance`, `staging/samples/Chuvadi.Layout.Viewer`), so CI's pure-BCL check over `src/` and `shared/` needs no exemption. When chuvadi-pdf moves into the monorepo they return to `src/`, `tests/` and `samples/` with ProjectReferences (end state A). |
 | D-32 | Markdown (and later the HTML subset) is laid out by a separate add-on package, `Chuvadi.Layout.Markup`, from Chuvadi.Markup's public Markdown AST. The core does not reference Chuvadi.Markup; `DocumentLayout.Open(FlowDocument, LayoutSourceFormat, importWarnings, ...)` lets add-ons report their format and warnings. TXT stays in the core (`TextImporter`). |
+| D-113 | The LiPi Sans fonts are their own package, Chuvadi.Fonts (static TTF, about 3.9 MB, no dependencies), shared with Chuvadi.Pdf. Chuvadi.Layout uses them as built-in fonts (`LayoutOptions.UseBuiltInFonts`, default true) after `FontSources`; Chuvadi.Layout.Fonts keeps the Office metric-compatible substitutes. |
+| D-115 | The importers are their own packages before the first tag: Chuvadi.Layout.Docs (Chuvadi.Docs) and Chuvadi.Layout.Sheets (Chuvadi.Sheets); the engine depends on neither. Chuvadi.Layout.Documents (`AutoDetectLayout.Open`) keeps the former one-call `Open(stream)` for every format, encrypted files included. `BundledFontSource.ReadResource` is internal. Package, namespace and class names avoid Microsoft format names (D-121); format identifiers such as `LayoutSourceFormat.Docx` stay. |
 | — | Docs/Sheets coupling: one `Chuvadi.Layout` package with ProjectReferences to Docs and Sheets (added when the importers land), plus a public IR. Sheets was added in L7 (Chuvadi.Sheets 1.6.1). |
 | — | Fonts: a separate `Chuvadi.Layout.Fonts` OFL pack; system fonts opt-in; Layout's own internal sfnt core, to be promoted to `shared/Chuvadi.Internal/Fonts` later; Excel max-digit width follows the documented rule. |
 | — | Shaping: `IShaper`, with the Pdf shaper supplied through the adapter. Arabic/Hebrew bidi, Thai-family breaking and East Asian doc-grid are out of 1.0 and produce warnings. |
@@ -47,10 +49,10 @@ document is the reference for the library; changes to it go through a PR like co
 ## 2. Architecture
 
 ```
-importers (in Chuvadi.Layout)                    ┌─ Layout IR (public) ─┐
-  .docx  → DocxImporter  (Chuvadi.Docs 1.4)  ──► │ FlowDocument         │
-  .xlsx  → XlsxImporter  (Chuvadi.Sheets 1.4)──► │ GridWorkbook         │
-  .txt / .md (Chuvadi.Markup AST)            ──► └──────────┬───────────┘
+importers (own packages since D-115)            ┌─ Layout IR (public) ─┐
+  .docx  → DocsImporter   (Layout.Docs)      ──► │ FlowDocument         │
+  .xlsx  → SheetsImporter (Layout.Sheets)    ──► │ GridWorkbook         │
+  .txt (core) / .md, .html (Layout.Markup)   ──► └──────────┬───────────┘
                                                             ▼
                      Engine (pure BCL, no chuvadi-pdf)
                        Fonts:  sfnt reader, resolver, substitution report, metrics
@@ -71,8 +73,10 @@ adapter.
 ```
 namespace Chuvadi.Layout
 static class DocumentLayout
-  LaidOutDocument Open(Stream, LayoutOptions?, CancellationToken)          // sniffs docx/xlsx/txt/md
-  LaidOutDocument OpenDocx/OpenXlsx/OpenText/OpenMarkdown(Stream, LayoutOptions?, CancellationToken)
+  LaidOutDocument Open(Stream, LayoutSourceFormat, LayoutOptions?, CancellationToken)   // text; names the package for docx/xlsx
+  LaidOutDocument OpenText(Stream | string, ...)
+  // since D-115: DocsLayout.Open (Chuvadi.Layout.Docs), SheetsLayout.Open (Chuvadi.Layout.Sheets),
+  //              AutoDetectLayout.Open (Chuvadi.Layout.Documents: sniffs docx/xlsx/txt, encrypted too)
   LaidOutDocument Open(FlowDocument ir, ...) / Open(GridWorkbook ir, ...)
 
 sealed class LaidOutDocument : IDisposable       // GetPage calls serialise internally; pages immutable
@@ -244,7 +248,7 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 | Excel border widths (print) | hair 0.25 pt; thin, dotted, dashed, dash-dot 0.5 pt; medium styles 1 pt; thick 1.5 pt; double = two 0.5 pt lines | no |
 | Excel pattern fills | foreground over background blended by ink coverage (darkGray 75%, mediumGray 50%, lightGray 25%, gray125 12.5%, gray0625 6.25%, dark lines 50%, light lines 25%); gradients as the average of their stops | no |
 | Data bars | inset 2 px; length = Sheets' LengthPercent of the cell width; negative bars from the right edge; drawn solid | no |
-| Paper when the file states none | `XlsxImportOptions.DefaultPaperSizeCode`, default 1 (Letter, the format's default); Excel uses the printer's default | yes |
+| Paper when the file states none | `SheetsImportOptions.DefaultPaperSizeCode`, default 1 (Letter, the format's default); Excel uses the printer's default | yes |
 | Shape text | Normal font, 7.2 pt / 3.6 pt insets, top-left | no |
 | Narrowest space beside a floating object | 18 pt; narrower spaces are skipped | yes |
 | Both-sides wrapping | each row fills the left space, then the right space | yes |
@@ -345,7 +349,7 @@ L11 changes behind these numbers:
 
 ## 14. Docx import (L8)
 
-`DocxImporter` (Chuvadi.Docs 1.6.0) builds the flow IR from Chuvadi.Docs' effective formatting, as its
+`DocsImporter` (Chuvadi.Docs 1.6.0) builds the flow IR from Chuvadi.Docs' effective formatting, as its
 LAYOUT-INTEGRATION.md prescribes: `GetEffectiveRunFormat` / `GetEffectiveParagraphFormat` (with a `TableCellRef`
 inside tables), `GetEffectiveTableFormat`, `GetEffectiveCellFormat` (every cell carries its four resolved edges, so
 the table draws no borders of its own), `GetListLabels`, and `doc.Sections`.
@@ -360,7 +364,7 @@ the table draws no borders of its own), `GetListLabels`, and `doc.Sections`.
   background (perceived brightness below half; Word's threshold is not documented).
 - **Defaults.** A run with no font gets Times New Roman, and no size 10 pt (ECMA-376 defaults). Widow control is on
   unless the paragraph or a style turns it off (Word's behaviour). "Auto" paragraph spacing is 14 pt
-  (`DocxImportOptions.AutoParagraphSpacing`).
+  (`DocsImportOptions.AutoParagraphSpacing`).
 - **Tables.** The grid is the file's column widths, else the table width (points or percent) shared equally. Grid
   columns skipped by `gridBefore`/`gridAfter` become empty, borderless cells. Legacy `hMerge` runs become spans.
 - **Watermarks** are drawn by the engine: the text is shaped, its glyph outlines are stretched to the watermark box

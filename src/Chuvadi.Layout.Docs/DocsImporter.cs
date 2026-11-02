@@ -7,10 +7,10 @@ using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
 using D = Chuvadi.Docs.Word;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
-    /// <summary>Settings for <see cref="DocxImporter"/>.</summary>
-    public sealed record DocxImportOptions
+    /// <summary>Settings for <see cref="DocsImporter"/>.</summary>
+    public sealed record DocsImportOptions
     {
         /// <summary>Lay out headers and footers. Default true.</summary>
         public bool IncludeHeadersAndFooters { get; init; } = true;
@@ -48,17 +48,17 @@ namespace Chuvadi.Layout.Import
     /// and the document's embedded fonts (<see cref="FlowDocument.EmbeddedFonts"/>). Markers, comment anchors and comment balloons take
     /// no room. Values are never altered.
     /// </summary>
-    public static class DocxImporter
+    public static class DocsImporter
     {
         /// <summary>Reads a .docx (or an encrypted one, with <see cref="LayoutOptions.Password"/>) and builds the flow IR.</summary>
         /// <exception cref="LayoutFormatException">The data is not a readable document, or the password is missing or wrong.</exception>
         /// <exception cref="LayoutLimitExceededException">The document exceeds a <see cref="LayoutLimits"/> limit.</exception>
-        public static FlowDocument Import(Stream source, DocxImportOptions? options = null, LayoutOptions? layoutOptions = null,
+        public static FlowDocument Import(Stream source, DocsImportOptions? options = null, LayoutOptions? layoutOptions = null,
             Action<LayoutWarning>? warning = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(source);
             layoutOptions ??= new LayoutOptions();
-            D.Document doc = Load(source, layoutOptions, options ?? new DocxImportOptions(), cancellationToken);
+            D.Document doc = Load(source, layoutOptions, options ?? new DocsImportOptions(), cancellationToken);
             // The final view, as Word prints with changes accepted: insertions stay, deletions go, a deleted paragraph
             // mark joins its paragraph with the next. (The document was loaded here, so accepting changes alters no
             // caller's object; a Document passed in directly has deleted runs and rows skipped instead.)
@@ -67,11 +67,11 @@ namespace Chuvadi.Layout.Import
         }
 
         /// <summary>Builds the flow IR from a document already loaded or built with Chuvadi.Docs.</summary>
-        public static FlowDocument Import(D.Document document, DocxImportOptions? options = null, LayoutOptions? layoutOptions = null,
+        public static FlowDocument Import(D.Document document, DocsImportOptions? options = null, LayoutOptions? layoutOptions = null,
             Action<LayoutWarning>? warning = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(document);
-            return new DocxImport(document, options ?? new DocxImportOptions(), layoutOptions ?? new LayoutOptions(), warning ?? (_ => { }), cancellationToken).Run();
+            return new DocsImport(document, options ?? new DocsImportOptions(), layoutOptions ?? new LayoutOptions(), warning ?? (_ => { }), cancellationToken).Run();
         }
 
         /// <summary>The Chuvadi.Docs reader limits for <paramref name="limits"/>.</summary>
@@ -84,7 +84,7 @@ namespace Chuvadi.Layout.Import
             IncludeHeadersAndFooters = headersAndFooters,
         };
 
-        internal static D.Document Load(Stream source, LayoutOptions lo, DocxImportOptions o, CancellationToken ct)
+        internal static D.Document Load(Stream source, LayoutOptions lo, DocsImportOptions o, CancellationToken ct)
         {
             try
             {

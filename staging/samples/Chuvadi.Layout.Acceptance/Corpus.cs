@@ -185,7 +185,7 @@ namespace Chuvadi.Layout.Acceptance
                 {
                     ".md" => Chuvadi.Layout.Markup.MarkdownLayout.Open(fs, null, options),
                     ".html" or ".htm" => Chuvadi.Layout.Markup.HtmlLayout.Open(fs, null, options),
-                    _ => DocumentLayout.Open(fs, LayoutSourceFormat.Auto, options),
+                    _ => Chuvadi.Layout.Documents.AutoDetectLayout.Open(fs, LayoutSourceFormat.Auto, options),
                 };
             }
             catch (Exception ex) when (ex is LayoutException or IOException or InvalidDataException)

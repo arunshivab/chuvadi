@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Shared helpers of the Layout tests. -->
+  <ItemGroup>
+    <Compile Include="..\Chuvadi.Layout.Tests\Flow.cs" Link="Shared\Flow.cs" />
+    <Compile Include="..\Chuvadi.Layout.Tests\TestFonts.cs" Link="Shared\TestFonts.cs" />
+    <Compile Include="..\Chuvadi.Layout.Docs.Tests\EncryptedFixtures.cs" Link="Shared\EncryptedFixtures.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The encrypted fixtures of the Docs and Sheets tests, embedded and read through a MemoryStream (D-44). -->
+    <EmbeddedResource Include="..\Chuvadi.Layout.Docs.Tests\Fixtures\encrypted\sniff-pw.docx" LogicalName="Chuvadi.Layout.Documents.Tests.Encrypted.sniff-pw.docx" />
+    <EmbeddedResource Include="..\Chuvadi.Layout.Sheets.Tests\Fixtures\encrypted\sample-pw.xlsx" LogicalName="Chuvadi.Layout.Documents.Tests.Encrypted.sample-pw.xlsx" />
+  </ItemGroup>
+
+  <!-- NOTE: the SHIPPED LIBRARIES remain strictly pure-BCL (no PackageReference).
+       Test tooling below is dev-time only and never ships. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Documents\Chuvadi.Layout.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+  </ItemGroup>
+
+</Project>

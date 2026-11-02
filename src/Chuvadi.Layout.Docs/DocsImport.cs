@@ -6,18 +6,18 @@ using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
 using D = Chuvadi.Docs.Word;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
-    /// <summary>One docx → flow IR conversion (see <see cref="DocxImporter"/>).</summary>
-    internal sealed partial class DocxImport
+    /// <summary>One docx → flow IR conversion (see <see cref="DocsImporter"/>).</summary>
+    internal sealed partial class DocsImport
     {
         private readonly D.Document _doc;
-        private readonly DocxImportOptions _o;
+        private readonly DocsImportOptions _o;
         private readonly LayoutOptions _lo;
         private readonly Action<LayoutWarning> _warn;
         private readonly CancellationToken _ct;
         private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
-        private readonly DocxTheme _theme;
+        private readonly DocsTheme _theme;
         private readonly IReadOnlyDictionary<D.Paragraph, D.ListLabel> _labels;
         private readonly Dictionary<D.Paragraph, FlowParagraph> _converted = new Dictionary<D.Paragraph, FlowParagraph>(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<D.HeaderFooterContent, IList<FlowBlock>> _stories = new Dictionary<D.HeaderFooterContent, IList<FlowBlock>>(ReferenceEqualityComparer.Instance);
@@ -28,14 +28,14 @@ namespace Chuvadi.Layout.Import
         private PageGeometry _page = PageGeometry.A4;
         private long _blocks;
 
-        public DocxImport(D.Document doc, DocxImportOptions options, LayoutOptions layoutOptions, Action<LayoutWarning> warn, CancellationToken ct)
+        public DocsImport(D.Document doc, DocsImportOptions options, LayoutOptions layoutOptions, Action<LayoutWarning> warn, CancellationToken ct)
         {
             _doc = doc;
             _o = options;
             _lo = layoutOptions;
             _warn = warn;
             _ct = ct;
-            _theme = DocxTheme.Parse(doc.ThemeXml);
+            _theme = DocsTheme.Parse(doc.ThemeXml);
             _labels = doc.GetListLabels();
         }
 
@@ -268,7 +268,7 @@ namespace Chuvadi.Layout.Import
         private FlowWatermark Watermark(D.TextWatermark wm) => new FlowWatermark(wm.Text)
         {
             FontFamily = string.IsNullOrWhiteSpace(wm.Font) ? "Calibri" : wm.Font,
-            Color = DocxTheme.TryHex(wm.ColorHex?.TrimStart('#'), out LayoutColor c) ? c : new LayoutColor(0xC0, 0xC0, 0xC0),
+            Color = DocsTheme.TryHex(wm.ColorHex?.TrimStart('#'), out LayoutColor c) ? c : new LayoutColor(0xC0, 0xC0, 0xC0),
             Opacity = double.IsFinite(wm.Opacity) ? Math.Clamp(wm.Opacity, 0, 1) : 0.5,
             Diagonal = wm.Diagonal,
             Width = wm.WidthPt,
@@ -279,7 +279,7 @@ namespace Chuvadi.Layout.Import
 
         private FlowBlock? Block(object block, D.TableCellRef? cell, int depth, double width)
         {
-            LayoutLimits.Check(nameof(LayoutLimits.MaxBlocks), _lo.Limits.MaxBlocks, ++_blocks);
+            Shared.Check(nameof(LayoutLimits.MaxBlocks), _lo.Limits.MaxBlocks, ++_blocks);
             return block switch
             {
                 D.Paragraph p => Paragraph(p, cell),

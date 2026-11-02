@@ -133,7 +133,7 @@ namespace Chuvadi.Layout.Acceptance
         private static int DumpLines(string source, string reference, int page, TextWriter output)
         {
             using FileStream fs = File.OpenRead(source);
-            using LaidOutDocument doc = DocumentLayout.Open(fs, LayoutSourceFormat.Auto, Runner.Options(RunSettings.Default));
+            using LaidOutDocument doc = Chuvadi.Layout.Documents.AutoDetectLayout.Open(fs, LayoutSourceFormat.Auto, Runner.Options(RunSettings.Default));
             DocumentText l = LayoutText.Read(doc);
             DocumentText r = ReferencePdf.Read(File.ReadAllBytes(reference));
             PageText? rp = page - 1 < r.Pages.Count ? r.Pages[page - 1] : null;

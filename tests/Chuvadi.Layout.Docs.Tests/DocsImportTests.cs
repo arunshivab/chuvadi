@@ -1,7 +1,8 @@
 using Chuvadi.Docs.Word;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Engine;
-using Chuvadi.Layout.Import;
+using Chuvadi.Layout.Docs;
+using Chuvadi.Layout.Tests;
 using Chuvadi.Layout.Model;
 using LayoutBreak = Chuvadi.Layout.Model.BreakKind;
 using LParagraphAlignment = Chuvadi.Layout.Model.ParagraphAlignment;
@@ -9,10 +10,10 @@ using LSectionStart = Chuvadi.Layout.Model.SectionStart;
 using LUnderline = Chuvadi.Layout.Model.UnderlineStyle;
 using LVerticalMerge = Chuvadi.Layout.Model.VerticalMerge;
 
-namespace Chuvadi.Layout.Tests;
+namespace Chuvadi.Layout.Docs.Tests;
 
 /// <summary>Documents written with Chuvadi.Docs, read back through the docx importer (L8).</summary>
-public class DocxImportTests
+public class DocsImportTests
 {
     internal static LayoutOptions Options(string culture = "en-IN")
     {
@@ -28,24 +29,9 @@ public class DocxImportTests
         return ms.ToArray();
     }
 
-    /// <summary>
-    /// An encrypted fixture (Fixtures/encrypted, embedded in the test assembly) as an in-memory stream. Encrypted
-    /// packages are never written to or opened from a file path in these tests: on Windows, Microsoft Defender scans an
-    /// encrypted OOXML file on open by trying the default password, which can take seconds before any library code runs.
-    /// </summary>
-    internal static MemoryStream Encrypted(string name)
-    {
-        using Stream s = typeof(DocxImportTests).Assembly.GetManifestResourceStream("Chuvadi.Layout.Tests.Encrypted." + name)
-            ?? throw new InvalidOperationException("Missing embedded fixture " + name);
-        MemoryStream ms = new MemoryStream();
-        s.CopyTo(ms);
-        ms.Position = 0;
-        return ms;
-    }
-
     /// <summary>Saves and imports, so the importer sees exactly what a loaded file gives.</summary>
-    internal static FlowDocument Import(Document doc, DocxImportOptions? o = null, List<LayoutWarning>? warnings = null, LayoutOptions? lo = null)
-        => DocxImporter.Import(new MemoryStream(Save(doc)), o, lo ?? Options(), warnings is null ? null : warnings.Add);
+    internal static FlowDocument Import(Document doc, DocsImportOptions? o = null, List<LayoutWarning>? warnings = null, LayoutOptions? lo = null)
+        => DocsImporter.Import(new MemoryStream(Save(doc)), o, lo ?? Options(), warnings is null ? null : warnings.Add);
 
     private static IEnumerable<FlowParagraph> Paragraphs(IEnumerable<FlowBlock> blocks)
     {
@@ -100,7 +86,7 @@ public class DocxImportTests
         Assert.Equal(new LayoutColor(0xFF, 0xFF, 0x00), runs[3].Format.Background);
         Assert.NotEqual(LUnderline.None, runs[4].Format.Underline); // the Hyperlink character style
         // Built and loaded hyperlinks both keep their target (loaded ones since Chuvadi.Docs 1.5.0).
-        TextRun built = Paragraphs(DocxImporter.Import(doc, null, Options()).Sections[0].Blocks).ElementAt(1).Inlines.OfType<TextRun>().Last();
+        TextRun built = Paragraphs(DocsImporter.Import(doc, null, Options()).Sections[0].Blocks).ElementAt(1).Inlines.OfType<TextRun>().Last();
         Assert.Equal("https://example.org", built.HyperlinkUri);
         Assert.Equal("https://example.org", runs[4].HyperlinkUri);
         Assert.Equal("Calibri", runs[0].Format.FontFamily);
@@ -172,7 +158,7 @@ public class DocxImportTests
         // A loaded document carries tabs and line breaks as characters in the run text (the engine honours both).
         Assert.Equal("a\tb\ncd", Text(p));
         Assert.Contains(p.Inlines, i => i is BreakInline { Kind: LayoutBreak.Page });
-        FlowParagraph builtParagraph = Paragraphs(DocxImporter.Import(doc, null, Options()).Sections[0].Blocks).First();
+        FlowParagraph builtParagraph = Paragraphs(DocsImporter.Import(doc, null, Options()).Sections[0].Blocks).First();
         Assert.Contains(builtParagraph.Inlines, i => i is TabInline);
         Assert.Contains(builtParagraph.Inlines, i => i is BreakInline { Kind: LayoutBreak.Line });
         FlowParagraph footer = Paragraphs(flow.Sections[0].HeadersFooters!.DefaultFooter!).Single();
@@ -294,7 +280,7 @@ public class DocxImportTests
         double Y(PathOp p) => p.Segments.Where(s => s.Kind != PathSegmentKind.Close).Average(s => s.Y);
         Assert.True(Y(letters[0]) > Y(letters[^1]) + 50, "D is lower on the page than T");
 
-        FlowDocument none = Import(doc, new DocxImportOptions { IncludeWatermarks = false });
+        FlowDocument none = Import(doc, new DocsImportOptions { IncludeWatermarks = false });
         Assert.Null(none.Sections[0].Watermark);
     }
 
@@ -313,7 +299,7 @@ public class DocxImportTests
             VerticalOffsetPt = 10,
             Wrap = TextWrap.TopAndBottom,
         }));
-        FlowDocument flow = DocxImporter.Import(doc, null, Options());
+        FlowDocument flow = DocsImporter.Import(doc, null, Options());
         List<FlowParagraph> ps = Paragraphs(flow.Sections[0].Blocks).ToList();
         ImageInline inline = Assert.Single(ps[0].Inlines.OfType<ImageInline>());
         Assert.Equal(72, inline.Width);
@@ -382,7 +368,7 @@ public class DocxImportTests
         Assert.Single(Paragraphs(ft.Rows[0].Cells[1].Blocks).SelectMany(p => p.Inlines.OfType<ImageInline>()));
         Assert.Empty(warnings);
 
-        FlowDocument noImages = Import(doc, new DocxImportOptions { IncludeImages = false });
+        FlowDocument noImages = Import(doc, new DocsImportOptions { IncludeImages = false });
         Assert.Empty(Paragraphs(noImages.Sections[0].Blocks).SelectMany(p => p.Inlines.OfType<ImageInline>()));
     }
 
@@ -393,33 +379,8 @@ public class DocxImportTests
         doc.AddParagraph().Text("shown ").Text("secret", new TextFormat { Hidden = true });
         TextRun secret = Paragraphs(Import(doc).Sections[0].Blocks).Single().Inlines.OfType<TextRun>().Last();
         Assert.True(secret.Format.Hidden);
-        TextRun printed = Paragraphs(Import(doc, new DocxImportOptions { IncludeHiddenText = true }).Sections[0].Blocks).Single().Inlines.OfType<TextRun>().Last();
+        TextRun printed = Paragraphs(Import(doc, new DocsImportOptions { IncludeHiddenText = true }).Sections[0].Blocks).Single().Inlines.OfType<TextRun>().Last();
         Assert.False(printed.Format.Hidden);
-    }
-
-    [Fact]
-    public void Open_sniffs_docx_and_encrypted_documents()
-    {
-        Document doc = new Document();
-        doc.AddParagraph("Sniffed and laid out");
-        using LaidOutDocument laid = DocumentLayout.Open(new MemoryStream(Save(doc)), LayoutSourceFormat.Auto, Options());
-        Assert.Equal(LayoutSourceFormat.Docx, laid.Source.Format);
-        Assert.Contains("Sniffed and laid out", laid.GetPage(0).GetText());
-
-        // The same document, encrypted with password "pw" (Fixtures/encrypted/sniff-pw.docx).
-        byte[] encrypted = Encrypted("sniff-pw.docx").ToArray();
-        Assert.Throws<LayoutFormatException>(() => DocumentLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, Options()));
-        LayoutOptions withPassword = Options();
-        withPassword.Password = "pw";
-        using LaidOutDocument opened = DocumentLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, withPassword);
-        Assert.Equal(LayoutSourceFormat.Docx, opened.Source.Format);
-        LayoutOptions wrong = Options();
-        wrong.Password = "nope";
-        Assert.Throws<LayoutFormatException>(() => DocumentLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, wrong));
-
-        // An encrypted workbook with the same entry point still opens as a workbook.
-        using LaidOutDocument book = DocumentLayout.Open(Encrypted("sample-pw.xlsx"), LayoutSourceFormat.Auto, withPassword);
-        Assert.Equal(LayoutSourceFormat.Xlsx, book.Source.Format);
     }
 
     [Fact]
@@ -451,7 +412,7 @@ public class DocxImportTests
     {
         // POI ThreeColHeadFoot.docx: "First header column" ptab-centre "Mid header" ptab-right "Right header!".
         using FileStream fs = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "docx", "ThreeColHeadFoot.docx"));
-        using LaidOutDocument laid = DocumentLayout.Open(fs, LayoutSourceFormat.Auto, Options());
+        using LaidOutDocument laid = DocsLayout.Open(fs, null, Options());
         LaidOutPage page = laid.GetPage(0);
         LayoutBox header = page.Boxes.First(b => b.Kind == LayoutBoxKind.Header);
         List<GlyphRunOp> inHeader = page.DisplayList.OfType<GlyphRunOp>().Where(r => r.Y <= header.Rect.Bottom).ToList();
@@ -470,21 +431,21 @@ public class DocxImportTests
         doc.AddParagraph("No paper size stated");
         doc.Section.Page.SizeStated = false;
         byte[] bytes = Save(doc);
-        using LaidOutDocument laid = DocumentLayout.OpenDocx(new MemoryStream(bytes), null, Options(culture));
+        using LaidOutDocument laid = DocsLayout.Open(new MemoryStream(bytes), null, Options(culture));
         Assert.Equal(width, laid.GetPage(0).WidthPt, 1);
         Assert.Equal(height, laid.GetPage(0).HeightPt, 1);
 
         // Landscape with no stated size (in memory: Chuvadi.Docs writes a w:pgSz for any landscape section).
         doc.Section.Page.Orientation = PageOrientation.Landscape;
         doc.Section.Page.SizeStated = false;
-        PageGeometry landscape = DocxImporter.Import(doc, null, Options(culture)).Sections[0].Page;
+        PageGeometry landscape = DocsImporter.Import(doc, null, Options(culture)).Sections[0].Page;
         Assert.Equal(height, landscape.Width, 1);
         Assert.Equal(width, landscape.Height, 1);
 
         // A stated size is kept whatever the culture.
         Document a4 = new Document();
         a4.AddParagraph("A4 stated");
-        using LaidOutDocument stated = DocumentLayout.OpenDocx(new MemoryStream(Save(a4)), null, Options("en-US"));
+        using LaidOutDocument stated = DocsLayout.Open(new MemoryStream(Save(a4)), null, Options("en-US"));
         Assert.Equal(595.3, stated.GetPage(0).WidthPt, 0);
     }
 
@@ -506,8 +467,13 @@ public class DocxImportTests
     [Fact]
     public void A_workbook_renamed_docx_is_rejected_by_the_document_reader()
     {
-        byte[] xlsx = XlsxImportTests.Save(XlsxImportTests.Sample());
-        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => DocumentLayout.OpenDocx(new MemoryStream(xlsx), null, Options()));
+        // A workbook written with Chuvadi.Sheets (a test-only reference of this project).
+        Chuvadi.Sheets.Excel.Workbook wb = new Chuvadi.Sheets.Excel.Workbook();
+        wb.AddSheet("Charges").Cell("A1").Value = "Schedule of Charges";
+        using MemoryStream saved = new MemoryStream();
+        wb.SaveTo(saved);
+        byte[] xlsx = saved.ToArray();
+        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => DocsLayout.Open(new MemoryStream(xlsx), null, Options()));
         Assert.IsType<DocxFormatException>(ex.InnerException);
     }
 
@@ -515,7 +481,7 @@ public class DocxImportTests
     public void Corrupt_and_limited_input_fail_cleanly()
     {
         byte[] notDocx = System.Text.Encoding.ASCII.GetBytes("PK\u0003\u0004word/document.xml then garbage");
-        Assert.Throws<LayoutFormatException>(() => DocumentLayout.OpenDocx(new MemoryStream(notDocx), null, Options()));
+        Assert.Throws<LayoutFormatException>(() => DocsLayout.Open(new MemoryStream(notDocx), null, Options()));
 
         Document doc = new Document();
         DocTable outer = doc.AddTable(1);
@@ -528,17 +494,17 @@ public class DocxImportTests
         current.AddRow("deepest");
         LayoutOptions tight = Options();
         tight.Limits = new LayoutLimits { MaxNestingDepth = 3 };
-        Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.OpenDocx(new MemoryStream(Save(doc)), null, tight).ResolvePageCount());
+        Assert.Throws<LayoutLimitExceededException>(() => DocsLayout.Open(new MemoryStream(Save(doc)), null, tight).ResolvePageCount());
     }
 }
 
 /// <summary>Word-made documents from the Apache POI corpus (Fixtures/docx, Apache-2.0).</summary>
-public class DocxWordFixtureTests
+public class DocsWordFixtureTests
 {
     private static LaidOutDocument Open(string file, List<LayoutWarning>? warnings = null)
     {
         using FileStream fs = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "docx", file));
-        return DocumentLayout.Open(fs, LayoutSourceFormat.Auto, DocxImportTests.Options());
+        return DocsLayout.Open(fs, null, DocsImportTests.Options());
     }
 
     [Theory]

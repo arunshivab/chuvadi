@@ -15,7 +15,7 @@ namespace Chuvadi.Layout.ManualTests
 
         private static void L8_DocxShowcaseLaysOutLikeWord()
         {
-            using LaidOutDocument doc = DocumentLayout.Open(new MemoryStream(PreviewScenarios.DocxShowcase()), LayoutSourceFormat.Auto, PreviewScenarios.DocxOptions());
+            using LaidOutDocument doc = Chuvadi.Layout.Documents.AutoDetectLayout.Open(new MemoryStream(PreviewScenarios.DocxShowcase()), LayoutSourceFormat.Auto, PreviewScenarios.DocxOptions());
             Check(doc.Source.Format == LayoutSourceFormat.Docx, "sniffed as docx");
             int n = doc.ResolvePageCount();
             Check(n >= 2, "docx showcase pages: " + n);

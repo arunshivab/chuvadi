@@ -21,10 +21,6 @@
   <!-- Unicode conformance data (UCD 16.0.0, Unicode License v3; see src/Chuvadi.Layout/THIRD-PARTY-NOTICES.md). -->
   <ItemGroup>
     <EmbeddedResource Include="Data\*.txt" LogicalName="Chuvadi.Layout.Tests.Data.%(Filename)%(Extension)" />
-    <None Include="Fixtures\xlsx\*.*" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Fixtures\docx\*.*" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Encrypted packages are embedded and read through a MemoryStream, never opened from a path (D-44). -->
-    <EmbeddedResource Include="Fixtures\encrypted\*.docx;Fixtures\encrypted\*.xlsx" LogicalName="Chuvadi.Layout.Tests.Encrypted.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- NOTE: the SHIPPED LIBRARIES remain strictly pure-BCL (no PackageReference).

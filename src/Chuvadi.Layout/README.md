@@ -1,9 +1,19 @@
 # Chuvadi.Layout
 
 A pure-BCL page layout engine for .NET. It paginates flow documents (Word-style) and spreadsheet
-grids (Excel-style) into fixed pages, emitting a neutral, immutable page display list. Its only
-dependency is the Chuvadi family itself (Chuvadi.Sheets reads .xlsx); there is no PDF dependency.
-PDF, SVG and PNG output ships separately as Chuvadi.Layout.Pdf.
+grids (Excel-style) into fixed pages, emitting a neutral, immutable page display list, and lays out plain text. Its
+only dependency is Chuvadi.Fonts (the built-in LiPi Sans fonts); there is no PDF dependency. The importers are their
+own packages, so an app takes only what it needs:
+
+| Package | Lays out |
+|---|---|
+| Chuvadi.Layout.Docs | Word documents (.docx), through Chuvadi.Docs: `DocsLayout.Open` |
+| Chuvadi.Layout.Sheets | Excel workbooks (.xlsx), through Chuvadi.Sheets: `SheetsLayout.Open` |
+| Chuvadi.Layout.Documents | any of these, format detected: `AutoDetectLayout.Open` |
+| Chuvadi.Layout.Markup | Markdown and sanitized HTML, through Chuvadi.Markup |
+| Chuvadi.Layout.Fonts | the Office metric-compatible substitute fonts (Liberation, Carlito, Caladea) |
+
+PDF, SVG and PNG output ships separately as Chuvadi.Layout.Pdf; SVG is also in this package (`LayoutSvg`).
 
 Status: **0.1.0 (preview).** Word documents (Chuvadi.Docs 1.6.0), Excel workbooks (Chuvadi.Sheets 1.7.0) and plain
 text; Markdown and HTML through Chuvadi.Layout.Markup. Limits and decisions: `docs/Chuvadi.Layout/DESIGN.md` in the
@@ -16,8 +26,9 @@ using Chuvadi.Layout;
 using Chuvadi.Layout.Fonts;
 
 var options = new LayoutOptions();
-options.FontSources.Add(BundledFontSource.Instance);   // Chuvadi.Layout.Fonts package (OFL)
+options.FontSources.Add(BundledFontSource.Instance);   // Chuvadi.Layout.Fonts package (OFL): Office substitutes
 // options.AllowSystemFonts = true;                   // desktop viewers: use real Office fonts when installed
+// LiPi Sans (Latin and nine Indic scripts) is built in (Chuvadi.Fonts); options.UseBuiltInFonts = false turns it off.
 
 FontResolver fonts = options.CreateFontResolver();
 FontResolution r = fonts.Resolve(new FontRequest("Calibri", Weight: 700));
@@ -30,12 +41,14 @@ foreach (FontSubstitution s in fonts.ReportedSubstitutions)
 int mdw = r.Face.MaxDigitWidthPixels(11);   // Excel max digit width, 7 px for Calibri 11
 ```
 
-## Word documents
+## Word documents (Chuvadi.Layout.Docs)
 
 ```csharp
+using Chuvadi.Layout.Docs;
+
 var options = new LayoutOptions();                     // options.Password = "..." for encrypted documents
 options.FontSources.Add(BundledFontSource.Instance);
-using LaidOutDocument doc = DocumentLayout.OpenDocx(File.OpenRead("report.docx"), null, options);
+using LaidOutDocument doc = DocsLayout.Open(File.OpenRead("report.docx"), null, options);
 int pages = doc.ResolvePageCount();
 LaidOutPage first = doc.GetPage(0);                     // display list, boxes, text; SVG with LayoutSvg
 ```
@@ -46,13 +59,15 @@ text boxes, footnotes at the foot of their page and endnotes after the text, tra
 PAGE/NUMPAGES fields and the document's embedded fonts (`LayoutOptions.UseEmbeddedFonts`). What is approximated
 or not yet laid out is reported in `doc.Warnings`.
 
-## Excel workbooks
+## Excel workbooks (Chuvadi.Layout.Sheets)
 
 ```csharp
+using Chuvadi.Layout.Sheets;
+
 var options = new LayoutOptions();                     // options.Password = "..." for encrypted workbooks
 options.FontSources.Add(BundledFontSource.Instance);
-using LaidOutDocument doc = DocumentLayout.OpenXlsx(File.OpenRead("charges.xlsx"),
-    new XlsxImportOptions { DefaultPaperSizeCode = 9 }, options);   // A4 when the file states no paper
+using LaidOutDocument doc = SheetsLayout.Open(File.OpenRead("charges.xlsx"),
+    new SheetsImportOptions { DefaultPaperSizeCode = 9 }, options);   // A4 when the file states no paper
 foreach (LaidOutPage page in doc.GetPages())
     Console.WriteLine($"{page.SourceName} page {page.PageLabel}");
 foreach (LayoutWarning w in doc.Warnings)
@@ -68,8 +83,19 @@ come from Chuvadi.Sheets and are printed as Excel shows them:
 - conditional formats (fills, fonts, borders, number formats, data bars);
 - pictures and shapes.
 
-Charts are drawn as labelled placeholders. `DocumentLayout.Open(Stream)` sniffs .xlsx
-automatically. `DocumentLayout.Open(Workbook)` takes a workbook you have already loaded.
+Charts are drawn as labelled placeholders. `SheetsLayout.Open(Workbook)` takes a workbook you have already loaded.
+
+## A file of unknown kind (Chuvadi.Layout.Documents)
+
+```csharp
+using Chuvadi.Layout.Documents;
+
+using LaidOutDocument doc = AutoDetectLayout.Open(stream, LayoutSourceFormat.Auto, options);   // docx, xlsx, text
+```
+
+The format is sniffed from the content; with `options.Password` an encrypted file is decrypted and laid out as a
+document or a workbook, whichever it is. The engine's own `DocumentLayout.Open(Stream)` lays out plain text and, for a
+docx, an xlsx or an encrypted file, throws `LayoutFormatException` naming the package to use.
 
 ## Guarantees
 

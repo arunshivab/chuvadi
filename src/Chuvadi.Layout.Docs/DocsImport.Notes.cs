@@ -6,9 +6,9 @@ using Chuvadi.Layout.Fonts;
 using Chuvadi.Layout.Model;
 using D = Chuvadi.Docs.Word;
 
-namespace Chuvadi.Layout.Import
+namespace Chuvadi.Layout.Docs
 {
-    internal sealed partial class DocxImport
+    internal sealed partial class DocsImport
     {
         // ---- Footnotes and endnotes (Chuvadi.Docs 1.6.0) ----
 
@@ -163,8 +163,8 @@ namespace Chuvadi.Layout.Import
                     _ => TextBoxVerticalAlignment.Top,
                 },
                 AutoFit = box.AutoFit,
-                Fill = DocxTheme.TryHex(box.FillHex?.TrimStart('#'), out LayoutColor fill) ? fill : null,
-                Line = DocxTheme.TryHex(box.LineHex?.TrimStart('#'), out LayoutColor line) ? line : null,
+                Fill = DocsTheme.TryHex(box.FillHex?.TrimStart('#'), out LayoutColor fill) ? fill : null,
+                Line = DocsTheme.TryHex(box.LineHex?.TrimStart('#'), out LayoutColor line) ? line : null,
                 LineWidth = box.LineWidthPt ?? 0.75,
             };
             double inner = Math.Max(1, width - flowBox.InsetLeft - flowBox.InsetRight);
