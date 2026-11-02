@@ -2,6 +2,19 @@
 
 ## 0.1.0 (unreleased)
 
+D-116 A4 (font search order and embedded subset fonts):
+
+- Search order: fonts embedded in the document, then installed fonts (with `AllowSystemFonts`), then `FontSources`,
+  then the built-in fonts. An installed family now wins over a packed copy of the same family (it used to be the
+  other way round). New `LayoutOptions.PreferBundledFonts` (default false) puts installed fonts last, so the output is
+  the same on every machine. `AllowSystemFonts` stays off by default, so nothing changes for callers that leave it off.
+- A character missing from an embedded (subset) font is drawn with the full font of the same family from the other
+  sources, in search order, and only then with the script fallback, as before. Either way a new warning,
+  `EmbeddedFontMissingGlyphs` (Fidelity, once per family), names the family and the first such character; the face
+  used is recorded in `FontSubstitutions` (`UsedOrigin` System, Supplied or Bundled).
+- No output change in the reference corpus or the fixtures (none has a subset missing a character it uses, and they
+  run without installed fonts).
+
 D-115 / D-121 (the importers as their own packages):
 
 - The engine no longer references Chuvadi.Docs or Chuvadi.Sheets. The docx importer is Chuvadi.Layout.Docs

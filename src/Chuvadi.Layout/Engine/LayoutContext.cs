@@ -123,5 +123,12 @@ namespace Chuvadi.Layout.Engine
 
         /// <summary>A font embedded in the source document could not be read; the font is substituted.</summary>
         public const string EmbeddedFontUnreadable = "EmbeddedFontUnreadable";
+
+        /// <summary>
+        /// A font embedded in the source document (usually a subset) has no glyph for some characters; they are drawn
+        /// with the full font of the same family from the other sources (installed fonts first), or, when no other
+        /// source has the family, with the script fallback (D-116). Once per family.
+        /// </summary>
+        public const string EmbeddedFontMissingGlyphs = "EmbeddedFontMissingGlyphs";
     }
 }
