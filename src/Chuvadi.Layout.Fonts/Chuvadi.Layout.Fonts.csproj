@@ -11,7 +11,7 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Fonts</Product>
-    <Description>Offline font pack for Chuvadi.Layout: SIL OFL 1.1 fonts embedded as resources, exposed as an IFontSource. Metric-compatible substitutes for the Office core fonts (Liberation Sans/Serif/Mono for Arial/Times New Roman/Courier New, Carlito for Calibri, Caladea for Cambria) and LiPi Sans (Latin plus ten Indic scripts) as static Regular/Bold faces. No network, no disk access.</Description>
+    <Description>Offline font pack for Chuvadi.Layout: SIL OFL 1.1 fonts embedded as resources, exposed as an IFontSource. Metric-compatible substitutes for the Office core fonts (Liberation Sans/Serif/Mono for Arial/Times New Roman/Courier New, Carlito for Calibri, Caladea for Cambria), four styles each. The LiPi Sans fonts are in Chuvadi.Fonts, which Chuvadi.Layout uses as its built-in fonts. No network, no disk access.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>0.1.0</Version>
@@ -20,7 +20,7 @@
     <PackageLicenseExpression>MIT AND OFL-1.1</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>fonts;ofl;liberation;carlito;caladea;indic;layout</PackageTags>
+    <PackageTags>fonts;ofl;liberation;carlito;caladea;layout</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Pdf.Tests" />
   </ItemGroup>
 
   <ItemGroup>

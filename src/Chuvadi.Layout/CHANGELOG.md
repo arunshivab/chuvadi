@@ -2,6 +2,20 @@
 
 ## 0.1.0 (unreleased)
 
+D-113 / D-115 (built-in fonts from Chuvadi.Fonts):
+
+- Chuvadi.Layout references the new Chuvadi.Fonts package and adds its 22 LiPi Sans faces to every resolver as the
+  built-in fonts, after `LayoutOptions.FontSources` (new `LayoutOptions.UseBuiltInFonts`, default true). Indic text
+  and the script fallback no longer need `BundledFontSource.Instance`. The faces report `FontOrigin.Bundled`, as
+  before. With `UseBuiltInFonts = false` and no other source, resolving still throws the "No fonts are available"
+  `LayoutException`, whose message now names the switch.
+- Chuvadi.Layout.Fonts keeps the 20 Office metric-compatible faces (Liberation, Carlito, Caladea); the 22 LiPi files
+  and their licence moved unchanged to Chuvadi.Fonts (same bytes, checked by SHA-256). `BundledFontSource.ReadResource`
+  is internal (D-115). Tests and samples read LiPi through `Chuvadi.Fonts.FontPack`. The reference corpus font
+  configuration lists both font folders.
+- No output change: the corpus, the fixtures and their SVG hashes, page counts, warnings and font reports are
+  identical.
+
 D-90 (page-dependent field values as text runs):
 
 - Field values (PAGE, NUMPAGES, SECTIONPAGES, DATE, TIME, FILENAME and cached results) are evaluated when the

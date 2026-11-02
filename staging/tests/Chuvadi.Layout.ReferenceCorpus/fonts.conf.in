@@ -1,8 +1,9 @@
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
-<!-- LibreOffice sees only Layout's bundled fonts (plus the metric-compatible aliases), so both sides draw with the same font files. -->
+<!-- LibreOffice sees only Layout's fonts: the Layout.Fonts pack and the built-in LiPi fonts of Chuvadi.Fonts (plus the metric-compatible aliases), so both sides draw with the same font files. -->
 <fontconfig>
   <dir>@FONTS@</dir>
+  <dir>@BUILTIN@</dir>
   <cachedir>@CACHE@</cachedir>
   <include ignore_missing="yes">/etc/fonts/conf.d/30-metric-aliases.conf</include>
   <alias><family>sans-serif</family><prefer><family>Liberation Sans</family></prefer></alias>

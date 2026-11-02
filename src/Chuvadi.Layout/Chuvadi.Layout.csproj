@@ -29,6 +29,11 @@
     <ProjectReference Include="..\Chuvadi.Sheets\Chuvadi.Sheets.csproj" />
   </ItemGroup>
 
+  <!-- The built-in fonts (LiPi Sans; D-101, D-113). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />

@@ -31,7 +31,7 @@ namespace Chuvadi.Layout.ManualTests
             }
         }
 
-        private static FontResolver Bundled() => new FontResolver(new IFontSource[] { BundledFontSource.Instance });
+        private static FontResolver Bundled() => new FontResolver(new IFontSource[] { BundledFontSource.Instance, BuiltInFontSource.Instance });
 
         private static void L1_BundledPackLoadsEveryFace()
         {
@@ -42,7 +42,8 @@ namespace Chuvadi.Layout.ManualTests
                 Check(f.FamilyName == d.FamilyName && f.Weight == d.Weight && f.IsItalic == d.IsItalic, "catalog mismatch for " + d.Key);
                 n++;
             }
-            Check(n == 42, "expected 42 bundled faces, got " + n);
+            Check(n == 20, "expected 20 bundled faces, got " + n);
+            Check(BuiltInFontSource.Instance.GetFaces().Count == 22, "expected 22 built-in LiPi faces");
         }
 
         private static void L1_OfficeFontsResolveToMetricCompatibleSubstitutes()

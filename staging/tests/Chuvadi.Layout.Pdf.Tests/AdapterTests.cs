@@ -13,12 +13,12 @@ using PdfShaping = Chuvadi.Pdf.Text.Shaping;
 
 namespace Chuvadi.Layout.Pdf.Tests;
 
-/// <summary>Fonts from the OFL pack in Chuvadi.Layout.Fonts, and layout helpers.</summary>
+/// <summary>Fonts from the OFL packs (LiPi from Chuvadi.Fonts, the rest from Chuvadi.Layout.Fonts), and layout helpers.</summary>
 internal static class Fixture
 {
     public const string Tamil = "LiPi-Sans-Tamil-Regular.ttf";
 
-    public static byte[] FontBytes(string file) => BundledFontSource.ReadResource(file);
+    public static byte[] FontBytes(string file) => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : BundledFontSource.ReadResource(file);
 
     public static FontFace Face(string file) => FontFace.Load(FontBytes(file), 0, FontOrigin.Supplied, file);
 

@@ -72,8 +72,8 @@ namespace Chuvadi.Layout
     {
         /// <summary>
         /// Font sources, searched in order after any fonts embedded in the document. Typically the
-        /// Chuvadi.Layout.Fonts pack (BundledFontSource.Instance). Nothing is read from disk or the network unless a
-        /// source does so itself.
+        /// Chuvadi.Layout.Fonts pack (BundledFontSource.Instance, the Office metric-compatible substitutes). Nothing is
+        /// read from disk or the network unless a source does so itself.
         /// </summary>
         public IList<IFontSource> FontSources { get; } = new List<IFontSource>();
 
@@ -85,6 +85,14 @@ namespace Chuvadi.Layout
 
         /// <summary>Use fonts embedded in the source document. Default true.</summary>
         public bool UseEmbeddedFonts { get; set; } = true;
+
+        /// <summary>
+        /// Use the built-in fonts: the LiPi Sans faces of the Chuvadi.Fonts package (Latin and nine Indic scripts),
+        /// searched after <see cref="FontSources"/>. They are the default script fallback and last resort, so text is
+        /// never left without a font. Default true; false lays out with only the document's, the app's and (if
+        /// allowed) the installed fonts.
+        /// </summary>
+        public bool UseBuiltInFonts { get; set; } = true;
 
         /// <summary>Substitution and fallback rules. Default <see cref="FontSubstitutionTable.CreateDefault"/>.</summary>
         public FontSubstitutionTable FontSubstitutions { get; set; } = FontSubstitutionTable.CreateDefault();
@@ -115,7 +123,10 @@ namespace Chuvadi.Layout
         /// <summary>Number of laid-out pages (with display lists) kept in memory. Default 8.</summary>
         public int PageCacheSize { get; set; } = 8;
 
-        /// <summary>Builds the resolver for these options: <paramref name="embedded"/> first, then sources, then system fonts if allowed.</summary>
+        /// <summary>
+        /// Builds the resolver for these options: <paramref name="embedded"/> first, then <see cref="FontSources"/>, then
+        /// the built-in fonts (if <see cref="UseBuiltInFonts"/>), then system fonts (if <see cref="AllowSystemFonts"/>).
+        /// </summary>
         public FontResolver CreateFontResolver(IFontSource? embedded = null)
         {
             List<IFontSource> sources = new List<IFontSource>();
@@ -124,6 +135,10 @@ namespace Chuvadi.Layout
                 sources.Add(embedded);
             }
             sources.AddRange(FontSources);
+            if (UseBuiltInFonts)
+            {
+                sources.Add(BuiltInFontSource.Instance);
+            }
             if (AllowSystemFonts)
             {
                 sources.Add(new SystemFontSource());

@@ -200,7 +200,7 @@ namespace Chuvadi.Layout.Fonts
             List<FontFaceDescriptor> all = AllFaces();
             if (all.Count == 0)
             {
-                throw new LayoutException("No fonts are available: configure at least one font source (for example the Chuvadi.Layout.Fonts pack).");
+                throw new LayoutException("No fonts are available: LayoutOptions.UseBuiltInFonts is off and no other font source is configured (for example the Chuvadi.Layout.Fonts pack, or AllowSystemFonts).");
             }
             FontResolution? any = TryFamily(request with { Family = all[0].FamilyName }, FontMatchKind.LastResort);
             return any! with { Request = request };

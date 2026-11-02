@@ -22,8 +22,8 @@ report says so, and the files at the end are the ones to open in real Word and E
 
 ## How the references are made
 
-- LibreOffice runs with its own font configuration (fonts.conf.in) that contains only Layout's bundled fonts
-  (src/Chuvadi.Layout.Fonts/Fonts) and the metric-compatible aliases. So both sides draw with the same font files:
+- LibreOffice runs with its own font configuration (fonts.conf.in) that contains only Layout's fonts
+  (src/Chuvadi.Layout.Fonts/Fonts and the built-in LiPi fonts in src/Chuvadi.Fonts/Fonts) and the metric-compatible aliases. So both sides draw with the same font files:
   Calibri as Carlito, Cambria as Caladea, Arial as Liberation Sans, Times New Roman as Liberation Serif, Courier New as
   Liberation Mono, and Tamil with LiPi Sans Tamil.
 - Command (what make-references.sh runs):
