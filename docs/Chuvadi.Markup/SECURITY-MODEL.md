@@ -2,10 +2,10 @@
 
 ## Threat model
 
-Input is hostile: mail from anyone (Anjal), documents from anywhere (Reader). The attacker wants to run
-script, make the viewer fetch something (tracking, IP disclosure, CSRF), capture credentials, overlay
-the host UI, or make the server/app hang or run out of memory. The sanitizer's output is placed into the
-host's own page (Anjal: server-side rendered; Reader: WebView2), so a single bypass is a host compromise.
+Input is hostile: mail from anyone, documents from anywhere. The attacker wants to run script, make the
+viewer fetch something (tracking, IP disclosure, CSRF), capture credentials, overlay the host UI, or make
+the server or app hang or run out of memory. The sanitizer's output is placed into the host's own page
+(server-side rendered or in an embedded web view), so a single bypass is a host compromise.
 
 ## How the sanitizer works
 
@@ -14,7 +14,7 @@ host's own page (Anjal: server-side rendered; Reader: WebView2), so a single byp
 2. **Allowlist.** Each element is kept, unwrapped (children kept) or dropped (with children) per
    `SanitizerPolicy`; unknown elements are unwrapped (`DefaultElementAction`). Attributes are kept only
    if allowed globally or for that element; every `on*` handler is always removed. SVG and MathML have
-   their own allowlists and are off unless enabled (Reader enables safe subsets).
+   their own built-in safe subsets and are off unless `AllowSvg` / `AllowMathML` is set.
 3. **URLs.** Links are scheme-checked (`http`, `https`, `mailto` by default; relative and `#fragment`
    per policy) and then kept, made inert (`data-chuvadi-href` + `title`) or rewritten through a template.
    A relative URL that would reveal a scheme once control, whitespace and format characters are removed
@@ -37,23 +37,27 @@ host's own page (Anjal: server-side rendered; Reader: WebView2), so a single byp
    `counter()`/`counters()`, SVG `font-family`). Content therefore cannot replace a font, animation or
    list style the host uses. `@page` and `@layer` are not allowed, and the anchor-positioning and
    view-transition properties (`anchor-name`, `position-anchor`, `anchor()`, `view-transition-name`, ...)
-   are removed. `Anjal()` keeps no web fonts at all unless `font-face` is added back to `AllowedAtRules`.
+   are removed. By default no web fonts are kept at all; `AllowEmbeddedFonts` turns `@font-face` on
+   (still namespaced, and still only from `data:` URIs or the resolver).
 5. **Ids.** `id`, `for`, `headers`, `aria-*` id references, `usemap` and fragment links are prefixed
    (`user-content-`) so content cannot clobber host ids or globals.
 6. **Fixed point.** The output is serialized, re-parsed as a fragment in body context and sanitized
    again until it no longer changes (`MaxStabilityPasses`, default 3). This closes mutation-XSS
    (namespace confusion, `<noscript>`, `<template>`, `<select>` and comment edge cases). If it never
    stabilises, the escaped plain text is returned (`UnstableOutputHandling.PlainText`).
-7. **Limits.** All parsing runs under `MarkupLimits` (`Strict()` in `Anjal()`) and the caller's
+7. **Limits.** All parsing runs under `MarkupLimits` (`Strict()` by default) and the caller's
    `CancellationToken`.
 
 The test suite runs ~170 XSS, mutation-XSS and exfiltration vectors, seeded structural fuzzing and
-time-boxed random-byte fuzzing through both policies, and checks every output with an independent
+time-boxed random-byte fuzzing through the default policy and a configuration with every switch on, and checks every output with an independent
 invariant checker that re-parses with scripting on and off.
 
-## Reader requirements §9 — mapping
+## Requirements mapping (consumer requirements §9, sanitizer strip list)
 
-| Requirement | Anjal() | Reader() |
+"Default" is `new SanitizerPolicy()`. "All switches on" is `Links = Active`, `AllowRelativeLinks`,
+`AllowFormControls`, `AllowMedia`, `AllowSvg`, `AllowMathML`, `AllowSvgDataImages` and `AllowEmbeddedFonts` set.
+
+| Requirement | Default | All switches on |
 |---|---|---|
 | `<script>`, all `on*` handlers | removed | removed |
 | `javascript:`, `vbscript:`, `data:` URLs (except `data:image/*`) | removed | removed |

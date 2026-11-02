@@ -18,7 +18,7 @@ column/tab arithmetic, lazy continuation, link reference definitions) followed b
 (delimiter stack with `openers_bottom` per delimiter class, bracket stack, backtick and HTML-end
 memoisation). GFM tables, task lists, strikethrough and extended autolinks follow cmark-gfm. The internal
 block/inline tree is converted to the public AST, which is plain mutable .NET objects: consumers
-(Reader, Chuvadi.Layout, Chuvadi.Docs) can walk, edit and build documents, then render HTML or write
+(viewers, Chuvadi.Layout, Chuvadi.Docs) can walk, edit and build documents, then render HTML or write
 Markdown. The writer is verified by round-tripping every spec example: parse, write, parse again, and
 the HTML must be identical.
 
@@ -71,7 +71,7 @@ Throughput on a 2-core 2.1 GHz Xeon (Linux, .NET 10, Release):
 | Markdown parse + render (GFM) | ~7 |
 | Markdown writer (parse + write) | ~8 |
 | HTML parse | ~19 |
-| Sanitize (Reader or Anjal rules, incl. stability passes) | ~5.5 |
+| Sanitize (default or all-switches policy, incl. stability passes) | ~5.5 |
 | Plain text to HTML | ~65 |
 
 Every entry point is also fuzzed with random bytes and random markup fragments (`FuzzTests`, time-boxed;
@@ -96,6 +96,6 @@ in well under a second; see `HtmlPathologicalTests` and `PathologicalTests`.
   is a backstop, and cancellation is polled inside the opener walk.
 - **Encodings** ISO-8859-10, -14 and -16 and other labels .NET has no code page for are reported as
   unsupported (`HtmlEncoding.GetEncoding` returns null) and decoding falls back to the next sniffing step.
-- **Markdown footnotes** are out of scope for 1.0 (Reader requirements §10).
+- **Markdown footnotes** are out of scope for 1.0 (consumer requirements §10).
 - **Markdown `RawHtmlMode.Escape`** renders HTML blocks as escaped paragraphs (cmark's `--safe` emits
   a comment placeholder instead); `Strip` removes them.

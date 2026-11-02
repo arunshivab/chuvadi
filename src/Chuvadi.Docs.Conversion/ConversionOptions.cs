@@ -389,8 +389,8 @@ public sealed class HtmlImportOptions : ImportOptions
     /// </summary>
     public static SanitizerPolicy DefaultPolicy()
     {
-        var p = SanitizerPolicy.Anjal();
-        p.Links = LinkHandling.Keep;
+        var p = new SanitizerPolicy();
+        p.Links = LinkHandling.Active;
         p.LinksOpenInNewWindow = false;
         p.AllowRelativeLinks = true;
         p.StyleSheets = StyleSheetHandling.Drop;

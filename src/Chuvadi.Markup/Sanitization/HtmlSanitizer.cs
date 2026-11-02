@@ -12,13 +12,13 @@ namespace Chuvadi.Markup.Sanitization
     /// </summary>
     public static class HtmlSanitizer
     {
-        /// <summary>Sanitizes an HTML document or fragment (mail bodies, web pages, rendered Markdown). Policy defaults to <see cref="SanitizerPolicy.Anjal"/>.</summary>
+        /// <summary>Sanitizes an HTML document or fragment (mail bodies, web pages, rendered Markdown). A null policy means a new <see cref="SanitizerPolicy"/>: the safest configuration.</summary>
         /// <exception cref="MarkupLimitExceededException">A hard limit was exceeded.</exception>
         /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
         public static SanitizeResult Sanitize(string html, SanitizerPolicy? policy = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(html);
-            policy ??= SanitizerPolicy.Anjal();
+            policy ??= new SanitizerPolicy();
             var doc = HtmlParser.Parse(html, ParserOptions(policy), cancellationToken);
             return Run(doc, policy, cancellationToken);
         }
@@ -27,7 +27,7 @@ namespace Chuvadi.Markup.Sanitization
         public static SanitizeResult Sanitize(byte[] html, SanitizerPolicy? policy = null, System.Text.Encoding? encoding = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(html);
-            policy ??= SanitizerPolicy.Anjal();
+            policy ??= new SanitizerPolicy();
             var options = ParserOptions(policy);
             options.Encoding = encoding;
             var doc = HtmlParser.Parse(html, options, cancellationToken);
@@ -38,7 +38,7 @@ namespace Chuvadi.Markup.Sanitization
         public static SanitizeResult Sanitize(HtmlDocument document, SanitizerPolicy? policy = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(document);
-            policy ??= SanitizerPolicy.Anjal();
+            policy ??= new SanitizerPolicy();
             return Run((HtmlDocument)document.Clone(true), policy, cancellationToken);
         }
 

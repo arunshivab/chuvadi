@@ -182,7 +182,7 @@ namespace Chuvadi.Markup.Sanitization
                     }
                     if (rule is not CssAtRule at) continue;
                     string n = at.Name.ToLowerInvariant();
-                    if (!_p.AllowedAtRules.Contains(n)) continue;
+                    if (!AtRuleAllowed(n)) continue;
                     if (n == "font-face")
                     {
                         foreach (var d in at.Declarations)
@@ -361,6 +361,8 @@ namespace Chuvadi.Markup.Sanitization
             }
         }
 
+        private bool AtRuleAllowed(string name) => _p.AllowedAtRules.Contains(name) || (name == "font-face" && _p.AllowEmbeddedFonts);
+
         private static string StripVendor(string n)
         {
             foreach (var p in new[] { "-webkit-", "-moz-", "-ms-", "-o-" })
@@ -400,7 +402,7 @@ namespace Chuvadi.Markup.Sanitization
         private bool SanitizeAtRule(CssAtRule at, string? scope, bool verification, bool inStyleRule)
         {
             string name = at.Name.ToLowerInvariant();
-            if (!_p.AllowedAtRules.Contains(name)) return false;
+            if (!AtRuleAllowed(name)) return false;
             if (!at.HasBlock) return false;
             if (!PreludeIsSafe(at.Prelude)) return false;
             bool keyframes = name.EndsWith("keyframes", StringComparison.Ordinal);

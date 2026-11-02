@@ -17,8 +17,8 @@ namespace Chuvadi.Markup.Sanitization
     /// <summary>How links (<c>a</c> and <c>area</c> with <c>href</c>) are emitted.</summary>
     public enum LinkHandling
     {
-        /// <summary>Keep the (scheme-checked) href. The host is expected to intercept navigation.</summary>
-        Keep,
+        /// <summary>Keep the (scheme-checked) href, so the link is active. The host is expected to intercept navigation.</summary>
+        Active,
         /// <summary>Remove the href so the link cannot navigate; the destination is kept in <see cref="SanitizerPolicy.InertLinkAttribute"/> and, if the element has none, a <c>title</c>.</summary>
         Inert,
         /// <summary>Replace the href with <see cref="SanitizerPolicy.LinkRewriteTemplate"/> (for a click-through page).</summary>

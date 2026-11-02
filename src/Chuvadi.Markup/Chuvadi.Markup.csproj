@@ -11,7 +11,7 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Markup</Product>
-    <Description>Pure-BCL markup library for .NET: a CommonMark Markdown parser with GFM tables, task lists, strikethrough and autolinks, a public Markdown AST with HTML renderer and Markdown writer, a WHATWG HTML5 tokenizer and tree builder with charset sniffing, a CSS syntax parser, an allowlist HTML sanitizer with strict (mail) and standard (viewer) policies, and plain text to safe HTML. Built for untrusted input: limits, documented exceptions and cancellation everywhere. No NuGet dependencies.</Description>
+    <Description>Pure-BCL markup library for .NET: a CommonMark Markdown parser with GFM tables, task lists, strikethrough and autolinks, a public Markdown AST with HTML renderer and Markdown writer, a WHATWG HTML5 tokenizer and tree builder with charset sniffing, a CSS syntax parser, an allowlist HTML sanitizer whose default policy is the strictest, with capability switches, and plain text to safe HTML. Built for untrusted input: limits, documented exceptions and cancellation everywhere. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>1.0.0</Version>

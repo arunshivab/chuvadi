@@ -13,7 +13,7 @@ namespace Chuvadi.Markup.ManualTests
     /// <summary>
     /// Writes HTML pages for visual verification in a browser (Edge / WebView2). Each page wraps the
     /// library output in a host page with a Content-Security-Policy that blocks all network access,
-    /// as Reader and Anjal do, so anything that still tried to load would show as a CSP error in the
+    /// as a mail client or document viewer would, so anything that still tried to load would show as a CSP error in the
     /// browser's developer tools console.
     /// </summary>
     public static class PreviewScenarios
@@ -26,21 +26,21 @@ namespace Chuvadi.Markup.ManualTests
             var pages = new List<(string File, string Title, string Body)>();
 
             pages.Add(("markdown-gfm.html", "Markdown (GFM) README", MarkdownConverter.ToHtml(Samples.ReadmeMarkdown)));
-            pages.Add(("markdown-raw-html-sanitized.html", "Markdown with raw HTML, Reader-sanitized",
-                HtmlSanitizer.Sanitize(MarkdownConverter.ToHtml(Samples.ReadmeMarkdown, null, new MarkdownHtmlOptions { RawHtml = RawHtmlMode.Passthrough, HeadingIds = true }), SanitizerPolicy.Reader()).Html));
+            pages.Add(("markdown-raw-html-sanitized.html", "Markdown with raw HTML, viewer-sanitized",
+                HtmlSanitizer.Sanitize(MarkdownConverter.ToHtml(Samples.ReadmeMarkdown, null, new MarkdownHtmlOptions { RawHtml = RawHtmlMode.Passthrough, HeadingIds = true }), SamplePolicies.Viewer()).Html));
             pages.Add(("markdown-roundtrip.html", "MarkdownWriter output of the README",
                 "<pre>" + HtmlSerializer.EscapeText(MarkdownWriter.Write(MarkdownParser.Parse(Samples.ReadmeMarkdown, MarkdownOptions.Gfm()))) + "</pre>"));
 
-            var anjal = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SanitizerPolicy.Anjal());
-            pages.Add(("email-anjal.html", "Newsletter, Anjal policy (remote images blocked)", anjal.Html + Report(anjal)));
+            var mail = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SamplePolicies.Mail());
+            pages.Add(("email-mail.html", "Newsletter, mail policy (library default; remote images blocked)", mail.Html + Report(mail)));
 
-            var withCid = SanitizerPolicy.Anjal();
+            var withCid = SamplePolicies.Mail();
             withCid.ResourceResolver = new DelegateResourceResolver(r => r.Url.StartsWith("cid:", StringComparison.Ordinal) ? Samples.PngDataUri : null);
             var cid = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, withCid);
-            pages.Add(("email-anjal-cid.html", "Newsletter, Anjal policy, cid: parts resolved", cid.Html + Report(cid)));
+            pages.Add(("email-mail-cid.html", "Newsletter, mail policy, cid: parts resolved", cid.Html + Report(cid)));
 
-            var reader = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SanitizerPolicy.Reader());
-            pages.Add(("email-reader.html", "Newsletter, Reader policy", reader.Html + Report(reader)));
+            var viewer = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SamplePolicies.Viewer());
+            pages.Add(("email-viewer.html", "Newsletter, viewer policy", viewer.Html + Report(viewer)));
 
             pages.Add(("email-original-escaped.html", "Newsletter source (escaped, for comparison)", "<pre>" + HtmlSerializer.EscapeText(Samples.NewsletterHtml) + "</pre>"));
             pages.Add(("text-prewrap.html", "Plain-text reply, pre-wrap with quotes and inert links", PlainText.ToHtml(Samples.PlainTextReply, new TextToHtmlOptions { Links = LinkHandling.Inert })));

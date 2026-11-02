@@ -10,9 +10,9 @@ public class VerificationGroupTests
     [Fact] public void MarkdownUnsafeUrlsAreRemoved() => VerificationGroups.MarkdownUnsafeUrlsAreRemoved();
     [Fact] public void MarkdownAstIsNavigable() => VerificationGroups.MarkdownAstIsNavigable();
     [Fact] public void MarkdownWriterRoundTrips() => VerificationGroups.MarkdownWriterRoundTrips();
-    [Fact] public void MarkdownThroughReaderSanitizerIsSafe() => VerificationGroups.MarkdownThroughReaderSanitizerIsSafe();
-    [Fact] public void NewsletterSanitizesForAnjal() => VerificationGroups.NewsletterSanitizesForAnjal();
-    [Fact] public void NewsletterSanitizesForReader() => VerificationGroups.NewsletterSanitizesForReader();
+    [Fact] public void MarkdownThroughViewerSanitizerIsSafe() => VerificationGroups.MarkdownThroughViewerSanitizerIsSafe();
+    [Fact] public void NewsletterSanitizesForMail() => VerificationGroups.NewsletterSanitizesForMail();
+    [Fact] public void NewsletterSanitizesForViewer() => VerificationGroups.NewsletterSanitizesForViewer();
     [Fact] public void CidImagesResolveThroughHost() => VerificationGroups.CidImagesResolveThroughHost();
     [Fact] public void Windows1252MailDecodes() => VerificationGroups.Windows1252MailDecodes();
     [Fact] public void SanitizedOutputIsStable() => VerificationGroups.SanitizedOutputIsStable();

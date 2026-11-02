@@ -15,7 +15,7 @@ namespace Chuvadi.Markup.Tests.Text
         [Fact]
         public void Autolinks()
         {
-            string html = PlainText.ToHtml("see https://x.example/a_(b). www.y.example, z@w.example!", new TextToHtmlOptions { LinksOpenInNewWindow = false, WrapperClass = null, Layout = TextLayout.Preformatted });
+            string html = PlainText.ToHtml("see https://x.example/a_(b). www.y.example, z@w.example!", new TextToHtmlOptions { Links = LinkHandling.Active, LinksOpenInNewWindow = false, WrapperClass = null, Layout = TextLayout.Preformatted });
             Assert.Equal("<pre style=\"tab-size: 8\">see <a href=\"https://x.example/a_(b)\">https://x.example/a_(b)</a>. <a href=\"http://www.y.example\">www.y.example</a>, <a href=\"mailto:z@w.example\">z@w.example</a>!</pre>", html);
         }
 
@@ -51,6 +51,28 @@ namespace Chuvadi.Markup.Tests.Text
             var sw = System.Diagnostics.Stopwatch.StartNew();
             PlainText.ToHtml(string.Concat(System.Linq.Enumerable.Repeat("a@b c www http:/ x.example@ ", 50_000)));
             Assert.True(sw.Elapsed.TotalSeconds < 3);
+        }
+    
+        [Fact]
+        public void LinksAreInertByDefaultLikeTheSanitizer()
+        {
+            Assert.Equal(LinkHandling.Inert, new TextToHtmlOptions().Links);
+            Assert.Equal(new SanitizerPolicy().Links, new TextToHtmlOptions().Links);
+            string html = PlainText.ToHtml("see https://x.example/a and mail z@w.example", new TextToHtmlOptions { WrapperClass = null });
+            Assert.DoesNotContain(" href=", html, System.StringComparison.Ordinal);
+            Assert.Contains("data-chuvadi-href=\"https://x.example/a\"", html, System.StringComparison.Ordinal);
+            Assert.Contains("data-chuvadi-href=\"mailto:z@w.example\"", html, System.StringComparison.Ordinal);
+            Assert.Equal(PlainText.ToHtml("see https://x.example/a", new TextToHtmlOptions()), PlainText.ToHtml("see https://x.example/a", null));
+        }
+
+        [Theory]
+        [InlineData(LinkHandling.Active, " href=\"https://x.example/a\"")]
+        [InlineData(LinkHandling.Inert, " data-chuvadi-href=\"https://x.example/a\"")]
+        [InlineData(LinkHandling.Rewrite, " href=\"#https%3A%2F%2Fx.example%2Fa\"")]
+        public void EveryLinkHandlingValueIsAvailable(LinkHandling mode, string expected)
+        {
+            string html = PlainText.ToHtml("https://x.example/a", new TextToHtmlOptions { Links = mode, WrapperClass = null });
+            Assert.Contains(expected, html, System.StringComparison.Ordinal);
         }
     }
 }

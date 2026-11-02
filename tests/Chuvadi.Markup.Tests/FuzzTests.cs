@@ -127,15 +127,15 @@ namespace Chuvadi.Markup.Tests
         [Fact]
         public void Sanitizer()
         {
-            var anjal = SanitizerPolicy.Anjal();
-            var reader = SanitizerPolicy.Reader();
+            var strict = TestPolicies.Strict();
+            var viewer = TestPolicies.Viewer();
             int n = Run(2, (seed, bytes, text) =>
             {
-                var a = HtmlSanitizer.Sanitize(bytes, anjal);
-                var problems = SafetyInvariants.Check(a, anjal);
+                var a = HtmlSanitizer.Sanitize(bytes, strict);
+                var problems = SafetyInvariants.Check(a, strict);
                 Assert.True(problems.Count == 0, $"seed {seed}: " + string.Join("; ", problems));
-                var r = HtmlSanitizer.Sanitize(text, reader);
-                problems = SafetyInvariants.Check(r, reader);
+                var r = HtmlSanitizer.Sanitize(text, viewer);
+                problems = SafetyInvariants.Check(r, viewer);
                 Assert.True(problems.Count == 0, $"seed {seed}: " + string.Join("; ", problems));
             });
             Assert.True(n > 0);

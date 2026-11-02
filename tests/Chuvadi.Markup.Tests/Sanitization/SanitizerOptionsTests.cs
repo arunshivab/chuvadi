@@ -11,7 +11,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         private const string Png = "data:image/png;base64,iVBORw0KGgo=";
 
         [Fact]
-        public void AnjalBlocksRemoteImagesAndReportsThem()
+        public void DefaultPolicyBlocksRemoteImagesAndReportsThem()
         {
             var r = HtmlSanitizer.Sanitize("<p><img src='https://t.example/pixel.gif' alt=x><img src='" + Png + "'></p>");
             Assert.DoesNotContain("t.example", r.Html);
@@ -26,7 +26,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void ResolverMapsCidImages()
         {
-            var p = SanitizerPolicy.Anjal();
+            var p = TestPolicies.Strict();
             p.ResourceResolver = new DelegateResourceResolver(req => req.Url == "cid:logo@x" ? Png : null);
             var r = HtmlSanitizer.Sanitize("<img src='cid:logo@x'><img src='cid:other'>", p);
             Assert.Contains("src=\"" + Png + "\"", r.Html);
@@ -36,7 +36,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void ResolverResultIsTrustedButNeverScriptCapable()
         {
-            var p = SanitizerPolicy.Anjal();
+            var p = TestPolicies.Strict();
             p.ResourceResolver = new DelegateResourceResolver(req => req.Url switch
             {
                 "cid:a" => "/mail/42/part/2",
@@ -54,18 +54,18 @@ namespace Chuvadi.Markup.Tests.Sanitization
         public void LinkModes()
         {
             const string html = "<a href='https://x.example/?a=1&b=2'>go</a>";
-            var keep = HtmlSanitizer.Sanitize(html, SanitizerPolicy.Reader());
+            var keep = HtmlSanitizer.Sanitize(html, TestPolicies.Viewer());
             Assert.Contains("href=\"https://x.example/?a=1&amp;b=2\"", keep.Html);
             Assert.Contains("rel=\"noopener noreferrer\"", keep.Html);
 
-            var inert = SanitizerPolicy.Reader();
+            var inert = TestPolicies.Viewer();
             inert.Links = LinkHandling.Inert;
             var ri = HtmlSanitizer.Sanitize(html, inert);
             Assert.DoesNotContain(" href=", ri.Html);
             Assert.Contains("data-chuvadi-href=\"https://x.example/?a=1&amp;b=2\"", ri.Html);
             Assert.Contains("title=\"https://x.example/?a=1&amp;b=2\"", ri.Html);
 
-            var rw = SanitizerPolicy.Reader();
+            var rw = TestPolicies.Viewer();
             rw.Links = LinkHandling.Rewrite;
             rw.LinkRewriteTemplate = "/go?u={url}";
             var rr = HtmlSanitizer.Sanitize(html, rw);
@@ -75,7 +75,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void DangerousLinkSchemesRemoved()
         {
-            var r = HtmlSanitizer.Sanitize("<a href=' jav&#x09;ascript:alert(1)'>x</a><a href='mailto:a@b'>m</a>", SanitizerPolicy.Reader());
+            var r = HtmlSanitizer.Sanitize("<a href=' jav&#x09;ascript:alert(1)'>x</a><a href='mailto:a@b'>m</a>", TestPolicies.Viewer());
             Assert.DoesNotContain("javascript", r.Html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("mailto:a@b", r.Html);
         }
@@ -96,7 +96,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void StyleSheetsCanBeDropped()
         {
-            var p = SanitizerPolicy.Anjal();
+            var p = TestPolicies.Strict();
             p.StyleSheets = StyleSheetHandling.Drop;
             var r = HtmlSanitizer.Sanitize("<style>p{color:red}</style><p>x</p>", p);
             Assert.DoesNotContain("<style", r.Html);
@@ -120,7 +120,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
             Assert.Contains("background-image: none, url(&quot;" + Png + "&quot;)", r.Html);
             Assert.Equal(2, r.BlockedResources.Count);
 
-            var p = SanitizerPolicy.Anjal();
+            var p = TestPolicies.Strict();
             p.ReplaceBlockedCssImagesWithNone = false;
             var r2 = HtmlSanitizer.Sanitize("<p style=\"background: url(https://t.example/bg.png) #036; color: red\">x", p);
             Assert.DoesNotContain("background", r2.Html);
@@ -138,14 +138,14 @@ namespace Chuvadi.Markup.Tests.Sanitization
             var r = HtmlSanitizer.Sanitize("<style>" + css + " i { color: blue }</style><p>x");
             Assert.DoesNotContain("red", r.Html);
             Assert.Contains(".chuvadi-content i { color: blue; }", r.Html);
-            Assert.Empty(SafetyInvariants.Check(r, SanitizerPolicy.Anjal()));
+            Assert.Empty(SafetyInvariants.Check(r, TestPolicies.Strict()));
         }
 
         [Fact]
         public void FuzzSeed1930389171StyleWithoutSelector()
         {
             var bytes = FuzzTests.Input(1930389171);
-            var policy = SanitizerPolicy.Anjal();
+            var policy = TestPolicies.Strict();
             Assert.Empty(SafetyInvariants.Check(HtmlSanitizer.Sanitize(bytes, policy), policy));
         }
 
@@ -162,7 +162,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [InlineData("/\u00AD\\script.example/")]
         public void RelativeLinksHidingASchemeAreRemoved(string href)
         {
-            var r = HtmlSanitizer.Sanitize("<a href=\"" + href + "\">x</a><a href=\"\u0099docs/a.html\">y</a>", SanitizerPolicy.Reader());
+            var r = HtmlSanitizer.Sanitize("<a href=\"" + href + "\">x</a><a href=\"\u0099docs/a.html\">y</a>", TestPolicies.Viewer());
             Assert.DoesNotContain("script", r.Html, StringComparison.Ordinal);
             Assert.Contains("docs/a.html", r.Html, StringComparison.Ordinal);
         }
@@ -174,7 +174,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void F1_FontFaceFamiliesAreNamespacedWithTheirReferences()
         {
-            var p = SanitizerPolicy.Reader();
+            var p = TestPolicies.Viewer();
             string html = "<style>@font-face{font-family:HostFont;src:url(" + FontData + ")} p{font-family:HostFont, serif} .x{font:italic bold 12px/2 HostFont, sans-serif} .y{font-family:Arial}</style>"
                 + "<p style=\"font-family:'hostfont'\">x</p><svg><text font-family=\"HostFont, serif\">t</text></svg>";
             var r = HtmlSanitizer.Sanitize(html, p);
@@ -190,13 +190,13 @@ namespace Chuvadi.Markup.Tests.Sanitization
         }
 
         [Fact]
-        public void F1_AnjalDropsFontFaceUnlessOptedIn()
+        public void F1_EmbeddedFontsAreOffUnlessEnabled()
         {
             string html = "<style>@font-face{font-family:HostFont;src:url(" + FontData + ")} p{font-family:HostFont}</style><p>x";
-            var strict = HtmlSanitizer.Sanitize(html, SanitizerPolicy.Anjal());
+            var strict = HtmlSanitizer.Sanitize(html, TestPolicies.Strict());
             Assert.DoesNotContain("@font-face", strict.Html, StringComparison.Ordinal);
-            var optIn = SanitizerPolicy.Anjal();
-            optIn.AllowedAtRules.Add("font-face");
+            var optIn = TestPolicies.Strict();
+            optIn.AllowEmbeddedFonts = true;
             var r = HtmlSanitizer.Sanitize(html, optIn);
             Assert.Contains("@font-face { font-family: \"user-content-HostFont\";", r.Html, StringComparison.Ordinal);
             Assert.Contains("p { font-family: \"user-content-HostFont\"; }", r.Html, StringComparison.Ordinal);
@@ -206,7 +206,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void F1_NamesFallBackToScopeClassWhenIdPrefixIsEmpty()
         {
-            var p = SanitizerPolicy.Reader();
+            var p = TestPolicies.Viewer();
             p.IdPrefix = null;
             var r = HtmlSanitizer.Sanitize("<style>@font-face{font-family:'Host Font';src:url(" + FontData + ")} p{font-family:Host  Font}</style><p>x", p);
             Assert.Contains("font-family: \"chuvadi-content-Host Font\";", r.Html, StringComparison.Ordinal);
@@ -216,7 +216,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void F3_KeyframesAndCounterStylesAreNamespaced()
         {
-            foreach (var p in new[] { SanitizerPolicy.Anjal(), SanitizerPolicy.Reader() })
+            foreach (var p in new[] { TestPolicies.Strict(), TestPolicies.Viewer() })
             {
                 var r = HtmlSanitizer.Sanitize("<style>@keyframes hostspin{from{opacity:1}to{opacity:0}} p{animation:hostspin 1s infinite;animation-name:hostspin, other}"
                     + "@counter-style lower-roman{system:cyclic;symbols:'!';fallback:lower-roman} ol{list-style:lower-roman inside} li::before{content:counter(c, lower-roman)}</style>"
@@ -236,7 +236,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void F3_PageAndLayerAreDroppedAndContainerContentsScoped()
         {
-            foreach (var p in new[] { SanitizerPolicy.Anjal(), SanitizerPolicy.Reader() })
+            foreach (var p in new[] { TestPolicies.Strict(), TestPolicies.Viewer() })
             {
                 var r = HtmlSanitizer.Sanitize("<style>@page{margin:0} @layer base{p{color:red}} @layer a, b; @container x (min-width: 1px){p{color:blue}}</style><p>x", p);
                 Assert.DoesNotContain("@page", r.Html, StringComparison.Ordinal);
@@ -249,7 +249,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void F3_AnchorPositioningAndViewTransitionNamesAreRemoved()
         {
-            var r = HtmlSanitizer.Sanitize("<p style='anchor-name:--a;position-anchor:--host;top:anchor(--host bottom);view-transition-name:host;color:red'>x", SanitizerPolicy.Reader());
+            var r = HtmlSanitizer.Sanitize("<p style='anchor-name:--a;position-anchor:--host;top:anchor(--host bottom);view-transition-name:host;color:red'>x", TestPolicies.Viewer());
             Assert.DoesNotContain("anchor", r.Html, StringComparison.Ordinal);
             Assert.DoesNotContain("view-transition", r.Html, StringComparison.Ordinal);
             Assert.Contains("color: red", r.Html, StringComparison.Ordinal);
@@ -270,7 +270,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [InlineData("@media screen { ~ * { color: red } }")]
         public void F4_SelectorsReachingOutsideTheWrapperAreDropped(string css)
         {
-            foreach (var p in new[] { SanitizerPolicy.Anjal(), SanitizerPolicy.Reader() })
+            foreach (var p in new[] { TestPolicies.Strict(), TestPolicies.Viewer() })
             {
                 var r = HtmlSanitizer.Sanitize("<style>" + css + " p ~ q { color: blue } .chuvadi-content > i { color: green }</style><p>m", p);
                 Assert.DoesNotContain("red", r.Html, StringComparison.Ordinal);
@@ -292,7 +292,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void EmptyPolicyKeepsOnlyText()
         {
-            var r = HtmlSanitizer.Sanitize("<p onclick=x>a<b>b</b><script>evil()</script></p>", SanitizerPolicy.Empty());
+            var r = HtmlSanitizer.Sanitize("<p onclick=x>a<b>b</b><script>evil()</script></p>", TestPolicies.TextOnly());
             Assert.DoesNotContain("<", r.Html.Replace("<div class=\"chuvadi-content\">", "").Replace("</div>", ""));
             Assert.Contains("ab", r.Html);
             Assert.DoesNotContain("evil", r.Html);
@@ -301,7 +301,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void CustomAllowList()
         {
-            var p = SanitizerPolicy.Empty();
+            var p = TestPolicies.TextOnly();
             p.AllowedElements.Add("b");
             p.AllowAttributes("b", "title");
             p.ScopeClass = null;
@@ -331,7 +331,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void LimitsAndCancellation()
         {
-            var p = SanitizerPolicy.Anjal();
+            var p = TestPolicies.Strict();
             p.Limits.MaxInputChars = 10;
             Assert.Throws<MarkupLimitExceededException>(() => HtmlSanitizer.Sanitize(new string('x', 100), p));
             using var cts = new CancellationTokenSource();
@@ -342,7 +342,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         [Fact]
         public void PolicyCloneIsDeep()
         {
-            var a = SanitizerPolicy.Reader();
+            var a = TestPolicies.Viewer();
             var b = a.Clone();
             b.AllowedElements.Remove("p");
             b.Limits.MaxNodes = 1;

@@ -19,17 +19,17 @@ namespace Chuvadi.Markup.Tests.Sanitization
 
         [Theory]
         [MemberData(nameof(Vectors))]
-        public void Anjal(int index, string input) => AssertSafe(index, input, SanitizerPolicy.Anjal());
+        public void Strict(int index, string input) => AssertSafe(index, input, TestPolicies.Strict());
 
         [Theory]
         [MemberData(nameof(Vectors))]
-        public void Reader(int index, string input) => AssertSafe(index, input, SanitizerPolicy.Reader());
+        public void Viewer(int index, string input) => AssertSafe(index, input, TestPolicies.Viewer());
 
         [Theory]
         [MemberData(nameof(Vectors))]
-        public void ReaderUnscoped(int index, string input)
+        public void ViewerUnscoped(int index, string input)
         {
-            var p = SanitizerPolicy.Reader();
+            var p = TestPolicies.Viewer();
             p.StyleSheets = StyleSheetHandling.Sanitize;
             p.ScopeClass = null;
             var result = HtmlSanitizer.Sanitize(input, p);
@@ -41,7 +41,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
         public void InvariantCheckerFlagsRawAttacks()
         {
             // control: the checker must see the attacks in unsanitized input, or the other tests prove nothing
-            int flagged = XssVectors.All.Count(v => SafetyInvariants.Check(v, SanitizerPolicy.Anjal()).Count > 0);
+            int flagged = XssVectors.All.Count(v => SafetyInvariants.Check(v, TestPolicies.Strict()).Count > 0);
             Assert.True(flagged >= XssVectors.All.Length * 8 / 10, flagged + " of " + XssVectors.All.Length + " flagged");
         }
 
@@ -71,7 +71,7 @@ namespace Chuvadi.Markup.Tests.Sanitization
                     sb.Append(piece);
                 }
                 string input = sb.ToString();
-                foreach (var policy in new[] { SanitizerPolicy.Anjal(), SanitizerPolicy.Reader() })
+                foreach (var policy in new[] { TestPolicies.Strict(), TestPolicies.Viewer() })
                 {
                     var result = HtmlSanitizer.Sanitize(input, policy);
                     var problems = SafetyInvariants.Check(result, policy);

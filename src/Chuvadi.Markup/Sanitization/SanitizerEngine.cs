@@ -33,6 +33,44 @@ namespace Chuvadi.Markup.Sanitization
             _css = new CssSanitizer(this, policy);
             _actions = actions;
             _blocked = blocked;
+
+            // the switches widen the policy's own sets for this run (the policy object is never modified)
+            _allowed = new HashSet<string>(policy.AllowedElements, StringComparer.Ordinal);
+            _dropped = new HashSet<string>(policy.DroppedElements, StringComparer.Ordinal);
+            _elementAttributes = policy.ElementAttributes;
+            if (policy.AllowFormControls || policy.AllowMedia)
+            {
+                _elementAttributes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+                foreach (var kv in policy.ElementAttributes) _elementAttributes[kv.Key] = new HashSet<string>(kv.Value, StringComparer.Ordinal);
+                if (policy.AllowFormControls) Enable(SanitizerPolicy.FormControlElements, SanitizerPolicy.FormControlAttributes);
+                if (policy.AllowMedia) Enable(SanitizerPolicy.MediaElements, SanitizerPolicy.MediaAttributes);
+            }
+            _imageTypes = policy.AllowedDataImageTypes;
+            if (policy.AllowSvgDataImages && !_imageTypes.Contains("image/svg+xml"))
+                _imageTypes = new HashSet<string>(_imageTypes, StringComparer.Ordinal) { "image/svg+xml" };
+            _mediaTypes = policy.AllowMedia ? policy.AllowedDataMediaTypes : s_none;
+        }
+
+        private static readonly HashSet<string> s_none = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _allowed;
+        private readonly HashSet<string> _dropped;
+        private readonly Dictionary<string, HashSet<string>> _elementAttributes;
+        private readonly HashSet<string> _imageTypes;
+        private readonly HashSet<string> _mediaTypes;
+
+        private void Enable(string[] elements, (string Element, string[] Attributes)[] attributes)
+        {
+            foreach (var e in elements)
+            {
+                _allowed.Add(e);
+                _dropped.Remove(e);
+            }
+            foreach (var (e, attrs) in attributes)
+            {
+                if (!_elementAttributes.TryGetValue(e, out var set))
+                    _elementAttributes[e] = set = new HashSet<string>(StringComparer.Ordinal);
+                set.UnionWith(attrs);
+            }
         }
 
         public int ActionCount => _actionCount;
@@ -280,13 +318,13 @@ namespace Chuvadi.Markup.Sanitization
             if (name == "form") return ElementAction.Unwrap; // forms can never submit
             if (_verification && name == "style" && _p.StyleSheets != StyleSheetHandling.Drop) return ElementAction.Keep;
             if (_verification && IsValidClass(_p.ScopeClass) && name == _p.WrapperElement && HasClass(e, _p.ScopeClass!)) return ElementAction.Keep;
-            if (_p.AllowedElements.Contains(name))
+            if (_allowed.Contains(name))
             {
                 if (!_p.AllowFormControls && name is "input" or "select" or "option" or "optgroup" or "textarea" or "button" or "datalist" or "output")
                     return ElementAction.Drop;
                 return ElementAction.Keep;
             }
-            if (_p.DroppedElements.Contains(name)) return ElementAction.Drop;
+            if (_dropped.Contains(name)) return ElementAction.Drop;
             return _p.DefaultElementAction == ElementAction.Keep ? ElementAction.Unwrap : _p.DefaultElementAction;
         }
 
@@ -318,7 +356,7 @@ namespace Chuvadi.Markup.Sanitization
                 return;
             }
             string el = e.LocalName;
-            _p.ElementAttributes.TryGetValue(el, out var specific);
+            _elementAttributes.TryGetValue(el, out var specific);
             var attrs = e.Attributes;
             // the reserved attribute is only ever written by the sanitizer itself (never accepted from input,
             // except on links in verification passes where it is this sanitizer's own output)
@@ -511,9 +549,9 @@ namespace Chuvadi.Markup.Sanitization
             {
                 var allowed = kind switch
                 {
-                    ResourceKind.Image => _p.AllowedDataImageTypes,
+                    ResourceKind.Image => _imageTypes,
                     ResourceKind.Font => _p.AllowedDataFontTypes,
-                    ResourceKind.Media => _p.AllowedDataMediaTypes,
+                    ResourceKind.Media => _mediaTypes,
                     _ => null,
                 };
                 if (allowed is not null && allowed.Contains(mime) && size <= _p.Limits.MaxDataUriBytes) return u;
@@ -547,9 +585,9 @@ namespace Chuvadi.Markup.Sanitization
                 if (!UrlUtil.TryParseData(n, out string mime, out long size)) return true;
                 var allowed = kind switch
                 {
-                    ResourceKind.Image => _p.AllowedDataImageTypes,
+                    ResourceKind.Image => _imageTypes,
                     ResourceKind.Font => _p.AllowedDataFontTypes,
-                    ResourceKind.Media => _p.AllowedDataMediaTypes,
+                    ResourceKind.Media => _mediaTypes,
                     _ => null,
                 };
                 return allowed is null || !allowed.Contains(mime) || size > _p.Limits.MaxDataUriBytes;
