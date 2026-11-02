@@ -11,7 +11,7 @@ or a remote agent, recording one audit event per job.
 | A3 | `Chuvadi.Print.Windows` | Windows printers through the GDI spooler (P/Invoke only) | 0.3.0 |
 | A4 | `Chuvadi.Print.Ipp` | Driverless IPP printing on any OS: PWG Raster or PDF passthrough | 0.4.0 |
 | A6 | `Chuvadi.Print.Remote` | An embeddable print hub and dial-out print agents | 0.5.0 |
-| A5 | package **Chuvadi.Print.Pdf** (`staging/`) | PDF rendering (`PdfPageRasterizer`) and print-to-PDF (`PdfFileTarget`) over Chuvadi.Pdf | 0.1.0 |
+| A5 | package **Chuvadi.Print.Pdf** (`staging/`) | PDF rendering (`PdfPageRasterizer`) over Chuvadi.Pdf | 0.1.0 |
 
 The architectural invariants (P01–P09) are in [BASELINE.md](BASELINE.md). How Docs/Sheets reports get printed is
 in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
@@ -86,7 +86,6 @@ PrintResult sent = job.SubmitTo(documentTarget);     // the PDF itself to an IDo
 | `WindowsPrinterTarget(name)` | raster | A3, see §3. |
 | `IppPrinterTarget(uri)` | raster | A4, PWG Raster. |
 | `IppDocumentTarget(uri)` | document | A4, PDF passthrough. |
-| `PdfFileTarget(path or stream)` | document | A5, vector print-to-PDF. |
 
 Your own target implements `IPrintTarget` (raster pages) or `IDocumentTarget` (the PDF itself).
 
@@ -136,19 +135,13 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
 
-## 5. PDF rendering and print-to-PDF (A5, package Chuvadi.Print.Pdf)
+## 5. PDF rendering (A5, package Chuvadi.Print.Pdf)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
   rendered at the resolution and pixel format the job asks for. Annotations and form fields are printed by
   flattening them first. All the renderer's options are exposed: `SuperSample`, `GammaCorrect`, `Hinting`,
   `FlatnessTolerance`, `IgnoreOptionalContent`, `LayerVisibility`, `Password` and `MaxRenderDpi`.
-- **`PdfFileTarget`** writes the printed sheet sides as a new PDF, placing the original pages as vectors.
-  Layout, plan, page selection, copies, collation and duplex blank backs all apply.
-  - Options: `IncludeAnnotations`, `IncludeFormFields`, `MarginReference`, `HardMargins`,
-    `IncludeBlankBacks`, `ClipToPrintableArea`, `Password` and `Encryption`.
-  - Results: `LastPlan`, `LastPageCount`, `LastOutputPath`, `LastApproximations` (colour mode and duplex
-    binding).
-  - Output goes through a temporary file, so a failed job leaves no half-written PDF.
+- **Saving as PDF** is not a print target: use the Chuvadi.Pdf writer or Chuvadi.Layout's PDF output.
 - **Building**: it lives in `staging/` and consumes the version-pinned Chuvadi.Pdf packages (3.22.1) from
   the local feed set in `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and
   CI until Chuvadi.Pdf joins the monorepo or nuget.org (D-28). Building and packing are described in its README.

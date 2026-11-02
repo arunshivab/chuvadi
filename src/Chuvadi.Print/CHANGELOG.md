@@ -5,13 +5,15 @@
 - **Removed (D-48, D-11 withdrawn)**: the "Chuvadi PDF" virtual printer product (`products/ChuvadiPdfPrinter`:
   the Print Support App, the named-pipe queue on Microsoft Print To PDF, the agent service, installer and
   self-test scripts) is removed completely. It never shipped and nothing in the library depended on it.
+  Chuvadi.Print.Pdf's `PdfFileTarget` (print a job to a PDF file) is removed too; saving as PDF belongs to the
+  Chuvadi.Pdf writer and Chuvadi.Layout's PDF output.
 
 Release candidate for 1.0.0. Everything from 0.1.0 to 0.5.0 (A1 to A6) is in it. The public API is now frozen
 for 1.x: from here on, changes are additive only, and any breaking change waits for 2.0.
 
 - **Version**: 1.0.0-rc.1. No API changes since 0.5.0.
 - **Docs**: `docs/Chuvadi.Print/GUIDE.md`, the user guide covering settings, layout and planning, `PrintJob`,
-  the targets (PNG, Windows, IPP, PDF file), the spool envelope, the audit trail, remote printing (hub and
+  the targets (PNG, Windows, IPP), the spool envelope, the audit trail, remote printing (hub and
   agent) and Chuvadi.Print.Pdf. `docs/Chuvadi.Print/PRINTING-REPORTS.md`
   covers printing Docs/Sheets reports through Chuvadi.Layout. `docs/Chuvadi.Print/WINDOWS-VERIFICATION.md` is
   the checklist run on Windows 10 and 11 before tagging print-v1.0.0.
@@ -19,7 +21,7 @@ for 1.x: from here on, changes are additive only, and any breaking change waits 
   from the local feed (D-29) and stays outside `Chuvadi.slnx` and CI until Chuvadi.Pdf moves into the monorepo
   or is on nuget.org (D-28).
 - **Known limits for 1.0**: Chuvadi.Pdf's renderer draws the media box. Annotation printing ignores the
-  annotation Print flag. A vector PDF output keeps its original colours. Everything verified only on Windows
+  annotation Print flag. Everything verified only on Windows
   is listed in WINDOWS-VERIFICATION.md.
 
 ## 0.5.0 (unreleased)

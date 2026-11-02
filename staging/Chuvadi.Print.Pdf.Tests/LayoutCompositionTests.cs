@@ -33,7 +33,7 @@ internal static class StubLayout
 
 /// <summary>
 /// The composition LiPi uses to print docx/xlsx reports: Chuvadi.Layout renders to PDF, Chuvadi.Print prints the
-/// PDF (to a device through PdfPageRasterizer, or to a PDF file through PdfFileTarget). No extra adapter.
+/// PDF (to a device through PdfPageRasterizer). No extra adapter.
 /// </summary>
 public class LayoutCompositionTests
 {
@@ -58,21 +58,6 @@ public class LayoutCompositionTests
         Assert.Equal(4, printer.Pages.Count);
         Assert.All(printer.Pages, p => Assert.True(p.BlackPixels > 500, "text and rule were rendered"));
         Assert.Single(audit.Events);
-    }
-
-    [Fact]
-    public void LayoutPdfPrintsToAPdfFileAsVectors()
-    {
-        byte[] pdf = StubLayout.ToPdf(Discharge, pages: 3);
-        var output = new MemoryStream();
-        var target = new PdfFileTarget(output);
-        PrintResult result = new PrintJob(pdf).WithPages(PageSelection.Range("1, 3")).WithPaper(PaperSize.A5)
-            .WithScale(ScaleMode.FitToPage).SubmitTo(target);
-        Assert.Equal(PrintJobStatus.Printed, result.Status);
-        Assert.Equal(2, target.LastPageCount);
-        using var doc = Chuvadi.Pdf.Documents.PdfDocument.Open(new MemoryStream(output.ToArray()));
-        Assert.Equal(2, doc.PageCount);
-        Assert.Equal(PaperSize.A5.WidthPoints, doc.Pages[0].Width, 1);
     }
 
     [Fact]

@@ -87,7 +87,7 @@ The pure-BCL grep needs no change in end state A, because only ProjectReferences
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <Product>Chuvadi.Print.Pdf</Product>
-    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview), and PdfFileTarget prints to a PDF file by placing the original pages as vectors (no rasterising), with every Chuvadi.Print layout, copy, collation and duplex setting.</Description>
+    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>1.0.0</Version>
@@ -96,7 +96,7 @@ The pure-BCL grep needs no change in end state A, because only ProjectReferences
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;pdf;rasterizer;print-to-pdf;imposition</PackageTags>
+    <PackageTags>print;printing;pdf;rasterizer</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -181,7 +181,7 @@ writes dependencies on Chuvadi.Pdf.Rendering / Operations 0.1.0.
 The package table (Package | Formats | Status) has no Print rows yet:
 ```markdown
 | **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing: Windows (GDI), IPP, PNG preview, remote hub/agent | v1.0.0 |
-| **[Chuvadi.Print.Pdf](src/Chuvadi.Print.Pdf/README.md)** | PDF rendering and print-to-PDF for Chuvadi.Print (over Chuvadi.Pdf) | v1.0.0 |
+| **[Chuvadi.Print.Pdf](src/Chuvadi.Print.Pdf/README.md)** | PDF rendering for Chuvadi.Print (over Chuvadi.Pdf) | v1.0.0 |
 ```
 The Print row can go in as soon as `print-v1.0.0` is tagged. Use the versions actually released.
 
@@ -189,4 +189,4 @@ The Print row can go in as soon as `print-v1.0.0` is tagged. Use the versions ac
 
 - **Docs:** update `BASELINE.md` (the A5 line), `GUIDE.md` §5 and §8, the Chuvadi.Print.Pdf README ("Building"),
   `PRINTING-REPORTS.md` (the test path) and `WINDOWS-VERIFICATION.md` (step 2 and the `staging/` paths).
-- **Gate:** build `Chuvadi.slnx` and run all suites, including `tests/Chuvadi.Print.Pdf.Tests` (27 tests).
+- **Gate:** build `Chuvadi.slnx` and run all suites, including `tests/Chuvadi.Print.Pdf.Tests` (16 tests).
