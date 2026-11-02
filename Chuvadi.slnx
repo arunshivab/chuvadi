@@ -1,24 +1,32 @@
 <Solution>
   <Folder Name="/samples/">
+    <Project Path="samples/Chuvadi.Docs.Conversion.ManualTests/Chuvadi.Docs.Conversion.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Docs.ManualTests/Chuvadi.Docs.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Layout.ManualTests/Chuvadi.Layout.ManualTests.csproj" />
+    <Project Path="samples/Chuvadi.Markup.ManualTests/Chuvadi.Markup.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Print.ManualTests/Chuvadi.Print.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Sheets.ManualTests/Chuvadi.Sheets.ManualTests.csproj" />
+    <Project Path="samples/Chuvadi.Zip.ManualTests/Chuvadi.Zip.ManualTests.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Chuvadi.Docs/Chuvadi.Docs.csproj" />
+    <Project Path="src/Chuvadi.Docs.Conversion/Chuvadi.Docs.Conversion.csproj" />
     <Project Path="src/Chuvadi.Layout/Chuvadi.Layout.csproj" />
     <Project Path="src/Chuvadi.Layout.Fonts/Chuvadi.Layout.Fonts.csproj" />
     <Project Path="src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj" />
     <Project Path="src/Chuvadi.Markup/Chuvadi.Markup.csproj" />
     <Project Path="src/Chuvadi.Print/Chuvadi.Print.csproj" />
     <Project Path="src/Chuvadi.Sheets/Chuvadi.Sheets.csproj" />
+    <Project Path="src/Chuvadi.Zip/Chuvadi.Zip.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Chuvadi.Docs.Conversion.Tests/Chuvadi.Docs.Conversion.Tests.csproj" />
     <Project Path="tests/Chuvadi.Docs.Tests/Chuvadi.Docs.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Markup.Tests/Chuvadi.Layout.Markup.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Tests/Chuvadi.Layout.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Markup.Tests/Chuvadi.Markup.Tests.csproj" />
     <Project Path="tests/Chuvadi.Print.Tests/Chuvadi.Print.Tests.csproj" />
     <Project Path="tests/Chuvadi.Sheets.Tests/Chuvadi.Sheets.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Zip.Tests/Chuvadi.Zip.Tests.csproj" />
   </Folder>
 </Solution>

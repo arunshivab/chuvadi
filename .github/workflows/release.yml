@@ -4,14 +4,18 @@ name: Release
 #   git tag -s sheets-v1.1.1 -m "Chuvadi.Sheets 1.1.1" && git push origin sheets-v1.1.1
 #   git tag -s docs-v1.0.0   -m "Chuvadi.Docs 1.0.0"   && git push origin docs-v1.0.0
 #   git tag -s print-v0.1.0  -m "Chuvadi.Print 0.1.0"  && git push origin print-v0.1.0
+#   git tag -s zip-v1.0.0    -m "Chuvadi.Zip 1.0.0"    && git push origin zip-v1.0.0
+#   git tag -s markup-v1.0.0 -m "Chuvadi.Markup 1.0.0" && git push origin markup-v1.0.0
 #   git tag -s layout-v0.1.0        -m "Chuvadi.Layout 0.1.0"        && git push origin layout-v0.1.0
 #   git tag -s layout-fonts-v0.1.0  -m "Chuvadi.Layout.Fonts 0.1.0"  && git push origin layout-fonts-v0.1.0
 #   git tag -s layout-markup-v0.1.0 -m "Chuvadi.Layout.Markup 0.1.0" && git push origin layout-markup-v0.1.0
 # The prefix selects which package is built, tested, packed, and released.
+# docs-v* releases TWO packages at one version: Chuvadi.Docs and Chuvadi.Docs.Conversion.
+# Packages are attached to the GitHub release only; nothing is pushed to nuget.org for now.
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*", "print-v*", "layout-v*", "layout-fonts-v*", "layout-markup-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "layout-v*", "layout-fonts-v*", "layout-markup-v*"]
 
 permissions:
   contents: write
@@ -21,10 +25,10 @@ env:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve package from tag prefix
         id: pkg
@@ -33,18 +37,22 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           case "$TAG" in
             sheets-v*) NAME="Chuvadi.Sheets" ;;
-            docs-v*)   NAME="Chuvadi.Docs" ;;
+            docs-v*)   NAME="Chuvadi.Docs"; PACKAGES="Chuvadi.Docs Chuvadi.Docs.Conversion" ;;
             print-v*)  NAME="Chuvadi.Print" ;;
-            layout-v*)        NAME="Chuvadi.Layout" ;;
+            zip-v*)    NAME="Chuvadi.Zip" ;;
+            markup-v*) NAME="Chuvadi.Markup" ;;
             layout-fonts-v*)  NAME="Chuvadi.Layout.Fonts" ;;
             layout-markup-v*) NAME="Chuvadi.Layout.Markup" ;;
+            layout-v*)        NAME="Chuvadi.Layout" ;;
             *) echo "::error::Unrecognized tag prefix: $TAG"; exit 1 ;;
           esac
+          PACKAGES="${PACKAGES:-$NAME}"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "Releasing $NAME from tag $TAG"
+          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "Releasing $PACKAGES from tag $TAG"
 
       - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -55,19 +63,43 @@ jobs:
           dotnet build -c Release
           dotnet test tests/Chuvadi.Sheets.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Docs.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Docs.Conversion.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Print.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Zip.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Markup.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Markup.Tests -c Release --no-build
           dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Docs.Conversion.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Zip.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Markup.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
+      - name: Check Docs and Docs.Conversion versions match the tag
+        if: ${{ startsWith(github.ref_name, 'docs-v') }}
+        shell: bash
+        run: |
+          TAGV="${GITHUB_REF_NAME#docs-v}"
+          for p in Chuvadi.Docs Chuvadi.Docs.Conversion; do
+            V=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "src/$p/$p.csproj" | head -n 1)
+            echo "$p version $V (tag version $TAGV)"
+            if [ "$V" != "$TAGV" ]; then echo "::error::$p version $V does not match the tag version $TAGV"; exit 1; fi
+          done
+
       - name: Pack ${{ steps.pkg.outputs.name }}
-        run: dotnet pack "src/${{ steps.pkg.outputs.name }}/${{ steps.pkg.outputs.name }}.csproj" -c Release --no-build
+        shell: bash
+        run: |
+          mkdir -p dist
+          for p in ${{ steps.pkg.outputs.packages }}; do
+            dotnet pack "src/$p/$p.csproj" -c Release --no-build
+            cp artifacts/bin/$p/Release/*.nupkg dist/
+          done
+          ls -l dist
 
       # Author signing (optional): runs only when a code-signing certificate is configured.
-      - name: Sign package (if certificate configured)
+      - name: Sign packages (if certificate configured)
         if: ${{ env.HAS_CERT == 'true' }}
         env:
           HAS_CERT: ${{ secrets.SIGNING_CERT_PFX_BASE64 != '' }}
@@ -75,25 +107,18 @@ jobs:
           PFX_PWD: ${{ secrets.SIGNING_CERT_PASSWORD }}
         run: |
           echo "$PFX_B64" | base64 -d > signing.pfx
-          dotnet nuget sign "artifacts/bin/${{ steps.pkg.outputs.name }}/Release/"*.nupkg \
+          dotnet nuget sign dist/*.nupkg \
             --certificate-path signing.pfx \
             --certificate-password "$PFX_PWD" \
             --timestamper http://timestamp.digicert.com
           rm -f signing.pfx
 
-      - name: Create GitHub release with the package attached
+      - name: Create GitHub release with the packages attached
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/bin/${{ steps.pkg.outputs.name }}/Release/*.nupkg
+          files: dist/*.nupkg
           generate_release_notes: true
 
-      # NuGet.org publication (optional): configure the NUGET_API_KEY secret to enable.
-      - name: Push to NuGet.org (if API key configured)
-        if: ${{ env.HAS_KEY == 'true' }}
-        env:
-          HAS_KEY: ${{ secrets.NUGET_API_KEY != '' }}
-        run: |
-          dotnet nuget push "artifacts/bin/${{ steps.pkg.outputs.name }}/Release/"*.nupkg \
-            --api-key "${{ secrets.NUGET_API_KEY }}" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
+      # No nuget.org push for now (D-46): NUGET_API_KEY is not configured until the licence
+      # is decided. To enable later, add a step here that pushes dist/*.nupkg, guarded by
+      # `if: ${{ env.HAS_KEY == 'true' }}` with HAS_KEY: ${{ secrets.NUGET_API_KEY != '' }}.
