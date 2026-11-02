@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!-- LibreOffice sees only Layout's bundled fonts (plus the metric-compatible aliases), so both sides draw with the same font files. -->
+<fontconfig>
+  <dir>@FONTS@</dir>
+  <cachedir>@CACHE@</cachedir>
+  <include ignore_missing="yes">/etc/fonts/conf.d/30-metric-aliases.conf</include>
+  <alias><family>sans-serif</family><prefer><family>Liberation Sans</family></prefer></alias>
+  <alias><family>serif</family><prefer><family>Liberation Serif</family></prefer></alias>
+  <alias><family>monospace</family><prefer><family>Liberation Mono</family></prefer></alias>
+</fontconfig>

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Acceptance harness for Chuvadi.Layout: lays out each corpus file and compares it with a reference PDF printed
+    from Word or Excel (page count, per-page text, line positions). Reads reference PDFs with chuvadi-pdf, taken as
+    version-pinned packages (D-29: ChuvadiPdf.props, nuget.config). Not in Chuvadi.slnx or CI. See README.md.
+  -->
+  <Import Project="..\..\src\Chuvadi.Layout.Pdf\ChuvadiPdf.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.Acceptance</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.Acceptance</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout.Markup\Chuvadi.Layout.Markup.csproj" />
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Pdf\Chuvadi.Layout.Pdf.csproj" />
+    <PackageReference Include="Chuvadi.Pdf.Authoring" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Documents" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Rendering.DisplayList" Version="[$(ChuvadiPdfVersion)]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.Acceptance.Tests" />
+  </ItemGroup>
+
+</Project>

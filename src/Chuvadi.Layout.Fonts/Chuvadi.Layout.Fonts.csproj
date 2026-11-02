@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.Fonts</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.Fonts</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Layout.Fonts</Product>
+    <Description>Offline font pack for Chuvadi.Layout: SIL OFL 1.1 fonts embedded as resources, exposed as an IFontSource. Metric-compatible substitutes for the Office core fonts (Liberation Sans/Serif/Mono for Arial/Times New Roman/Courier New, Carlito for Calibri, Caladea for Cambria) and LiPi Sans (Latin plus ten Indic scripts) as static Regular/Bold faces. No network, no disk access.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT AND OFL-1.1</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>fonts;ofl;liberation;carlito;caladea;indic;layout</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts\*.ttf" LogicalName="Chuvadi.Layout.Fonts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)FONTS.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)Licenses\*.txt" Pack="true" PackagePath="licenses" />
+  </ItemGroup>
+
+</Project>

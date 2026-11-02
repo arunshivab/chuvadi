@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.ManualTests</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.ManualTests</AssemblyName>
+    <StartupObject>Chuvadi.Layout.ManualTests.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
+  </ItemGroup>
+
+</Project>

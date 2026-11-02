@@ -1,0 +1,74 @@
+file	family	libreoffice_pages	layout_pages	status	lines_matched	pixels_worst	category	note
+d01-fonts-sizes.docx	fonts and sizes	2	2	fail	91.9	62.58	font-substitution	Cambria is drawn with Caladea; LibreOffice spaces Caladea lines by its typo metrics (1.15 em), Layout by the Windows metrics Word uses (1.30 em). Calibri, Arial, Times and Courier lines match.
+d02-font-styles.docx	fonts and sizes	1	1	pass	100	7.48	pass	
+d03-tamil-latin-mix.docx	Tamil and Latin	1	1	fail	9.1	5.08	reference-extraction	Glyphs, line breaks and positions match LibreOffice (Chuvadi.Pdf 3.26 shaping; pixel score under 10%). Text differs only because Chuvadi.Pdf extracts LibreOffice's Tamil text wrongly (vowel signs repeated or moved); poppler extracts the same reference exactly as Layout writes it. Reported to the Pdf chat.
+d04-tamil-long.docx	Tamil and Latin	4	4	fail	0	7.46	reference-extraction	As d03. Spaces between Tamil words now take the Tamil font and size (fixed in Layout by this corpus). To confirm in Word: line 2 ends with காலை.
+d05-paragraph-spacing.docx	paragraph spacing	2	2	pass	100	6.94	pass	Space between paragraphs is the larger of space after and space before (fixed in Layout by this corpus). To confirm in Word.
+d06-line-spacing.docx	paragraph spacing	1	1	pass	100	9	pass	
+d07-alignment.docx	paragraph spacing	1	1	pass	100	8.01	pass	
+d08-indents.docx	paragraph spacing	1	1	pass	100	7	pass	
+d09-keep-with-next.docx	keep-with-next and widows	4	4	pass	100	9.36	pass	
+d10-widow-orphan.docx	keep-with-next and widows	2	2	pass	100	8.39	pass	
+d11-page-breaks.docx	keep-with-next and widows	4	4	pass	100	7.76	pass	A paragraph holding only a page break keeps its mark on the old page (fixed in Layout by this corpus). To confirm in Word.
+d12-bullets.docx	lists	1	1	pass	100	5	pass	
+d13-numbered.docx	lists	1	1	pass	100	4.71	pass	
+d14-long-text.docx	paragraph spacing	6	6	pass	100	10.02	pass	
+d15-table-simple.docx	tables	1	1	pass	100	4.99	pass	Rows make room for their horizontal borders (fixed in Layout by this corpus). To confirm in Word.
+d16-table-merges.docx	tables	1	1	pass	100	5.61	pass	
+d17-table-repeat-header.docx	tables	3	3	pass	100	27.39	pass	
+d18-table-widths.docx	tables	2	2	pass	100	19.57	pass	
+d19-table-banded-style.docx	tables	1	1	pass	100	1.99	pass	
+d20-table-nested.docx	tables	1	1	fail	100	30.54	libreoffice-differs	After a nested table the cell holds its required empty paragraph; Layout gives it a line, as Word shows it, LibreOffice hides it, so the next outer row starts one line lower in Layout. To confirm in Word.
+d21-sections-orientation.docx	sections and columns	3	3	pass	100	10.28	pass	
+d22-sections-columns.docx	sections and columns	1	1	fail	19.6	28.48	layout-gap	Newspaper columns (w:cols) are not laid out yet: Layout flows the section in one column.
+d23-sections-page-numbering.docx	sections and columns	3	3	pass	100	8.8	pass	
+d24-header-footer.docx	headers and footers	2	2	pass	100	8.4	pass	
+d25-header-first-page.docx	headers and footers	2	2	pass	100	9	pass	
+d26-header-odd-even.docx	headers and footers	2	2	pass	100	8.41	pass	
+d27-header-table.docx	headers and footers	1	1	pass	100	8.6	pass	
+d28-image-inline.docx	images	1	1	pass	100	8.85	pass	
+d29-image-sizes.docx	images	1	1	fail	100	14.55	libreoffice-differs	Layout makes a line holding an inline picture as tall as the picture plus the font descent (the picture sits on the baseline, as in Word); LibreOffice uses the picture height alone. About 3 pt per picture. To confirm in Word.
+d30-image-float-square.docx	images	1	1	pass	100	6.44	pass	
+d31-image-float-behind.docx	images	1	1	pass	100	4.79	pass	
+d32-page-a4-narrow.docx	page sizes and margins	2	2	pass	100	10.97	pass	
+d33-page-letter-wide.docx	page sizes and margins	2	2	pass	100	7.55	pass	
+d34-page-a5-legal.docx	page sizes and margins	3	3	pass	100	9.66	pass	
+d35-tabs.docx	tabs and ptab	1	1	pass	100	4.41	pass	Each tab draws the leader of its own stop (fixed in Layout by this corpus).
+d36-ptab.docx	tabs and ptab	1	1	fail	96.2	10.37	libreoffice-differs	LibreOffice does not draw the dot leader of a positional tab; Layout does, as Word does.
+d37-borders-shading.docx	paragraph spacing	1	1	pass	100	2.46	pass	
+d38-hyperlinks.docx	fonts and sizes	1	1	pass	100	2.14	pass	
+d39-watermark.docx	headers and footers	1	1	fail	87.1	38.11	open	One line breaks one word later in Layout than in LibreOffice (a word that fits within about 1 pt of the right margin). To confirm in Word.
+d40-report.docx	mixed	1	1	pass	100	5.62	pass	
+d41-paragraph-mark-size.docx	fonts and sizes	1	1	pass	100	50.8	pass	Lines pass within tolerance, but the pixel score is high: Layout sizes the last line by the 11 pt paragraph mark as well, as Word does; LibreOffice uses the 8 pt text alone. To confirm in Word.
+d42-footnotes.docx	notes	2	2	fail	100	55.81	libreoffice-differs	Footnotes match LibreOffice on page 1 (positions within 0.6 pt, two-inch separator). Endnotes differ: LibreOffice puts them on a page of their own with its endnote page style; Layout, like Word, continues them after the text. To confirm in Word.
+d43-tracked-comments.docx	notes	1	1	fail	64.7	20.99	libreoffice-differs	LibreOffice exports the markup (deleted text shown); Layout lays out the final view (changes accepted, comment balloons not drawn), as the Docs integration guide says. To confirm what Word prints by default (Print Markup).
+d44-fields.docx	notes	1	1	pass	100	5.99	pass	Complex fields (REF, PAGEREF, SEQ) show their cached results; bookmark and field markers take no room.
+d45-text-boxes.docx	images	1	1	fail	63.2	10.74	libreoffice-differs	Fill, outline, insets and text match. LibreOffice places the right-aligned box 8.45 pt further left (it keeps the 9 pt wrap distance inside the margin); Layout aligns the box edge to the margin, so lines beside it hold about one word more. To confirm in Word.
+d46-floating-table.docx	tables	1	1	fail	33.3	36.27	layout-gap	The floating table is placed 200 pt from the margin in the text flow; Layout does not yet wrap text beside floating tables or apply their vertical position (a warning says so). LibreOffice wraps the text beside it.
+d47-symbols.docx	fonts and sizes	1	1	pass	100	6.82	pass	w:sym characters drawn in their font.
+d48-embedded-font.docx	fonts and sizes	1	1	pass	100	5.12	pass	DejaVu Serif comes only from the document (LibreOffice and Layout both use the embedded font; it is in neither font set).
+x01-number-formats.xlsx	number formats	2	2	fail	2.4	54.42	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page. Also: values 0 and 0.375 under date formats show ######## (Chuvadi.Sheets reads serials below 1 as 1899-12-30 and formats that as negative; reported to the Sheets chat).
+x02-accounting.xlsx	number formats	1	1	fail	80	53.32	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x03-fonts-alignment.xlsx	fonts and alignment	2	1	fail	50	58.6	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x04-merges.xlsx	merges	2	2	fail	76.5	61.05	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x05-borders.xlsx	borders	1	1	fail	100	65.3	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x06-fills.xlsx	fills	1	1	fail	100	24.71	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x07-conditional.xlsx	conditional formats	1	1	fail	100	31.5	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x08-print-area.xlsx	print areas and titles	1	1	fail	90	26.94	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x09-print-titles.xlsx	print areas and titles	4	4	fail	72.6	30.95	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x10-page-breaks.xlsx	page breaks	6	6	fail	93.4	31.67	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x11-fit-width.xlsx	fit to page	2	2	fail	71.9	16.37	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x12-fit-one-page.xlsx	fit to page	1	1	fail	80.2	11.56	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x13-wide-sheet.xlsx	wide sheets	10	10	fail	97.1	58.95	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x14-wide-over-then-down.xlsx	wide sheets	10	10	fail	97.1	58.95	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x15-long-sheet.xlsx	page breaks	7	7	fail	69.1	41.8	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x16-landscape.xlsx	page setup	2	2	fail	86.9	31.82	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x17-letter.xlsx	page setup	4	2	fail	0	32.64	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x18-header-footer.xlsx	page setup	3	3	fail	76.6	43.8	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x19-gridlines-headings.xlsx	page setup	1	1	fail	100	70.12	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x20-widths-heights.xlsx	fonts and alignment	2	2	fail	100	60	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x21-hidden.xlsx	fonts and alignment	1	1	fail	86.7	28.06	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x22-overflow.xlsx	fonts and alignment	2	1	fail	56.3	49	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page. Layout clips overflowing text at the last used column; Calc prints the overflow on further pages. To confirm in Excel.
+x23-wrap-tall.xlsx	fonts and alignment	2	2	fail	17.7	59.05	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x24-multi-sheet.xlsx	page setup	5	5	fail	85.7	56.79	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
+x25-scale-center.xlsx	fit to page	1	1	fail	87.1	19.31	calc-vs-excel	Calc paginates differently from Excel: without pageMargins Calc uses 0.75/1.0 in margins (Excel 0.7/0.75), its default row is about 13.8 pt (Excel 15 pt) and it converts column widths to wider pages, so its last column often moves to another page.
