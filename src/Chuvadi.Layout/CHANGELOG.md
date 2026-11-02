@@ -2,6 +2,13 @@
 
 ## 0.1.0 (unreleased)
 
+C3 (Chuvadi.Pdf 3.30.1 in staging):
+
+- The staged Chuvadi.Layout.Pdf, its tests, the acceptance harness and the viewer use Chuvadi.Pdf 3.30.1
+  (`ChuvadiPdfVersion`; was 3.26.0). No source change. Layout.Pdf still registers every face before drawing and draws
+  with `DrawShapedRun` only (D-105 holds). Output: the reference corpus report (page counts, text, line geometry and
+  pixel scores of all 73 files) and the SVG pages of the corpus and fixtures are identical to 3.26.0.
+
 D-53 notices (C1, C2; no behaviour change):
 
 - THIRD-PARTY-NOTICES.md also names DerivedCoreProperties.txt and DerivedGeneralCategory.txt (UCD 16.0.0) and the
