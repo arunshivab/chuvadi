@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+D-53 notices (C1, C2; no behaviour change):
+
+- THIRD-PARTY-NOTICES.md also names DerivedCoreProperties.txt and DerivedGeneralCategory.txt (UCD 16.0.0) and the
+  CLDR paperSize data behind `PaperDefaults` (both under the Unicode License v3 it already carries). The Layout.Pdf
+  README points to the HarfBuzz notice shipped in Chuvadi.Pdf.Text.Shaping.
+
 D-116 A5 (substitutes) and the Q6 / Q7 answers:
 
 - Chuvadi.Layout.Fonts adds Gelasio 1.008 (Regular, Bold, Italic, Bold Italic) for Georgia and Selawik 1.01 (Regular,

@@ -48,6 +48,13 @@ embed, such as CFF2; its text is left out), `PdfImageFormat` (GIF/EMF/WMF/SVG â†
 `PdfTextNotExtractable` (a run without a text mapping). The codes of the 3.22.1 adapter (`PdfSyntheticItalic`,
 `PdfHorizontalScale`, `PdfTranslucency`, `PdfImageClip`, `PdfImageCrop`, `PdfCffFontNotEmbedded`) are gone.
 
+## Third-party notices
+
+Chuvadi.Layout.Pdf contains no third-party code. Its Indic shaping (`PdfShaper`) calls Chuvadi.Pdf.Text.Shaping,
+whose shaper is a port of parts of HarfBuzz: the HarfBuzz notice ships in that package
+(`THIRD-PARTY-NOTICES.md` at the package root). The Unicode data in Chuvadi.Layout is listed in Chuvadi.Layout's
+`THIRD-PARTY-NOTICES.md`.
+
 ## Build (D-18, D-29, D-37)
 
 This project is not in Chuvadi.slnx or CI. It takes chuvadi-pdf as **version-pinned packages** from the
