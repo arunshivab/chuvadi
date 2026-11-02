@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Chuvadi.Markup.Html;
 using Chuvadi.Markup.Sanitization;
+using Chuvadi.Markup.Tests.Sanitization;
 
 namespace Chuvadi.Markup.Tests.Html
 {
@@ -104,7 +105,7 @@ namespace Chuvadi.Markup.Tests.Html
             var sw = Stopwatch.StartNew();
             try
             {
-                var r = HtmlSanitizer.Sanitize(html, SanitizerPolicy.Reader());
+                var r = HtmlSanitizer.Sanitize(html, TestPolicies.Viewer());
                 Assert.NotNull(r.Html);
             }
             catch (MarkupLimitExceededException)

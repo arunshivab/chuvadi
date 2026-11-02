@@ -7,8 +7,8 @@ What 1.0 gives you:
 - **Markdown**: a CommonMark 0.31.2 parser (all 652 spec examples) with the GFM extensions — tables, task lists, strikethrough, extended autolinks — and the tag filter. A public, editable **AST** with source positions, an **HTML renderer** (cmark-identical output; raw HTML escape / strip / passthrough; unsafe URLs removed by default) and a **Markdown writer** that turns any AST back into Markdown.
 - **HTML**: the WHATWG tokenizer and tree builder — the DOM a browser builds, including adoption agency, foster parenting, templates, SVG/MathML and fragment parsing (the full html5lib tokenizer and tree-construction suites pass, including `<selectedcontent>` mirroring). Charset sniffing from bytes (BOM, caller, `<meta>` prescan, windows-1252 fallback, all WHATWG labels .NET supports). A small editable DOM and a spec serializer.
 - **CSS**: a CSS Syntax Level 3 tokenizer and parser (style sheets, declarations, nesting) and a safe serializer.
-- **Sanitizer**: allowlist sanitizer with two ready policies — **`SanitizerPolicy.Anjal()`** (strict, for mail: no forms, only `data:` images, links inert, all network blocked) and **`SanitizerPolicy.Reader()`** (standard viewer; still no network) — plus `Empty()` to build your own. Style sheets are sanitized and scoped under a wrapper class, ids and document-global CSS names (fonts, keyframes, counter styles) are prefixed, `cid:` and relative URLs go through your resolver, blocked resources are reported, and the output is re-parsed until it is a fixed point (mutation-XSS safe).
-- **Plain text**: text or `format=flowed` mail to safe HTML, with quote levels, autolinks (live, inert or rewritten) and three layouts.
+- **Sanitizer**: allowlist sanitizer. **`new SanitizerPolicy()` is the safest configuration** (links inert, images only as `data:` URIs, no forms, SVG, MathML, media or embedded fonts, strict limits, nothing ever fetched); each capability is a plain switch the application turns on in its own code (`Links`, `AllowRelativeLinks`, `AllowFormControls`, `AllowMedia`, `AllowSvg`, `AllowMathML`, `AllowSvgDataImages`, `AllowEmbeddedFonts`, `StyleSheets`, `ResourceResolver`, `Limits` and the allowlists). Style sheets are sanitized and scoped under a wrapper class, ids and document-global CSS names (fonts, keyframes, counter styles) are prefixed, `cid:` and relative URLs go through your resolver, blocked resources are reported, and the output is re-parsed until it is a fixed point (mutation-XSS safe).
+- **Plain text**: text or `format=flowed` mail to safe HTML, with quote levels, autolinks (inert by default, like the sanitizer; or live or rewritten) and three layouts.
 
 ```csharp
 using Chuvadi.Markup;
@@ -27,8 +27,8 @@ foreach (var h in doc.Descendants().OfType<Heading>())
 string withIds = MarkdownHtmlRenderer.Render(doc, new MarkdownHtmlOptions { HeadingIds = true, SourcePositions = true }, ct);
 string markdownAgain = MarkdownWriter.Write(doc);
 
-// Untrusted mail HTML (Anjal): strict policy, network blocked, links inert
-var policy = SanitizerPolicy.Anjal();
+// Untrusted mail HTML: the default policy is the strictest (network blocked, links inert)
+var policy = new SanitizerPolicy();
 policy.ResourceResolver = new DelegateResourceResolver(r =>
     r.Url.StartsWith("cid:") ? FindCidPartAsDataUri(r.Url.Substring(4)) : null);
 SanitizeResult mail = HtmlSanitizer.Sanitize(mimeHtmlPartBytes, policy, encoding: null, ct);
@@ -36,11 +36,21 @@ Console.WriteLine(mail.Html);                      // <div class="chuvadi-conten
 foreach (var b in mail.BlockedResources)           // e.g. offer "show images"
     Console.WriteLine($"{b.Kind} {b.Url}");
 
-// Documents in Reader: standard policy
-SanitizeResult page = HtmlSanitizer.Sanitize(untrustedHtml, SanitizerPolicy.Reader(), ct);
+// A document viewer turns on what it needs; still nothing is fetched without a resolver
+var viewer = new SanitizerPolicy
+{
+    Links = LinkHandling.Active,
+    AllowRelativeLinks = true,
+    AllowFormControls = true,   // inert: forms are always unwrapped
+    AllowMedia = true,
+    AllowSvg = true,
+    AllowMathML = true,
+    AllowEmbeddedFonts = true,  // families are namespaced so they cannot restyle the host
+};
+SanitizeResult page = HtmlSanitizer.Sanitize(untrustedHtml, viewer, ct);
 
-// Plain-text mail -> safe HTML
-string body = PlainText.ToHtml(text, new TextToHtmlOptions { FormatFlowed = true, Links = LinkHandling.Inert }, ct);
+// Plain-text mail -> safe HTML (links inert by default; Links = LinkHandling.Active for live links)
+string body = PlainText.ToHtml(text, new TextToHtmlOptions { FormatFlowed = true }, ct);
 
 // The HTML parser on its own: the DOM a browser would build
 HtmlDocument dom = HtmlParser.Parse(untrustedHtml, new HtmlParserOptions { Limits = MarkupLimits.Strict() }, ct);

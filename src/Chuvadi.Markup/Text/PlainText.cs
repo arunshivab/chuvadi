@@ -34,8 +34,8 @@ namespace Chuvadi.Markup.Text
         /// <summary>Turn <c>http(s)://</c>, <c>ftp://</c>, <c>www.</c> addresses and email addresses into links. Default true.</summary>
         public bool Autolink { get; set; } = true;
 
-        /// <summary>How detected links are emitted (as in the sanitizer). Default <see cref="LinkHandling.Keep"/>.</summary>
-        public LinkHandling Links { get; set; } = LinkHandling.Keep;
+        /// <summary>How detected links are emitted (as in the sanitizer). Default <see cref="LinkHandling.Inert"/>, the same safe default as <see cref="Sanitization.SanitizerPolicy.Links"/>; set <see cref="LinkHandling.Active"/> for live links.</summary>
+        public LinkHandling Links { get; set; } = LinkHandling.Inert;
 
         /// <summary>Attribute holding the destination of inert or rewritten links. Default <c>data-chuvadi-href</c>.</summary>
         public string? InertLinkAttribute { get; set; } = "data-chuvadi-href";

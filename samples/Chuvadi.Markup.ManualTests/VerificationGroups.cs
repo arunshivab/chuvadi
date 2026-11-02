@@ -11,7 +11,7 @@ using Chuvadi.Markup.Text;
 namespace Chuvadi.Markup.ManualTests
 {
     /// <summary>
-    /// End-to-end scenarios for the library's consumers (Reader, Anjal Mail, Layout, Docs). Each method
+    /// End-to-end scenarios for typical consumers (a document viewer, a mail client, layout and document conversion). Each method
     /// is self-contained and throws on failure. The console Program runs them all; the xUnit Tests
     /// project drives each as a [Fact].
     /// </summary>
@@ -25,9 +25,9 @@ namespace Chuvadi.Markup.ManualTests
             MarkdownUnsafeUrlsAreRemoved,
             MarkdownAstIsNavigable,
             MarkdownWriterRoundTrips,
-            MarkdownThroughReaderSanitizerIsSafe,
-            NewsletterSanitizesForAnjal,
-            NewsletterSanitizesForReader,
+            MarkdownThroughViewerSanitizerIsSafe,
+            NewsletterSanitizesForMail,
+            NewsletterSanitizesForViewer,
             CidImagesResolveThroughHost,
             Windows1252MailDecodes,
             SanitizedOutputIsStable,
@@ -52,7 +52,7 @@ namespace Chuvadi.Markup.ManualTests
         public static void MarkdownReadmeRendersAsGfm()
         {
             string html = MarkdownConverter.ToHtml(Samples.ReadmeMarkdown);
-            Contains(html, "<h1>Chuvadi Reader</h1>", "heading");
+            Contains(html, "<h1>Chuvadi Markup sample</h1>", "heading");
             Contains(html, "<strong>fast</strong>", "strong");
             Contains(html, "<del>unsafe</del>", "strikethrough");
             Contains(html, "<a href=\"http://www.example.org\">www.example.org</a>", "extended autolink");
@@ -124,23 +124,23 @@ namespace Chuvadi.Markup.ManualTests
             Require(a == b, "Markdown written from the AST renders identically");
         }
 
-        public static void MarkdownThroughReaderSanitizerIsSafe()
+        public static void MarkdownThroughViewerSanitizerIsSafe()
         {
             string html = MarkdownConverter.ToHtml(Samples.ReadmeMarkdown, null, new MarkdownHtmlOptions { RawHtml = RawHtmlMode.Passthrough });
-            var r = HtmlSanitizer.Sanitize(html, SanitizerPolicy.Reader());
+            var r = HtmlSanitizer.Sanitize(html, SamplePolicies.Viewer());
             Lacks(r.Html, "onclick", "event handler");
             Contains(r.Html, "<span>inline html</span>", "allowed raw span");
             Contains(r.Html, "<table>", "table");
             Require(r.IsStable, "stable");
         }
 
-        public static void NewsletterSanitizesForAnjal()
+        public static void NewsletterSanitizesForMail()
         {
-            var r = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SanitizerPolicy.Anjal());
+            var r = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SamplePolicies.Mail());
             string h = r.Html;
             Require(r.Title == "October deals", "title extracted");
             foreach (var bad in new[] { "<script", "onload", "<form", "<input", "<iframe", "javascript:", "tracker.example", "cdn.example", "fonts.example", "@import", "behavior", "position: fixed", " href=" })
-                Lacks(h, bad, "Anjal output");
+                Lacks(h, bad, "mail output");
             Contains(h, "<div class=\"chuvadi-content\"", "scope wrapper");
             Contains(h, ".chuvadi-content #user-content-wrapper", "scoped id selector");
             Contains(h, "@media only screen and (max-width: 620px)", "media query kept");
@@ -154,11 +154,11 @@ namespace Chuvadi.Markup.ManualTests
             Require(r.IsStable, "stable");
         }
 
-        public static void NewsletterSanitizesForReader()
+        public static void NewsletterSanitizesForViewer()
         {
-            var r = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SanitizerPolicy.Reader());
+            var r = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, SamplePolicies.Viewer());
             foreach (var bad in new[] { "<script", "onload", "<form", "<iframe", "javascript:", "tracker.example", "cdn.example" })
-                Lacks(r.Html, bad, "Reader output");
+                Lacks(r.Html, bad, "viewer output");
             Contains(r.Html, "href=\"https://shop.example/deals?utm_source=mail&amp;id=42\"", "links kept for host interception");
             Contains(r.Html, "rel=\"noopener noreferrer\"", "rel added");
             Contains(r.Html, "<input type=\"password\" name=\"pw\">", "inert form control kept (form removed)");
@@ -166,7 +166,7 @@ namespace Chuvadi.Markup.ManualTests
 
         public static void CidImagesResolveThroughHost()
         {
-            var p = SanitizerPolicy.Anjal();
+            var p = SamplePolicies.Mail();
             var requests = new List<ResourceRequest>();
             p.ResourceResolver = new DelegateResourceResolver(req =>
             {
@@ -190,7 +190,7 @@ namespace Chuvadi.Markup.ManualTests
 
         public static void SanitizedOutputIsStable()
         {
-            foreach (var policy in new[] { SanitizerPolicy.Anjal(), SanitizerPolicy.Reader() })
+            foreach (var policy in new[] { SamplePolicies.Mail(), SamplePolicies.Viewer() })
             {
                 var r = HtmlSanitizer.Sanitize(Samples.NewsletterHtml, policy);
                 var reparsed = HtmlParser.ParseFragment(r.Html, "body");
@@ -237,11 +237,11 @@ namespace Chuvadi.Markup.ManualTests
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             string deep = string.Concat(Enumerable.Repeat("<div><b><table><tr><td>", 20_000));
-            var r = HtmlSanitizer.Sanitize(deep, SanitizerPolicy.Reader());
+            var r = HtmlSanitizer.Sanitize(deep, SamplePolicies.Viewer());
             Require(r.Html.Length > 0, "output produced");
             string md = new string('>', 100_000) + string.Concat(Enumerable.Repeat("*a **b ", 50_000));
             MarkdownConverter.ToHtml(md);
-            var strict = SanitizerPolicy.Anjal();
+            var strict = SamplePolicies.Mail();
             bool threw = false;
             try { HtmlSanitizer.Sanitize(new string('x', strict.Limits.MaxInputChars + 1), strict); }
             catch (MarkupLimitExceededException ex) { threw = ex.LimitName == nameof(MarkupLimits.MaxInputChars); }

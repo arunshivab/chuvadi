@@ -79,7 +79,7 @@ public static class HtmlExportTests
             AssertNotContains(preview, "<html", "fragment");
             AssertNotContains(preview, "<style", "no style sheet");
             AssertNotContains(preview, "javascript", "no unsafe link");
-            var r = HtmlSanitizer.Sanitize(preview, SanitizerPolicy.Anjal());
+            var r = HtmlSanitizer.Sanitize(preview, new SanitizerPolicy());
             var removals = r.Actions.Where(a => a.Kind is SanitizerActionKind.RemovedElement or SanitizerActionKind.UnwrappedElement
                 or SanitizerActionKind.RemovedAttribute or SanitizerActionKind.RemovedCssDeclaration or SanitizerActionKind.BlockedResource)
                 // Making a link inert removes its href (recorded together with NeutralizedLink): expected for mail.

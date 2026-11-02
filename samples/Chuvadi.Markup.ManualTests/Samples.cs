@@ -9,7 +9,7 @@ namespace Chuvadi.Markup.ManualTests
         public const string PngDataUri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
         public const string ReadmeMarkdown =
-"# Chuvadi Reader\n" +
+"# Chuvadi Markup sample\n" +
 "\n" +
 "A **fast**, _safe_ reader for ~~unsafe~~ untrusted documents. See <https://example.com> or www.example.org.\n" +
 "\n" +
