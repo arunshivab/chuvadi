@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    D-40: generates the reference corpus (docx with Chuvadi.Docs, xlsx with Chuvadi.Sheets). Each file exercises one
+    feature family. The reference PDFs are rendered by LibreOffice headless (make-references.sh) and the comparison is
+    the acceptance harness (staging/samples/Chuvadi.Layout.Acceptance). Pure BCL, but kept in staging/ with the
+    harness it feeds. Not in Chuvadi.slnx or CI.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.ReferenceCorpus</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.ReferenceCorpus</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DejaVu Serif for d48 (embedded font); DejaVu licence beside it. -->
+    <EmbeddedResource Include="Fonts\DejaVuSerif.ttf" LogicalName="Chuvadi.Layout.ReferenceCorpus.Fonts.DejaVuSerif.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Chuvadi.Docs\Chuvadi.Docs.csproj" />
+    <ProjectReference Include="..\..\..\src\Chuvadi.Sheets\Chuvadi.Sheets.csproj" />
+  </ItemGroup>
+
+</Project>

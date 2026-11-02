@@ -5,6 +5,10 @@ Projects that are ready but cannot join `Chuvadi.slnx` and CI yet.
 | Project | Waiting for |
 |---|---|
 | `Chuvadi.Print.Pdf` (+ `Chuvadi.Print.Pdf.Tests`) | Chuvadi.Pdf moving into the monorepo, or Chuvadi.Pdf on nuget.org (D-28, D-29) |
+| `src/Chuvadi.Layout.Pdf` (+ `tests/Chuvadi.Layout.Pdf.Tests`) | Chuvadi.Pdf moving into the monorepo (Layout D-42, end state A) |
+| `tests/Chuvadi.Layout.Acceptance.Tests`, `samples/Chuvadi.Layout.Acceptance` | the same (corpus acceptance harness and its tests) |
+| `samples/Chuvadi.Layout.Viewer` | the same (reference viewer: per-page SVG/PNG, index.html) |
+| `samples/Chuvadi.Layout.ReferenceCorpus`, `tests/Chuvadi.Layout.ReferenceCorpus` | the same (corpus generator, and the corpus with its LibreOffice 24.2.7.2 references; D-40) |
 
 The projects here consume the Chuvadi.Pdf **packages** from your local package folder. `staging/nuget.config`
 sets it as `..\..\..\local-nuget`, relative to that file, so the folder `local-nuget` sits next to the folder
@@ -21,4 +25,14 @@ To build: pack chuvadi-pdf into the feed first. In the chuvadi-pdf clone, run
 
 ```powershell
 dotnet test staging/Chuvadi.Print.Pdf.Tests -c Release
+```
+
+Layout's staged projects pin Chuvadi.Pdf 3.26.0 in `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props` and carry their own
+per-project `nuget.config` (same local feed). Build them from the repository root:
+
+```powershell
+dotnet build staging/tests/Chuvadi.Layout.Pdf.Tests -c Release --no-incremental
+dotnet test staging/tests/Chuvadi.Layout.Pdf.Tests -c Release --no-build
+dotnet build staging/tests/Chuvadi.Layout.Acceptance.Tests -c Release --no-incremental
+dotnet test staging/tests/Chuvadi.Layout.Acceptance.Tests -c Release --no-build
 ```

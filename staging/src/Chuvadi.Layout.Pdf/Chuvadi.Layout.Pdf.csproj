@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Chuvadi.Layout.Pdf: PDF / SVG / PNG output and the Indic shaper for Chuvadi.Layout, built on chuvadi-pdf.
+    D-29: chuvadi-pdf comes as version-pinned packages (ChuvadiPdf.props) from the local feed named in nuget.config.
+    D-18: not in Chuvadi.slnx or CI. D-37: lives under staging/ until chuvadi-pdf joins as ProjectReferences, then returns to src/.
+  -->
+  <Import Project="ChuvadiPdf.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.Pdf</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.Pdf</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Layout.Pdf</Product>
+    <Description>PDF, SVG and PNG output for Chuvadi.Layout pages (whole documents or one page at a time, memory-only), and PdfShaper: complex-script (Indic) shaping through Chuvadi.Pdf.Text.Shaping as a Chuvadi.Layout IShaper. Pure BCL; built on chuvadi-pdf.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>layout;pdf;svg;png;docx;xlsx;shaping;indic</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <PackageReference Include="Chuvadi.Pdf.Authoring" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Documents" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Graphics" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Svg" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Text.Shaping" Version="[$(ChuvadiPdfVersion)]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.Pdf.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

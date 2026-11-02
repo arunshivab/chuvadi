@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.Markup</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.Markup</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Layout.Markup</Product>
+    <Description>Markdown (CommonMark + GFM) and HTML print and export for Chuvadi.Layout: turns Chuvadi.Markup's Markdown AST and sanitized HTML DOM (mail and pages, with inline CSS) into Chuvadi.Layout's flow document, so they paginate into the same page display list as docx and text (SVG, PNG and PDF through Chuvadi.Layout.Pdf). Pure BCL; an optional add-on so the core layout package does not depend on Chuvadi.Markup.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>markdown;commonmark;gfm;html;email;layout;pagination;print;pdf</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <ProjectReference Include="..\Chuvadi.Markup\Chuvadi.Markup.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.Markup.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

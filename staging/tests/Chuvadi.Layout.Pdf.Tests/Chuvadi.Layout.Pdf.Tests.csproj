@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- D-29: chuvadi-pdf as pinned packages from the local feed (nuget.config); not in Chuvadi.slnx or CI. -->
+  <Import Project="..\..\src\Chuvadi.Layout.Pdf\ChuvadiPdf.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Pdf\Chuvadi.Layout.Pdf.csproj" />
+    <!-- Synthetic test fonts from chuvadi-pdf (tests/Fixtures/Fonts): a TrueType collection and a CFF face. -->
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Fonts\*.*" CopyToOutputDirectory="PreserveNewest" LinkBase="Fonts" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Test fonts: the OFL faces bundled in Chuvadi.Layout.Fonts (Liberation, LiPi Sans Tamil). -->
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+    <PackageReference Include="Chuvadi.Pdf.Documents" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Text" Version="[$(ChuvadiPdfVersion)]" />
+  </ItemGroup>
+
+</Project>

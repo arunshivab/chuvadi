@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    D-29: projects that use chuvadi-pdf take it as version-pinned packages from the local NuGet feed
+    (%USERPROFILE%\Documents\local-nuget, see the nuget.config next to each project), never from a source clone.
+    Imported by Chuvadi.Layout.Pdf, Chuvadi.Layout.Pdf.Tests, Chuvadi.Layout.Acceptance and
+    Chuvadi.Layout.Acceptance.Tests; none of them is in Chuvadi.slnx or CI.
+    To move to a newer Chuvadi.Pdf: pack it into the feed, then change this one number.
+  -->
+  <PropertyGroup>
+    <ChuvadiPdfVersion>3.26.0</ChuvadiPdfVersion>
+  </PropertyGroup>
+
+</Project>
