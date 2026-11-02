@@ -14,8 +14,7 @@ Chuvadi.Pdf packages:
 - The version is `ChuvadiPdfVersion`, currently 3.22.1.
 - They come from Arun's local feed `C:\Users\aruns\Documents\local-nuget`, set by `staging/nuget.config`.
 
-The Chuvadi PDF product does the same through its own `products/ChuvadiPdfPrinter/nuget.config`. No project
-references a chuvadi-pdf source clone (D-29).
+No project references a chuvadi-pdf source clone (D-29).
 
 `staging/` is deliberately outside `src/`, which the CI pure-BCL grep scans.
 
@@ -42,11 +41,6 @@ git mv staging/Chuvadi.Print.Pdf.Tests tests/Chuvadi.Print.Pdf.Tests
 git rm staging/nuget.config staging/README.md
 ```
 
-Drop `products/ChuvadiPdfPrinter/nuget.config` too, unless the product still consumes Chuvadi.Print as a package
-(D-11 package mode). In `ChuvadiPdfPrinter.Core.csproj`, change the path
-`..\..\..\..\staging\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj` to
-`..\..\..\..\src\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj`.
-
 ### 1.2 `Chuvadi.slnx` (shared)
 
 Add to the `/src/` folder, after `src/Chuvadi.Print/Chuvadi.Print.csproj`:
@@ -57,7 +51,6 @@ Add to the `/tests/` folder, after `tests/Chuvadi.Print.Tests/Chuvadi.Print.Test
 ```xml
     <Project Path="tests/Chuvadi.Print.Pdf.Tests/Chuvadi.Print.Pdf.Tests.csproj" />
 ```
-`products/ChuvadiPdfPrinter` stays out of `Chuvadi.slnx` (D-23).
 
 ### 1.3 `.github/workflows/ci.yml` (shared)
 
@@ -94,7 +87,7 @@ The pure-BCL grep needs no change in end state A, because only ProjectReferences
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <Product>Chuvadi.Print.Pdf</Product>
-    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview), and PdfFileTarget prints to a PDF file by placing the original pages as vectors (no rasterising), with every Chuvadi.Print layout, copy, collation and duplex setting.</Description>
+    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>1.0.0</Version>
@@ -103,7 +96,7 @@ The pure-BCL grep needs no change in end state A, because only ProjectReferences
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;pdf;rasterizer;print-to-pdf;imposition</PackageTags>
+    <PackageTags>print;printing;pdf;rasterizer</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -188,13 +181,12 @@ writes dependencies on Chuvadi.Pdf.Rendering / Operations 0.1.0.
 The package table (Package | Formats | Status) has no Print rows yet:
 ```markdown
 | **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing: Windows (GDI), IPP, PNG preview, remote hub/agent | v1.0.0 |
-| **[Chuvadi.Print.Pdf](src/Chuvadi.Print.Pdf/README.md)** | PDF rendering and print-to-PDF for Chuvadi.Print (over Chuvadi.Pdf) | v1.0.0 |
+| **[Chuvadi.Print.Pdf](src/Chuvadi.Print.Pdf/README.md)** | PDF rendering for Chuvadi.Print (over Chuvadi.Pdf) | v1.0.0 |
 ```
 The Print row can go in as soon as `print-v1.0.0` is tagged. Use the versions actually released.
 
 ## 5. Print-owned follow-ups (Print chat, with 1.1)
 
-- **Product:** remove the local-feed note from `INSTALL.md` and `scripts/build.ps1` when it no longer applies.
 - **Docs:** update `BASELINE.md` (the A5 line), `GUIDE.md` §5 and §8, the Chuvadi.Print.Pdf README ("Building"),
   `PRINTING-REPORTS.md` (the test path) and `WINDOWS-VERIFICATION.md` (step 2 and the `staging/` paths).
-- **Gate:** build `Chuvadi.slnx` and run all suites, including `tests/Chuvadi.Print.Pdf.Tests` (27 tests).
+- **Gate:** build `Chuvadi.slnx` and run all suites, including `tests/Chuvadi.Print.Pdf.Tests` (16 tests).

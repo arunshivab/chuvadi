@@ -9,7 +9,6 @@ Chuvadi.Layout                  lays it out and renders it to PDF bytes     (own
         |
 Chuvadi.Print                   PrintJob: settings, plan, audit, spool envelope
         |-- PdfPageRasterizer (Chuvadi.Print.Pdf) --> WindowsPrinterTarget / IppPrinterTarget / ImageFileTarget
-        |-- PdfFileTarget     (Chuvadi.Print.Pdf) --> a PDF file, pages placed as vectors
         |-- IppDocumentTarget                      --> an IPP printer that accepts PDF (no rendering)
         '-- PrintHub.Submit   (Chuvadi.Print.Remote) --> a PrintAgent at the branch, which prints with any of the above
 ```
@@ -34,14 +33,10 @@ PrintResult result = new PrintJob(pdf)
     .PrintTo(new WindowsPrinterTarget("Ward-3 LaserJet"));  // or new IppPrinterTarget("ipp://...")
 ```
 
-## To a PDF file ("print to PDF")
+## Saving as PDF
 
-```csharp
-new PrintJob(pdf).WithPages(PageSelection.Range("1, 3")).WithPaper(PaperSize.A5).WithScale(ScaleMode.FitToPage)
-    .SubmitTo(new PdfFileTarget(@"D:\out\discharge-A5.pdf"));
-```
-The result is a new PDF in the printed layout (sheet size, scaling, copies, duplex blank backs). Text stays
-text, because the pages are placed as vectors and never rasterised.
+Saving a report as PDF is not printing: the PDF bytes from Chuvadi.Layout (or a document written with the
+Chuvadi.Pdf writer) are the file. Chuvadi.Print is only used when the PDF goes to a printer.
 
 ## To a printer at a branch (LiPi Connect)
 
@@ -60,7 +55,6 @@ own resolution. Exactly one audit event is recorded per job (P06).
 | Need | Packages |
 |---|---|
 | Print to a Windows or IPP printer (rendered) | Chuvadi.Print, Chuvadi.Print.Pdf |
-| Print to a PDF file | Chuvadi.Print, Chuvadi.Print.Pdf |
 | PDF passthrough to an IPP printer | Chuvadi.Print |
 | Remote printing | Chuvadi.Print (hub and agent); the agent also needs Chuvadi.Print.Pdf to render |
 
@@ -69,7 +63,6 @@ own resolution. Exactly one audit event is recorded per job (P06).
 The tests in `staging/Chuvadi.Print.Pdf.Tests/LayoutCompositionTests.cs` run this composition. A stand-in for
 Layout (`StubLayout`, which writes the PDF with the Chuvadi PDF authoring API) produces the report, which is then:
 - printed to a device: 2 copies, double-sided, monochrome, one audit event;
-- printed to an A5 PDF file with a page selection;
 - carried through the spool envelope and printed on the other side.
 
 The test also writes a preview PNG. Replace `StubLayout` with the real Chuvadi.Layout call once Layout is in

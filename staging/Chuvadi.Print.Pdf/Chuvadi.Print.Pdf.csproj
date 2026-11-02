@@ -21,7 +21,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <Product>Chuvadi.Print.Pdf</Product>
-    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview), and PdfFileTarget prints to a PDF file by placing the original pages as vectors (no rasterising), with every Chuvadi.Print layout, copy, collation and duplex setting.</Description>
+    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>0.1.0</Version>
@@ -30,7 +30,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;pdf;rasterizer;print-to-pdf;imposition</PackageTags>
+    <PackageTags>print;printing;pdf;rasterizer</PackageTags>
 
     <ChuvadiPdfVersion>3.22.1</ChuvadiPdfVersion>
   </PropertyGroup>

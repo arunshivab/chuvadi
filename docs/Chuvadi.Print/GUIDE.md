@@ -11,8 +11,7 @@ or a remote agent, recording one audit event per job.
 | A3 | `Chuvadi.Print.Windows` | Windows printers through the GDI spooler (P/Invoke only) | 0.3.0 |
 | A4 | `Chuvadi.Print.Ipp` | Driverless IPP printing on any OS: PWG Raster or PDF passthrough | 0.4.0 |
 | A6 | `Chuvadi.Print.Remote` | An embeddable print hub and dial-out print agents | 0.5.0 |
-| A5 | package **Chuvadi.Print.Pdf** (`staging/`) | PDF rendering (`PdfPageRasterizer`) and print-to-PDF (`PdfFileTarget`) over Chuvadi.Pdf | 0.1.0 |
-| Product | `products/ChuvadiPdfPrinter` | The "Chuvadi PDF" virtual printer for every Windows application | 0.2.0 |
+| A5 | package **Chuvadi.Print.Pdf** (`staging/`) | PDF rendering (`PdfPageRasterizer`) over Chuvadi.Pdf | 0.1.0 |
 
 The architectural invariants (P01–P09) are in [BASELINE.md](BASELINE.md). How Docs/Sheets reports get printed is
 in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
@@ -87,7 +86,6 @@ PrintResult sent = job.SubmitTo(documentTarget);     // the PDF itself to an IDo
 | `WindowsPrinterTarget(name)` | raster | A3, see §3. |
 | `IppPrinterTarget(uri)` | raster | A4, PWG Raster. |
 | `IppDocumentTarget(uri)` | document | A4, PDF passthrough. |
-| `PdfFileTarget(path or stream)` | document | A5, vector print-to-PDF. |
 
 Your own target implements `IPrintTarget` (raster pages) or `IDocumentTarget` (the PDF itself).
 
@@ -137,19 +135,13 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
 
-## 5. PDF rendering and print-to-PDF (A5, package Chuvadi.Print.Pdf)
+## 5. PDF rendering (A5, package Chuvadi.Print.Pdf)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
   rendered at the resolution and pixel format the job asks for. Annotations and form fields are printed by
   flattening them first. All the renderer's options are exposed: `SuperSample`, `GammaCorrect`, `Hinting`,
   `FlatnessTolerance`, `IgnoreOptionalContent`, `LayerVisibility`, `Password` and `MaxRenderDpi`.
-- **`PdfFileTarget`** writes the printed sheet sides as a new PDF, placing the original pages as vectors.
-  Layout, plan, page selection, copies, collation and duplex blank backs all apply.
-  - Options: `IncludeAnnotations`, `IncludeFormFields`, `MarginReference`, `HardMargins`,
-    `IncludeBlankBacks`, `ClipToPrintableArea`, `Password` and `Encryption`.
-  - Results: `LastPlan`, `LastPageCount`, `LastOutputPath`, `LastApproximations` (colour mode and duplex
-    binding).
-  - Output goes through a temporary file, so a failed job leaves no half-written PDF.
+- **Saving as PDF** is not a print target: use the Chuvadi.Pdf writer or Chuvadi.Layout's PDF output.
 - **Building**: it lives in `staging/` and consumes the version-pinned Chuvadi.Pdf packages (3.22.1) from
   the local feed set in `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and
   CI until Chuvadi.Pdf joins the monorepo or nuget.org (D-28). Building and packing are described in its README.
@@ -207,24 +199,7 @@ await agent.RunAsync(stoppingToken);
   (Range), `POST jobs/{id}/status`. Every request carries the headers `X-Chuvadi-Protocol: 1`,
   `X-Chuvadi-Agent` and `Authorization: Bearer`.
 
-## 7. The Chuvadi PDF virtual printer (product)
-
-`products/ChuvadiPdfPrinter` is a separate product built on the Chuvadi.Print package (D-11, D-23); install
-it with `INSTALL.md`.
-
-- **Windows 11 24H2+**: a Print Support App adds "Chuvadi PDF" (asks where to save) and "Chuvadi PDF
-  (Auto-save)".
-- **Windows 10 or any Windows**: a "Chuvadi PDF" queue on Windows' own "Microsoft Print To PDF" driver,
-  whose port is the agent's named pipe. Each job is its own pipe connection, so jobs never share a file.
-- **Agent service**: one service in every mode. It saves the PDFs into a private folder per user, writes the
-  audit trail and, optionally, forwards each PDF to physical printers:
-  - IPP printers get the PDF passed through.
-  - Windows printers get it rendered by Chuvadi.Print.Pdf, with `Paper` (`Auto` matches the first page),
-    `Color`, `Scale` and `MaxRasterDpi`.
-- **Self-test**: `scripts\selftest.ps1` prints a test page through each installed variant and checks the
-  PDF and the audit trail.
-
-## 8. Testing and verification
+## 7. Testing and verification
 
 - **Tests**: `dotnet test Chuvadi.slnx` runs Print's unit tests and its verification groups. Groups that do
   not apply on the current OS report SKIP.
@@ -234,5 +209,4 @@ it with `INSTALL.md`.
   - `--windows-printer "<name>" [--windows-output <folder>]`: an 11-job proof set.
   - `--ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]`: a proof set over IPP.
 - **Chuvadi.Print.Pdf**: `dotnet test staging/Chuvadi.Print.Pdf.Tests` (needs the Chuvadi.Pdf packages in the local feed).
-- **The product**: `dotnet test products/ChuvadiPdfPrinter/ChuvadiPdfPrinter.sln`.
 - **Windows**: everything only Windows can prove is in [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md).

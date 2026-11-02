@@ -29,7 +29,7 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   status reports); the hub never connects to an agent. Agents authenticate with a per-agent bearer token
   (stored hashed on the hub, rotated without reinstalling, revocable at once); plain HTTP is refused
   except to loopback or when explicitly allowed. The IPP client (A4) likewise only makes outbound requests
-  to printers; an IPP *server* (for the "Chuvadi PDF" product) lives outside the library and binds to
+  to printers; an IPP *server*, if a host application needs one, lives outside the library and binds to
   loopback unless deliberately configured otherwise. *(Decision D-26.)*
 - **P08 — Portable core builds and tests on Linux; Windows code is namespace-confined.**
   *(Amended 2026-10-28, decision D-12.)* `Chuvadi.Print` is a single plain `net10.0` assembly. All
@@ -61,14 +61,12 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   `IppPrinterTarget` (rendered pages as PWG Raster) and `IppDocumentTarget` (PDF passthrough via the new
   core `PrintJob.SubmitTo` / `IDocumentTarget`): driverless printing on any OS. (0.4.0)
 - **A5 — Chuvadi.Print.Pdf** — separate package (`staging/Chuvadi.Print.Pdf`, tests in
-  `staging/Chuvadi.Print.Pdf.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering) and the
-  vector-imposition `PdfFileTarget` (print-to-PDF via `SubmitTo`). It consumes the version-pinned Chuvadi.Pdf
+  `staging/Chuvadi.Print.Pdf.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering). It consumes the version-pinned Chuvadi.Pdf
   packages from the local feed through `staging/nuget.config`; it never references a source clone (D-29).
   It stays outside `Chuvadi.slnx` and CI, and outside the `src/` scanned by the pure-BCL check, until
   Chuvadi.Pdf moves into the monorepo or is on nuget.org (D-28). (0.1.0)
-- **Product: "Chuvadi PDF" virtual printer** — separate product consuming the Chuvadi.Print nupkg
-  (decision D-11): a Print Support App virtual printer on Windows 11, a "Microsoft Print to PDF" queue
-  fallback on Windows 10, an IPP server later. No v3/v4 driver, port monitor or print processor.
+- **System-wide virtual printer**: none. The "Chuvadi PDF" product (decision D-11) was withdrawn and removed
+  (D-48); any future system-wide printer is a separate decision pending with the maintainer.
 - **A6** — `Chuvadi.Print.Remote` (decision D-26): `PrintHub`, a host-agnostic hub protocol
   handler the host app embeds (LiPi Connect is the reference host) behind any web stack; `PrintAgent`, which
   dials out, long-polls, downloads with resume and SHA-256 check, prints through any `IPrintTarget` /

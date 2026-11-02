@@ -7,11 +7,6 @@ Connects [Chuvadi.Print](../Chuvadi.Print/README.md) to the Chuvadi PDF library
   printers, IPP printers, PNG preview — one page at a time at the device resolution, with the page's `/Rotate`
   applied. Annotations and form fields print when asked (they are flattened into a copy of the document first).
   Exposes the renderer's options: supersampling, gamma, hinting, flatness, layers, password, a render-DPI cap.
-- **`PdfFileTarget`** (`IDocumentTarget`): "print to PDF". Writes a new PDF whose pages are the printed sheet
-  sides, placing the original pages as vectors (text stays text) with every Chuvadi.Print layout setting —
-  paper, orientation, scale mode, alignment, margins, auto-rotate — and the print plan's page selection, copies,
-  collation and duplex blank backs. Optional clipping to the printable area, simulated hard margins, output
-  encryption. Writes through a temporary file, so a failed job leaves no half-written PDF.
 
 ```csharp
 using Chuvadi.Print;
@@ -23,7 +18,6 @@ var job = new PrintJob("discharge-summary.pdf")
     .WithCopies(2).WithDuplex(Duplex.Vertical).WithPaper(PaperSize.A4);
 
 job.PrintTo(new WindowsPrinterTarget("Ward-3 LaserJet"));       // rendered pages to a printer
-job.SubmitTo(new PdfFileTarget(@"C:\out\summary-printed.pdf"));  // the same job as a vector PDF
 ```
 
 ## Building
@@ -48,8 +42,7 @@ The package depends on Chuvadi.Print and on Chuvadi.Pdf.Rendering / Chuvadi.Pdf.
 ## Notes
 
 - Chuvadi.Pdf's renderer draws the media box; `GetPageSize` reports the media box (turned by `/Rotate`).
-  `PdfFileTarget` places the crop box, as viewers show the page.
 - Annotation flattening skips hidden and no-view annotations; the annotation Print flag is not consulted.
-- A vector PDF keeps original colours: Grayscale/Monochrome are listed in `LastApproximations`.
+- Saving a document as PDF is not this package's job: use the Chuvadi.Pdf writer or Chuvadi.Layout's PDF output.
 
 Licence: MIT (this adapter). Chuvadi.Pdf is Apache-2.0.
