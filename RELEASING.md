@@ -13,28 +13,36 @@
 | `print-v*` | Chuvadi.Print | `src/Chuvadi.Print/Chuvadi.Print.csproj` |
 | `zip-v*` | Chuvadi.Zip | `src/Chuvadi.Zip/Chuvadi.Zip.csproj` |
 | `markup-v*` | Chuvadi.Markup | `src/Chuvadi.Markup/Chuvadi.Markup.csproj` |
+| `fonts-v*` | Chuvadi.Fonts | `src/Chuvadi.Fonts/Chuvadi.Fonts.csproj` |
 | `layout-v*` | Chuvadi.Layout | `src/Chuvadi.Layout/Chuvadi.Layout.csproj` |
+| `layout-docs-v*` | Chuvadi.Layout.Docs | `src/Chuvadi.Layout.Docs/Chuvadi.Layout.Docs.csproj` |
+| `layout-sheets-v*` | Chuvadi.Layout.Sheets | `src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj` |
+| `layout-documents-v*` | Chuvadi.Layout.Documents | `src/Chuvadi.Layout.Documents/Chuvadi.Layout.Documents.csproj` |
 | `layout-fonts-v*` | Chuvadi.Layout.Fonts | `src/Chuvadi.Layout.Fonts/Chuvadi.Layout.Fonts.csproj` |
 | `layout-markup-v*` | Chuvadi.Layout.Markup | `src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj` |
 
 Chuvadi.Docs.Conversion has no tag of its own: it rides on `docs-v*`. The workflow refuses a
 `docs-v*` tag when the two `<Version>` values differ from the tag version.
 
-A longer prefix is listed before a shorter one that it starts with (`layout-fonts-v*` and
-`layout-markup-v*` before `layout-v*`), so each tag resolves to exactly one package set.
+A longer prefix is listed before a shorter one that it starts with (`layout-documents-v*`,
+`layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*` and `layout-markup-v*` before `layout-v*`), so each tag
+resolves to exactly one package set. (`layout-docs-v*` cannot match `layout-documents-v…`, and `fonts-v*` cannot
+match `layout-fonts-v…`: a case pattern matches from the start.)
 
 ## Release order
 
 A package must be released after the packages it depends on. Chuvadi.Layout references
-Chuvadi.Docs and Chuvadi.Sheets; Chuvadi.Layout.Fonts and Chuvadi.Layout.Markup reference
-Chuvadi.Layout (Layout.Markup also Chuvadi.Markup):
+Chuvadi.Fonts only; Chuvadi.Layout.Docs references Chuvadi.Layout and Chuvadi.Docs, Chuvadi.Layout.Sheets
+Chuvadi.Layout and Chuvadi.Sheets, Chuvadi.Layout.Documents both of those; Chuvadi.Layout.Fonts and
+Chuvadi.Layout.Markup reference Chuvadi.Layout (Layout.Markup also Chuvadi.Markup):
 
 1. `zip-v*`
 2. `markup-v*`
 3. `docs-v*` (version pending Arun; Docs.Conversion needs Chuvadi.Markup released first)
-4. `layout-v*`
-5. `layout-fonts-v*`
-6. `layout-markup-v*`
+4. `fonts-v*`
+5. `layout-v*`
+6. `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*`, `layout-markup-v*` (any order)
+7. `layout-documents-v*`
 
 (`sheets-v1.7.0` is already released. `print-v*` is not scheduled: Chuvadi.Print is in progress.)
 Push one tag, wait for its Release workflow to finish green, then push the next. Create each tag

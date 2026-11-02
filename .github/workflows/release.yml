@@ -6,7 +6,11 @@ name: Release
 #   git tag -s print-v0.1.0  -m "Chuvadi.Print 0.1.0"  && git push origin print-v0.1.0
 #   git tag -s zip-v1.0.0    -m "Chuvadi.Zip 1.0.0"    && git push origin zip-v1.0.0
 #   git tag -s markup-v1.0.0 -m "Chuvadi.Markup 1.0.0" && git push origin markup-v1.0.0
+#   git tag -s fonts-v1.0.0         -m "Chuvadi.Fonts 1.0.0"         && git push origin fonts-v1.0.0
 #   git tag -s layout-v0.1.0        -m "Chuvadi.Layout 0.1.0"        && git push origin layout-v0.1.0
+#   git tag -s layout-docs-v0.1.0   -m "Chuvadi.Layout.Docs 0.1.0"   && git push origin layout-docs-v0.1.0
+#   git tag -s layout-sheets-v0.1.0 -m "Chuvadi.Layout.Sheets 0.1.0" && git push origin layout-sheets-v0.1.0
+#   git tag -s layout-documents-v0.1.0 -m "Chuvadi.Layout.Documents 0.1.0" && git push origin layout-documents-v0.1.0
 #   git tag -s layout-fonts-v0.1.0  -m "Chuvadi.Layout.Fonts 0.1.0"  && git push origin layout-fonts-v0.1.0
 #   git tag -s layout-markup-v0.1.0 -m "Chuvadi.Layout.Markup 0.1.0" && git push origin layout-markup-v0.1.0
 # The prefix selects which package is built, tested, packed, and released.
@@ -15,7 +19,7 @@ name: Release
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "layout-v*", "layout-fonts-v*", "layout-markup-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*"]
 
 permissions:
   contents: write
@@ -41,6 +45,10 @@ jobs:
             print-v*)  NAME="Chuvadi.Print" ;;
             zip-v*)    NAME="Chuvadi.Zip" ;;
             markup-v*) NAME="Chuvadi.Markup" ;;
+            fonts-v*)  NAME="Chuvadi.Fonts" ;;
+            layout-documents-v*) NAME="Chuvadi.Layout.Documents" ;;
+            layout-docs-v*)   NAME="Chuvadi.Layout.Docs" ;;
+            layout-sheets-v*) NAME="Chuvadi.Layout.Sheets" ;;
             layout-fonts-v*)  NAME="Chuvadi.Layout.Fonts" ;;
             layout-markup-v*) NAME="Chuvadi.Layout.Markup" ;;
             layout-v*)        NAME="Chuvadi.Layout" ;;
@@ -67,7 +75,11 @@ jobs:
           dotnet test tests/Chuvadi.Print.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Zip.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Markup.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Fonts.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Layout.Docs.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Layout.Sheets.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Layout.Documents.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Markup.Tests -c Release --no-build
           dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
@@ -75,6 +87,7 @@ jobs:
           dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Zip.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Markup.ManualTests
+          dotnet run -c Release --no-build --project samples/Chuvadi.Fonts.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
       - name: Check Docs and Docs.Conversion versions match the tag

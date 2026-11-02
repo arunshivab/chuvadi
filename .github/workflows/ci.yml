@@ -60,8 +60,20 @@ jobs:
       - name: Unit tests — Chuvadi.Markup (xUnit)
         run: dotnet test tests/Chuvadi.Markup.Tests -c Release --no-build --logger "trx;LogFileName=markup.trx"
 
+      - name: Unit tests — Chuvadi.Fonts (xUnit)
+        run: dotnet test tests/Chuvadi.Fonts.Tests -c Release --no-build --logger "trx;LogFileName=fonts.trx"
+
       - name: Unit tests — Chuvadi.Layout (xUnit)
         run: dotnet test tests/Chuvadi.Layout.Tests -c Release --no-build --logger "trx;LogFileName=layout.trx"
+
+      - name: Unit tests — Chuvadi.Layout.Docs (xUnit)
+        run: dotnet test tests/Chuvadi.Layout.Docs.Tests -c Release --no-build --logger "trx;LogFileName=layout-docs.trx"
+
+      - name: Unit tests — Chuvadi.Layout.Sheets (xUnit)
+        run: dotnet test tests/Chuvadi.Layout.Sheets.Tests -c Release --no-build --logger "trx;LogFileName=layout-sheets.trx"
+
+      - name: Unit tests — Chuvadi.Layout.Documents (xUnit)
+        run: dotnet test tests/Chuvadi.Layout.Documents.Tests -c Release --no-build --logger "trx;LogFileName=layout-documents.trx"
 
       - name: Unit tests — Chuvadi.Layout.Markup (xUnit)
         run: dotnet test tests/Chuvadi.Layout.Markup.Tests -c Release --no-build --logger "trx;LogFileName=layout-markup.trx"
@@ -84,6 +96,9 @@ jobs:
       - name: Verification suite — Chuvadi.Markup (end-to-end)
         run: dotnet run -c Release --no-build --project samples/Chuvadi.Markup.ManualTests
 
+      - name: Verification suite — Chuvadi.Fonts (end-to-end)
+        run: dotnet run -c Release --no-build --project samples/Chuvadi.Fonts.ManualTests
+
       - name: Verification suite — Chuvadi.Layout (end-to-end)
         run: dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
@@ -96,7 +111,11 @@ jobs:
           dotnet pack src/Chuvadi.Print/Chuvadi.Print.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Zip/Chuvadi.Zip.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Markup/Chuvadi.Markup.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Fonts/Chuvadi.Fonts.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Layout/Chuvadi.Layout.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Layout.Docs/Chuvadi.Layout.Docs.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Layout.Documents/Chuvadi.Layout.Documents.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Layout.Fonts/Chuvadi.Layout.Fonts.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj -c Release --no-build
 
@@ -112,6 +131,10 @@ jobs:
             artifacts/bin/Chuvadi.Print/Release/*.nupkg
             artifacts/bin/Chuvadi.Zip/Release/*.nupkg
             artifacts/bin/Chuvadi.Markup/Release/*.nupkg
+            artifacts/bin/Chuvadi.Fonts/Release/*.nupkg
             artifacts/bin/Chuvadi.Layout/Release/*.nupkg
+            artifacts/bin/Chuvadi.Layout.Docs/Release/*.nupkg
+            artifacts/bin/Chuvadi.Layout.Sheets/Release/*.nupkg
+            artifacts/bin/Chuvadi.Layout.Documents/Release/*.nupkg
             artifacts/bin/Chuvadi.Layout.Fonts/Release/*.nupkg
             artifacts/bin/Chuvadi.Layout.Markup/Release/*.nupkg
