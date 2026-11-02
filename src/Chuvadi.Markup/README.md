@@ -61,4 +61,4 @@ Show sanitizer output inside a page that also carries a Content-Security-Policy 
 
 Exceptions: `ArgumentNullException` for null input, `ArgumentOutOfRangeException` for invalid limits, `MarkupLimitExceededException` (with `LimitName`, `Limit`, `Actual`) when a hard limit is exceeded, `OperationCanceledException` on cancellation. Malformed input never throws: it is parsed the way a browser (or cmark) would parse it.
 
-MIT licensed. The test suite vendors the CommonMark spec (CC BY-SA 4.0), the GFM spec and html5lib-tests (MIT); none of it ships in the package.
+MIT licensed. Part of the Markdown parser and HTML renderer follows the cmark and cmark-gfm reference implementations (BSD 2-Clause, with the houdini href escaper under MIT); their notices ship in `THIRD-PARTY-NOTICES.txt` in this package. The test suite vendors the CommonMark spec (CC BY-SA 4.0), the GFM spec and html5lib-tests (MIT); none of it ships in the package.
