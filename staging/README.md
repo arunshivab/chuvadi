@@ -27,7 +27,7 @@ To build: pack chuvadi-pdf into the feed first. In the chuvadi-pdf clone, run
 dotnet test staging/Chuvadi.Print.Pdf.Tests -c Release
 ```
 
-Layout's staged projects pin Chuvadi.Pdf 3.30.1 in `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props` and carry their own
+Layout's staged projects pin Chuvadi.Pdf 3.30.2 in `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props` and carry their own
 per-project `nuget.config` (same local feed). Build them from the repository root:
 
 ```powershell
