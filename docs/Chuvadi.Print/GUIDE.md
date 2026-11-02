@@ -12,7 +12,6 @@ or a remote agent, recording one audit event per job.
 | A4 | `Chuvadi.Print.Ipp` | Driverless IPP printing on any OS: PWG Raster or PDF passthrough | 0.4.0 |
 | A6 | `Chuvadi.Print.Remote` | An embeddable print hub and dial-out print agents | 0.5.0 |
 | A5 | package **Chuvadi.Print.Pdf** (`staging/`) | PDF rendering (`PdfPageRasterizer`) and print-to-PDF (`PdfFileTarget`) over Chuvadi.Pdf | 0.1.0 |
-| Product | `products/ChuvadiPdfPrinter` | The "Chuvadi PDF" virtual printer for every Windows application | 0.2.0 |
 
 The architectural invariants (P01–P09) are in [BASELINE.md](BASELINE.md). How Docs/Sheets reports get printed is
 in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
@@ -207,24 +206,7 @@ await agent.RunAsync(stoppingToken);
   (Range), `POST jobs/{id}/status`. Every request carries the headers `X-Chuvadi-Protocol: 1`,
   `X-Chuvadi-Agent` and `Authorization: Bearer`.
 
-## 7. The Chuvadi PDF virtual printer (product)
-
-`products/ChuvadiPdfPrinter` is a separate product built on the Chuvadi.Print package (D-11, D-23); install
-it with `INSTALL.md`.
-
-- **Windows 11 24H2+**: a Print Support App adds "Chuvadi PDF" (asks where to save) and "Chuvadi PDF
-  (Auto-save)".
-- **Windows 10 or any Windows**: a "Chuvadi PDF" queue on Windows' own "Microsoft Print To PDF" driver,
-  whose port is the agent's named pipe. Each job is its own pipe connection, so jobs never share a file.
-- **Agent service**: one service in every mode. It saves the PDFs into a private folder per user, writes the
-  audit trail and, optionally, forwards each PDF to physical printers:
-  - IPP printers get the PDF passed through.
-  - Windows printers get it rendered by Chuvadi.Print.Pdf, with `Paper` (`Auto` matches the first page),
-    `Color`, `Scale` and `MaxRasterDpi`.
-- **Self-test**: `scripts\selftest.ps1` prints a test page through each installed variant and checks the
-  PDF and the audit trail.
-
-## 8. Testing and verification
+## 7. Testing and verification
 
 - **Tests**: `dotnet test Chuvadi.slnx` runs Print's unit tests and its verification groups. Groups that do
   not apply on the current OS report SKIP.
@@ -234,5 +216,4 @@ it with `INSTALL.md`.
   - `--windows-printer "<name>" [--windows-output <folder>]`: an 11-job proof set.
   - `--ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]`: a proof set over IPP.
 - **Chuvadi.Print.Pdf**: `dotnet test staging/Chuvadi.Print.Pdf.Tests` (needs the Chuvadi.Pdf packages in the local feed).
-- **The product**: `dotnet test products/ChuvadiPdfPrinter/ChuvadiPdfPrinter.sln`.
 - **Windows**: everything only Windows can prove is in [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md).
