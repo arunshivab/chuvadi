@@ -6,11 +6,15 @@
 
 | Package | Formats | Status |
 |---|---|---|
-| **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v1.1.2 |
-| **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v1.0.0 |
+| **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v1.7.0 |
+| **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v1.6.0 |
+| **[Chuvadi.Docs.Conversion](src/Chuvadi.Docs.Conversion/README.md)** | Docs to and from plain text, Markdown (CommonMark + GFM) and HTML, plus a self-contained HTML preview (over Chuvadi.Markup; released with Docs) | v1.6.0 |
 | **[Chuvadi.Layout](src/Chuvadi.Layout/README.md)** | page layout of docx, xlsx and text into fixed pages (display list, SVG) | v0.1.0 (preview) |
 | **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible, Indic) | v0.1.0 (preview) |
 | **[Chuvadi.Layout.Markup](src/Chuvadi.Layout.Markup/README.md)** | Markdown and sanitized HTML (mail, pages) layout through Chuvadi.Markup | v0.1.0 (preview) |
+| **[Chuvadi.Markup](src/Chuvadi.Markup/README.md)** | Markdown (CommonMark + GFM), HTML5 parse/sanitize, CSS, text to HTML | v1.0.0 |
+| **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing: Windows (GDI), IPP, PNG preview, remote hub/agent | v1.0.0-rc.1 (in progress) |
+| **[Chuvadi.Zip](src/Chuvadi.Zip/README.md)** | zip (streaming read/write, Zip64, AES-256, zip-slip and bomb limits) | v1.0.0 |
 | [Chuvadi.Pdf](https://github.com/arunshivab/chuvadi-pdf) | pdf | v2.7.0 (separate repo) |
 
 ## Shared foundation
@@ -49,7 +53,7 @@ Every package ships with an xUnit suite plus an end-to-end manual verification s
 
 ## Releases
 
-Per-package tags: `sheets-v1.1.1`, `docs-v1.0.0`, `layout-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`. See [RELEASING.md](RELEASING.md).
+Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): `sheets-v1.7.0`, `docs-v*` (version pending), `zip-v1.0.0`, `markup-v1.0.0`, `layout-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`. See [RELEASING.md](RELEASING.md).
 
 ## License
 
