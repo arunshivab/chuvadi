@@ -46,7 +46,7 @@ public class IppCodecTests
             .Add("job-state", IppValue.Enum(9))
             .Add("sides", IppValue.Keyword("one-sided"), IppValue.Keyword("two-sided-long-edge"))
             .Add("job-name", IppValue.NameWithLanguage("en", "Discharge summary"))
-            .Add("job-originating-user-name", IppValue.Name("dr.arun"))
+            .Add("job-originating-user-name", IppValue.Name("dr.user1"))
             .Add("blob", IppValue.OctetString(new byte[] { 0, 1, 255 }))
             .Add("time-at-creation", IppValue.DateTime(new DateTimeOffset(2026, 10, 28, 6, 42, 15, 300, TimeSpan.FromMinutes(330))))
             .Add("printer-resolution", IppValue.Resolution(118, 236, IppResolutionUnits.DotsPerCentimetre))
@@ -521,7 +521,7 @@ public class IppPrintingTests
         var sink = new MemoryAuditSink();
         PrintResult result = new PrintJob(pdf)
             .WithPages(PageSelection.Range("2-3")).WithCopies(2).WithOrientation(PageOrientation.Landscape)
-            .WithAlignment(ContentAlignment.TopLeft).WithTitle("Lab report").WithUser("arun").WithAuditSink(sink)
+            .WithAlignment(ContentAlignment.TopLeft).WithTitle("Lab report").WithUser("user1").WithAuditSink(sink)
             .SubmitTo(target);
 
         Assert.True(result.Status == PrintJobStatus.Printed, result.Error);

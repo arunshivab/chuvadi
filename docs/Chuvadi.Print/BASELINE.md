@@ -19,7 +19,7 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   not scale with document size. `ImageFileTarget` holds one sheet image at a time;
   `WindowsPrinterTarget` sends each page to GDI in bands of a few megabytes; `IppPrinterTarget` composes one
   sheet at a time and spools the PWG Raster stream to a temporary file, not memory.
-- **P06 — One audit event per job** (AERB / NABH): exactly one `PrintAuditEvent` per `PrintTo` /
+- **P06 — One audit event per job** (regulatory audit trails, for example AERB and NABH in India): exactly one `PrintAuditEvent` per `PrintTo` /
   `SubmitTo`, whether the job is printed, fails or is cancelled. Remotely (A6) the agent's event travels to
   the hub with the final status and the hub records it once into the host's sink; a job that ends on the
   hub (cancelled while queued, leases exhausted) or before printing on the agent (unknown printer, payload
@@ -68,7 +68,7 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - **System-wide virtual printer**: none. The "Chuvadi PDF" product (decision D-11) was withdrawn and removed
   (D-48); any future system-wide printer is a separate decision pending with the maintainer.
 - **A6** — `Chuvadi.Print.Remote` (decision D-26): `PrintHub`, a host-agnostic hub protocol
-  handler the host app embeds (LiPi Connect is the reference host) behind any web stack; `PrintAgent`, which
+  handler the host app embeds behind any web stack; `PrintAgent`, which
   dials out, long-polls, downloads with resume and SHA-256 check, prints through any `IPrintTarget` /
   `IDocumentTarget` and reports progress and the outcome; per-agent tokens with rotation and revocation
   (`TokenAgentAuthenticator`); pluggable job storage (`IPrintJobStore`: durable `FileJobStore`,

@@ -32,14 +32,14 @@ internal static class StubLayout
 }
 
 /// <summary>
-/// The composition LiPi uses to print docx/xlsx reports: Chuvadi.Layout renders to PDF, Chuvadi.Print prints the
+/// The composition a host application uses to print docx/xlsx reports: Chuvadi.Layout renders to PDF, Chuvadi.Print prints the
 /// PDF (to a device through PdfPageRasterizer). No extra adapter.
 /// </summary>
 public class LayoutCompositionTests
 {
     private static readonly StubLayout.Report Discharge = new("Discharge summary", new[]
     {
-        ("Patient", "MRN 004211"), ("Ward", "Ward 3"), ("Consultant", "Dr. A. Shiva"), ("Follow-up", "14 days")
+        ("Patient", "MRN 004211"), ("Ward", "Ward 3"), ("Consultant", "Dr. A. Example"), ("Follow-up", "14 days")
     });
 
     [Fact]
@@ -49,7 +49,7 @@ public class LayoutCompositionTests
         var printer = new RecordingTarget();
         var audit = new MemoryAuditSink();
         PrintResult result = new PrintJob(pdf)
-            .WithTitle("Discharge summary").WithUser("dr.arun").WithTenant("apulki")
+            .WithTitle("Discharge summary").WithUser("user1").WithTenant("tenant-a")
             .WithRasterizer(new PdfPageRasterizer())
             .WithCopies(2, collate: true).WithDuplex(Duplex.Vertical).WithColor(ColorMode.Monochrome)
             .WithAuditSink(audit)

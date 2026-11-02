@@ -6,9 +6,10 @@ Projects that are ready but cannot join `Chuvadi.slnx` and CI yet.
 |---|---|
 | `Chuvadi.Print.Pdf` (+ `Chuvadi.Print.Pdf.Tests`) | Chuvadi.Pdf moving into the monorepo, or Chuvadi.Pdf on nuget.org (D-28, D-29) |
 
-The projects here consume the Chuvadi.Pdf **packages** from Arun's local feed
-`C:\Users\aruns\Documents\local-nuget`. The feed is set by `staging/nuget.config`, which applies only to
-projects under this folder. They never reference a chuvadi-pdf source clone (D-29).
+The projects here consume the Chuvadi.Pdf **packages** from your local package folder. `staging/nuget.config`
+sets it as `..\..\..\local-nuget`, relative to that file, so the folder `local-nuget` sits next to the folder
+that holds your clones. For a clone or worktree at `C:\src\chuvadi-monorepo\chuvadi` it is
+`C:\src\local-nuget`. The file applies only to projects under this folder. They never reference a chuvadi-pdf source clone (D-29).
 
 The CI pure-BCL check scans `src/` and `shared/` only. These first-party PackageReferences live here, outside
 its scope, until the move. Then they go to `src/` and `tests/` as ordinary projects

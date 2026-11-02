@@ -12,7 +12,7 @@ They stay outside `Chuvadi.slnx` and CI for now. They consume version-pinned `Pa
 Chuvadi.Pdf packages:
 - The packages are `Chuvadi.Pdf.Rendering` and `Chuvadi.Pdf.Operations`.
 - The version is `ChuvadiPdfVersion`, currently 3.22.1.
-- They come from Arun's local feed `C:\Users\aruns\Documents\local-nuget`, set by `staging/nuget.config`.
+- They come from your local package folder, `..\..\..\local-nuget` relative to `staging/nuget.config` (see `staging/README.md`).
 
 No project references a chuvadi-pdf source clone (D-29).
 

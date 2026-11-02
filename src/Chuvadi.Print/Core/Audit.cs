@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Chuvadi.Print
 {
-    /// <summary>A single auditable print event (one per job; supports AERB/NABH trails).</summary>
+    /// <summary>A single auditable print event (one per job; supports regulatory audit trails, for example AERB and NABH in India).</summary>
     public sealed class PrintAuditEvent
     {
         public Guid JobId { get; init; } = Guid.NewGuid();

@@ -46,7 +46,7 @@ PrintJob job = new PrintJob("report.pdf")          // or bytes, a stream, PrintJ
     .WithCopies(2, collate: true).WithDuplex(Duplex.Vertical)
     .WithPaper(PaperSize.A4).WithScale(ScaleMode.FitToPage).WithAlignment(ContentAlignment.Center)
     .WithColor(ColorMode.Monochrome).WithMonochrome(MonochromeConversion.ErrorDiffusion)
-    .WithTitle("Discharge summary").WithUser("dr.arun").WithTenant("apulki")
+    .WithTitle("Discharge summary").WithUser("user1").WithTenant("tenant-a")
     .WithRasterizer(new PdfPageRasterizer())          // Chuvadi.Print.Pdf
     .WithAuditSink(new FileAuditSink("print-audit.log"));
 
@@ -99,9 +99,9 @@ how a job travels to another machine (P04: the PDF travels, never bitmaps).
 
 ```csharp
 foreach (PrinterInfo p in WindowsPrinters.List()) Console.WriteLine(p.Name + (p.IsDefault ? " (default)" : ""));
-WindowsPrinterCapabilities caps = WindowsPrinters.GetCapabilities("Ward-3 LaserJet", job.Settings);
+WindowsPrinterCapabilities caps = WindowsPrinters.GetCapabilities("Ward-3 Laser", job.Settings);
 
-job.PrintTo(new WindowsPrinterTarget("Ward-3 LaserJet")
+job.PrintTo(new WindowsPrinterTarget("Ward-3 Laser")
     .WithBin(caps.Bins.FirstOrDefault(b => b.Name == "Tray 2"))
     .WithQuality(PrintQuality.High)
     .WithMaxRasterDpi(300));
@@ -149,16 +149,16 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
 ## 6. Remote printing (A6, `Chuvadi.Print.Remote`)
 
 Branch PCs run a **PrintAgent** that dials out over HTTPS to a **PrintHub** embedded in the host application
-(LiPi Connect). Nothing listens on the branch PC (P07).
+. Nothing listens on the branch PC (P07).
 
 **Hub (host side)**
 
 ```csharp
-var tokens = new TokenAgentAuthenticator(new FileAgentTokenStore(@"D:\lipi\print\agents.json"));
-var hub = new PrintHub(new FileJobStore(@"D:\lipi\print\jobs"), tokens, new FileAuditSink(@"D:\lipi\print\audit.log"),
+var tokens = new TokenAgentAuthenticator(new FileAgentTokenStore(@"D:\print\agents.json"));
+var hub = new PrintHub(new FileJobStore(@"D:\print\jobs"), tokens, new FileAuditSink(@"D:\print\audit.log"),
                        new PrintHubOptions { LeaseSeconds = 120, MaxAttempts = 3 });
 string token = tokens.Issue("ward3-pc");                    // give it to the agent's installer once
-StoredJob queued = hub.Submit("ward3-pc", "Ward-3 LaserJet", job);   // idempotent per job.JobId
+StoredJob queued = hub.Submit("ward3-pc", "Ward-3 Laser", job);   // idempotent per job.JobId
 hub.JobFinished += (_, e) => Notify(e.Job.JobId, e.Job.State);
 ```
 
@@ -177,7 +177,7 @@ hub.JobFinished += (_, e) => Notify(e.Job.JobId, e.Job.State);
 ```csharp
 using var agent = new PrintAgent(new PrintAgentOptions
 {
-    HubUri = new Uri("https://lipi.example.com/print-hub/"), AgentId = "ward3-pc",
+    HubUri = new Uri("https://hub.example.com/print-hub/"), AgentId = "ward3-pc",
     Credentials = new FileAgentCredentialStore(@"C:\ProgramData\Chuvadi\Agent\token.txt"),
     JournalFolder = @"C:\ProgramData\Chuvadi\Agent\journal",
     PrinterResolver = name => new WindowsPrinterTarget(name),

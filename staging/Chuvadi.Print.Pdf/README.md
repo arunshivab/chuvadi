@@ -17,24 +17,24 @@ var job = new PrintJob("discharge-summary.pdf")
     .WithRasterizer(new PdfPageRasterizer())
     .WithCopies(2).WithDuplex(Duplex.Vertical).WithPaper(PaperSize.A4);
 
-job.PrintTo(new WindowsPrinterTarget("Ward-3 LaserJet"));       // rendered pages to a printer
+job.PrintTo(new WindowsPrinterTarget("Ward-3 Laser"));       // rendered pages to a printer
 ```
 
 ## Building
 
 This project lives in `staging/` and is **not** in `Chuvadi.slnx` or the monorepo's CI (D-28, D-29). It
 consumes the Chuvadi.Pdf packages (`Chuvadi.Pdf.Rendering`, `Chuvadi.Pdf.Operations`, pinned by
-`ChuvadiPdfVersion` in the csproj, currently 3.22.1) from the local feed `C:\Users\aruns\Documents\local-nuget`,
+`ChuvadiPdfVersion` in the csproj, currently 3.22.1) from your local package folder (see `staging/README.md`),
 configured by `staging/nuget.config` for the projects under `staging/` only. It never references a chuvadi-pdf
 source clone.
 
 ```powershell
 # once per Chuvadi.Pdf version, in the chuvadi-pdf clone:
 .\build\pack.ps1 -Version 3.22.1
-Copy-Item artifacts\nupkg\*.nupkg C:\Users\aruns\Documents\local-nuget
+Copy-Item artifacts\nupkg\*.nupkg C:\src\local-nuget
 # in the monorepo:
 dotnet test staging/Chuvadi.Print.Pdf.Tests -c Release
-dotnet pack staging/Chuvadi.Print.Pdf -c Release -o C:\Users\aruns\Documents\local-nuget
+dotnet pack staging/Chuvadi.Print.Pdf -c Release -o C:\src\local-nuget
 ```
 The package depends on Chuvadi.Print and on Chuvadi.Pdf.Rendering / Chuvadi.Pdf.Operations at
 `ChuvadiPdfVersion`. To move to a newer Chuvadi.Pdf, pack it into the feed and change `ChuvadiPdfVersion`.

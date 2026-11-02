@@ -15,7 +15,7 @@ namespace Chuvadi.Print.Remote
     /// <summary>Settings for <see cref="PrintAgent"/>.</summary>
     public sealed class PrintAgentOptions
     {
-        /// <summary>The hub's base address, e.g. https://lipi.example.com/print-hub/. Required. HTTPS unless loopback or <see cref="AllowInsecureHttp"/>.</summary>
+        /// <summary>The hub's base address, e.g. https://hub.example.com/print-hub/. Required. HTTPS unless loopback or <see cref="AllowInsecureHttp"/>.</summary>
         public Uri? HubUri { get; set; }
 
         /// <summary>This agent's id, as registered with the host. Required.</summary>

@@ -27,7 +27,7 @@ PrintJob job = new PrintJob("discharge-summary.pdf")
     .WithAlignment(ContentAlignment.Center)
     .WithColor(ColorMode.Monochrome)
     .WithMonochrome(MonochromeConversion.ErrorDiffusion)
-    .WithUser("dr.arun").WithTenant("apulki-pune")
+    .WithUser("user1").WithTenant("tenant-a")
     .WithRasterizer(rasterizer)                       // e.g. from Chuvadi.Print.Pdf
     .WithAuditSink(new FileAuditSink("print-audit.log"));
 
@@ -50,8 +50,8 @@ using Chuvadi.Print.Windows;
 foreach (PrinterInfo p in WindowsPrinters.List())
     Console.WriteLine(p.Name + (p.IsDefault ? " (default)" : ""));
 
-WindowsPrinterCapabilities caps = WindowsPrinters.GetCapabilities("Ward-3 LaserJet", job.Settings);
-var target = new WindowsPrinterTarget("Ward-3 LaserJet")
+WindowsPrinterCapabilities caps = WindowsPrinters.GetCapabilities("Ward-3 Laser", job.Settings);
+var target = new WindowsPrinterTarget("Ward-3 Laser")
     .WithBin(caps.Bins.FirstOrDefault(b => b.Name == "Tray 2"))
     .WithQuality(PrintQuality.High);
 
@@ -82,8 +82,8 @@ Remote printing: the hub inside your web application (here ASP.NET Core; any web
 ```csharp
 using Chuvadi.Print.Remote;
 
-var tokens = new TokenAgentAuthenticator(new FileAgentTokenStore(@"D:\lipi\print\agents.json"));
-var hub = new PrintHub(new FileJobStore(@"D:\lipi\print\jobs"), tokens, new FileAuditSink(@"D:\lipi\print\audit.log"));
+var tokens = new TokenAgentAuthenticator(new FileAgentTokenStore(@"D:\print\agents.json"));
+var hub = new PrintHub(new FileJobStore(@"D:\print\jobs"), tokens, new FileAuditSink(@"D:\print\audit.log"));
 
 string token = tokens.Issue("ward3-pc");      // give it to the agent's installer, once
 
@@ -101,7 +101,7 @@ app.Map("/print-hub/{**path}", async (HttpContext http, string? path) =>
     await response.CopyBodyToAsync(http.Response.Body, http.RequestAborted);
 });
 
-hub.Submit("ward3-pc", "Ward-3 LaserJet", job);     // idempotent per job.JobId
+hub.Submit("ward3-pc", "Ward-3 Laser", job);     // idempotent per job.JobId
 hub.JobFinished += (_, e) => Console.WriteLine(e.Job.JobId + " " + e.Job.State);
 ```
 
@@ -110,7 +110,7 @@ hub.JobFinished += (_, e) => Console.WriteLine(e.Job.JobId + " " + e.Job.State);
 ```csharp
 using var agent = new PrintAgent(new PrintAgentOptions
 {
-    HubUri = new Uri("https://lipi.example.com/print-hub/"),
+    HubUri = new Uri("https://hub.example.com/print-hub/"),
     AgentId = "ward3-pc",
     Credentials = new FileAgentCredentialStore(@"C:\ProgramData\Chuvadi\Agent\token.txt"),
     JournalFolder = @"C:\ProgramData\Chuvadi\Agent\journal",
