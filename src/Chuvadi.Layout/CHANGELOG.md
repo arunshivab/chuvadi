@@ -2,6 +2,81 @@
 
 ## 0.1.0 (unreleased)
 
+Chuvadi.Pdf 3.30.2 in staging:
+
+- `ChuvadiPdfVersion` 3.30.2 (was 3.30.1; 3.30.2 fixes SVG text positions and CFF widths in the PDF reader). No source
+  change. Output: the reference corpus report and the SVG pages of the corpus and fixtures are identical to 3.30.1.
+
+C3 (Chuvadi.Pdf 3.30.1 in staging):
+
+- The staged Chuvadi.Layout.Pdf, its tests, the acceptance harness and the viewer use Chuvadi.Pdf 3.30.1
+  (`ChuvadiPdfVersion`; was 3.26.0). No source change. Layout.Pdf still registers every face before drawing and draws
+  with `DrawShapedRun` only (D-105 holds). Output: the reference corpus report (page counts, text, line geometry and
+  pixel scores of all 73 files) and the SVG pages of the corpus and fixtures are identical to 3.26.0.
+
+D-53 notices (C1, C2; no behaviour change):
+
+- THIRD-PARTY-NOTICES.md also names DerivedCoreProperties.txt and DerivedGeneralCategory.txt (UCD 16.0.0) and the
+  CLDR paperSize data behind `PaperDefaults` (both under the Unicode License v3 it already carries). The Layout.Pdf
+  README points to the HarfBuzz notice shipped in Chuvadi.Pdf.Text.Shaping.
+
+D-116 A5 (substitutes) and the Q6 / Q7 answers:
+
+- Chuvadi.Layout.Fonts adds Gelasio 1.008 (Regular, Bold, Italic, Bold Italic) for Georgia and Selawik 1.01 (Regular,
+  Bold, Light, Semilight, Semibold) for Segoe UI: 29 faces, 8,264,644 bytes (+838,008). Selawik Light and Semilight
+  both state weight 300; each is found by its own family ("Selawik Light", "Selawik Semilight"), which "Segoe UI
+  Light" and "Segoe UI Semilight" map to (tested). Georgia → Gelasio and Segoe UI → Selawik replace Liberation Serif
+  and Liberation Sans as the first substitute; both stay non-metric (`NonMetricFontSubstitution`) until measured
+  against the real fonts with the new `ManualTests --compare-metrics` (read-only, run on Windows).
+- "Noto Sans Tamil" and "Noto Sans Devanagari" map to LiPi Sans Tamil / Devanagari as metric-compatible substitutes
+  (measured: identical widths and vertical metrics, Regular and Bold).
+- New warning `MetricFontSubstitution` (Info, once per family) for every metric-compatible substitution (Calibri →
+  Carlito, Arial → Liberation Sans, Noto Sans Tamil → LiPi Sans Tamil, ...), so no substitution is silent.
+- Output: no page or SVG changes in the corpus and fixtures (none asks for Georgia, Segoe UI or Noto); 86 of 88 files
+  gain one to five `MetricFontSubstitution` Info warnings.
+
+D-116 A4 (font search order and embedded subset fonts):
+
+- Search order: fonts embedded in the document, then installed fonts (with `AllowSystemFonts`), then `FontSources`,
+  then the built-in fonts. An installed family now wins over a packed copy of the same family (it used to be the
+  other way round). New `LayoutOptions.PreferBundledFonts` (default false) puts installed fonts last, so the output is
+  the same on every machine. `AllowSystemFonts` stays off by default, so nothing changes for callers that leave it off.
+- A character missing from an embedded (subset) font is drawn with the full font of the same family from the other
+  sources, in search order, and only then with the script fallback, as before. Either way a new warning,
+  `EmbeddedFontMissingGlyphs` (Fidelity, once per family), names the family and the first such character; the face
+  used is recorded in `FontSubstitutions` (`UsedOrigin` System, Supplied or Bundled).
+- No output change in the reference corpus or the fixtures (none has a subset missing a character it uses, and they
+  run without installed fonts).
+
+D-115 / D-121 (the importers as their own packages):
+
+- The engine no longer references Chuvadi.Docs or Chuvadi.Sheets. The docx importer is Chuvadi.Layout.Docs
+  (`DocsLayout`, `DocsImporter`, `DocsImportOptions`; were `DocumentLayout.OpenDocx`, `DocxImporter`,
+  `DocxImportOptions`), the xlsx importer is Chuvadi.Layout.Sheets (`SheetsLayout`, `SheetsImporter`,
+  `SheetsImportOptions`; were `DocumentLayout.OpenXlsx`, `XlsxImporter`, `XlsxImportOptions`), and
+  Chuvadi.Layout.Documents (`AutoDetectLayout.Open`) keeps the one-call open for every format, encrypted files
+  included. `DocumentLayout.Open(Stream)` lays out text and, for a docx, an xlsx or an encrypted Office file, throws
+  `LayoutFormatException` naming the package (it used to lay them out).
+- New: `DocumentLayout.Open(GridWorkbook, LayoutSourceFormat, importWarnings, options, ct)`, the grid twin of the
+  flow overload, so importers outside the engine report their format and warnings.
+- The importer tests moved with their code (Chuvadi.Layout.Docs.Tests, .Sheets.Tests, .Documents.Tests); the counts
+  add up to the former total plus three new detection tests. No output change: corpus, fixtures, SVG hashes,
+  warnings and font reports identical.
+
+D-113 / D-115 (built-in fonts from Chuvadi.Fonts):
+
+- Chuvadi.Layout references the new Chuvadi.Fonts package and adds its 22 LiPi Sans faces to every resolver as the
+  built-in fonts, after `LayoutOptions.FontSources` (new `LayoutOptions.UseBuiltInFonts`, default true). Indic text
+  and the script fallback no longer need `BundledFontSource.Instance`. The faces report `FontOrigin.Bundled`, as
+  before. With `UseBuiltInFonts = false` and no other source, resolving still throws the "No fonts are available"
+  `LayoutException`, whose message now names the switch.
+- Chuvadi.Layout.Fonts keeps the 20 Office metric-compatible faces (Liberation, Carlito, Caladea); the 22 LiPi files
+  and their licence moved unchanged to Chuvadi.Fonts (same bytes, checked by SHA-256). `BundledFontSource.ReadResource`
+  is internal (D-115). Tests and samples read LiPi through `Chuvadi.Fonts.FontPack`. The reference corpus font
+  configuration lists both font folders.
+- No output change: the corpus, the fixtures and their SVG hashes, page counts, warnings and font reports are
+  identical.
+
 D-90 (page-dependent field values as text runs):
 
 - Field values (PAGE, NUMPAGES, SECTIONPAGES, DATE, TIME, FILENAME and cached results) are evaluated when the

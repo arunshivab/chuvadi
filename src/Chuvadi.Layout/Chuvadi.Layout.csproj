@@ -11,7 +11,7 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Layout</Product>
-    <Description>Pure-BCL page layout engine for .NET: paginates flow documents (Word-style) and spreadsheet grids (Excel-style) into fixed pages with a neutral, immutable page display list. Font core (TrueType/OpenType/TTC, metrics, cmap, kerning), font resolution with reported substitution, lazy per-page layout, cancellation and hard limits for untrusted input. No NuGet dependencies; no PDF dependency (PDF/SVG/PNG output ships separately as Chuvadi.Layout.Pdf).</Description>
+    <Description>Pure-BCL page layout engine for .NET: paginates flow documents (Word-style) and spreadsheet grids (Excel-style) into fixed pages with a neutral, immutable page display list, and lays out plain text. The docx and xlsx importers ship separately as Chuvadi.Layout.Docs and Chuvadi.Layout.Sheets (Chuvadi.Layout.Documents detects the format). Font core (TrueType/OpenType/TTC, metrics, cmap, kerning), font resolution with reported substitution, lazy per-page layout, cancellation and hard limits for untrusted input. No NuGet dependencies; no PDF dependency (PDF/SVG/PNG output ships separately as Chuvadi.Layout.Pdf).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>0.1.0</Version>
@@ -20,18 +20,21 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>layout;pagination;docx;xlsx;typesetting;fonts;truetype;opentype;print</PackageTags>
+    <PackageTags>layout;pagination;typesetting;fonts;truetype;opentype;print</PackageTags>
   </PropertyGroup>
 
-  <!-- Importers: one Chuvadi.Layout package with ProjectReferences to the format libraries (DESIGN.md section 1). -->
+  <!-- The built-in fonts (LiPi Sans; D-101, D-113). The engine has no other reference: the docx and xlsx importers
+       are the Chuvadi.Layout.Docs and Chuvadi.Layout.Sheets packages (D-115). -->
   <ItemGroup>
-    <ProjectReference Include="..\Chuvadi.Docs\Chuvadi.Docs.csproj" />
-    <ProjectReference Include="..\Chuvadi.Sheets\Chuvadi.Sheets.csproj" />
+    <ProjectReference Include="..\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Docs.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Sheets.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Documents.Tests" />
   </ItemGroup>
 
   <ItemGroup>

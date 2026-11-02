@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Layout.Documents\Chuvadi.Layout.Documents.csproj" />
   </ItemGroup>
 
   <ItemGroup>

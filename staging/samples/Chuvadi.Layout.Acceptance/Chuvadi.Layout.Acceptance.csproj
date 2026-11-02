@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
     <ProjectReference Include="..\..\..\src\Chuvadi.Layout.Markup\Chuvadi.Layout.Markup.csproj" />
     <ProjectReference Include="..\..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+    <ProjectReference Include="..\..\..\src\Chuvadi.Layout.Documents\Chuvadi.Layout.Documents.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Layout.Pdf\Chuvadi.Layout.Pdf.csproj" />
     <PackageReference Include="Chuvadi.Pdf.Authoring" Version="[$(ChuvadiPdfVersion)]" />
     <PackageReference Include="Chuvadi.Pdf.Documents" Version="[$(ChuvadiPdfVersion)]" />

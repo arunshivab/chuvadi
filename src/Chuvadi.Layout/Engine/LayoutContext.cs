@@ -91,6 +91,13 @@ namespace Chuvadi.Layout.Engine
         /// <summary>A font was substituted with one that is not metric-compatible; breaks may move.</summary>
         public const string NonMetricFontSubstitution = "NonMetricFontSubstitution";
 
+        /// <summary>
+        /// A font was substituted with a metric-compatible one (same advance widths and line metrics, for example
+        /// Calibri → Carlito, Noto Sans Tamil → LiPi Sans Tamil): line and page breaks are kept; the glyph shapes are
+        /// the substitute's (D-116). Severity Info, once per family.
+        /// </summary>
+        public const string MetricFontSubstitution = "MetricFontSubstitution";
+
         /// <summary>An image format cannot be rendered (EMF/WMF and others); a placeholder box is drawn.</summary>
         public const string ImagePlaceholder = "ImagePlaceholder";
 
@@ -123,5 +130,12 @@ namespace Chuvadi.Layout.Engine
 
         /// <summary>A font embedded in the source document could not be read; the font is substituted.</summary>
         public const string EmbeddedFontUnreadable = "EmbeddedFontUnreadable";
+
+        /// <summary>
+        /// A font embedded in the source document (usually a subset) has no glyph for some characters; they are drawn
+        /// with the full font of the same family from the other sources (installed fonts first), or, when no other
+        /// source has the family, with the script fallback (D-116). Once per family.
+        /// </summary>
+        public const string EmbeddedFontMissingGlyphs = "EmbeddedFontMissingGlyphs";
     }
 }

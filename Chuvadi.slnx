@@ -2,6 +2,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/Chuvadi.Docs.Conversion.ManualTests/Chuvadi.Docs.Conversion.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Docs.ManualTests/Chuvadi.Docs.ManualTests.csproj" />
+    <Project Path="samples/Chuvadi.Fonts.ManualTests/Chuvadi.Fonts.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Layout.ManualTests/Chuvadi.Layout.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Markup.ManualTests/Chuvadi.Markup.ManualTests.csproj" />
     <Project Path="samples/Chuvadi.Print.ManualTests/Chuvadi.Print.ManualTests.csproj" />
@@ -11,9 +12,13 @@
   <Folder Name="/src/">
     <Project Path="src/Chuvadi.Docs/Chuvadi.Docs.csproj" />
     <Project Path="src/Chuvadi.Docs.Conversion/Chuvadi.Docs.Conversion.csproj" />
+    <Project Path="src/Chuvadi.Fonts/Chuvadi.Fonts.csproj" />
     <Project Path="src/Chuvadi.Layout/Chuvadi.Layout.csproj" />
+    <Project Path="src/Chuvadi.Layout.Docs/Chuvadi.Layout.Docs.csproj" />
+    <Project Path="src/Chuvadi.Layout.Documents/Chuvadi.Layout.Documents.csproj" />
     <Project Path="src/Chuvadi.Layout.Fonts/Chuvadi.Layout.Fonts.csproj" />
     <Project Path="src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj" />
+    <Project Path="src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj" />
     <Project Path="src/Chuvadi.Markup/Chuvadi.Markup.csproj" />
     <Project Path="src/Chuvadi.Print/Chuvadi.Print.csproj" />
     <Project Path="src/Chuvadi.Sheets/Chuvadi.Sheets.csproj" />
@@ -22,7 +27,11 @@
   <Folder Name="/tests/">
     <Project Path="tests/Chuvadi.Docs.Conversion.Tests/Chuvadi.Docs.Conversion.Tests.csproj" />
     <Project Path="tests/Chuvadi.Docs.Tests/Chuvadi.Docs.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Fonts.Tests/Chuvadi.Fonts.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Layout.Docs.Tests/Chuvadi.Layout.Docs.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Layout.Documents.Tests/Chuvadi.Layout.Documents.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Markup.Tests/Chuvadi.Layout.Markup.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Layout.Sheets.Tests/Chuvadi.Layout.Sheets.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Tests/Chuvadi.Layout.Tests.csproj" />
     <Project Path="tests/Chuvadi.Markup.Tests/Chuvadi.Markup.Tests.csproj" />
     <Project Path="tests/Chuvadi.Print.Tests/Chuvadi.Print.Tests.csproj" />

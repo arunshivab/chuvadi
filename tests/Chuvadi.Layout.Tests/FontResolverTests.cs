@@ -1,3 +1,6 @@
+using Chuvadi.Layout.Engine;
+using Chuvadi.Layout.Drawing;
+using Chuvadi.Layout.Model;
 using Chuvadi.Layout.Fonts;
 using Chuvadi.Layout.Text;
 
@@ -48,8 +51,9 @@ public class FontResolverTests
     [Fact]
     public void Non_metric_substitute_is_flagged()
     {
+        // D-116 A5: Segoe UI → Selawik (closer design; non-metric until measured), Liberation Sans after it.
         FontResolution res = TestFonts.BundledResolver().Resolve(new FontRequest("Segoe UI"));
-        Assert.Equal("Liberation Sans", res.Face.FamilyName);
+        Assert.Equal("Selawik", res.Face.FamilyName);
         Assert.Equal(FontMatchKind.Substitute, res.Kind);
         Assert.False(res.IsMetricFaithful);
     }
@@ -143,5 +147,114 @@ public class FontResolverTests
         {
             Directory.Delete(dir, true);
         }
+    }
+}
+
+/// <summary>D-116: installed fonts before the pack, the option to prefer the pack, and embedded subset fonts.</summary>
+public class FontSearchOrderTests
+{
+    private static List<string> Names(LayoutOptions o) => o.CreateFontResolver(new MemoryFontSource("Embedded fonts", FontOrigin.Embedded)).Sources.Select(s => s.Name).ToList();
+
+    [Fact]
+    public void Installed_fonts_come_before_the_pack_unless_the_pack_is_preferred()
+    {
+        LayoutOptions o = new LayoutOptions { AllowSystemFonts = true };
+        o.FontSources.Add(BundledFontSource.Instance);
+        Assert.Equal(new[] { "Embedded fonts", "System fonts", "Chuvadi.Layout.Fonts", "Chuvadi.Fonts" }, Names(o));
+        o.PreferBundledFonts = true;
+        Assert.Equal(new[] { "Embedded fonts", "Chuvadi.Layout.Fonts", "Chuvadi.Fonts", "System fonts" }, Names(o));
+        // Without installed fonts the option changes nothing.
+        LayoutOptions off = new LayoutOptions();
+        off.FontSources.Add(BundledFontSource.Instance);
+        List<string> plain = Names(off);
+        off.PreferBundledFonts = true;
+        Assert.Equal(plain, Names(off));
+        Assert.Equal(new[] { "Embedded fonts", "Chuvadi.Layout.Fonts", "Chuvadi.Fonts" }, plain);
+    }
+
+    [Fact]
+    public void A_family_found_earlier_wins_so_the_installed_copy_is_used_by_default()
+    {
+        // Two copies of the same family in search order: the first source's copy is used (here the "installed" one).
+        MemoryFontSource installed = new MemoryFontSource("Installed", FontOrigin.System);
+        installed.Add(TestFonts.Bytes("Carlito-Regular.ttf"), "carlito-installed.ttf");
+        FontResolver r = new FontResolver(new IFontSource[] { installed, BundledFontSource.Instance });
+        Assert.Equal(FontOrigin.System, r.Resolve(new FontRequest("Carlito")).Face.Origin);
+        FontResolver packFirst = new FontResolver(new IFontSource[] { BundledFontSource.Instance, installed });
+        Assert.Equal(FontOrigin.Bundled, packFirst.Resolve(new FontRequest("Carlito")).Face.Origin);
+    }
+
+    private static LaidOutDocument LayOut(string text, out FlowDocument doc)
+    {
+        MemoryFontSource embedded = new MemoryFontSource("Embedded fonts", FontOrigin.Embedded);
+        embedded.Add(TestFonts.SubsetCmap(TestFonts.Bytes("Caladea-Regular.ttf"), "Hello wrd".Select(c => (int)c)), "Caladea (subset)");
+        doc = Flow.Doc(FlowParagraph.Of(text, new CharacterFormat { FontFamily = "Caladea", FontSize = 11 }, new ParagraphFormat()));
+        doc.EmbeddedFonts = embedded;
+        return DocumentLayout.Open(doc, Flow.Options());
+    }
+
+    [Fact]
+    public void A_character_missing_from_an_embedded_subset_uses_the_full_font_of_the_same_family_with_a_warning()
+    {
+        using LaidOutDocument laid = LayOut("Hello wérld", out _);   // é is not in the subset
+        laid.GetPage(0);
+        LayoutWarning w = Assert.Single(laid.Warnings, w => w.Code == LayoutWarningCodes.EmbeddedFontMissingGlyphs);
+        Assert.Equal("Caladea", w.Location);
+        Assert.Contains("U+00E9", w.Message);
+        Assert.Contains("the bundled 'Caladea' is used", w.Message);
+        Assert.Contains(laid.FontSubstitutions, s => s.RequestedFamily == "Caladea" && s.UsedFamily == "Caladea" && s.UsedOrigin == FontOrigin.Bundled);
+        // The subset still draws the characters it has.
+        Assert.Contains(laid.GetPage(0).DisplayList.OfType<GlyphRunOp>(), g => g.Font.Origin == FontOrigin.Embedded);
+        Assert.Contains(laid.GetPage(0).DisplayList.OfType<GlyphRunOp>(), g => g.Font.Origin == FontOrigin.Bundled && g.Font.FamilyName == "Caladea");
+    }
+
+    [Fact]
+    public void Without_the_family_elsewhere_the_script_fallback_draws_it_and_the_warning_says_so()
+    {
+        using LaidOutDocument laid = LayOut("Hello த", out _);   // Tamil: neither Caladea has it
+        laid.GetPage(0);
+        LayoutWarning w = Assert.Single(laid.Warnings, w => w.Code == LayoutWarningCodes.EmbeddedFontMissingGlyphs);
+        Assert.Contains("U+0BA4", w.Message);
+        Assert.Contains("'LiPi Sans Tamil' is used", w.Message);
+    }
+
+    [Fact]
+    public void A_complete_embedded_font_raises_no_warning()
+    {
+        using LaidOutDocument laid = LayOut("Hello world", out _);
+        laid.GetPage(0);
+        Assert.DoesNotContain(laid.Warnings, w => w.Code == LayoutWarningCodes.EmbeddedFontMissingGlyphs);
+    }
+}
+
+/// <summary>D-116 A5 / Q6: every metric-compatible substitution is announced, at Info, once per family.</summary>
+public class MetricSubstitutionWarningTests
+{
+    [Fact]
+    public void Metric_compatible_substitutions_raise_an_info_warning_once_per_family()
+    {
+        CharacterFormat calibri = new CharacterFormat { FontFamily = "Calibri", FontSize = 11 };
+        CharacterFormat tamil = new CharacterFormat { FontFamily = "Noto Sans Tamil", FontSize = 11 };
+        FlowDocument doc = Flow.Doc(
+            FlowParagraph.Of("One", calibri, new ParagraphFormat()),
+            FlowParagraph.Of("Two", calibri, new ParagraphFormat()),
+            FlowParagraph.Of("தமிழ்", tamil, new ParagraphFormat()));
+        using LaidOutDocument laid = DocumentLayout.Open(doc, Flow.Options());
+        laid.GetPage(0);
+        List<LayoutWarning> metric = laid.Warnings.Where(w => w.Code == LayoutWarningCodes.MetricFontSubstitution).ToList();
+        Assert.Equal(2, metric.Count);
+        Assert.All(metric, w => Assert.Equal(LayoutWarningSeverity.Info, w.Severity));
+        Assert.Contains(metric, w => w.Location == "Calibri" && w.Message.Contains("'Carlito'", StringComparison.Ordinal));
+        Assert.Contains(metric, w => w.Location == "Noto Sans Tamil" && w.Message.Contains("'LiPi Sans Tamil'", StringComparison.Ordinal));
+        Assert.DoesNotContain(laid.Warnings, w => w.Code == LayoutWarningCodes.NonMetricFontSubstitution);
+    }
+
+    [Fact]
+    public void An_exact_family_raises_no_substitution_warning()
+    {
+        FlowDocument doc = Flow.Doc(FlowParagraph.Of("Carlito itself", new CharacterFormat { FontFamily = "Carlito", FontSize = 11 }, new ParagraphFormat()));
+        using LaidOutDocument laid = DocumentLayout.Open(doc, Flow.Options());
+        laid.GetPage(0);
+        Assert.DoesNotContain(laid.Warnings, w => w.Code is LayoutWarningCodes.MetricFontSubstitution or LayoutWarningCodes.NonMetricFontSubstitution);
     }
 }

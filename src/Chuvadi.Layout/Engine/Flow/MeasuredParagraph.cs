@@ -275,6 +275,10 @@ namespace Chuvadi.Layout.Engine.Flow
                         double size = memoSize;
                         // Most clusters are in the primary face; the fallback search runs only for the rest.
                         FontResolution res = IsSpaceLike(cp) || primary.Face.HasGlyph(cp) ? primary : ctx.Fonts.ResolveForCodepoint(primary, cp);
+                        if (primary.Face.Origin == FontOrigin.Embedded && !IsSpaceLike(cp) && !primary.Face.HasGlyph(cp) && !FontResolver.IsDefaultIgnorable(cp))
+                        {
+                            WarnEmbeddedMissing(ctx, primary, res, cp);
+                        }
                         size *= piece.SizeScale;
                         // Glyph substitutions for characters Word draws with another glyph when the face lacks them.
                         for (int k = i; k < clusterEnd; k++)
@@ -433,6 +437,32 @@ namespace Chuvadi.Layout.Engine.Flow
 
         private static bool IsSpaceLike(int cp) => cp is ' ' or '\u00A0' or '\t';
 
+        /// <summary>D-116: a character missing from an embedded (subset) font is never replaced silently. Once per family.</summary>
+        private static void WarnEmbeddedMissing(LayoutContext ctx, FontResolution primary, FontResolution used, int cp)
+        {
+            string family = primary.Face.FamilyName;
+            string where = used.Face.Origin switch
+            {
+                FontOrigin.System => "installed",
+                FontOrigin.Supplied => "supplied",
+                _ => "bundled",
+            };
+            string message;
+            if (ReferenceEquals(used, primary) || !used.Face.HasGlyph(cp))
+            {
+                message = $"The font '{family}' embedded in the document has no glyph for some characters (first U+{cp:X4}), and no other font has them; they are drawn as missing glyphs.";
+            }
+            else if (string.Equals(used.Face.FamilyName, family, StringComparison.OrdinalIgnoreCase))
+            {
+                message = $"The font '{family}' embedded in the document has no glyph for some characters (first U+{cp:X4}); the {where} '{used.Face.FamilyName}' is used for them.";
+            }
+            else
+            {
+                message = $"The font '{family}' embedded in the document has no glyph for some characters (first U+{cp:X4}), and no other source has them in '{family}'; '{used.Face.FamilyName}' is used for them.";
+            }
+            ctx.Warn(LayoutWarningCodes.EmbeddedFontMissingGlyphs, LayoutWarningSeverity.Fidelity, message, family);
+        }
+
         /// <summary>Whether the spaces around index i have a complex-script character on both sides.</summary>
         private static bool BetweenComplex(string text, int i)
         {
@@ -571,6 +601,11 @@ namespace Chuvadi.Layout.Engine.Flow
             {
                 ctx.Warn(LayoutWarningCodes.NonMetricFontSubstitution, LayoutWarningSeverity.Fidelity,
                     $"'{family}' is not available; '{r.Face.FamilyName}' is used and is not metric-compatible, so line and page breaks may differ.", family);
+            }
+            else if (r.Kind == FontMatchKind.MetricCompatibleSubstitute)
+            {
+                ctx.Warn(LayoutWarningCodes.MetricFontSubstitution, LayoutWarningSeverity.Info,
+                    $"'{family}' is not available; the metric-compatible '{r.Face.FamilyName}' is used (same advance widths and line metrics), so line and page breaks are kept.", family);
             }
             return r;
         }

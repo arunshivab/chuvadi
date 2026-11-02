@@ -66,6 +66,7 @@ namespace Chuvadi.Layout.Fonts
         private readonly object _gate = new object();
         private readonly IReadOnlyList<IFontSource> _sources;
         private readonly Dictionary<string, (IFontSource Source, List<FontFaceDescriptor> Faces)?> _familyIndex = new Dictionary<string, (IFontSource, List<FontFaceDescriptor>)?>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (IFontSource Source, List<FontFaceDescriptor> Faces)?> _familyOutsideEmbeddedIndex = new Dictionary<string, (IFontSource, List<FontFaceDescriptor>)?>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<(IFontSource, string, int), FontFace> _faceCache = new Dictionary<(IFontSource, string, int), FontFace>();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<FontRequest, FontResolution> _resolutionCache = new System.Collections.Concurrent.ConcurrentDictionary<FontRequest, FontResolution>();
         private readonly List<FontSubstitution> _substitutions = new List<FontSubstitution>();
@@ -140,6 +141,17 @@ namespace Chuvadi.Layout.Fonts
             UnicodeScript script = UnicodeScripts.GetScript(codepoint);
             lock (_gate)
             {
+                if (primary.Face.Origin == FontOrigin.Embedded)
+                {
+                    // D-116: an embedded font is usually a subset. The full font of the same family from the other
+                    // sources (installed fonts first, unless PreferBundledFonts) draws what the subset lacks.
+                    FontResolution? full = TryFamilyOutsideEmbedded(primary.Request);
+                    if (full is not null && full.Face.HasGlyph(codepoint))
+                    {
+                        Report(primary.Request.Family, full, script);
+                        return full;
+                    }
+                }
                 List<string> families = new List<string>(Substitutions.GetScriptFallback(script));
                 families.AddRange(Substitutions.GetLastResort());
                 foreach (string family in families)
@@ -155,7 +167,8 @@ namespace Chuvadi.Layout.Fonts
             return primary;
         }
 
-        private static bool IsDefaultIgnorable(int cp)
+        /// <summary>True for characters that draw nothing (soft hyphen, joiners, variation selectors, controls).</summary>
+        internal static bool IsDefaultIgnorable(int cp)
             => cp is 0x00AD or 0x034F or 0x061C or 0x115F or 0x1160 or 0x17B4 or 0x17B5 or 0x3164 or 0xFEFF or 0xFFA0
                || (cp >= 0x180B && cp <= 0x180F) || (cp >= 0x200B && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E)
                || (cp >= 0x2060 && cp <= 0x206F) || (cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0xE0000 && cp <= 0xE0FFF)
@@ -200,7 +213,7 @@ namespace Chuvadi.Layout.Fonts
             List<FontFaceDescriptor> all = AllFaces();
             if (all.Count == 0)
             {
-                throw new LayoutException("No fonts are available: configure at least one font source (for example the Chuvadi.Layout.Fonts pack).");
+                throw new LayoutException("No fonts are available: LayoutOptions.UseBuiltInFonts is off and no other font source is configured (for example the Chuvadi.Layout.Fonts pack, or AllowSystemFonts).");
             }
             FontResolution? any = TryFamily(request with { Family = all[0].FamilyName }, FontMatchKind.LastResort);
             return any! with { Request = request };
@@ -231,6 +244,53 @@ namespace Chuvadi.Layout.Fonts
             bool synthBold = request.Weight >= 600 && face.Weight < 600;
             bool synthItalic = request.Italic && !face.IsItalic;
             return new FontResolution(face, request, kind, synthBold, synthItalic);
+        }
+
+        /// <summary>The requested family from the sources' non-embedded faces only (D-116), or null.</summary>
+        private FontResolution? TryFamilyOutsideEmbedded(FontRequest request)
+        {
+            if (request.Family.Length == 0)
+            {
+                return null;
+            }
+            if (!_familyOutsideEmbeddedIndex.TryGetValue(request.Family, out (IFontSource, List<FontFaceDescriptor>)? entry))
+            {
+                entry = null;
+                foreach (IFontSource source in _sources)
+                {
+                    List<FontFaceDescriptor> legacy = new List<FontFaceDescriptor>();
+                    List<FontFaceDescriptor> typographic = new List<FontFaceDescriptor>();
+                    foreach (FontFaceDescriptor d in source.GetFaces())
+                    {
+                        if (d.Origin == FontOrigin.Embedded)
+                        {
+                            continue;
+                        }
+                        if (string.Equals(d.FamilyName, request.Family, StringComparison.OrdinalIgnoreCase))
+                        {
+                            legacy.Add(d);
+                        }
+                        else if (string.Equals(d.TypographicFamilyName, request.Family, StringComparison.OrdinalIgnoreCase))
+                        {
+                            typographic.Add(d);
+                        }
+                    }
+                    List<FontFaceDescriptor> faces = legacy.Count > 0 ? legacy : typographic;
+                    if (faces.Count > 0)
+                    {
+                        entry = (source, faces);
+                        break;
+                    }
+                }
+                _familyOutsideEmbeddedIndex[request.Family] = entry;
+            }
+            if (entry is null)
+            {
+                return null;
+            }
+            FontFaceDescriptor pick = PickStyle(entry.Value.Item2, request.Weight, request.Italic);
+            FontFace face = Load(entry.Value.Item1, pick);
+            return new FontResolution(face, request, FontMatchKind.Exact, request.Weight >= 600 && face.Weight < 600, request.Italic && !face.IsItalic);
         }
 
         private (IFontSource, List<FontFaceDescriptor>)? FindFamily(string family)

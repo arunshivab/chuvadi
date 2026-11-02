@@ -6,8 +6,9 @@ using System.Reflection;
 namespace Chuvadi.Layout.Fonts
 {
     /// <summary>
-    /// The fonts bundled in this package, read from embedded resources on first use of each face.
-    /// No disk or network access. Thread-safe. Use <see cref="Instance"/>.
+    /// The fonts bundled in this package (the Office metric-compatible substitutes), read from embedded resources on
+    /// first use of each face. The LiPi Sans faces are Chuvadi.Layout's built-in fonts (Chuvadi.Fonts) and are not
+    /// listed here. No disk or network access. Thread-safe. Use <see cref="Instance"/>.
     /// </summary>
     public sealed class BundledFontSource : IFontSource
     {
@@ -64,9 +65,10 @@ namespace Chuvadi.Layout.Fonts
             }
         }
 
-        /// <summary>The raw bytes of a bundled font file (for example "Carlito-Regular.ttf").</summary>
+        /// <summary>The raw bytes of a bundled font file (for example "Carlito-Regular.ttf"). Internal (D-115): faces are
+        /// handed out through <see cref="LoadFace"/>.</summary>
         /// <exception cref="ArgumentException">No such file is bundled.</exception>
-        public static byte[] ReadResource(string fileName)
+        internal static byte[] ReadResource(string fileName)
         {
             ArgumentNullException.ThrowIfNull(fileName);
             Assembly asm = typeof(BundledFontSource).Assembly;

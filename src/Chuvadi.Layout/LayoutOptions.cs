@@ -71,20 +71,38 @@ namespace Chuvadi.Layout
     public sealed class LayoutOptions
     {
         /// <summary>
-        /// Font sources, searched in order after any fonts embedded in the document. Typically the
-        /// Chuvadi.Layout.Fonts pack (BundledFontSource.Instance). Nothing is read from disk or the network unless a
-        /// source does so itself.
+        /// Font sources, searched in order after any fonts embedded in the document and (unless
+        /// <see cref="PreferBundledFonts"/>) installed fonts. Typically the
+        /// Chuvadi.Layout.Fonts pack (BundledFontSource.Instance, the Office metric-compatible substitutes). Nothing is
+        /// read from disk or the network unless a source does so itself.
         /// </summary>
         public IList<IFontSource> FontSources { get; } = new List<IFontSource>();
 
         /// <summary>
-        /// Also search the operating system's font directories (after <see cref="FontSources"/>). Off by default so
-        /// output is identical on every machine; turn on in desktop viewers to use real Office fonts when present.
+        /// Also search the operating system's font directories. Off by default so output is identical on every
+        /// machine; turn on in desktop viewers to use real Office fonts when present. Installed fonts are searched
+        /// before <see cref="FontSources"/> and the built-in fonts, so an installed family wins over a packed copy of
+        /// the same family (D-116), unless <see cref="PreferBundledFonts"/> is set.
         /// </summary>
         public bool AllowSystemFonts { get; set; }
 
+        /// <summary>
+        /// Search <see cref="FontSources"/> and the built-in fonts before installed fonts, so the same family gives the
+        /// same output on every machine (servers, tests) even with <see cref="AllowSystemFonts"/> on. Default false:
+        /// an installed font wins over the pack (D-116). Has no effect while <see cref="AllowSystemFonts"/> is off.
+        /// </summary>
+        public bool PreferBundledFonts { get; set; }
+
         /// <summary>Use fonts embedded in the source document. Default true.</summary>
         public bool UseEmbeddedFonts { get; set; } = true;
+
+        /// <summary>
+        /// Use the built-in fonts: the LiPi Sans faces of the Chuvadi.Fonts package (Latin and nine Indic scripts),
+        /// searched after <see cref="FontSources"/>. They are the default script fallback and last resort, so text is
+        /// never left without a font. Default true; false lays out with only the document's, the app's and (if
+        /// allowed) the installed fonts.
+        /// </summary>
+        public bool UseBuiltInFonts { get; set; } = true;
 
         /// <summary>Substitution and fallback rules. Default <see cref="FontSubstitutionTable.CreateDefault"/>.</summary>
         public FontSubstitutionTable FontSubstitutions { get; set; } = FontSubstitutionTable.CreateDefault();
@@ -115,7 +133,12 @@ namespace Chuvadi.Layout
         /// <summary>Number of laid-out pages (with display lists) kept in memory. Default 8.</summary>
         public int PageCacheSize { get; set; } = 8;
 
-        /// <summary>Builds the resolver for these options: <paramref name="embedded"/> first, then sources, then system fonts if allowed.</summary>
+        /// <summary>
+        /// Builds the resolver for these options. Search order (D-116): <paramref name="embedded"/> (if
+        /// <see cref="UseEmbeddedFonts"/>), then installed fonts (if <see cref="AllowSystemFonts"/>), then
+        /// <see cref="FontSources"/>, then the built-in fonts (if <see cref="UseBuiltInFonts"/>). With
+        /// <see cref="PreferBundledFonts"/>, installed fonts come last instead.
+        /// </summary>
         public FontResolver CreateFontResolver(IFontSource? embedded = null)
         {
             List<IFontSource> sources = new List<IFontSource>();
@@ -123,8 +146,16 @@ namespace Chuvadi.Layout
             {
                 sources.Add(embedded);
             }
+            if (AllowSystemFonts && !PreferBundledFonts)
+            {
+                sources.Add(new SystemFontSource());
+            }
             sources.AddRange(FontSources);
-            if (AllowSystemFonts)
+            if (UseBuiltInFonts)
+            {
+                sources.Add(BuiltInFontSource.Instance);
+            }
+            if (AllowSystemFonts && PreferBundledFonts)
             {
                 sources.Add(new SystemFontSource());
             }

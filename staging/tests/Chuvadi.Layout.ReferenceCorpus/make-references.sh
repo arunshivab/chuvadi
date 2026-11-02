@@ -8,7 +8,7 @@ repo=$(cd "$here/../../.." && pwd)
 soffice=${SOFFICE:-soffice}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-sed -e "s|@FONTS@|$repo/src/Chuvadi.Layout.Fonts/Fonts|" -e "s|@CACHE@|$work/fc-cache|" "$here/fonts.conf.in" > "$work/fonts.conf"
+sed -e "s|@FONTS@|$repo/src/Chuvadi.Layout.Fonts/Fonts|" -e "s|@BUILTIN@|$repo/src/Chuvadi.Fonts/Fonts|" -e "s|@CACHE@|$work/fc-cache|" "$here/fonts.conf.in" > "$work/fonts.conf"
 dotnet run -c Release --project "$repo/staging/samples/Chuvadi.Layout.ReferenceCorpus" -- "$work/src"
 FONTCONFIG_FILE="$work/fonts.conf" SAL_USE_VCLPLUGIN=svp "$soffice" -env:UserInstallation="file://$work/profile" \
   --headless --norestore --convert-to pdf --outdir "$work/ref" "$work"/src/*.docx "$work"/src/*.xlsx > "$work/soffice.log" 2>&1

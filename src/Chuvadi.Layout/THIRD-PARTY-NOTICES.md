@@ -1,8 +1,10 @@
 # Third-party notices
 
 Chuvadi.Layout contains tables generated from the Unicode Character Database 16.0.0
-(Scripts.txt, LineBreak.txt, GraphemeBreakProperty.txt, EastAsianWidth.txt, emoji-data.txt), which are
-distributed under the following licence.
+(Scripts.txt, LineBreak.txt, GraphemeBreakProperty.txt, DerivedCoreProperties.txt (InCB), EastAsianWidth.txt,
+emoji-data.txt and extracted/DerivedGeneralCategory.txt; see docs/Chuvadi.Layout/tools in the repository), and the
+list of regions whose default paper is US Letter (`PaperDefaults`) from the Unicode CLDR supplemental data
+(paperSize). Both are distributed by Unicode, Inc. under the following licence.
 
 ```
 UNICODE LICENSE V3

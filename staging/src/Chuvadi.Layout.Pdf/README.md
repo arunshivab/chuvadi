@@ -23,7 +23,7 @@ image crops, clips and translucency. Settings: `LayoutPdfOptions.LayoutSvg`. It 
 `ToSvgViaPdf` renders through chuvadi-pdf's SVG renderer instead (settings: `LayoutPdfOptions.Svg`). It is kept for
 comparison.
 
-## How the display list maps to PDF (Chuvadi.Pdf 3.26.0)
+## How the display list maps to PDF (Chuvadi.Pdf 3.30.2)
 
 | Display list | PDF |
 |---|---|
@@ -38,7 +38,7 @@ comparison.
 `FontFace` (collection faces included), whose shaping tables and feature lookups are cached, so line fitting does no
 font parsing. Its metrics are checked against Chuvadi.Layout's own font core in the tests.
 
-Indic shaping is HarfBuzz-conformant: Chuvadi.Pdf 3.26's `TextShaper` is a port of HarfBuzz's OpenType and Indic
+Indic shaping is HarfBuzz-conformant: Chuvadi.Pdf's `TextShaper` (since 3.26; Layout now uses 3.30.2) is a port of HarfBuzz's OpenType and Indic
 shapers and matches HarfBuzz 15.0.0 glyph for glyph (ids, clusters, advances and offsets) on all 19,641 test syllables
 of the nine LiPi Indic scripts, Tamil included.
 
@@ -48,11 +48,18 @@ embed, such as CFF2; its text is left out), `PdfImageFormat` (GIF/EMF/WMF/SVG â†
 `PdfTextNotExtractable` (a run without a text mapping). The codes of the 3.22.1 adapter (`PdfSyntheticItalic`,
 `PdfHorizontalScale`, `PdfTranslucency`, `PdfImageClip`, `PdfImageCrop`, `PdfCffFontNotEmbedded`) are gone.
 
+## Third-party notices
+
+Chuvadi.Layout.Pdf contains no third-party code. Its Indic shaping (`PdfShaper`) calls Chuvadi.Pdf.Text.Shaping,
+whose shaper is a port of parts of HarfBuzz: the HarfBuzz notice ships in that package
+(`THIRD-PARTY-NOTICES.md` at the package root). The Unicode data in Chuvadi.Layout is listed in Chuvadi.Layout's
+`THIRD-PARTY-NOTICES.md`.
+
 ## Build (D-18, D-29, D-37)
 
 This project is not in Chuvadi.slnx or CI. It takes chuvadi-pdf as **version-pinned packages** from the
 local NuGet feed (`%USERPROFILE%/Documents/local-nuget`), never from a source clone:
-- the version is pinned once, in `ChuvadiPdf.props` (`ChuvadiPdfVersion`, currently 3.26.0);
+- the version is pinned once, in `ChuvadiPdf.props` (`ChuvadiPdfVersion`, currently 3.30.2);
 - the feed is set by the `nuget.config` next to each project that uses it (this one, `staging/tests/Chuvadi.Layout.Pdf.Tests`,
   `staging/samples/Chuvadi.Layout.Acceptance`, `staging/tests/Chuvadi.Layout.Acceptance.Tests`). `Chuvadi.*` packages come only from
   the local feed; everything else from nuget.org.

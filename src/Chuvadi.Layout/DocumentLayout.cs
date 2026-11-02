@@ -30,7 +30,7 @@ namespace Chuvadi.Layout
         }
 
         /// <summary>
-        /// Lays out a flow document produced by an importer outside this package (for example Chuvadi.Layout.Markup):
+        /// Lays out a flow document produced by an importer outside this package (for example Chuvadi.Layout.Docs or Chuvadi.Layout.Markup):
         /// <paramref name="sourceFormat"/> is reported in <see cref="LaidOutDocument.Source"/>, and the importer's
         /// <paramref name="importWarnings"/> come first in <see cref="LaidOutDocument.Warnings"/>.
         /// </summary>
@@ -65,11 +65,35 @@ namespace Chuvadi.Layout
         }
 
         /// <summary>
-        /// Lays out a document from a stream. With <see cref="LayoutSourceFormat.Auto"/> the format is sniffed:
-        /// .docx documents go to <see cref="DocxImporter"/> and .xlsx workbooks to <see cref="XlsxImporter"/> (encrypted ones too,
-        /// when <see cref="LayoutOptions.Password"/> is set); anything else is read as plain text. The stream is read to its end and left open.
+        /// Lays out a workbook produced by an importer outside this package (for example Chuvadi.Layout.Sheets):
+        /// <paramref name="sourceFormat"/> is reported in <see cref="LaidOutDocument.Source"/>, and the importer's
+        /// <paramref name="importWarnings"/> come first in <see cref="LaidOutDocument.Warnings"/>. Page bands are
+        /// computed at open, so the page count is final at once.
         /// </summary>
-        /// <exception cref="LayoutFormatException">The format is not supported in this version.</exception>
+        public static LaidOutDocument Open(GridWorkbook workbook, LayoutSourceFormat sourceFormat, IEnumerable<LayoutWarning>? importWarnings,
+            LayoutOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(workbook);
+            options ??= new LayoutOptions();
+            LayoutContext ctx = new LayoutContext(options, options.CreateFontResolver());
+            if (importWarnings is not null)
+            {
+                foreach (LayoutWarning w in importWarnings)
+                {
+                    ctx.Warn(w.Code, w.Severity, w.Message, w.Location);
+                }
+            }
+            return OpenGrid(workbook, ctx, sourceFormat, cancellationToken);
+        }
+
+        /// <summary>
+        /// Lays out plain text from a stream. With <see cref="LayoutSourceFormat.Auto"/> the format is sniffed
+        /// (<see cref="Sniff"/>): text is laid out here; a .docx document, an .xlsx workbook or an encrypted Office file
+        /// throws <see cref="LayoutFormatException"/> naming the package that lays it out (Chuvadi.Layout.Docs,
+        /// Chuvadi.Layout.Sheets, or Chuvadi.Layout.Documents, whose AutoDetectLayout.Open keeps this method's former
+        /// behaviour for every format). The stream is read to its end and left open.
+        /// </summary>
+        /// <exception cref="LayoutFormatException">The format is laid out by another package, or not supported.</exception>
         /// <exception cref="LayoutLimitExceededException">The input exceeds <see cref="LayoutLimits.MaxSourceBytes"/>.</exception>
         public static LaidOutDocument Open(Stream source, LayoutSourceFormat format = LayoutSourceFormat.Auto, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -82,7 +106,7 @@ namespace Chuvadi.Layout
                 if (IsOleCompound(bytes) && options.Password is not null)
                 {
                     // An encrypted Office file: what is inside is known only after decryption.
-                    return OpenEncrypted(bytes, options, cancellationToken);
+                    throw new LayoutFormatException("The input is an encrypted Office file: lay it out with the Chuvadi.Layout.Documents package (AutoDetectLayout.Open), which decrypts it and tells a document from a workbook, or with DocsLayout.Open (Chuvadi.Layout.Docs) or SheetsLayout.Open (Chuvadi.Layout.Sheets) when the format is known. The engine package depends on neither Chuvadi.Docs nor Chuvadi.Sheets.");
                 }
                 format = Sniff(bytes);
             }
@@ -91,9 +115,9 @@ namespace Chuvadi.Layout
                 case LayoutSourceFormat.Text:
                     return OpenTextBytes(bytes, null, options, cancellationToken);
                 case LayoutSourceFormat.Xlsx:
-                    return OpenXlsxBytes(bytes, null, options, cancellationToken);
+                    throw new LayoutFormatException("An .xlsx workbook is laid out by the Chuvadi.Layout.Sheets package (SheetsLayout.Open), or by Chuvadi.Layout.Documents (AutoDetectLayout.Open), which detects the format; the engine package does not depend on Chuvadi.Sheets.");
                 case LayoutSourceFormat.Docx:
-                    return OpenDocxBytes(bytes, null, options, cancellationToken);
+                    throw new LayoutFormatException("A .docx document is laid out by the Chuvadi.Layout.Docs package (DocsLayout.Open), or by Chuvadi.Layout.Documents (AutoDetectLayout.Open), which detects the format; the engine package does not depend on Chuvadi.Docs.");
                 case LayoutSourceFormat.Markdown:
                     throw new LayoutFormatException("Markdown is laid out by the Chuvadi.Layout.Markup package (MarkdownLayout.Open); the core package does not depend on Chuvadi.Markup.");
                 case LayoutSourceFormat.Html:
@@ -103,109 +127,10 @@ namespace Chuvadi.Layout
             }
         }
 
-        /// <summary>
-        /// Lays out a .docx document the way Word lays it out (see <see cref="DocxImporter"/>). Encrypted documents need
-        /// <see cref="LayoutOptions.Password"/>. Import warnings are reported in <see cref="LaidOutDocument.Warnings"/>.
-        /// </summary>
-        /// <exception cref="LayoutFormatException">Not a readable document, or the password is missing or wrong.</exception>
-        /// <exception cref="LayoutLimitExceededException">The document exceeds a <see cref="LayoutLimits"/> limit.</exception>
-        public static LaidOutDocument OpenDocx(Stream source, DocxImportOptions? importOptions = null, LayoutOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            options ??= new LayoutOptions();
-            byte[] bytes = ReadAll(source, options.Limits.MaxSourceBytes, cancellationToken);
-            return OpenDocxBytes(bytes, importOptions, options, cancellationToken);
-        }
-
-        /// <summary>Lays out a document already loaded or built with Chuvadi.Docs.</summary>
-        public static LaidOutDocument Open(Chuvadi.Docs.Word.Document document, DocxImportOptions? importOptions = null, LayoutOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(document);
-            options ??= new LayoutOptions();
-            List<LayoutWarning> warnings = new List<LayoutWarning>();
-            FlowDocument flow = DocxImporter.Import(document, importOptions, options, warnings.Add, cancellationToken);
-            return OpenFlow(flow, Context(options, flow, warnings), LayoutSourceFormat.Docx);
-        }
-
-        /// <summary>
-        /// An encrypted package is a document when Chuvadi.Docs reads it (since Docs 1.5.0, a package whose main part is
-        /// not a Word document is rejected), else a workbook.
-        /// </summary>
-        private static LaidOutDocument OpenEncrypted(byte[] bytes, LayoutOptions options, CancellationToken ct)
-        {
-            try
-            {
-                return OpenDocxBytes(bytes, null, options, ct);
-            }
-            catch (LayoutFormatException ex) when (ex.InnerException is Chuvadi.Docs.Word.DocxFormatException)
-            {
-                // Not a Word document: a workbook, or nothing readable (Chuvadi.Sheets says which).
-            }
-            return OpenXlsxBytes(bytes, null, options, ct);
-        }
-
-        private static LaidOutDocument OpenDocxBytes(byte[] bytes, DocxImportOptions? importOptions, LayoutOptions options, CancellationToken ct)
-        {
-            List<LayoutWarning> warnings = new List<LayoutWarning>();
-            using MemoryStream ms = new MemoryStream(bytes, writable: false);
-            FlowDocument flow = DocxImporter.Import(ms, importOptions, options, warnings.Add, ct);
-            (int? pages, string? title) = PackageProperties.Read(bytes);
-            flow.PageCountHint ??= pages;
-            flow.Title = title ?? flow.Title;
-            return OpenFlow(flow, Context(options, flow, warnings), LayoutSourceFormat.Docx);
-        }
-
-        /// <summary>The layout context for an imported document: its embedded fonts first, then the import's warnings.</summary>
-        private static LayoutContext Context(LayoutOptions options, FlowDocument flow, List<LayoutWarning> importWarnings)
-        {
-            LayoutContext ctx = new LayoutContext(options, options.CreateFontResolver(flow.EmbeddedFonts));
-            foreach (LayoutWarning w in importWarnings)
-            {
-                ctx.Warn(w.Code, w.Severity, w.Message, w.Location);
-            }
-            return ctx;
-        }
-
         private static LaidOutDocument OpenFlow(FlowDocument flow, LayoutContext ctx, LayoutSourceFormat format)
         {
             FlowEngine engine = new FlowEngine(flow, ctx, new LayoutSourceInfo(format, flow.Sections.Count, flow.Title));
             return new LaidOutDocument(engine, ctx);
-        }
-
-        /// <summary>
-        /// Lays out an .xlsx workbook the way Excel prints it (see <see cref="XlsxImporter"/>). Encrypted workbooks
-        /// need <see cref="LayoutOptions.Password"/>. Import warnings are reported in <see cref="LaidOutDocument.Warnings"/>.
-        /// </summary>
-        /// <exception cref="LayoutFormatException">Not a readable workbook, or the password is missing or wrong.</exception>
-        public static LaidOutDocument OpenXlsx(Stream source, XlsxImportOptions? importOptions = null, LayoutOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            options ??= new LayoutOptions();
-            byte[] bytes = ReadAll(source, options.Limits.MaxSourceBytes, cancellationToken);
-            return OpenXlsxBytes(bytes, importOptions, options, cancellationToken);
-        }
-
-        /// <summary>Lays out a workbook already loaded with Chuvadi.Sheets (load it with <c>IncludeStyledEmptyCells = true</c>).</summary>
-        public static LaidOutDocument Open(Chuvadi.Sheets.Excel.Workbook workbook, XlsxImportOptions? importOptions = null, LayoutOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(workbook);
-            options ??= new LayoutOptions();
-            LayoutContext ctx = new LayoutContext(options, options.CreateFontResolver());
-            GridWorkbook book = XlsxImporter.Import(workbook, importOptions, options, w => ctx.Warn(w.Code, w.Severity, w.Message, w.Location), cancellationToken);
-            return OpenGrid(book, ctx, LayoutSourceFormat.Xlsx, cancellationToken);
-        }
-
-        private static LaidOutDocument OpenXlsxBytes(byte[] bytes, XlsxImportOptions? importOptions, LayoutOptions options, CancellationToken ct)
-        {
-            LayoutContext ctx = new LayoutContext(options, options.CreateFontResolver());
-            using MemoryStream ms = new MemoryStream(bytes, writable: false);
-            GridWorkbook book = XlsxImporter.Import(ms, importOptions, options, w => ctx.Warn(w.Code, w.Severity, w.Message, w.Location), ct);
-            book.Title ??= options.DocumentName;
-            return OpenGrid(book, ctx, LayoutSourceFormat.Xlsx, ct);
         }
 
         private static LaidOutDocument OpenGrid(GridWorkbook book, LayoutContext ctx, LayoutSourceFormat format, CancellationToken ct)

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Layout.Documents</RootNamespace>
+    <AssemblyName>Chuvadi.Layout.Documents</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Layout.Documents</Product>
+    <Description>Format detection for Chuvadi.Layout: one call (AutoDetectLayout.Open) lays out a .docx document, an .xlsx workbook, an encrypted one of either kind, or plain text from a stream, sending each to Chuvadi.Layout.Docs, Chuvadi.Layout.Sheets or the engine. Pure BCL.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>layout;pagination;docx;xlsx;text;detection</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.Layout.Docs\Chuvadi.Layout.Docs.csproj" />
+    <ProjectReference Include="..\Chuvadi.Layout.Sheets\Chuvadi.Layout.Sheets.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Documents.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -9,8 +9,12 @@
 | **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v1.7.0 |
 | **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v1.6.0 |
 | **[Chuvadi.Docs.Conversion](src/Chuvadi.Docs.Conversion/README.md)** | Docs to and from plain text, Markdown (CommonMark + GFM) and HTML, plus a self-contained HTML preview (over Chuvadi.Markup; released with Docs) | v1.6.0 |
-| **[Chuvadi.Layout](src/Chuvadi.Layout/README.md)** | page layout of docx, xlsx and text into fixed pages (display list, SVG) | v0.1.0 (preview) |
-| **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible, Indic) | v0.1.0 (preview) |
+| **[Chuvadi.Fonts](src/Chuvadi.Fonts/README.md)** | the LiPi Sans fonts (Latin and nine Indic scripts) as static TrueType files | v1.0.0 |
+| **[Chuvadi.Layout](src/Chuvadi.Layout/README.md)** | page layout engine: flow and grid pages, plain text, display list, SVG | v0.1.0 (preview) |
+| **[Chuvadi.Layout.Docs](src/Chuvadi.Layout.Docs/README.md)** | Word documents (docx) laid out through Chuvadi.Docs | v0.1.0 (preview) |
+| **[Chuvadi.Layout.Sheets](src/Chuvadi.Layout.Sheets/README.md)** | Excel workbooks (xlsx) laid out through Chuvadi.Sheets | v0.1.0 (preview) |
+| **[Chuvadi.Layout.Documents](src/Chuvadi.Layout.Documents/README.md)** | one call for docx, xlsx (encrypted too) and text, format detected | v0.1.0 (preview) |
+| **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible substitutes, Gelasio, Selawik) | v0.1.0 (preview) |
 | **[Chuvadi.Layout.Markup](src/Chuvadi.Layout.Markup/README.md)** | Markdown and sanitized HTML (mail, pages) layout through Chuvadi.Markup | v0.1.0 (preview) |
 | **[Chuvadi.Markup](src/Chuvadi.Markup/README.md)** | Markdown (CommonMark + GFM), HTML5 parse/sanitize, CSS, text to HTML | v1.0.0 |
 | **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing: Windows (GDI), IPP, PNG preview, remote hub/agent | v1.0.0-rc.1 (in progress) |
@@ -39,7 +43,7 @@ DocxTemplate.Fill("invoice-template.docx", "invoice-0042.docx",
     new Dictionary<string, string> { ["Total"] = "Rs 54,000.00" });
 
 // Layout: paginate a Word or Excel file into pages (SVG here; PDF through Chuvadi.Layout.Pdf)
-using var laidOut = DocumentLayout.Open(File.OpenRead("report.docx"));
+using var laidOut = AutoDetectLayout.Open(File.OpenRead("report.docx"));   // Chuvadi.Layout.Documents
 for (int i = 0; i < laidOut.ResolvePageCount(); i++)
 {
     using var svg = File.Create($"page-{i + 1}.svg");
@@ -53,7 +57,7 @@ Every package ships with an xUnit suite plus an end-to-end manual verification s
 
 ## Releases
 
-Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): `sheets-v1.7.0`, `docs-v*` (version pending), `zip-v1.0.0`, `markup-v1.0.0`, `layout-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`. See [RELEASING.md](RELEASING.md).
+Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): `sheets-v1.7.0`, `docs-v*` (version pending), `zip-v1.0.0`, `markup-v1.0.0`, `fonts-v1.0.0`, `layout-v0.1.0`, `layout-docs-v0.1.0`, `layout-sheets-v0.1.0`, `layout-documents-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`. See [RELEASING.md](RELEASING.md).
 
 ## License
 

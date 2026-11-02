@@ -66,7 +66,7 @@ namespace Chuvadi.Layout.Fonts
             {
                 t.SetSubstitutes(f, new FontSubstitute("Carlito", false));
             }
-            foreach (string f in new[] { "Segoe UI", "Tahoma", "Verdana", "Trebuchet MS", "Century Gothic", "Gill Sans MT", "Franklin Gothic Book", "Lucida Sans Unicode", "Microsoft Sans Serif", "Arial Narrow", "Arial Unicode MS" })
+            foreach (string f in new[] { "Tahoma", "Verdana", "Trebuchet MS", "Century Gothic", "Gill Sans MT", "Franklin Gothic Book", "Lucida Sans Unicode", "Microsoft Sans Serif", "Arial Narrow", "Arial Unicode MS" })
             {
                 t.SetSubstitutes(f, new FontSubstitute(Sans, false));
             }
@@ -74,7 +74,7 @@ namespace Chuvadi.Layout.Fonts
             {
                 t.SetSubstitutes(f, new FontSubstitute("Caladea", false));
             }
-            foreach (string f in new[] { "Georgia", "Garamond", "Book Antiqua", "Palatino Linotype", "Century", "Bookman Old Style", "Baskerville Old Face" })
+            foreach (string f in new[] { "Garamond", "Book Antiqua", "Palatino Linotype", "Century", "Bookman Old Style", "Baskerville Old Face" })
             {
                 t.SetSubstitutes(f, new FontSubstitute(Serif, false));
             }
@@ -82,6 +82,21 @@ namespace Chuvadi.Layout.Fonts
             {
                 t.SetSubstitutes(f, new FontSubstitute(Mono, false));
             }
+            // D-116 A5. Georgia → Gelasio and Segoe UI → Selawik (Chuvadi.Layout.Fonts): closer designs than Liberation;
+            // entered as non-metric until measured against the real fonts (ManualTests --compare-metrics). Segoe UI's
+            // Light, Semilight and Semibold families map to the Selawik faces of the same weight, mapped by file.
+            t.SetSubstitutes("Georgia", new FontSubstitute("Gelasio", false), new FontSubstitute(Serif, false));
+            t.SetSubstitutes("Segoe UI", new FontSubstitute("Selawik", false), new FontSubstitute(Sans, false));
+            t.SetSubstitutes("Segoe UI Light", new FontSubstitute("Selawik Light", false), new FontSubstitute(Sans, false));
+            t.SetSubstitutes("Segoe UI Semilight", new FontSubstitute("Selawik Semilight", false), new FontSubstitute(Sans, false));
+            t.SetSubstitutes("Segoe UI Semibold", new FontSubstitute("Selawik Semibold", false), new FontSubstitute(Sans, false));
+
+            // D-116 A5. LiPi Sans Tamil and Devanagari are Noto Sans Tamil 2.004 and Devanagari 2.006 under another
+            // name: identical advance widths for every Noto codepoint and identical vertical metrics, Regular and Bold
+            // (three Devanagari Bold widths differ by 1/1000 em). An installed Noto font is still used first.
+            t.SetSubstitutes("Noto Sans Tamil", new FontSubstitute("LiPi Sans Tamil", true));
+            t.SetSubstitutes("Noto Sans Devanagari", new FontSubstitute("LiPi Sans Devanagari", true));
+
             foreach (string f in new[] { "Nirmala UI", "Nirmala Text" })
             {
                 t.SetSubstitutes(f, new FontSubstitute("LiPi Sans", false));

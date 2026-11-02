@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Fonts</RootNamespace>
+    <AssemblyName>Chuvadi.Fonts</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Fonts</Product>
+    <Description>The LiPi Sans fonts for .NET as embedded resources: static TrueType faces for Latin (Regular, Bold, Italic, Bold Italic) and nine Indic scripts (Bengali, Devanagari, Gujarati, Gurmukhi, Kannada, Malayalam, Odia, Tamil, Telugu; Regular and Bold), with their names, styles, lengths and SHA-256 hashes. SIL Open Font License 1.1. Pure BCL, no dependencies, no disk or network access.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>1.0.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageLicenseExpression>MIT AND OFL-1.1</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>fonts;ofl;truetype;indic;tamil;devanagari;bengali;malayalam;telugu;kannada</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Fonts.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Fonts.ManualTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts\*.ttf" LogicalName="Chuvadi.Fonts.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Licenses\LiPiSans-OFL.txt" LogicalName="Chuvadi.Fonts.LiPiSans-OFL.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)FONTS.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)Licenses\*.txt" Pack="true" PackagePath="licenses" />
+  </ItemGroup>
+
+</Project>
