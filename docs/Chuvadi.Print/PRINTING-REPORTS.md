@@ -1,6 +1,6 @@
 # Printing Docs and Sheets reports
 
-LiPi prints Word (docx) and Excel (xlsx) reports by composing three libraries, with no new adapter:
+A host application prints Word (docx) and Excel (xlsx) reports by composing three libraries, with no new adapter:
 
 ```
 Chuvadi.Docs / Chuvadi.Sheets   build the report (docx / xlsx)
@@ -26,11 +26,11 @@ Chuvadi.Layout. Everything after it is Chuvadi.Print API.
 byte[] pdf = layout.ToPdf(dischargeSummaryDocx);          // Chuvadi.Layout (placeholder)
 
 PrintResult result = new PrintJob(pdf)
-    .WithTitle("Discharge summary").WithUser("dr.arun").WithTenant("apulki")
+    .WithTitle("Discharge summary").WithUser("user1").WithTenant("tenant-a")
     .WithCopies(2, collate: true).WithDuplex(Duplex.Vertical).WithColor(ColorMode.Monochrome)
     .WithRasterizer(new PdfPageRasterizer())                // Chuvadi.Print.Pdf
-    .WithAuditSink(new FileAuditSink(@"D:\lipi\print-audit.log"))
-    .PrintTo(new WindowsPrinterTarget("Ward-3 LaserJet"));  // or new IppPrinterTarget("ipp://...")
+    .WithAuditSink(new FileAuditSink(@"D:\print\audit.log"))
+    .PrintTo(new WindowsPrinterTarget("Ward-3 Laser"));  // or new IppPrinterTarget("ipp://...")
 ```
 
 ## Saving as PDF
@@ -38,11 +38,11 @@ PrintResult result = new PrintJob(pdf)
 Saving a report as PDF is not printing: the PDF bytes from Chuvadi.Layout (or a document written with the
 Chuvadi.Pdf writer) are the file. Chuvadi.Print is only used when the PDF goes to a printer.
 
-## To a printer at a branch (LiPi Connect)
+## To a printer at a branch (remote hub)
 
 ```csharp
 // Web host: lay out, then queue for the branch agent (idempotent per JobId).
-hub.Submit("ward3-pc", "Ward-3 LaserJet", new PrintJob(pdf).WithCopies(2).WithTitle("Discharge summary"));
+hub.Submit("ward3-pc", "Ward-3 Laser", new PrintJob(pdf).WithCopies(2).WithTitle("Discharge summary"));
 
 // Branch agent (PrintAgentOptions): Rasterizer = new PdfPageRasterizer(),
 //   PrinterResolver = name => new WindowsPrinterTarget(name)

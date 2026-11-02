@@ -19,7 +19,7 @@ namespace Chuvadi.Print.ManualTests
 
         public static void IppMessagesRoundTrip()
         {
-            IppMessage request = IppMessage.CreateRequest(IppOperation.PrintJob, 42, "ipp://printer/ipp/print", "arun");
+            IppMessage request = IppMessage.CreateRequest(IppOperation.PrintJob, 42, "ipp://printer/ipp/print", "user1");
             request.AddGroup(IppTag.JobAttributes)
                 .Add("copies", IppValue.Integer(2))
                 .Add("media-col", IppValue.Collection(new IppCollection()

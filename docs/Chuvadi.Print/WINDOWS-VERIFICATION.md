@@ -15,7 +15,7 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, and
    the D-48 removal. Update your clone:
    ```powershell
-   cd C:\Users\aruns\Documents\chuvadi-monorepo\chuvadi
+   cd C:\src\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
@@ -24,11 +24,11 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 2. **Local feed.** The Chuvadi.Pdf packages of the pinned version (3.22.1, the `ChuvadiPdfVersion` in
    `staging\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj`) are in the local feed:
    ```powershell
-   Get-ChildItem C:\Users\aruns\Documents\local-nuget -Filter "Chuvadi.Pdf.Rendering.*.nupkg"
+   Get-ChildItem C:\src\local-nuget -Filter "Chuvadi.Pdf.Rendering.*.nupkg"
    ```
    Expected: `Chuvadi.Pdf.Rendering.3.22.1.nupkg` (the feed holds all 33 Chuvadi.Pdf packages of that version).
    If they are missing, in the chuvadi-pdf clone run `.\build\pack.ps1 -Version 3.22.1`, then
-   `Copy-Item artifacts\nupkg\*.nupkg C:\Users\aruns\Documents\local-nuget`. Do not point `-OutputDir`
+   `Copy-Item artifacts\nupkg\*.nupkg C:\src\local-nuget`. Do not point `-OutputDir`
    at the feed: the script empties its output folder first.
 3. **Tools.** The .NET 10 SDK is installed (`dotnet --list-sdks` shows 10.x).
 4. **Printers.** Note which printers are available:

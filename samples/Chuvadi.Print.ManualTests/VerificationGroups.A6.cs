@@ -49,7 +49,7 @@ namespace Chuvadi.Print.ManualTests
             PrintAuditEvent audit = rig.HubAudit.Events[0];
             Require(audit.JobId == queued.JobId && audit.Status == PrintJobStatus.Printed, "audit is the job's");
             Require(audit.PrinterName == RemoteRig.PrinterName && audit.MachineName == Environment.MachineName, "the agent's own PrintTo event");
-            Require(audit.UserName == "arun" && audit.TenantId == "lipi" && audit.DocumentTitle == "Invoice 42", "metadata travels");
+            Require(audit.UserName == "user1" && audit.TenantId == "tenant-a" && audit.DocumentTitle == "Invoice 42", "metadata travels");
             Require(rig.AgentAudit.Events.Count == 1 && rig.AgentAudit.Events[0].JobId == queued.JobId, "one local agent event");
             Require(finished is not null && finished.Job.JobId == queued.JobId, "JobFinished raised");
             Require(rig.Store.OpenPayload(queued.JobId) is null, "payload deleted when final");

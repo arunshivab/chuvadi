@@ -115,7 +115,7 @@ namespace Chuvadi.Print.ManualTests
         public StoredJob Submit(int pages = 2, int copies = 1, Guid? jobId = null, string printer = PrinterName)
         {
             var job = new PrintJob(FakeDocument.Uniform(pages, PageDimensions.FromPaper(PaperSize.A4)))
-                .WithCopies(copies).WithTitle("Invoice 42").WithUser("arun").WithTenant("lipi");
+                .WithCopies(copies).WithTitle("Invoice 42").WithUser("user1").WithTenant("tenant-a");
             if (jobId is Guid id) job.WithJobId(id);
             return Hub.Submit(AgentId, printer, job);
         }

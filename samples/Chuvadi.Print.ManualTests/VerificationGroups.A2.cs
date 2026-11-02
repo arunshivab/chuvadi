@@ -321,16 +321,16 @@ namespace Chuvadi.Print.ManualTests
             var sink = new MemoryAuditSink();
             var job = FakeJob(FakeDocument.Uniform(4, A4Page), new FakeRasterizer())
                 .WithPages(PageSelection.Odd).WithCopies(3).WithTitle("Discharge summary")
-                .WithUser("arun").WithTenant("apulki").WithAuditSink(sink);
-            PrintResult result = job.PrintTo(new RecordingTarget { Name = "Ward-3 LaserJet" });
+                .WithUser("user1").WithTenant("tenant-a").WithAuditSink(sink);
+            PrintResult result = job.PrintTo(new RecordingTarget { Name = "Ward-3 Laser" });
 
             Require(sink.Events.Count == 1, "one audit event, saw " + sink.Events.Count);
             PrintAuditEvent e = sink.Events[0];
             Require(e.JobId == job.JobId && result.JobId == job.JobId, "job id flows to audit and result");
             Require(e.Status == PrintJobStatus.Printed && e.Error is null, "status printed");
             Require(e.PageCount == 2 && e.Copies == 3, "pages and copies");
-            Require(e.DocumentTitle == "Discharge summary" && e.UserName == "arun" && e.TenantId == "apulki", "metadata");
-            Require(e.PrinterName == "Ward-3 LaserJet" && e.MachineName == Environment.MachineName, "printer and machine");
+            Require(e.DocumentTitle == "Discharge summary" && e.UserName == "user1" && e.TenantId == "tenant-a", "metadata");
+            Require(e.PrinterName == "Ward-3 Laser" && e.MachineName == Environment.MachineName, "printer and machine");
             Require(e.CompletedAt.HasValue && e.CompletedAt >= e.StartedAt, "timestamps");
         }
 
@@ -442,7 +442,7 @@ namespace Chuvadi.Print.ManualTests
             byte[] doc = FakeDocument.Uniform(3, A4Page);
             var id = Guid.NewGuid();
             PrintJob original = new PrintJob(doc)
-                .WithJobId(id).WithTitle("Radiotherapy plan").WithUser("physicist").WithTenant("apulki-pune")
+                .WithJobId(id).WithTitle("Radiotherapy plan").WithUser("physicist").WithTenant("tenant-b")
                 .WithPages(PageSelection.Range("1-2")).WithCopies(2).WithAutoRotate().WithColor(ColorMode.Monochrome);
 
             string path = Path.Combine(Path.GetTempPath(), "chuvadi-print-" + Guid.NewGuid().ToString("N") + ".cvpr");
@@ -451,7 +451,7 @@ namespace Chuvadi.Print.ManualTests
                 original.SaveSpoolTo(path);
                 PrintJob loaded = PrintJob.LoadSpool(path);
                 Require(loaded.JobId == id && loaded.DocumentTitle == "Radiotherapy plan", "id/title");
-                Require(loaded.UserName == "physicist" && loaded.TenantId == "apulki-pune", "user/tenant");
+                Require(loaded.UserName == "physicist" && loaded.TenantId == "tenant-b", "user/tenant");
                 Require(loaded.Settings.AutoRotate && loaded.Settings.Copies == 2 && loaded.Settings.Color == ColorMode.Monochrome, "settings");
                 Require(SeqEqualBytes(loaded.PdfBytes, doc), "document bytes");
 

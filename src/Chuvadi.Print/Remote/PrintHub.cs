@@ -53,7 +53,7 @@ namespace Chuvadi.Print.Remote
     }
 
     /// <summary>
-    /// The hub side of remote printing, embedded in a host application (LiPi Connect is the reference host).
+    /// The hub side of remote printing, embedded in a host application.
     /// Print agents on other machines dial out to it over HTTPS (P07: the hub never connects to an agent),
     /// authenticate with a per-agent token, long-poll for jobs, download each job's spool envelope and report
     /// progress and the outcome. The host submits jobs, watches them, cancels them and reads the audit trail.
