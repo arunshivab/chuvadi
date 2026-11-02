@@ -2,6 +2,11 @@
 
 ## 0.1.0 (unreleased)
 
+Chuvadi.Pdf 3.30.2 in staging:
+
+- `ChuvadiPdfVersion` 3.30.2 (was 3.30.1; 3.30.2 fixes SVG text positions and CFF widths in the PDF reader). No source
+  change. Output: the reference corpus report and the SVG pages of the corpus and fixtures are identical to 3.30.1.
+
 C3 (Chuvadi.Pdf 3.30.1 in staging):
 
 - The staged Chuvadi.Layout.Pdf, its tests, the acceptance harness and the viewer use Chuvadi.Pdf 3.30.1

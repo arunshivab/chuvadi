@@ -8,7 +8,7 @@
     To move to a newer Chuvadi.Pdf: pack it into the feed, then change this one number.
   -->
   <PropertyGroup>
-    <ChuvadiPdfVersion>3.30.1</ChuvadiPdfVersion>
+    <ChuvadiPdfVersion>3.30.2</ChuvadiPdfVersion>
   </PropertyGroup>
 
 </Project>
