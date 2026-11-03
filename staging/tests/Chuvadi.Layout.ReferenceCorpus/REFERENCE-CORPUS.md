@@ -78,7 +78,7 @@ pagination differences (below), not Layout faults found so far.
 | d19-table-banded-style.docx | tables | 1 | 1 | pass | 100% | 1.99% | pass |
 | d20-table-nested.docx | tables | 1 | 1 | fail | 100% | 30.54% | libreoffice-differs |
 | d21-sections-orientation.docx | sections and columns | 3 | 3 | pass | 100% | 10.28% | pass |
-| d22-sections-columns.docx | sections and columns | 1 | 1 | fail | 19.6% | 28.48% | layout-gap |
+| d22-sections-columns.docx | sections and columns | 1 | 1 | pass | 100% | 4.83% | pass |
 | d23-sections-page-numbering.docx | sections and columns | 3 | 3 | pass | 100% | 8.8% | pass |
 | d24-header-footer.docx | headers and footers | 2 | 2 | pass | 100% | 8.8% | pass |
 | d25-header-first-page.docx | headers and footers | 2 | 2 | pass | 100% | 9% | pass |
@@ -145,7 +145,7 @@ pagination differences (below), not Layout faults found so far.
 - **d11-page-breaks.docx** (pass): A paragraph holding only a page break keeps its mark on the old page (fixed in Layout by this corpus). To confirm in Word.
 - **d15-table-simple.docx** (pass): Rows make room for their horizontal borders (fixed in Layout by this corpus). To confirm in Word.
 - **d20-table-nested.docx** (libreoffice-differs): After a nested table the cell holds its required empty paragraph; Layout gives it a line, as Word shows it, LibreOffice hides it, so the next outer row starts one line lower in Layout. To confirm in Word.
-- **d22-sections-columns.docx** (layout-gap): Newspaper columns (w:cols) are not laid out yet: Layout flows the section in one column.
+- **d22-sections-columns.docx** (pass): Newspaper columns, laid out as the file states them (ECMA-376 17.6.4). Where the standard is silent (balancing, the separator line, the mark after a column break, footnotes) Layout follows Word, measured with calib-columns.docx; d22 matches Word 2021 within 0.1 pt.
 - **d29-image-sizes.docx** (libreoffice-differs): Layout makes a line holding an inline picture as tall as the picture plus the font descent (the picture sits on the baseline, as in Word); LibreOffice uses the picture height alone. About 3 pt per picture. To confirm in Word.
 - **d35-tabs.docx** (pass): Each tab draws the leader of its own stop (fixed in Layout by this corpus).
 - **d36-ptab.docx** (libreoffice-differs): LibreOffice does not draw the dot leader of a positional tab; Layout does, as Word does.
@@ -222,7 +222,7 @@ outline, insets, vertical alignment, auto-fit), floating tables at their horizon
 | Negative serial under a date format | Shown as a date before 1900 | ######## | x01 |
 | Overflowing text past the used range | Printed on further pages | Clipped at the last used column (to confirm) | x22 |
 
-Multi-column sections (d22) are a Layout gap, not a difference: Layout does not lay out w:cols yet.
+Multi-column sections (d22) are laid out since the columns PR and match both LibreOffice and Word.
 
 ## Open these in real Word / Excel on Windows
 
@@ -236,7 +236,7 @@ Please open each in Word or Excel (File > Print preview, A4 or Letter as stated)
 | d11-page-breaks.docx | Pages 2, 3 and 4 start at the top with text, no empty line. |
 | d15-table-simple.docx | Row pitch with 0.75 pt borders: 13.43 + 0.75 pt per row. |
 | d20-table-nested.docx | Is there an empty line below the nested table inside the outer cell? |
-| d22-sections-columns.docx | Two-column section (Layout gap): for the record of how Word flows it. |
+| d22-sections-columns.docx | Two-column section with a separator: matches Word 2021 (checked 3 Nov 2026). |
 | d29-image-sizes.docx | Gap below each inline picture: about 3 pt (Layout) or none (LibreOffice). |
 | d04-tamil-long.docx | Tamil at 12 pt: does line 2 end with காலை (Layout and LibreOffice) and are the spaces between Tamil words the Tamil font's? |
 | d36-ptab.docx | Dot leader to the right-aligned "right" on the first body line. |

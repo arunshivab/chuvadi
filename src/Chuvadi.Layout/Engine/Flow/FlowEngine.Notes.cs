@@ -76,18 +76,42 @@ namespace Chuvadi.Layout.Engine.Flow
             return new FlowParagraph { MarkFormat = mark };
         }
 
-        /// <summary>Draws the page's footnotes at the foot of the body, under a separator line.</summary>
+        /// <summary>
+        /// Draws the page's footnotes at the foot of the body, under a separator line. In a multi-column section each
+        /// note is drawn in the column of its reference, at that column's width (Word's rule; the standard is silent).
+        /// </summary>
         internal void EmitFootnotes(PagePlan plan, PageRecord record, List<LayoutOp> ops, List<LayoutBox> boxes, StringBuilder text, CancellationToken ct)
         {
             if (plan.Footnotes.Count == 0)
             {
                 return;
             }
-            (double left, double width) = TextArea(plan.Geometry, record.PageNumber);
-            double separator = SeparatorHeight(plan.Footnotes[0], width, record);
+            (double pageLeft, double pageWidth) = TextArea(plan.Geometry, record.PageNumber);
+            List<((double Left, double Width) Area, List<FlowNote> Notes)> groups = new List<((double, double), List<FlowNote>)>();
+            for (int i = 0; i < plan.Footnotes.Count; i++)
+            {
+                (double Left, double Width) area = i < plan.FootnoteAreas.Count && plan.FootnoteAreas[i] is (double, double) a ? a : (pageLeft, pageWidth);
+                int g = groups.FindIndex(x => Math.Abs(x.Area.Left - area.Left) < Epsilon && Math.Abs(x.Area.Width - area.Width) < Epsilon);
+                if (g < 0)
+                {
+                    groups.Add((area, new List<FlowNote>()));
+                    g = groups.Count - 1;
+                }
+                groups[g].Notes.Add(plan.Footnotes[i]);
+            }
+            foreach (((double left, double width), List<FlowNote> notes) in groups)
+            {
+                EmitFootnoteGroup(plan, record, notes, left, width, ops, boxes, text, ct);
+            }
+        }
+
+        private void EmitFootnoteGroup(PagePlan plan, PageRecord record, List<FlowNote> notes, double left, double width, List<LayoutOp> ops,
+            List<LayoutBox> boxes, StringBuilder text, CancellationToken ct)
+        {
+            double separator = SeparatorHeight(notes[0], width, record);
             List<HeaderFooterLayout> layouts = new List<HeaderFooterLayout>();
             double total = separator;
-            foreach (FlowNote note in plan.Footnotes)
+            foreach (FlowNote note in notes)
             {
                 HeaderFooterLayout hf = LayoutHeaderFooter(note.Blocks, width, record, "footnote", ct);
                 layouts.Add(hf);

@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <None Include="Fixtures\docx\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\columns\*.*" CopyToOutputDirectory="PreserveNewest" />
     <!-- Encrypted packages are embedded and read through a MemoryStream, never opened from a path (D-44). -->
     <EmbeddedResource Include="Fixtures\encrypted\*.docx" LogicalName="Chuvadi.Layout.Docs.Tests.Encrypted.%(Filename)%(Extension)" />
   </ItemGroup>

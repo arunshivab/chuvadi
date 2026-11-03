@@ -122,6 +122,11 @@ namespace Chuvadi.Layout.Engine.Flow
 
         internal const char LineSeparator = '\u2028';
         internal const char PageBreakChar = '\u000C';
+
+        /// <summary>A column break in the paragraph text (a mandatory break, like the page break).</summary>
+        internal const char ColumnBreakChar = '\u000B';
+
+        internal static bool IsPageOrColumnBreak(char c) => c == PageBreakChar || c == ColumnBreakChar;
         internal const char ObjectChar = '\uFFFC';
 
         private sealed record Piece(string Text, CharacterFormat Format, SegmentKind Kind, double SizeScale, ImageInline? Image, FieldInline? Field, string? Uri, string? Anchor, PositionalTab? Positional = null)
@@ -161,9 +166,12 @@ namespace Chuvadi.Layout.Engine.Flow
                         pieces.Add(new Piece("\t", tab.Format, SegmentKind.Tab, 1, null, null, null, null, tab.Positional));
                         break;
                     case BreakInline br:
-                        pieces.Add(br.Kind == BreakKind.Line
-                            ? new Piece(LineSeparator.ToString(), br.Format, SegmentKind.LineBreak, 1, null, null, null, null)
-                            : new Piece(PageBreakChar.ToString(), br.Format, SegmentKind.PageBreak, 1, null, null, null, null));
+                        pieces.Add(br.Kind switch
+                        {
+                            BreakKind.Line => new Piece(LineSeparator.ToString(), br.Format, SegmentKind.LineBreak, 1, null, null, null, null),
+                            BreakKind.Column => new Piece(ColumnBreakChar.ToString(), br.Format, SegmentKind.PageBreak, 1, null, null, null, null),
+                            _ => new Piece(PageBreakChar.ToString(), br.Format, SegmentKind.PageBreak, 1, null, null, null, null),
+                        });
                         break;
                     case FieldInline f:
                         string value = fields.Evaluate(f);

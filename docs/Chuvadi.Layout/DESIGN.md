@@ -263,7 +263,8 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 |---|---|
 | ComplexScriptNotShaped | A complex script was laid out with nominal glyphs (no shaper supports it). |
 | BidiNotSupported | Right-to-left text was laid out left-to-right. |
-| MultiColumnNotSupported | A multi-column section was laid out as one column. |
+| MultiColumnNotSupported | No longer raised: multi-column sections are laid out in their columns. |
+| ColumnTooNarrow | Columns narrower than 1 pt (laid out 1 pt wide) or more than 45 columns (cut to 45). |
 | NonMetricFontSubstitution | A substitute that is not metric-compatible was used; breaks may move. |
 | ImagePlaceholder | An image format that cannot be drawn (EMF/WMF/…) became a placeholder box. |
 | ContentTallerThanPage | A line or row taller than the page body was clipped. |
@@ -308,7 +309,7 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
   - Floating tables are placed at their horizontal position in the flow: no vertical position and no wrapping.
   - Text boxes are drawn upright; tables inside an inline text box are not laid out. Shapes other than text boxes,
     frames (`w:framePr`) and content-control boundaries are not modelled by Chuvadi.Docs.
-  - Multiple text columns, page borders, line numbers, vertical page alignment, diagonal and rotated cells,
+  - Page borders, line numbers, vertical page alignment, diagonal and rotated cells,
     between/bar paragraph borders and right-aligned list numbers are reported and laid out simply.
 - HTML (L12, Chuvadi.Markup 1.0.0):
   - Style sheets (`<style>`) are not applied, only inline styles and presentational attributes. Floats, positioning,
@@ -366,8 +367,14 @@ the table draws no borders of its own), `GetListLabels`, and `doc.Sections`.
 - **Defaults.** A run with no font gets Times New Roman, and no size 10 pt (ECMA-376 defaults). Widow control is on
   unless the paragraph or a style turns it off (Word's behaviour). "Auto" paragraph spacing is 14 pt
   (`DocsImportOptions.AutoParagraphSpacing`).
-- **Tables.** The grid is the file's column widths, else the table width (points or percent) shared equally. Grid
-  columns skipped by `gridBefore`/`gridAfter` become empty, borderless cells. Legacy `hMerge` runs become spans.
+- **Columns.** `w:cols` is read completely (count, spacing, separator, unequal `w:col`). Each page is a stack of
+  regions, one per column set: text fills the columns left to right, a continuous break with another column set starts
+  a region below, and a region ended that way is balanced (smallest height that still holds its content). Where
+  ECMA-376 is silent the rules follow Word 2021 as measured with calib-columns.docx (balancing, separator extent and
+  width, the paragraph mark after a column break, footnotes in their column). `doNotBalanceTextColumns` is not read
+  yet (needs a Chuvadi.Docs settings model).
+- **Tables.** The grid is the file's column widths, else the table width (points or percent) shared equally, worked
+  out from the column the table is placed in. Grid columns skipped by `gridBefore`/`gridAfter` become empty, borderless cells. Legacy `hMerge` runs become spans.
 - **Watermarks** are drawn by the engine: the text is shaped, its glyph outlines are stretched to the watermark box
   (Word's WordArt "fit shape"; the box defaults to Chuvadi.Docs' own rule) and rotated 45° for diagonal ones, as
   translucent filled paths under everything else.

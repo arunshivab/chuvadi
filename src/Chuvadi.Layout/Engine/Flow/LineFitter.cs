@@ -27,6 +27,10 @@ namespace Chuvadi.Layout.Engine.Flow
 
         public required bool EndsWithLineBreak { get; init; }
         public required bool EndsWithPageBreak { get; init; }
+
+        /// <summary>The break that ends the line is a column break (<see cref="EndsWithPageBreak"/> is also true).</summary>
+        public bool EndsWithColumnBreak { get; init; }
+
         public required bool IsLastLine { get; init; }
 
         /// <summary>The line ends at a soft hyphen that must be drawn as a hyphen.</summary>
@@ -127,7 +131,7 @@ namespace Chuvadi.Layout.Engine.Flow
             Dictionary<int, double> tabs = new Dictionary<int, double>();
             int i = s;
             int end = s;
-            bool lineBreak = false, pageBreak = false, hyphenated = false;
+            bool lineBreak = false, pageBreak = false, columnBreak = false, hyphenated = false;
             int visibleEnd = s;
             while (i < n)
             {
@@ -148,7 +152,7 @@ namespace Chuvadi.Layout.Engine.Flow
                         visibleX = ax;
                         atomVisibleEnd = k + 1;
                     }
-                    else if (c == ParagraphMeasurer.LineSeparator || c == ParagraphMeasurer.PageBreakChar)
+                    else if (c == ParagraphMeasurer.LineSeparator || ParagraphMeasurer.IsPageOrColumnBreak(c))
                     {
                         // zero width
                     }
@@ -215,9 +219,10 @@ namespace Chuvadi.Layout.Engine.Flow
                         lineBreak = true;
                         break;
                     }
-                    if (last == ParagraphMeasurer.PageBreakChar)
+                    if (ParagraphMeasurer.IsPageOrColumnBreak(last))
                     {
                         pageBreak = true;
+                        columnBreak = last == ParagraphMeasurer.ColumnBreakChar;
                         break;
                     }
                 }
@@ -254,6 +259,7 @@ namespace Chuvadi.Layout.Engine.Flow
                 TabWidths = tabs,
                 EndsWithLineBreak = lineBreak,
                 EndsWithPageBreak = pageBreak,
+                EndsWithColumnBreak = columnBreak,
                 IsLastLine = isLast,
                 Hyphenated = hyphenated,
                 VisibleEnd = Math.Max(s, visibleEnd),
@@ -280,7 +286,7 @@ namespace Chuvadi.Layout.Engine.Flow
         private static double VisibleWidth(MeasuredParagraph m, int i, int j)
         {
             int e = j;
-            while (e > i && (IsTrailingSpace(m.Text[e - 1]) || m.Text[e - 1] == ParagraphMeasurer.LineSeparator || m.Text[e - 1] == ParagraphMeasurer.PageBreakChar))
+            while (e > i && (IsTrailingSpace(m.Text[e - 1]) || m.Text[e - 1] == ParagraphMeasurer.LineSeparator || ParagraphMeasurer.IsPageOrColumnBreak(m.Text[e - 1])))
             {
                 e--;
             }
@@ -384,7 +390,7 @@ namespace Chuvadi.Layout.Engine.Flow
             string t = m.Text;
             int e = k + 1;
             int decimalAt = -1;
-            while (e < t.Length && t[e] != '\t' && t[e] != ParagraphMeasurer.LineSeparator && t[e] != ParagraphMeasurer.PageBreakChar)
+            while (e < t.Length && t[e] != '\t' && t[e] != ParagraphMeasurer.LineSeparator && !ParagraphMeasurer.IsPageOrColumnBreak(t[e]))
             {
                 if (decimalAt < 0 && (t[e] == '.' || t[e] == ','))
                 {

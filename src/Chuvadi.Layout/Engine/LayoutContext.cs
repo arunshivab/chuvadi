@@ -85,8 +85,14 @@ namespace Chuvadi.Layout.Engine
         /// <summary>Right-to-left text was laid out without bidi.</summary>
         public const string BidiNotSupported = "BidiNotSupported";
 
-        /// <summary>A section has more than one text column; laid out as one column.</summary>
+        /// <summary>
+        /// No longer raised: multi-column sections are laid out in their columns since this version. Kept so code that
+        /// tests for it still compiles.
+        /// </summary>
         public const string MultiColumnNotSupported = "MultiColumnNotSupported";
+
+        /// <summary>A section's columns are narrower than 1 pt, or it has more than 45 columns; they are laid out at 1 pt or 45 columns.</summary>
+        public const string ColumnTooNarrow = "ColumnTooNarrow";
 
         /// <summary>A font was substituted with one that is not metric-compatible; breaks may move.</summary>
         public const string NonMetricFontSubstitution = "NonMetricFontSubstitution";

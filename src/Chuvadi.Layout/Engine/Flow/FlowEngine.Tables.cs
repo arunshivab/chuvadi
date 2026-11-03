@@ -213,9 +213,16 @@ namespace Chuvadi.Layout.Engine.Flow
             double[] widths = new double[gridCount];
             double given = 0;
             int missing = 0;
+            // A table whose file gives no column widths shares the width of the space it is placed in (Q4).
+            double? shared = null;
+            if (tf.GridFromLayoutWidth && table.ColumnWidths.Count > 0)
+            {
+                double total = tf.PreferredWidthPercent is double pc ? areaWidth * pc / 100 : areaWidth - tf.Indent;
+                shared = Math.Max(1, total / table.ColumnWidths.Count);
+            }
             for (int i = 0; i < gridCount; i++)
             {
-                double w = i < table.ColumnWidths.Count ? table.ColumnWidths[i] : 0;
+                double w = i < table.ColumnWidths.Count ? shared ?? table.ColumnWidths[i] : 0;
                 widths[i] = w;
                 given += w;
                 if (w <= 0)
