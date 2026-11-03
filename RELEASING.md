@@ -10,7 +10,7 @@
 |---|---|---|
 | `sheets-v*` | Chuvadi.Sheets | `src/Chuvadi.Sheets/Chuvadi.Sheets.csproj` |
 | `docs-v*` | Chuvadi.Docs **and** Chuvadi.Docs.Conversion, at the same version | `src/Chuvadi.Docs/Chuvadi.Docs.csproj` and `src/Chuvadi.Docs.Conversion/Chuvadi.Docs.Conversion.csproj` |
-| `print-v*` | Chuvadi.Print | `src/Chuvadi.Print/Chuvadi.Print.csproj` |
+| `print-v*` | Chuvadi.Print **and** Chuvadi.Print.Windows, Chuvadi.Print.Ipp and Chuvadi.Print.Remote, at the same version | the four `.csproj` files under `src/Chuvadi.Print*/` |
 | `zip-v*` | Chuvadi.Zip | `src/Chuvadi.Zip/Chuvadi.Zip.csproj` |
 | `markup-v*` | Chuvadi.Markup | `src/Chuvadi.Markup/Chuvadi.Markup.csproj` |
 | `fonts-v*` | Chuvadi.Fonts | `src/Chuvadi.Fonts/Chuvadi.Fonts.csproj` |
@@ -21,8 +21,14 @@
 | `layout-fonts-v*` | Chuvadi.Layout.Fonts | `src/Chuvadi.Layout.Fonts/Chuvadi.Layout.Fonts.csproj` |
 | `layout-markup-v*` | Chuvadi.Layout.Markup | `src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj` |
 
-Chuvadi.Docs.Conversion has no tag of its own: it rides on `docs-v*`. The workflow refuses a
-`docs-v*` tag when the two `<Version>` values differ from the tag version.
+Chuvadi.Docs.Conversion has no tag of its own: it rides on `docs-v*`. Chuvadi.Print.Windows, .Ipp and
+.Remote ride on `print-v*`. The workflow refuses a `docs-v*` or `print-v*` tag when any `<Version>` of the
+packages it releases differs from the tag version.
+
+**Release notes.** The GitHub release body is the `## <version>` section of each released package's
+`src/<package>/CHANGELOG.md` (the heading must start with the exact tag version, for example `## 1.0.0 (date)`),
+not the generated list of every pull request since the previous tag. If no section is found, the body is a one-line
+pointer to the changelog. Write the section before you tag.
 
 A longer prefix is listed before a shorter one that it starts with (`layout-documents-v*`,
 `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*` and `layout-markup-v*` before `layout-v*`), so each tag
@@ -44,7 +50,8 @@ Chuvadi.Layout.Markup reference Chuvadi.Layout (Layout.Markup also Chuvadi.Marku
 6. `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*`, `layout-markup-v*` (any order)
 7. `layout-documents-v*`
 
-(`sheets-v1.7.0` is already released. `print-v*` is not scheduled: Chuvadi.Print is in progress.)
+(`sheets-v1.7.0` is already released. `print-v*` is not scheduled: the Print packages are in progress.
+Chuvadi.Print.Windows, .Ipp and .Remote depend on Chuvadi.Print, and they release with it.)
 Push one tag, wait for its Release workflow to finish green, then push the next. Create each tag
 on a commit whose `release.yml` already knows the prefix: a tag runs the workflow file that exists
 AT the tagged commit.

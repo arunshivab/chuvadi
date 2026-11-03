@@ -21,6 +21,9 @@
     <Project Path="src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj" />
     <Project Path="src/Chuvadi.Markup/Chuvadi.Markup.csproj" />
     <Project Path="src/Chuvadi.Print/Chuvadi.Print.csproj" />
+    <Project Path="src/Chuvadi.Print.Ipp/Chuvadi.Print.Ipp.csproj" />
+    <Project Path="src/Chuvadi.Print.Remote/Chuvadi.Print.Remote.csproj" />
+    <Project Path="src/Chuvadi.Print.Windows/Chuvadi.Print.Windows.csproj" />
     <Project Path="src/Chuvadi.Sheets/Chuvadi.Sheets.csproj" />
     <Project Path="src/Chuvadi.Zip/Chuvadi.Zip.csproj" />
   </Folder>

@@ -3,7 +3,7 @@ name: Release
 # Per-package releases via tag prefix:
 #   git tag -s sheets-v1.1.1 -m "Chuvadi.Sheets 1.1.1" && git push origin sheets-v1.1.1
 #   git tag -s docs-v1.0.0   -m "Chuvadi.Docs 1.0.0"   && git push origin docs-v1.0.0
-#   git tag -s print-v0.1.0  -m "Chuvadi.Print 0.1.0"  && git push origin print-v0.1.0
+#   git tag -s print-v1.0.0  -m "Chuvadi.Print 1.0.0"  && git push origin print-v1.0.0
 #   git tag -s zip-v1.0.0    -m "Chuvadi.Zip 1.0.0"    && git push origin zip-v1.0.0
 #   git tag -s markup-v1.0.0 -m "Chuvadi.Markup 1.0.0" && git push origin markup-v1.0.0
 #   git tag -s fonts-v1.0.0         -m "Chuvadi.Fonts 1.0.0"         && git push origin fonts-v1.0.0
@@ -42,7 +42,7 @@ jobs:
           case "$TAG" in
             sheets-v*) NAME="Chuvadi.Sheets" ;;
             docs-v*)   NAME="Chuvadi.Docs"; PACKAGES="Chuvadi.Docs Chuvadi.Docs.Conversion" ;;
-            print-v*)  NAME="Chuvadi.Print" ;;
+            print-v*)  NAME="Chuvadi.Print"; PACKAGES="Chuvadi.Print Chuvadi.Print.Windows Chuvadi.Print.Ipp Chuvadi.Print.Remote" ;;
             zip-v*)    NAME="Chuvadi.Zip" ;;
             markup-v*) NAME="Chuvadi.Markup" ;;
             fonts-v*)  NAME="Chuvadi.Fonts" ;;
@@ -90,12 +90,12 @@ jobs:
           dotnet run -c Release --no-build --project samples/Chuvadi.Fonts.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
-      - name: Check Docs and Docs.Conversion versions match the tag
-        if: ${{ startsWith(github.ref_name, 'docs-v') }}
+      - name: Check the versions of a multi-package release match the tag
+        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') }}
         shell: bash
         run: |
-          TAGV="${GITHUB_REF_NAME#docs-v}"
-          for p in Chuvadi.Docs Chuvadi.Docs.Conversion; do
+          TAGV="${GITHUB_REF_NAME#*-v}"
+          for p in ${{ steps.pkg.outputs.packages }}; do
             V=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "src/$p/$p.csproj" | head -n 1)
             echo "$p version $V (tag version $TAGV)"
             if [ "$V" != "$TAGV" ]; then echo "::error::$p version $V does not match the tag version $TAGV"; exit 1; fi
@@ -126,11 +126,30 @@ jobs:
             --timestamper http://timestamp.digicert.com
           rm -f signing.pfx
 
+      # Release notes: the CHANGELOG section of each released package (heading "## <version> ...").
+      # Never the generated list of every PR since the previous tag, which mixes all libraries.
+      - name: Release notes from the package CHANGELOG
+        shell: bash
+        run: |
+          TAGV="${GITHUB_REF_NAME#*-v}"
+          : > RELEASE_NOTES.md
+          for p in ${{ steps.pkg.outputs.packages }}; do
+            f="src/$p/CHANGELOG.md"
+            [ -f "$f" ] || continue
+            sec=$(awk -v v="$TAGV" '/^## / { if (found) exit; split(substr($0, 4), a, " "); if (a[1] == v) { found = 1; next } } found { print }' "$f")
+            if [ -n "$sec" ]; then printf '## %s %s\n\n%s\n\n' "$p" "$TAGV" "$sec" >> RELEASE_NOTES.md; fi
+          done
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "${{ steps.pkg.outputs.packages }} $TAGV. See the package CHANGELOG.md for the changes." > RELEASE_NOTES.md
+          fi
+          cat RELEASE_NOTES.md
+
       - name: Create GitHub release with the packages attached
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.nupkg
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
 
       # No nuget.org push for now (D-46): NUGET_API_KEY is not configured until the licence
       # is decided. To enable later, add a step here that pushes dist/*.nupkg, guarded by

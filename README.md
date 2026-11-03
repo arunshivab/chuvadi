@@ -17,7 +17,10 @@
 | **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible substitutes, Gelasio, Selawik) | v0.1.0 (preview) |
 | **[Chuvadi.Layout.Markup](src/Chuvadi.Layout.Markup/README.md)** | Markdown and sanitized HTML (mail, pages) layout through Chuvadi.Markup | v0.1.0 (preview) |
 | **[Chuvadi.Markup](src/Chuvadi.Markup/README.md)** | Markdown (CommonMark + GFM), HTML5 parse/sanitize, CSS, text to HTML | v1.0.0 |
-| **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing: Windows (GDI), IPP, PNG preview, remote hub/agent | v1.0.0-rc.1 (in progress) |
+| **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing core: print settings, job planning, spool envelope, PNG preview | v1.0.0-rc.1 (in progress) |
+| **[Chuvadi.Print.Windows](src/Chuvadi.Print.Windows/README.md)** | Windows printing through the GDI spooler (needs Chuvadi.Print) | v1.0.0-rc.1 (in progress) |
+| **[Chuvadi.Print.Ipp](src/Chuvadi.Print.Ipp/README.md)** | driverless IPP printing, PWG Raster (needs Chuvadi.Print) | v1.0.0-rc.1 (in progress) |
+| **[Chuvadi.Print.Remote](src/Chuvadi.Print.Remote/README.md)** | remote printing: hub and agent (needs Chuvadi.Print) | v1.0.0-rc.1 (in progress) |
 | **[Chuvadi.Zip](src/Chuvadi.Zip/README.md)** | zip (streaming read/write, Zip64, AES-256, zip-slip and bomb limits) | v1.0.0 |
 | [Chuvadi.Pdf](https://github.com/arunshivab/chuvadi-pdf) | pdf | v2.7.0 (separate repo) |
 

@@ -109,6 +109,9 @@ jobs:
           dotnet pack src/Chuvadi.Docs/Chuvadi.Docs.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Docs.Conversion/Chuvadi.Docs.Conversion.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Print/Chuvadi.Print.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Print.Windows/Chuvadi.Print.Windows.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Print.Ipp/Chuvadi.Print.Ipp.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Print.Remote/Chuvadi.Print.Remote.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Zip/Chuvadi.Zip.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Markup/Chuvadi.Markup.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Fonts/Chuvadi.Fonts.csproj -c Release --no-build
@@ -129,6 +132,9 @@ jobs:
             artifacts/bin/Chuvadi.Docs/Release/*.nupkg
             artifacts/bin/Chuvadi.Docs.Conversion/Release/*.nupkg
             artifacts/bin/Chuvadi.Print/Release/*.nupkg
+            artifacts/bin/Chuvadi.Print.Windows/Release/*.nupkg
+            artifacts/bin/Chuvadi.Print.Ipp/Release/*.nupkg
+            artifacts/bin/Chuvadi.Print.Remote/Release/*.nupkg
             artifacts/bin/Chuvadi.Zip/Release/*.nupkg
             artifacts/bin/Chuvadi.Markup/Release/*.nupkg
             artifacts/bin/Chuvadi.Fonts/Release/*.nupkg
