@@ -1,16 +1,18 @@
 # Chuvadi.Print — Baseline Invariants
 
-Invariants the package must always satisfy. Changes to these are deliberate, documented decisions.
+Invariants the packages must always satisfy. Changes to these are deliberate, documented decisions.
 
-- **P01 — Zero dependencies.** `src/Chuvadi.Print` declares no `<PackageReference>` and no
-  `<ProjectReference>`. It does not reference Chuvadi.Pdf: rasterisation is reached through the
+- **P01 — Zero dependencies.** *(Amended 2026-11-03, D-107/D-125: package split.)* `src/Chuvadi.Print` (the
+  core) declares no `<PackageReference>` and no `<ProjectReference>`. `src/Chuvadi.Print.Windows`,
+  `src/Chuvadi.Print.Ipp` and `src/Chuvadi.Print.Remote` declare no `<PackageReference>` and exactly one
+  `<ProjectReference>`, to the core; none references another. The core does not reference Chuvadi.Pdf: rasterisation is reached through the
   `IPageRasterizer` abstraction, and the PDF implementation ships as the separate thin adapter package
-  **Chuvadi.Print.Pdf**. The CI grep over `src/` and `shared/` enforces the no-third-party rule.
+  **Chuvadi.Print.Pdf.Raster**. The CI grep over `src/` and `shared/` enforces the no-third-party rule.
   Print does not use `shared/Chuvadi.Internal`.
-- **P02 — Bottom-up dependencies, no cycles.** Chuvadi.Print.Pdf depends on Chuvadi.Print and
+- **P02 — Bottom-up dependencies, no cycles.** Chuvadi.Print.Pdf.Raster depends on Chuvadi.Print and
   Chuvadi.Pdf; nothing depends back on it.
 - **P03 — PDF is the interchange; Print never rasterises.** Turning PDF into pixels is delegated to an
-  `IPageRasterizer` (Chuvadi.Pdf.Rendering via Chuvadi.Print.Pdf). Print only lays out, plans and
+  `IPageRasterizer` (Chuvadi.Pdf.Rendering via Chuvadi.Print.Pdf.Raster). Print only lays out, plans and
   re-encodes pixels (colour to gray to black-and-white, raster to device bitmap).
 - **P04 — The wire payload is PDF + settings + job metadata**, never pre-rendered bitmaps. The agent
   rasterises. The `SpoolEnvelope` is the canonical carrier; every new format version still reads the
@@ -31,16 +33,19 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   except to loopback or when explicitly allowed. The IPP client (A4) likewise only makes outbound requests
   to printers; an IPP *server*, if a host application needs one, lives outside the library and binds to
   loopback unless deliberately configured otherwise. *(Decision D-26.)*
-- **P08 — Portable core builds and tests on Linux; Windows code is namespace-confined.**
-  *(Amended 2026-10-28, decision D-12.)* `Chuvadi.Print` is a single plain `net10.0` assembly. All
-  Windows-specific code lives in the `Chuvadi.Print.Windows` namespace, is marked
+- **P08 — Portable core builds and tests on Linux; Windows code is package-confined.**
+  *(Amended 2026-11-03, D-107/D-125; before that 2026-10-28, D-12.)* Every Chuvadi.Print package is a plain
+  `net10.0` assembly. All Windows-specific code lives in the **Chuvadi.Print.Windows** package (namespace
+  `Chuvadi.Print.Windows`), is marked
   `[SupportedOSPlatform("windows")]` (so the platform analyzer flags unguarded use) and throws
   `PlatformNotSupportedException` elsewhere. It reaches the spooler and GDI only through P/Invoke to
   operating-system DLLs (`winspool.drv`, `gdi32.dll`); no native binaries ship and no
   `net10.0-windows` target is used. The DEVMODE mapping, paper matching, device geometry and bitmap
   banding are pure code and are unit-tested on Linux; the spooler path is tested on Windows (CI's
   Windows job prints through "Microsoft Print to PDF"; the maintainer verifies on real printers).
-  *Previously:* "confined to the `Chuvadi.Print.Windows` namespace / `net10.0-windows` target".
+  *Previously:* "`Chuvadi.Print` is a single plain `net10.0` assembly; Windows code lives in the
+  `Chuvadi.Print.Windows` namespace" (D-12), and before that "confined to the `Chuvadi.Print.Windows`
+  namespace / `net10.0-windows` target".
 - **P09 — Complete option coverage.** Every settings dimension exposes its full set of choices
   (all paper sizes, all orientations, all duplex modes, all colour modes, all scale modes, all nine
   content alignments, all page-selection styles, both margin references, all three monochrome
@@ -60,8 +65,8 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - **A4** — `Chuvadi.Print.Ipp`: IPP encoder/decoder, `IppClient`, PWG Raster writer/reader,
   `IppPrinterTarget` (rendered pages as PWG Raster) and `IppDocumentTarget` (PDF passthrough via the new
   core `PrintJob.SubmitTo` / `IDocumentTarget`): driverless printing on any OS. (0.4.0)
-- **A5 — Chuvadi.Print.Pdf** — separate package (`staging/Chuvadi.Print.Pdf`, tests in
-  `staging/Chuvadi.Print.Pdf.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering). It consumes the version-pinned Chuvadi.Pdf
+- **A5 — Chuvadi.Print.Pdf.Raster** — separate package (`staging/Chuvadi.Print.Pdf.Raster`, tests in
+  `staging/Chuvadi.Print.Pdf.Raster.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering). It consumes the version-pinned Chuvadi.Pdf
   packages from the local feed through `staging/nuget.config`; it never references a source clone (D-29).
   It stays outside `Chuvadi.slnx` and CI, and outside the `src/` scanned by the pure-BCL check, until
   Chuvadi.Pdf moves into the monorepo or is on nuget.org (D-28). (0.1.0)

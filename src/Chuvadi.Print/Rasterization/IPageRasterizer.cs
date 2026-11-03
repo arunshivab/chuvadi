@@ -5,7 +5,7 @@ namespace Chuvadi.Print
 {
     /// <summary>
     /// Turns document bytes (PDF) into page rasters. Chuvadi.Print never rasterises by itself;
-    /// an implementation is supplied by an adapter package (Chuvadi.Print.Pdf) or by the host.
+    /// an implementation is supplied by an adapter package (Chuvadi.Print.Pdf.Raster) or by the host.
     /// </summary>
     public interface IPageRasterizer
     {

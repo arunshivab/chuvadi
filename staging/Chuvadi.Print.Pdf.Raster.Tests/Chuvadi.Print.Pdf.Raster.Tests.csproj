@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Tests for the Chuvadi.Print.Pdf adapter. Like the adapter, under staging/ and outside Chuvadi.slnx and CI;
+  <!-- Tests for the Chuvadi.Print.Pdf.Raster adapter. Like the adapter, under staging/ and outside Chuvadi.slnx and CI;
        the Chuvadi.Pdf packages come from the local feed in staging/nuget.config (D-29). -->
 
   <PropertyGroup>
@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
-    <ProjectReference Include="..\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj" />
+    <ProjectReference Include="..\Chuvadi.Print.Pdf.Raster\Chuvadi.Print.Pdf.Raster.csproj" />
     <ProjectReference Include="..\..\samples\Chuvadi.Print.ManualTests\Chuvadi.Print.ManualTests.csproj" />
   </ItemGroup>
 

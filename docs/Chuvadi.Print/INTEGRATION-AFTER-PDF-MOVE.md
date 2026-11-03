@@ -1,12 +1,12 @@
-# Chuvadi.Print.Pdf — changes once Chuvadi.Pdf joins the monorepo (D-28, D-29)
+# Chuvadi.Print.Pdf.Raster — changes once Chuvadi.Pdf joins the monorepo (D-28, D-29)
 
 This file is for the integrator who moves chuvadi-pdf into the monorepo.
 
 ## Today
 
-Chuvadi.Print.Pdf and its tests live in `staging/`:
-- `staging/Chuvadi.Print.Pdf`
-- `staging/Chuvadi.Print.Pdf.Tests`
+Chuvadi.Print.Pdf.Raster and its tests live in `staging/`:
+- `staging/Chuvadi.Print.Pdf.Raster`
+- `staging/Chuvadi.Print.Pdf.Raster.Tests`
 
 They stay outside `Chuvadi.slnx` and CI for now. They consume version-pinned `PackageReference`s to the
 Chuvadi.Pdf packages:
@@ -36,8 +36,8 @@ with their current names. If they land elsewhere, only the two `ProjectReference
 ### 1.1 Moves (Print chat, one PR, right after the move)
 
 ```powershell
-git mv staging/Chuvadi.Print.Pdf src/Chuvadi.Print.Pdf
-git mv staging/Chuvadi.Print.Pdf.Tests tests/Chuvadi.Print.Pdf.Tests
+git mv staging/Chuvadi.Print.Pdf.Raster src/Chuvadi.Print.Pdf.Raster
+git mv staging/Chuvadi.Print.Pdf.Raster.Tests tests/Chuvadi.Print.Pdf.Raster.Tests
 git rm staging/nuget.config staging/README.md
 ```
 
@@ -45,36 +45,36 @@ git rm staging/nuget.config staging/README.md
 
 Add to the `/src/` folder, after `src/Chuvadi.Print/Chuvadi.Print.csproj`:
 ```xml
-    <Project Path="src/Chuvadi.Print.Pdf/Chuvadi.Print.Pdf.csproj" />
+    <Project Path="src/Chuvadi.Print.Pdf.Raster/Chuvadi.Print.Pdf.Raster.csproj" />
 ```
 Add to the `/tests/` folder, after `tests/Chuvadi.Print.Tests/Chuvadi.Print.Tests.csproj`:
 ```xml
-    <Project Path="tests/Chuvadi.Print.Pdf.Tests/Chuvadi.Print.Pdf.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Print.Pdf.Raster.Tests/Chuvadi.Print.Pdf.Raster.Tests.csproj" />
 ```
 
 ### 1.3 `.github/workflows/ci.yml` (shared)
 
 After the step "Unit tests — Chuvadi.Print (xUnit)":
 ```yaml
-      - name: Unit tests — Chuvadi.Print.Pdf (xUnit)
-        run: dotnet test tests/Chuvadi.Print.Pdf.Tests -c Release --no-build --logger "trx;LogFileName=print-pdf.trx"
+      - name: Unit tests — Chuvadi.Print.Pdf.Raster (xUnit)
+        run: dotnet test tests/Chuvadi.Print.Pdf.Raster.Tests -c Release --no-build --logger "trx;LogFileName=print-pdf-raster.trx"
 ```
 In "Pack packages", after the `Chuvadi.Print` line:
 ```yaml
-          dotnet pack src/Chuvadi.Print.Pdf/Chuvadi.Print.Pdf.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Print.Pdf.Raster/Chuvadi.Print.Pdf.Raster.csproj -c Release --no-build
 ```
 In "Upload package artifacts" `path:`, add:
 ```yaml
-            artifacts/bin/Chuvadi.Print.Pdf/Release/*.nupkg
+            artifacts/bin/Chuvadi.Print.Pdf.Raster/Release/*.nupkg
 ```
 The pure-BCL grep needs no change in end state A, because only ProjectReferences remain.
 
-### 1.4 `src/Chuvadi.Print.Pdf/Chuvadi.Print.Pdf.csproj` (Print-owned, whole file)
+### 1.4 `src/Chuvadi.Print.Pdf.Raster/Chuvadi.Print.Pdf.Raster.csproj` (Print-owned, whole file)
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Chuvadi.Print.Pdf: the adapter between Chuvadi.Print and Chuvadi.Pdf (BASELINE P01/P02, decisions D-14, D-28, D-29).
+  <!-- Chuvadi.Print.Pdf.Raster: the adapter between Chuvadi.Print and Chuvadi.Pdf (BASELINE P01/P02, decisions D-14, D-28, D-29).
        First-party ProjectReferences only; no PackageReference (P01). -->
 
   <PropertyGroup>
@@ -82,11 +82,11 @@ The pure-BCL grep needs no change in end state A, because only ProjectReferences
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>Chuvadi.Print.Pdf</RootNamespace>
-    <AssemblyName>Chuvadi.Print.Pdf</AssemblyName>
+    <RootNamespace>Chuvadi.Print.Pdf.Raster</RootNamespace>
+    <AssemblyName>Chuvadi.Print.Pdf.Raster</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Product>Chuvadi.Print.Pdf</Product>
+    <Product>Chuvadi.Print.Pdf.Raster</Product>
     <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
@@ -106,15 +106,15 @@ The pure-BCL grep needs no change in end state A, because only ProjectReferences
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Chuvadi.Print.Pdf.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Print.Pdf.Raster.Tests" />
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
 ```
-In `tests/Chuvadi.Print.Pdf.Tests/Chuvadi.Print.Pdf.Tests.csproj`, the ProjectReference paths become:
+In `tests/Chuvadi.Print.Pdf.Raster.Tests/Chuvadi.Print.Pdf.Raster.Tests.csproj`, the ProjectReference paths become:
 - `..\..\src\Chuvadi.Print\Chuvadi.Print.csproj`
-- `..\..\src\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj`
+- `..\..\src\Chuvadi.Print.Pdf.Raster\Chuvadi.Print.Pdf.Raster.csproj`
 - `..\..\samples\Chuvadi.Print.ManualTests\Chuvadi.Print.ManualTests.csproj`
 
 These are the same relative depth as today. Also drop its header comment about `staging/`.
@@ -129,7 +129,7 @@ those rules.
 to them and imports the root one. Do not merge them into the root file.
 
 Each Chuvadi.Pdf project also needs its real `Version` in the monorepo. chuvadi-pdf sets one only when the
-build passes it, and otherwise defaults to 0.1.0. Without real versions, `dotnet pack` of Chuvadi.Print.Pdf
+build passes it, and otherwise defaults to 0.1.0. Without real versions, `dotnet pack` of Chuvadi.Print.Pdf.Raster
 writes dependencies on Chuvadi.Pdf.Rendering / Operations 0.1.0.
 
 ---
@@ -160,33 +160,33 @@ writes dependencies on Chuvadi.Pdf.Rendering / Operations 0.1.0.
 
 ## 3. `.github/workflows/release.yml` (shared, both end states)
 
-- **Trigger** (`on.push.tags`): add `"print-pdf-v*"`:
+- **Trigger** (`on.push.tags`): add `"print-pdf-raster-v*"`:
   ```yaml
-      tags: ["sheets-v*", "docs-v*", "print-v*", "print-pdf-v*"]
+      tags: ["sheets-v*", "docs-v*", "print-v*", "print-pdf-raster-v*"]
   ```
 - **Tag prefix**: in "Resolve package from tag prefix", add this line before the `print-v*` line.
-  `print-v*` does not match `print-pdf-v…`, but listing the longer prefix first keeps it clear.
+  `print-v*` does not match `print-pdf-raster-v…`, but listing the longer prefix first keeps it clear.
   ```bash
-            print-pdf-v*) NAME="Chuvadi.Print.Pdf" ;;
+            print-pdf-raster-v*) NAME="Chuvadi.Print.Pdf.Raster" ;;
   ```
 - **Build + test**: in "Build + test everything", after the `Chuvadi.Print.Tests` line:
   ```bash
-          dotnet test tests/Chuvadi.Print.Pdf.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Print.Pdf.Raster.Tests -c Release --no-build
   ```
 - **Pack**: the existing line (`src/<name>/<name>.csproj`) works unchanged.
-- **Tag**: `git tag -s print-pdf-v1.0.0 -m "Chuvadi.Print.Pdf 1.0.0"`.
+- **Tag**: `git tag -s print-pdf-raster-v1.0.0 -m "Chuvadi.Print.Pdf.Raster 1.0.0"`.
 
 ## 4. Root `README.md` (shared)
 
 The package table (Package | Formats | Status) has no Print rows yet:
 ```markdown
 | **[Chuvadi.Print](src/Chuvadi.Print/README.md)** | printing: Windows (GDI), IPP, PNG preview, remote hub/agent | v1.0.0 |
-| **[Chuvadi.Print.Pdf](src/Chuvadi.Print.Pdf/README.md)** | PDF rendering for Chuvadi.Print (over Chuvadi.Pdf) | v1.0.0 |
+| **[Chuvadi.Print.Pdf.Raster](src/Chuvadi.Print.Pdf.Raster/README.md)** | PDF rendering for Chuvadi.Print (over Chuvadi.Pdf) | v1.0.0 |
 ```
 The Print row can go in as soon as `print-v1.0.0` is tagged. Use the versions actually released.
 
 ## 5. Print-owned follow-ups (Print chat, with 1.1)
 
-- **Docs:** update `BASELINE.md` (the A5 line), `GUIDE.md` §5 and §8, the Chuvadi.Print.Pdf README ("Building"),
+- **Docs:** update `BASELINE.md` (the A5 line), `GUIDE.md` §5 and §8, the Chuvadi.Print.Pdf.Raster README ("Building"),
   `PRINTING-REPORTS.md` (the test path) and `WINDOWS-VERIFICATION.md` (step 2 and the `staging/` paths).
-- **Gate:** build `Chuvadi.slnx` and run all suites, including `tests/Chuvadi.Print.Pdf.Tests` (16 tests).
+- **Gate:** build `Chuvadi.slnx` and run all suites, including `tests/Chuvadi.Print.Pdf.Raster.Tests` (16 tests).

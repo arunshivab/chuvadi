@@ -5,7 +5,7 @@ using Chuvadi.Pdf.Documents;
 using Chuvadi.Pdf.Graphics;
 using Chuvadi.Pdf.Rendering;
 
-namespace Chuvadi.Print.Pdf
+namespace Chuvadi.Print.Pdf.Raster
 {
     /// <summary>
     /// The <see cref="IPageRasterizer"/> for PDF documents, backed by the Chuvadi PDF renderer

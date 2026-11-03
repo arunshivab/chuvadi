@@ -1,7 +1,7 @@
 using System;
 using Chuvadi.Pdf.Graphics;
 
-namespace Chuvadi.Print.Pdf
+namespace Chuvadi.Print.Pdf.Raster
 {
     /// <summary>Copies a Chuvadi.Pdf <see cref="PixelBuffer"/> (BGRA, top-down) into a <see cref="RasterPage"/>.</summary>
     internal static class PixelCopy

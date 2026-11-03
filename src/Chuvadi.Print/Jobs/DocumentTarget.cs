@@ -5,7 +5,7 @@ namespace Chuvadi.Print
 {
     /// <summary>
     /// A destination that takes the document itself (PDF) plus its settings and lays it out on its own:
-    /// an IPP printer that accepts PDF (<see cref="Ipp.IppDocumentTarget"/>), a print agent, an archive.
+    /// an IPP printer that accepts PDF (IppDocumentTarget in Chuvadi.Print.Ipp), a print agent, an archive.
     /// Used with <see cref="PrintJob.SubmitTo"/>; nothing is rasterised.
     /// </summary>
     public interface IDocumentTarget

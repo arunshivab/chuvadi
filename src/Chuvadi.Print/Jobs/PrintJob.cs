@@ -550,7 +550,7 @@ namespace Chuvadi.Print
         private static IPageRasterizer RequireRasterizer(PrintJobOptions options)
             => options.Rasterizer ?? throw new InvalidOperationException(
                 "No rasteriser is configured. Set PrintJob.Options.Rasterizer or call WithRasterizer(...) " +
-                "(for PDF documents, use the Chuvadi.Print.Pdf adapter).");
+                "(for PDF documents, use the Chuvadi.Print.Pdf.Raster adapter).");
 
         private static void TryAbort(IPrintTarget target, Exception? reason)
         {

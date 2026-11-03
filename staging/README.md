@@ -4,7 +4,7 @@ Projects that are ready but cannot join `Chuvadi.slnx` and CI yet.
 
 | Project | Waiting for |
 |---|---|
-| `Chuvadi.Print.Pdf` (+ `Chuvadi.Print.Pdf.Tests`) | Chuvadi.Pdf moving into the monorepo, or Chuvadi.Pdf on nuget.org (D-28, D-29) |
+| `Chuvadi.Print.Pdf.Raster` (+ `Chuvadi.Print.Pdf.Raster.Tests`) | Chuvadi.Pdf moving into the monorepo, or Chuvadi.Pdf on nuget.org (D-28, D-29) |
 | `src/Chuvadi.Layout.Pdf` (+ `tests/Chuvadi.Layout.Pdf.Tests`) | Chuvadi.Pdf moving into the monorepo (Layout D-42, end state A) |
 | `tests/Chuvadi.Layout.Acceptance.Tests`, `samples/Chuvadi.Layout.Acceptance` | the same (corpus acceptance harness and its tests) |
 | `samples/Chuvadi.Layout.Viewer` | the same (reference viewer: per-page SVG/PNG, index.html) |
@@ -24,7 +24,7 @@ To build: pack chuvadi-pdf into the feed first. In the chuvadi-pdf clone, run
 `-OutputDir` at the feed: `pack.ps1` deletes its output folder first. Then:
 
 ```powershell
-dotnet test staging/Chuvadi.Print.Pdf.Tests -c Release
+dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
 ```
 
 Layout's staged projects pin Chuvadi.Pdf 3.30.2 in `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props` and carry their own

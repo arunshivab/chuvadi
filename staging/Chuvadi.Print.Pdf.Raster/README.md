@@ -1,4 +1,4 @@
-# Chuvadi.Print.Pdf
+# Chuvadi.Print.Pdf.Raster
 
 Connects [Chuvadi.Print](../Chuvadi.Print/README.md) to the Chuvadi PDF library
 ([chuvadi-pdf](https://github.com/arunshivab/chuvadi-pdf)). Pure managed code, no third-party packages.
@@ -10,7 +10,7 @@ Connects [Chuvadi.Print](../Chuvadi.Print/README.md) to the Chuvadi PDF library
 
 ```csharp
 using Chuvadi.Print;
-using Chuvadi.Print.Pdf;
+using Chuvadi.Print.Pdf.Raster;
 using Chuvadi.Print.Windows;
 
 var job = new PrintJob("discharge-summary.pdf")
@@ -33,8 +33,8 @@ source clone.
 .\build\pack.ps1 -Version 3.22.1
 Copy-Item artifacts\nupkg\*.nupkg C:\src\local-nuget
 # in the monorepo:
-dotnet test staging/Chuvadi.Print.Pdf.Tests -c Release
-dotnet pack staging/Chuvadi.Print.Pdf -c Release -o C:\src\local-nuget
+dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
+dotnet pack staging/Chuvadi.Print.Pdf.Raster -c Release -o C:\src\local-nuget
 ```
 The package depends on Chuvadi.Print and on Chuvadi.Pdf.Rendering / Chuvadi.Pdf.Operations at
 `ChuvadiPdfVersion`. To move to a newer Chuvadi.Pdf, pack it into the feed and change `ChuvadiPdfVersion`.
