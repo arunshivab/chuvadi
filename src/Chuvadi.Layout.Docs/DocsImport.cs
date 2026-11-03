@@ -82,7 +82,7 @@ namespace Chuvadi.Layout.Docs
                 _ct.ThrowIfCancellationRequested();
                 FlowSection target = flow.Sections[Math.Min(si, flow.Sections.Count - 1)];
                 _page = target.Page;
-                if (Block(block, null, 1, target.Page.ContentWidth) is FlowBlock fb)
+                if (Block(block, null, 1, FirstColumnWidth(target)) is FlowBlock fb)
                 {
                     target.Blocks.Add(fb);
                 }
@@ -93,6 +93,21 @@ namespace Chuvadi.Layout.Docs
             }
             AppendEndnotes(flow);
             return flow;
+        }
+
+        /// <summary>
+        /// The width body content is read at: the section's column (its first column when the columns are unequal;
+        /// tables without column widths are then sized again in the column they are placed in).
+        /// </summary>
+        private static double FirstColumnWidth(FlowSection s)
+        {
+            double width = s.Page.ContentWidth;
+            if (s.ColumnWidths.Count > 0)
+            {
+                return Math.Max(1, s.ColumnWidths[0].Width);
+            }
+            int n = Math.Max(1, s.ColumnCount);
+            return n == 1 ? width : Math.Max(1, (width - (Math.Max(0, s.ColumnSpacing) * (n - 1))) / n);
         }
 
         private void Warn(string code, LayoutWarningSeverity severity, string message, string? location = null)
@@ -151,6 +166,7 @@ namespace Chuvadi.Layout.Docs
                 MirrorMargins = _doc.MirrorMargins,
             };
             string where = "section " + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // ECMA-376 17.6.4: with w:equalWidth="0" the w:col elements give each column's width and the space after it.
             FlowSection fs = new FlowSection
             {
                 Page = page,
@@ -163,9 +179,18 @@ namespace Chuvadi.Layout.Docs
                     _ => SectionStart.NextPage,
                 },
                 ColumnCount = s.Columns.EqualWidth == false && s.Columns.Columns.Count > 0 ? s.Columns.Columns.Count : Math.Max(1, s.Columns.Count ?? 1),
+                ColumnSpacing = s.Columns.SpacingPt is double sp && sp >= 0 ? sp : 36,
+                ColumnSeparator = s.Columns.Separator == true,
                 PageNumberStart = s.PageNumbering.Start,
                 PageNumberFormat = PageFormat(s.PageNumbering.Format),
             };
+            if (s.Columns.EqualWidth == false && s.Columns.Columns.Count > 0)
+            {
+                foreach (D.ColumnDefinition c in s.Columns.Columns)
+                {
+                    fs.ColumnWidths.Add(new FlowColumn(c.WidthPt, c.SpaceAfterPt));
+                }
+            }
             if (s.PageNumbering.ChapterStyle is not null)
             {
                 Warn(LayoutWarningCodes.UnsupportedFeature, LayoutWarningSeverity.Fidelity, "Chapter numbers in page numbers are not shown.", where);

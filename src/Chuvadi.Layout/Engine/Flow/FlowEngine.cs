@@ -55,6 +55,14 @@ namespace Chuvadi.Layout.Engine.Flow
         public required string Path { get; init; }
     }
 
+    /// <summary>The line between two columns (w:cols/@w:sep).</summary>
+    internal sealed class PlacedColumnRule : PlanItem
+    {
+        public required double X { get; init; }
+        public required double Top { get; init; }
+        public required double Bottom { get; init; }
+    }
+
     /// <summary>A floating image placed on a page.</summary>
     internal sealed class PlacedFloatingImage : PlanItem
     {
@@ -82,6 +90,9 @@ namespace Chuvadi.Layout.Engine.Flow
 
         /// <summary>Footnotes whose references are on the page, in reference order.</summary>
         public List<FlowNote> Footnotes { get; } = new List<FlowNote>();
+
+        /// <summary>For each entry of <see cref="Footnotes"/>: the column its reference is in; null in a one-column section (the text area).</summary>
+        public List<(double Left, double Width)?> FootnoteAreas { get; } = new List<(double, double)?>();
 
         /// <summary>Bottom of the body area before footnotes took their room (the footnotes end here).</summary>
         public double FootnoteBottom { get; set; }
@@ -120,11 +131,6 @@ namespace Chuvadi.Layout.Engine.Flow
             for (int s = 0; s < doc.Sections.Count; s++)
             {
                 _sectionBlockOffset[s + 1] = _sectionBlockOffset[s] + doc.Sections[s].Blocks.Count;
-                if (doc.Sections[s].ColumnCount > 1)
-                {
-                    ctx.Warn(LayoutWarningCodes.MultiColumnNotSupported, LayoutWarningSeverity.Fidelity,
-                        $"Section {s + 1} has {doc.Sections[s].ColumnCount} columns; it is laid out as one column.", $"section {s + 1}");
-                }
             }
             _totalBlocks = _sectionBlockOffset[doc.Sections.Count];
             if (doc.Sections.Count == 0)

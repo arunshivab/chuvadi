@@ -101,6 +101,7 @@ namespace Chuvadi.Layout.ManualTests
             yield return ("table-showcase", () => DocumentLayout.Open(TableShowcase(), Options()));
             yield return ("wrap-showcase", () => DocumentLayout.Open(WrapShowcase(), Options()));
             yield return ("nested-split", () => DocumentLayout.Open(NestedSplitShowcase(), Options()));
+            yield return ("columns-showcase", () => DocumentLayout.Open(ColumnsShowcase(), Options()));
             yield return ("xlsx-import", () => Chuvadi.Layout.Sheets.SheetsLayout.Open(new System.IO.MemoryStream(XlsxShowcase()), null, XlsxOptions()));
             yield return ("docx-import", () => Chuvadi.Layout.Docs.DocsLayout.Open(new System.IO.MemoryStream(DocxShowcase()), null, DocxOptions()));
         }

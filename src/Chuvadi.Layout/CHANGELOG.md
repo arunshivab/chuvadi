@@ -2,6 +2,37 @@
 
 ## 0.1.0 (unreleased)
 
+Newspaper columns (d22; plan claude/layout-columns-floating-tables-plan.md, decisions Q1 to Q4 of 3 Nov 2026):
+
+- Multi-column sections are laid out in their columns (they were laid out as one column with
+  `MultiColumnNotSupported`, which is no longer raised; the constant stays). From the file (ECMA-376 17.6.4): equal
+  columns (`FlowSection.ColumnCount`, new `ColumnSpacing`, 36 pt when not stated), unequal columns (new
+  `ColumnWidths` of `FlowColumn(Width, SpaceAfter)`), the line in the middle of each gap (new `ColumnSeparator`),
+  column breaks (`BreakKind.Column`: the next column, the next page after the last one; a page break in one column as
+  before) and sections that start in the next column (`SectionStart.NextColumn`).
+- Where the standard is silent, Layout follows Word 2021, measured with calib-columns.docx (Q2):
+  - the columns of a section that ends at a continuous section break are balanced (new `BalanceColumns`, default
+    true): the region gets the smallest height at which its content still fits; a section ending at a next-page break
+    is not balanced;
+  - the separator is 0.75 pt black, from the top of the columns to the bottom of the longest column, and not drawn
+    before an empty column;
+  - after a column break the paragraph mark goes to the next column as an empty line (after a page break it stays,
+    as before);
+  - space before is kept at the top of a column reached by a column break and suppressed when reached by flow, as at
+    the top of a page;
+  - a footnote is drawn in the column of its reference, at that column's width; the note area shortens every column;
+  - an object positioned relative to the column (`HorizontalAnchor.Column`) uses the column the anchor paragraph is
+    in (it used the margins, the same thing in one column).
+- A continuous section break with a different column set starts a new region below the previous one on the same page.
+  A paragraph split between columns continues from the character where it stopped, so columns of different widths
+  rebreak it.
+- New `TableFormat.GridFromLayoutWidth` and `PreferredWidthPercent` (Q4): a table whose file gives no column widths
+  takes its grid from the width of the column it is placed in.
+- New warning `ColumnTooNarrow` (Fidelity): columns narrower than 1 pt are laid out 1 pt wide; more than 45 columns
+  (the schema maximum) are cut to 45.
+- Output: of the 88 corpus and fixture documents only d22 changes (it now passes against LibreOffice, and matches
+  Word within 0.1 pt). One-column documents are unchanged.
+
 Chuvadi.Pdf 3.30.2 in staging:
 
 - `ChuvadiPdfVersion` 3.30.2 (was 3.30.1; 3.30.2 fixes SVG text positions and CFF widths in the PDF reader). No source

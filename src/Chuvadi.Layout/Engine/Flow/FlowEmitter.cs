@@ -47,6 +47,9 @@ namespace Chuvadi.Layout.Engine.Flow
                     case PlacedTablePart table:
                         engine.EmitTablePart(table, ops, boxes, text, ct);
                         break;
+                    case PlacedColumnRule rule:
+                        ops.Add(new StrokeLineOp(rule.X, rule.Top, rule.X, rule.Bottom, FlowEngine.ColumnSeparatorWidth, LayoutColor.Black));
+                        break;
                 }
             }
 
@@ -287,7 +290,7 @@ namespace Chuvadi.Layout.Engine.Flow
             for (int k = a; k < b; k++)
             {
                 char c = t[k];
-                if (c == '\u00AD' || c == ParagraphMeasurer.LineSeparator || c == ParagraphMeasurer.PageBreakChar)
+                if (c == '\u00AD' || c == ParagraphMeasurer.LineSeparator || ParagraphMeasurer.IsPageOrColumnBreak(c))
                 {
                     continue;
                 }

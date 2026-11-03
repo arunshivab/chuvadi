@@ -497,12 +497,12 @@ public class FlowSectionTests
     }
 
     [Fact]
-    public void Multi_column_sections_warn()
+    public void Multi_column_sections_no_longer_warn()
     {
         FlowDocument d = Flow.Doc(Flow.P("cols"));
         d.Sections[0].ColumnCount = 2;
         using LaidOutDocument doc = DocumentLayout.Open(d, Flow.Options());
-        Assert.Contains(doc.Warnings, w => w.Code == "MultiColumnNotSupported");
+        Assert.DoesNotContain(doc.Warnings, w => w.Code == "MultiColumnNotSupported");
     }
 
     [Fact]

@@ -39,6 +39,10 @@ namespace Chuvadi.Layout.ManualTests
             {
                 yield return a;
             }
+            foreach (Action a in ColumnGroups())
+            {
+                yield return a;
+            }
         }
     }
 }

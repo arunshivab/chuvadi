@@ -80,6 +80,176 @@ namespace Chuvadi.Layout.Engine.Flow
             }
         }
 
+        /// <summary>Why a column stopped taking content.</summary>
+        private enum ColumnEnd
+        {
+            /// <summary>The column is full (or a keep rule moved content on): the next column, or the next page.</summary>
+            Full,
+
+            /// <summary>A column break: the next column, or the next page after the last column.</summary>
+            ColumnBreak,
+
+            /// <summary>A page break (or page-break-before): the next page.</summary>
+            PageBreak,
+
+            /// <summary>The next section starts on a new page.</summary>
+            SectionBreak,
+
+            /// <summary>The next section starts in the next column (w:type="nextColumn").</summary>
+            NextColumnSection,
+
+            /// <summary>The next section starts with a continuous break and a different column set: a new region below.</summary>
+            ContinuousSection,
+
+            /// <summary>The end of the document.</summary>
+            Finished,
+
+            /// <summary>Region only: every column of the region is used; the page ends.</summary>
+            Overflow,
+        }
+
+        /// <summary>Mutable state of the page being laid out, shared by its regions and columns.</summary>
+        private sealed class PageFill
+        {
+            public required PagePlan Plan { get; init; }
+            public required List<(double Top, double Bottom)> Bands { get; init; }
+            public required List<WrapExclusion> Exclusions { get; init; }
+            public required HashSet<AnchoredObjectInline> Seeded { get; init; }
+            public required List<Preseed> Late { get; init; }
+            public required HashSet<AnchoredObjectInline> Reached { get; init; }
+            public required PageRecord Record { get; init; }
+            public required PageGeometry PageGeom { get; init; }
+            public required double BodyTop { get; init; }
+
+            /// <summary>Bottom of the body; footnotes placed on the page raise it.</summary>
+            public double BodyBottom { get; set; }
+
+            /// <summary>Nothing has been placed on the page yet.</summary>
+            public bool FirstOnPage { get; set; } = true;
+
+            /// <summary>A copy for a trial layout (column balancing): later changes to either do not affect the other.</summary>
+            public PageFill Clone()
+            {
+                PagePlan p = new PagePlan { Section = Plan.Section, Geometry = Plan.Geometry, FootnoteBottom = Plan.FootnoteBottom };
+                p.Items.AddRange(Plan.Items);
+                p.Footnotes.AddRange(Plan.Footnotes);
+                p.FootnoteAreas.AddRange(Plan.FootnoteAreas);
+                return new PageFill
+                {
+                    Plan = p,
+                    Bands = new List<(double, double)>(Bands),
+                    Exclusions = new List<WrapExclusion>(Exclusions),
+                    Seeded = new HashSet<AnchoredObjectInline>(Seeded, ReferenceEqualityComparer.Instance),
+                    Late = new List<Preseed>(Late),
+                    Reached = new HashSet<AnchoredObjectInline>(Reached, ReferenceEqualityComparer.Instance),
+                    Record = Record,
+                    PageGeom = PageGeom,
+                    BodyTop = BodyTop,
+                    BodyBottom = BodyBottom,
+                    FirstOnPage = FirstOnPage,
+                };
+            }
+        }
+
+        /// <summary>The end of one column: why, where the flow continues, and how far down it reached.</summary>
+        /// <param name="End">Why the column ended.</param>
+        /// <param name="Next">Where the flow continues.</param>
+        /// <param name="Y">The flow position after the column's content (space after included).</param>
+        /// <param name="ContentBottom">Bottom of the last line or table placed in the column.</param>
+        /// <param name="Placed">Anything was placed in the column.</param>
+        private readonly record struct ColumnResult(ColumnEnd End, FlowPosition Next, double Y, double ContentBottom, bool Placed);
+
+        /// <summary>The end of one region (a set of columns between a top and a bottom).</summary>
+        private sealed record RegionResult(ColumnEnd End, FlowPosition Next, PageStartReason NextReason, double Y, double[] ContentBottoms, bool[] Placed, int ColumnsUsed);
+
+        /// <summary>Most columns a section can have (the schema allows at most 45 w:col elements).</summary>
+        internal const int MaxColumns = 45;
+
+        /// <summary>Width of the line between columns (Word draws about 0.75 pt).</summary>
+        internal const double ColumnSeparatorWidth = 0.75;
+
+        /// <summary>The columns of a section on a page, in absolute page coordinates (one entry for a one-column section).</summary>
+        internal List<(double Left, double Width)> ColumnsOf(FlowSection s, int sectionIndex, int pageNumber)
+        {
+            (double left, double width) = TextArea(s.Page, pageNumber);
+            List<(double Left, double Width)> cols = new List<(double, double)>();
+            string where = "section " + (sectionIndex + 1).ToString(CultureInfo.InvariantCulture);
+            if (s.ColumnWidths.Count > 0)
+            {
+                double x = left;
+                int n = Math.Min(s.ColumnWidths.Count, MaxColumns);
+                if (s.ColumnWidths.Count > MaxColumns)
+                {
+                    _ctx.Warn(LayoutWarningCodes.ColumnTooNarrow, LayoutWarningSeverity.Fidelity,
+                        $"Section {sectionIndex + 1} has {s.ColumnWidths.Count} columns; the first {MaxColumns} are laid out.", where);
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    FlowColumn c = s.ColumnWidths[i];
+                    double w = c.Width;
+                    if (!(w >= 1))
+                    {
+                        _ctx.Warn(LayoutWarningCodes.ColumnTooNarrow, LayoutWarningSeverity.Fidelity,
+                            $"Column {i + 1} of section {sectionIndex + 1} is narrower than 1 pt; it is laid out 1 pt wide.", where);
+                        w = 1;
+                    }
+                    cols.Add((x, w));
+                    x += w + (c.SpaceAfter > 0 ? c.SpaceAfter : 0);
+                }
+                return cols;
+            }
+            int count = Math.Max(1, s.ColumnCount);
+            if (count == 1)
+            {
+                cols.Add((left, width));
+                return cols;
+            }
+            if (count > MaxColumns)
+            {
+                _ctx.Warn(LayoutWarningCodes.ColumnTooNarrow, LayoutWarningSeverity.Fidelity,
+                    $"Section {sectionIndex + 1} has {count} columns; {MaxColumns} are laid out.", where);
+                count = MaxColumns;
+            }
+            double gap = s.ColumnSpacing > 0 ? s.ColumnSpacing : 0;
+            double cw = (width - (gap * (count - 1))) / count;
+            if (!(cw >= 1))
+            {
+                _ctx.Warn(LayoutWarningCodes.ColumnTooNarrow, LayoutWarningSeverity.Fidelity,
+                    $"The {count} columns of section {sectionIndex + 1} are narrower than 1 pt; they are laid out 1 pt wide.", where);
+                cw = 1;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                cols.Add((left + (i * (cw + gap)), cw));
+            }
+            return cols;
+        }
+
+        /// <summary>The column set of a section is the same as another's (a next-column section then stays in the region).</summary>
+        private bool SameColumns(FlowSection a, int ai, FlowSection b, int bi, int pageNumber)
+        {
+            List<(double Left, double Width)> x = ColumnsOf(a, ai, pageNumber);
+            List<(double Left, double Width)> y = ColumnsOf(b, bi, pageNumber);
+            if (x.Count != y.Count)
+            {
+                return false;
+            }
+            for (int i = 0; i < x.Count; i++)
+            {
+                if (Math.Abs(x[i].Left - y[i].Left) > Epsilon || Math.Abs(x[i].Width - y[i].Width) > Epsilon)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Lays out one page: a stack of regions. A region is one column set from a top down to the foot of the body;
+        /// text fills its columns left to right, then the page ends. A continuous section break with a different column
+        /// set ends the region and starts a new one below it. A region ended that way is balanced first (Word's rule;
+        /// the standard is silent): it gets the smallest height at which its content still fits its columns.
+        /// </summary>
         private PagePlan PaginateOnce(PageRecord record, CancellationToken ct, List<Preseed>? preseed, out List<Preseed> late, out HashSet<AnchoredObjectInline> reached)
         {
             late = new List<Preseed>();
@@ -92,24 +262,31 @@ namespace Chuvadi.Layout.Engine.Flow
             plan.Geometry = pageGeom;
             (double bodyTop, double bodyBottom) = BodyArea(record, pageGeom);
             plan.FootnoteBottom = bodyBottom;
-            double y = bodyTop;
-            bool first = true;
-            PageStartReason reason = record.Reason;
-            FlowParagraph? previousParagraph = null;
-            // Vertical bands that text must avoid (top-and-bottom wrapping) and objects text flows beside.
-            List<(double Top, double Bottom)> bands = new List<(double, double)>();
-            List<WrapExclusion> exclusions = new List<WrapExclusion>();
-            HashSet<AnchoredObjectInline> seeded = new HashSet<AnchoredObjectInline>(ReferenceEqualityComparer.Instance);
+            PageFill f = new PageFill
+            {
+                Plan = plan,
+                Bands = new List<(double, double)>(),
+                Exclusions = new List<WrapExclusion>(),
+                Seeded = new HashSet<AnchoredObjectInline>(ReferenceEqualityComparer.Instance),
+                Late = late,
+                Reached = reached,
+                Record = record,
+                PageGeom = pageGeom,
+                BodyTop = bodyTop,
+                BodyBottom = bodyBottom,
+            };
             if (preseed is not null)
             {
                 foreach (Preseed ps in preseed)
                 {
-                    seeded.Add(ps.Anchor);
+                    f.Seeded.Add(ps.Anchor);
                     plan.Items.Add(Placed(ps.Anchor, ps.Rect, false, ps.Path));
-                    AddWrap(ps.Anchor, ps.Rect, bands, exclusions, ps.Path);
+                    AddWrap(ps.Anchor, ps.Rect, f.Bands, f.Exclusions, ps.Path);
                 }
             }
 
+            double top = bodyTop;
+            PageStartReason reason = record.Reason;
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
@@ -119,47 +296,226 @@ namespace Chuvadi.Layout.Engine.Flow
                     plan.End = pos;
                     return plan;
                 }
+                int si = pos.Section;
+                FlowSection section = _doc.Sections[si];
+                List<(double Left, double Width)> cols = ColumnsOf(section, si, record.PageNumber);
+                bool single = cols.Count == 1;
+                double? limit = null;
+                if (!single && section.BalanceColumns)
+                {
+                    limit = BalancedBottom(f, pos, reason, cols, top, ct);
+                }
+                RegionResult rr = FillRegion(f, pos, reason, cols, single, top, limit, ct);
+                if (section.ColumnSeparator && !single)
+                {
+                    AddColumnSeparators(plan, cols, rr, top);
+                }
+                pos = rr.Next;
+                switch (rr.End)
+                {
+                    case ColumnEnd.Finished:
+                        plan.Finished = true;
+                        plan.End = pos;
+                        return plan;
+                    case ColumnEnd.ContinuousSection:
+                        top = rr.Y;
+                        reason = PageStartReason.SectionBreak;
+                        if (top >= f.BodyBottom - Epsilon)
+                        {
+                            plan.End = pos;
+                            plan.EndReason = PageStartReason.Flow;
+                            return plan;
+                        }
+                        continue;
+                    case ColumnEnd.PageBreak:
+                        plan.End = pos;
+                        plan.EndReason = PageStartReason.PageBreak;
+                        return plan;
+                    case ColumnEnd.SectionBreak:
+                        plan.End = pos;
+                        plan.EndReason = PageStartReason.SectionBreak;
+                        return plan;
+                    default:
+                        plan.End = pos;
+                        plan.EndReason = rr.NextReason;
+                        return plan;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The bottom that balances a region ended by a continuous section break: the smallest one (to 0.25 pt) at which
+        /// all of its content still fits its columns. Null when the region does not end on this page that way.
+        /// </summary>
+        private double? BalancedBottom(PageFill f, FlowPosition pos, PageStartReason reason, List<(double Left, double Width)> cols, double top, CancellationToken ct)
+        {
+            RegionResult full = FillRegion(f.Clone(), pos, reason, cols, false, top, null, ct);
+            if (full.End != ColumnEnd.ContinuousSection)
+            {
+                return null;
+            }
+            double hi = f.BodyBottom;
+            double lo = top;
+            while (hi - lo > 0.25)
+            {
+                ct.ThrowIfCancellationRequested();
+                double mid = (lo + hi) / 2;
+                RegionResult trial = FillRegion(f.Clone(), pos, reason, cols, false, top, mid, ct);
+                if (trial.End == ColumnEnd.ContinuousSection)
+                {
+                    hi = mid;
+                }
+                else
+                {
+                    lo = mid;
+                }
+            }
+            return hi;
+        }
+
+        /// <summary>Lines in the middle of the gaps before each column that has content, from the region top to the bottom of its longest column.</summary>
+        private static void AddColumnSeparators(PagePlan plan, List<(double Left, double Width)> cols, RegionResult rr, double top)
+        {
+            double bottom = top;
+            for (int c = 0; c < rr.ColumnsUsed; c++)
+            {
+                if (rr.Placed[c])
+                {
+                    bottom = Math.Max(bottom, rr.ContentBottoms[c]);
+                }
+            }
+            if (bottom <= top + Epsilon)
+            {
+                return;
+            }
+            for (int c = 1; c < rr.ColumnsUsed; c++)
+            {
+                if (!rr.Placed[c])
+                {
+                    continue;
+                }
+                double x = (cols[c - 1].Left + cols[c - 1].Width + cols[c].Left) / 2;
+                plan.Items.Add(new PlacedColumnRule { X = x, Top = top, Bottom = bottom });
+            }
+        }
+
+        /// <summary>Fills the columns of one region in order.</summary>
+        private RegionResult FillRegion(PageFill f, FlowPosition pos, PageStartReason reason, List<(double Left, double Width)> cols, bool single, double top,
+            double? limit, CancellationToken ct)
+        {
+            double[] bottoms = new double[cols.Count];
+            bool[] placed = new bool[cols.Count];
+            double maxY = top;
+            for (int c = 0; c < cols.Count; c++)
+            {
+                ColumnResult r = FillColumn(f, pos, reason, cols[c], single, top, limit, ct);
+                bottoms[c] = r.ContentBottom;
+                placed[c] = r.Placed;
+                maxY = Math.Max(maxY, r.Y);
+                pos = r.Next;
+                switch (r.End)
+                {
+                    case ColumnEnd.Full:
+                        reason = PageStartReason.Flow;
+                        break;
+                    case ColumnEnd.ColumnBreak:
+                        reason = PageStartReason.PageBreak;
+                        break;
+                    case ColumnEnd.NextColumnSection:
+                        int prev = Math.Max(0, pos.Section - 1);
+                        if (single || pos.Section >= _doc.Sections.Count
+                            || !SameColumns(_doc.Sections[prev], prev, _doc.Sections[pos.Section], pos.Section, f.Record.PageNumber))
+                        {
+                            // No next column of the same set on this page: the section starts on the next page.
+                            return new RegionResult(ColumnEnd.SectionBreak, pos, PageStartReason.SectionBreak, maxY, bottoms, placed, c + 1);
+                        }
+                        reason = PageStartReason.SectionBreak;
+                        break;
+                    default:
+                        return new RegionResult(r.End, pos, reason, maxY, bottoms, placed, c + 1);
+                }
+            }
+            return new RegionResult(ColumnEnd.Overflow, pos, reason, maxY, bottoms, placed, cols.Count);
+        }
+
+        /// <summary>
+        /// Fills one column (in a one-column section, the whole text area) from <paramref name="top"/> down to the foot of
+        /// the body, or <paramref name="limit"/> when the region is balanced.
+        /// </summary>
+        private ColumnResult FillColumn(PageFill f, FlowPosition pos, PageStartReason reason, (double Left, double Width) column, bool single, double top,
+            double? limit, CancellationToken ct)
+        {
+            PagePlan plan = f.Plan;
+            PageRecord record = f.Record;
+            PageGeometry pageGeom = f.PageGeom;
+            List<(double Top, double Bottom)> bands = f.Bands;
+            List<WrapExclusion> exclusions = f.Exclusions;
+            double bodyTop = top;
+            double bodyBottom = limit is double l0 ? Math.Min(l0, f.BodyBottom) : f.BodyBottom;
+            // At the top of a column that starts at the top of the body, something must be placed (a fresh column cannot do better).
+            bool canForce = top <= f.BodyTop + Epsilon && limit is null;
+            double y = top;
+            bool first = true;
+            bool placedAny = false;
+            double contentBottom = top;
+            FlowParagraph? previousParagraph = null;
+            HashSet<AnchoredObjectInline> seeded = f.Seeded;
+
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (pos.Section >= _doc.Sections.Count)
+                {
+                    return new ColumnResult(ColumnEnd.Finished, pos, y, contentBottom, placedAny);
+                }
                 FlowSection section = _doc.Sections[pos.Section];
                 if (pos.Block >= section.Blocks.Count)
                 {
                     int nextSection = pos.Section + 1;
                     if (nextSection >= _doc.Sections.Count)
                     {
-                        plan.Finished = true;
-                        plan.End = new FlowPosition(nextSection, 0, 0);
-                        return plan;
+                        return new ColumnResult(ColumnEnd.Finished, new FlowPosition(nextSection, 0, 0), y, contentBottom, placedAny);
                     }
                     FlowSection ns = _doc.Sections[nextSection];
                     pos = new FlowPosition(nextSection, 0, 0);
-                    bool continuous = ns.Start == SectionStart.Continuous && ns.Page.SameSizeAs(pageGeom);
-                    if (!continuous)
+                    bool sameSize = ns.Page.SameSizeAs(pageGeom);
+                    if (ns.Start == SectionStart.Continuous && sameSize)
                     {
-                        plan.End = pos;
-                        plan.EndReason = PageStartReason.SectionBreak;
-                        return plan;
+                        if (single && ColumnsOf(ns, nextSection, record.PageNumber).Count == 1)
+                        {
+                            continue; // one column on both sides: the flow simply continues
+                        }
+                        return new ColumnResult(ColumnEnd.ContinuousSection, pos, y, contentBottom, placedAny);
                     }
-                    continue;
+                    if (ns.Start == SectionStart.NextColumn && sameSize)
+                    {
+                        return new ColumnResult(ColumnEnd.NextColumnSection, pos, y, contentBottom, placedAny);
+                    }
+                    return new ColumnResult(ColumnEnd.SectionBreak, pos, y, contentBottom, placedAny);
                 }
 
-                (double areaLeft, double areaWidth) = TextArea(section.Page, record.PageNumber);
+                // The margins' text area (for objects positioned relative to the margins) and the column.
+                (double marginLeft, double marginWidth) = TextArea(section.Page, record.PageNumber);
+                (double areaLeft, double areaWidth) = single ? (marginLeft, marginWidth) : column;
                 FlowBlock block = section.Blocks[pos.Block];
                 string path = (pos.Section + 1).ToString(CultureInfo.InvariantCulture) + "/" + (pos.Block + 1).ToString(CultureInfo.InvariantCulture);
 
                 if (block is FlowTable table)
                 {
                     y = SkipFloats(bands, exclusions, y, 1, path);
-                    TablePlacement tp = PlaceTable(table, pos, plan, areaLeft, areaWidth, y, bodyTop, bodyBottom, first, path, record, ct);
+                    TablePlacement tp = PlaceTable(table, pos, plan, areaLeft, areaWidth, y, bodyTop, bodyBottom, first && canForce, path, record, ct);
                     if (tp.Placed)
                     {
                         first = false;
+                        placedAny = true;
+                        f.FirstOnPage = false;
+                        contentBottom = Math.Max(contentBottom, tp.Y);
                     }
                     y = tp.Y;
                     previousParagraph = null;
                     if (tp.PageEnds)
                     {
-                        plan.End = tp.Next;
-                        plan.EndReason = PageStartReason.Flow;
-                        return plan;
+                        return new ColumnResult(ColumnEnd.Full, tp.Next, y, contentBottom, placedAny);
                     }
                     pos = tp.Next;
                     continue;
@@ -172,25 +528,21 @@ namespace Chuvadi.Layout.Engine.Flow
                 double spaceBefore = 0;
                 if (atStart)
                 {
-                    if (pf.PageBreakBefore && !first)
+                    if (pf.PageBreakBefore && !f.FirstOnPage)
                     {
-                        plan.End = pos;
-                        plan.EndReason = PageStartReason.PageBreak;
-                        return plan;
+                        return new ColumnResult(ColumnEnd.PageBreak, pos, y, contentBottom, placedAny);
                     }
                     spaceBefore = SpaceBefore(p, previousParagraph);
                     if (first && reason == PageStartReason.Flow)
                     {
-                        spaceBefore = 0; // Word suppresses space before at the top of a page reached by normal flow.
+                        spaceBefore = 0; // Word suppresses space before at the top of a page (or column) reached by normal flow.
                     }
-                    if (!first && pf.KeepWithNext)
+                    if (!(first && canForce) && pf.KeepWithNext)
                     {
                         double chain = KeepChainHeight(pos, areaWidth, spaceBefore);
                         if (chain <= bodyBottom - bodyTop && y + chain > bodyBottom + Epsilon)
                         {
-                            plan.End = pos;
-                            plan.EndReason = PageStartReason.Flow;
-                            return plan;
+                            return new ColumnResult(ColumnEnd.Full, pos, y, contentBottom, placedAny);
                         }
                     }
                 }
@@ -206,7 +558,8 @@ namespace Chuvadi.Layout.Engine.Flow
                 List<Preseed> candidates = new List<Preseed>();
                 if (atStart)
                 {
-                    PlaceAnchors(p, plan, bands, exclusions, seeded, candidates, pageGeom, areaLeft, areaWidth, y + spaceBefore, bodyTop, bodyBottom, path, record);
+                    PlaceAnchors(p, plan, bands, exclusions, seeded, candidates, pageGeom, marginLeft, marginWidth, areaLeft, areaWidth,
+                        y + spaceBefore, f.BodyTop, bodyBottom, path, record);
                 }
                 double yy = y + spaceBefore;
 
@@ -232,9 +585,9 @@ namespace Chuvadi.Layout.Engine.Flow
                     int startChar = pos.TextStart ?? cached[Math.Min(pos.Line, cached.Count - 1)].Start;
                     List<(FittedLine Line, double Top)> rows = FitAround(m, startChar, atStart, yy, areaLeft, areaWidth, bands, exclusions, bodyBottom);
                     lines = new List<FittedLine>(rows.Count);
-                    foreach ((FittedLine l, double t) in rows)
+                    foreach ((FittedLine ln, double t) in rows)
                     {
-                        lines.Add(l);
+                        lines.Add(ln);
                         tops.Add(t);
                     }
                     startLine = 0;
@@ -282,20 +635,18 @@ namespace Chuvadi.Layout.Engine.Flow
                 int fit = k - startLine;
                 int remaining = total - startLine;
                 int place;
-                bool pageEnds;
+                bool columnEnds;
                 if (fit == remaining)
                 {
                     place = fit;
-                    pageEnds = false;
+                    columnEnds = false;
                 }
                 else
                 {
-                    if (pf.KeepLinesTogether && atStart && !first && ParagraphHeight(lines, startLine) <= bodyBottom - bodyTop)
+                    if (pf.KeepLinesTogether && atStart && !(first && canForce) && ParagraphHeight(lines, startLine) <= bodyBottom - bodyTop)
                     {
                         RollBack(plan, bands, exclusions, itemsBefore, bandsBefore, exclusionsBefore);
-                        plan.End = pos;
-                        plan.EndReason = PageStartReason.Flow;
-                        return plan;
+                        return new ColumnResult(ColumnEnd.Full, pos, y, contentBottom, placedAny);
                     }
                     place = fit;
                     if (pf.WidowControl && Rows(lines, startLine, total) >= 2)
@@ -313,7 +664,7 @@ namespace Chuvadi.Layout.Engine.Flow
                             }
                         }
                     }
-                    if (place == 0 && first)
+                    if (place == 0 && first && canForce)
                     {
                         place = Math.Max(1, fit);
                         while (startLine + place < total && lines[startLine + place].SameRow)
@@ -329,11 +680,9 @@ namespace Chuvadi.Layout.Engine.Flow
                     if (place == 0)
                     {
                         RollBack(plan, bands, exclusions, itemsBefore, bandsBefore, exclusionsBefore);
-                        plan.End = pos;
-                        plan.EndReason = PageStartReason.Flow;
-                        return plan;
+                        return new ColumnResult(ColumnEnd.Full, pos, y, contentBottom, placedAny);
                     }
-                    pageEnds = true;
+                    columnEnds = true;
                 }
 
                 // The paragraph's first line is on this page: its anchored objects are final.
@@ -343,21 +692,22 @@ namespace Chuvadi.Layout.Engine.Flow
                     {
                         if (inline is AnchoredObjectInline anchored)
                         {
-                            reached.Add(anchored);
+                            f.Reached.Add(anchored);
                         }
                     }
-                    if (!first)
+                    if (!f.FirstOnPage)
                     {
-                        late.AddRange(candidates);
+                        f.Late.AddRange(candidates);
                     }
                 }
 
-                // Place lines, honouring page breaks inside the paragraph.
+                // Place lines, honouring page and column breaks inside the paragraph.
                 double lineTop = yy;
                 double sliceTop = place > 0 && tops.Count > 0 ? tops[0] : lineTop;
                 double sliceBottom = lineTop;
                 int placedEnd = startLine + place;
                 bool pageBreak = false;
+                bool columnBreak = false;
                 for (int li = startLine; li < placedEnd; li++)
                 {
                     FittedLine line = lines[li];
@@ -377,10 +727,12 @@ namespace Chuvadi.Layout.Engine.Flow
                     {
                         placedEnd = li + 1;
                         pageBreak = true;
-                        if (!dynamic && placedEnd == total - 1 && lines[placedEnd].Start >= m.Text.Length)
+                        columnBreak = line.EndsWithColumnBreak;
+                        if (!columnBreak && !dynamic && placedEnd == total - 1 && lines[placedEnd].Start >= m.Text.Length)
                         {
-                            // Only the paragraph mark follows the page break: it stays with the break (Word 2013 and
-                            // later, LibreOffice) instead of starting the next page with an empty line.
+                            // Only the paragraph mark follows the page break: it stays with the break (Word 2013 and later,
+                            // LibreOffice) instead of starting the next page with an empty line. After a column break Word
+                            // carries the mark to the next column as an empty line (calibration K2, K6), so it is not kept.
                             placedEnd = total;
                         }
                         break;
@@ -390,10 +742,19 @@ namespace Chuvadi.Layout.Engine.Flow
                 for (int li = startLine; li < placedEnd; li++)
                 {
                     // Footnotes of the placed lines take their room at the foot of this page.
-                    bodyBottom -= NewNoteHeight(m, lines[li], plan, null, record, areaWidth, out List<FlowNote>? placedNotes);
+                    double noteRoom = NewNoteHeight(m, lines[li], plan, null, record, areaWidth, out List<FlowNote>? placedNotes);
+                    if (noteRoom > 0)
+                    {
+                        f.BodyBottom -= noteRoom;
+                        bodyBottom -= noteRoom;
+                    }
                     if (placedNotes is not null)
                     {
                         plan.Footnotes.AddRange(placedNotes);
+                        foreach (FlowNote _ in placedNotes)
+                        {
+                            plan.FootnoteAreas.Add(single ? null : (areaLeft, areaWidth));
+                        }
                     }
                 }
                 bool lastSlice = placedEnd == total && (dynamic ? lines[total - 1].IsLastLine : true);
@@ -406,26 +767,24 @@ namespace Chuvadi.Layout.Engine.Flow
                     Path = path,
                 });
                 first = false;
+                placedAny = true;
+                f.FirstOnPage = false;
+                contentBottom = Math.Max(contentBottom, lineTop);
                 if (pageBreak)
                 {
-                    plan.End = lastSlice ? new FlowPosition(pos.Section, pos.Block + 1, 0) : Continue(pos, lines, placedEnd, dynamic);
-                    plan.EndReason = PageStartReason.PageBreak;
-                    return plan;
+                    FlowPosition next = lastSlice ? new FlowPosition(pos.Section, pos.Block + 1, 0) : Continue(pos, lines, placedEnd, dynamic || !single);
+                    return new ColumnResult(columnBreak ? ColumnEnd.ColumnBreak : ColumnEnd.PageBreak, next, lineTop, contentBottom, placedAny);
                 }
-                if (pageEnds)
+                if (columnEnds)
                 {
-                    plan.End = Continue(pos, lines, placedEnd, dynamic);
-                    plan.EndReason = PageStartReason.Flow;
-                    return plan;
+                    return new ColumnResult(ColumnEnd.Full, Continue(pos, lines, placedEnd, dynamic || !single), lineTop, contentBottom, placedAny);
                 }
                 y = lineTop + borderBottom + SpaceAfter(p, NextParagraph(pos));
                 previousParagraph = p;
                 pos = new FlowPosition(pos.Section, pos.Block + 1, 0);
                 if (y >= bodyBottom - Epsilon)
                 {
-                    plan.End = pos;
-                    plan.EndReason = PageStartReason.Flow;
-                    return plan;
+                    return new ColumnResult(ColumnEnd.Full, pos, y, contentBottom, placedAny);
                 }
             }
         }
@@ -504,7 +863,7 @@ namespace Chuvadi.Layout.Engine.Flow
         /// </summary>
         private void PlaceAnchors(FlowParagraph p, PagePlan plan, List<(double Top, double Bottom)> bands, List<WrapExclusion> exclusions,
             HashSet<AnchoredObjectInline> seeded, List<Preseed> candidates, PageGeometry page,
-            double areaLeft, double areaWidth, double paragraphTop, double bodyTop, double bodyBottom, string path, PageRecord record)
+            double areaLeft, double areaWidth, double columnLeft, double columnWidth, double paragraphTop, double bodyTop, double bodyBottom, string path, PageRecord record)
         {
             foreach (FlowInline inline in p.Inlines)
             {
@@ -515,7 +874,8 @@ namespace Chuvadi.Layout.Engine.Flow
                 (double baseX, double spanX) = a.HorizontalRelativeTo switch
                 {
                     HorizontalAnchor.Page => (0.0, page.Width),
-                    _ => (areaLeft, areaWidth),
+                    HorizontalAnchor.Margin => (areaLeft, areaWidth),
+                    _ => (columnLeft, columnWidth), // the column the anchor paragraph is in (the margins in one column)
                 };
                 (double baseY, double spanY) = a.VerticalRelativeTo switch
                 {

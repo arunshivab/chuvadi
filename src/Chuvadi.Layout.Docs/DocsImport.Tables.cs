@@ -93,6 +93,15 @@ namespace Chuvadi.Layout.Docs
                 {
                     ft.ColumnWidths.Add(Math.Max(1, total / t.Columns));
                 }
+                if (depth == 1 && tf.FloatingPosition is null && tf.Width is not { Type: D.TableWidthType.Points, Value: > 0 })
+                {
+                    // No column widths in the file: the grid follows the width of the column the table is placed in.
+                    ft.Format = ft.Format with
+                    {
+                        GridFromLayoutWidth = true,
+                        PreferredWidthPercent = tf.Width is { Type: D.TableWidthType.Percent, Value: > 0 } pw ? pw.Value : null,
+                    };
+                }
             }
 
             for (int r = 0; r < t.Rows.Count; r++)

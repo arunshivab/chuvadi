@@ -85,6 +85,9 @@ namespace Chuvadi.Layout.Model
         public bool SameSizeAs(PageGeometry other) => Math.Abs(Width - other.Width) < 0.01 && Math.Abs(Height - other.Height) < 0.01;
     }
 
+    /// <summary>One column of a section with unequal columns (w:col): its width and the gap after it, in points.</summary>
+    public readonly record struct FlowColumn(double Width, double SpaceAfter);
+
     /// <summary>One section: page geometry plus content.</summary>
     public sealed class FlowSection
     {
@@ -92,8 +95,30 @@ namespace Chuvadi.Layout.Model
 
         public SectionStart Start { get; set; } = SectionStart.NextPage;
 
-        /// <summary>Number of text columns (w:cols/@w:num). Values above 1 are laid out as one column with a warning in this version.</summary>
+        /// <summary>
+        /// Number of equal text columns (w:cols/@w:num). Ignored when <see cref="ColumnWidths"/> is filled; the number
+        /// of columns is then the number of entries.
+        /// </summary>
         public int ColumnCount { get; set; } = 1;
+
+        /// <summary>Gap between equal columns (w:cols/@w:space); 36 pt (720 twips) when the file does not state it.</summary>
+        public double ColumnSpacing { get; set; } = 36;
+
+        /// <summary>
+        /// Unequal columns (w:cols/@w:equalWidth="0" with w:col), in order: each column's width and the gap after it.
+        /// Empty = <see cref="ColumnCount"/> equal columns.
+        /// </summary>
+        public IList<FlowColumn> ColumnWidths { get; } = new List<FlowColumn>();
+
+        /// <summary>A vertical line in the middle of each gap between columns (w:cols/@w:sep).</summary>
+        public bool ColumnSeparator { get; set; }
+
+        /// <summary>
+        /// Balance the columns of the section's last region when the next section starts with a continuous break, so the
+        /// columns end at about the same height (Word's behaviour; the file can turn it off with
+        /// w:compat/w:doNotBalanceTextColumns).
+        /// </summary>
+        public bool BalanceColumns { get; set; } = true;
 
         public IList<FlowBlock> Blocks { get; } = new List<FlowBlock>();
 
@@ -281,7 +306,7 @@ namespace Chuvadi.Layout.Model
         /// <summary>Page break (w:br type="page").</summary>
         Page,
 
-        /// <summary>Column break (laid out as a page break while multi-column layout is not supported).</summary>
+        /// <summary>Column break (w:br type="column"): the next column, or the next page after the last column.</summary>
         Column,
     }
 
@@ -481,6 +506,20 @@ namespace Chuvadi.Layout.Model
         public double CellMarginRight { get; init; } = 5.4;
         public double CellMarginTop { get; init; }
         public double CellMarginBottom { get; init; }
+
+        /// <summary>
+        /// The table's preferred width as a percentage of the space it is laid out in (w:tblW type="pct"), for a table
+        /// whose file gives no column widths. Null = not a percentage. With <see cref="GridFromLayoutWidth"/> the grid is
+        /// worked out from this when the table is placed.
+        /// </summary>
+        public double? PreferredWidthPercent { get; init; }
+
+        /// <summary>
+        /// The file gives no column widths: the grid is shared equally from the width of the column the table is placed
+        /// in (or <see cref="PreferredWidthPercent"/> of it) when the table is laid out, not from
+        /// <see cref="FlowTable.ColumnWidths"/>.
+        /// </summary>
+        public bool GridFromLayoutWidth { get; init; }
 
         /// <summary>Spacing between cells (w:tblCellSpacing); 0 = collapsed borders.</summary>
         public double CellSpacing { get; init; }
