@@ -1,6 +1,6 @@
 # Chuvadi.Markup — Changelog
 
-## 1.0.0 (unreleased)
+## 1.0.0 (2026-11-03)
 
 First stable release.
 
@@ -17,13 +17,13 @@ no script execution, network egress or mXSS breakout was found; the hardening it
 - **Sanitizer (F3)**: `@keyframes` and `@counter-style` names are namespaced the same way (with `animation`, `animation-name`, `list-style`, `list-style-type`, `counter()`/`counters()`, `system` and `fallback` references). `@page` and `@layer` are no longer in the default `AllowedAtRules`. `@container` contents are scoped like other rules. Anchor-positioning and view-transition names (`anchor-name`, `position-anchor`, `anchor-scope`, `position-try*`, `position-visibility`, `view-transition-name`, `view-transition-class`, `anchor()`, `anchor-size()`) are denied by default.
 - **Sanitizer (F4)**: selectors that start with a combinator, or that put `~` / `+` after the wrapper itself (including `html`, `body`, `:root` and nested `& ~ x` under them), are dropped.
 
-## 1.0.0-preview.2 (unreleased)
+## 1.0.0-preview.2 (not released separately; included in 1.0.0)
 
 - **HTML**: `<selectedcontent>` mirroring of the customizable `<select>`: the selected option's contents are cloned into the select's `<selectedcontent>` while parsing (counted against `MaxNodes`). The html5lib tree-construction suite now passes in full.
 - **Sanitizer**: style rules with an empty selector or an empty selector-list item are removed instead of being left unscoped (found by fuzzing; browsers drop such rules, so it was not exploitable). Relative links that would reveal a scheme once control, whitespace and format characters are removed (such as `\u0099javascript:`) are removed as defence in depth.
 - **Robustness**: time-boxed random-input fuzz tests for every entry point; timing-sensitive tests run in their own serial collection; globalization analyzers enforced (no culture-sensitive string operations).
 
-## 1.0.0-preview.1 (unreleased)
+## 1.0.0-preview.1 (not released separately; included in 1.0.0)
 
 First preview.
 
