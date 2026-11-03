@@ -1,8 +1,8 @@
 using Chuvadi.Pdf.Documents;
 using Chuvadi.Print.ManualTests;
-using Box = Chuvadi.Print.Pdf.Tests.MiniPdf.Box;
+using Box = Chuvadi.Print.Pdf.Raster.Tests.MiniPdf.Box;
 
-namespace Chuvadi.Print.Pdf.Tests;
+namespace Chuvadi.Print.Pdf.Raster.Tests;
 
 /// <summary>
 /// The test page: 200 x 100 pt, a black 50 x 50 square in its top-left corner (PDF y 50..100).

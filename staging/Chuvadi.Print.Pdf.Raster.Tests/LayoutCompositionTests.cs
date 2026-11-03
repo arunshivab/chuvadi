@@ -1,7 +1,7 @@
 using Chuvadi.Pdf.Authoring;
 using Chuvadi.Print.ManualTests;
 
-namespace Chuvadi.Print.Pdf.Tests;
+namespace Chuvadi.Print.Pdf.Raster.Tests;
 
 /// <summary>
 /// A stand-in for Chuvadi.Layout (owned by the Layout chat): turns a small report model into PDF bytes using the

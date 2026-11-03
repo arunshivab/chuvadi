@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Chuvadi.Print.Pdf.Tests;
+namespace Chuvadi.Print.Pdf.Raster.Tests;
 
 /// <summary>
 /// Writes small, valid test PDFs by hand (no PDF library), so the adapter is tested against known input:

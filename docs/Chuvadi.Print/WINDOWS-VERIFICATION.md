@@ -22,7 +22,7 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    ```
    Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.1</Version>`.
 2. **Local feed.** The Chuvadi.Pdf packages of the pinned version (3.22.1, the `ChuvadiPdfVersion` in
-   `staging\Chuvadi.Print.Pdf\Chuvadi.Print.Pdf.csproj`) are in the local feed:
+   `staging\Chuvadi.Print.Pdf.Raster\Chuvadi.Print.Pdf.Raster.csproj`) are in the local feed:
    ```powershell
    Get-ChildItem C:\src\local-nuget -Filter "Chuvadi.Pdf.Rendering.*.nupkg"
    ```
@@ -54,15 +54,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    ```
    Expected: `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
    `WindowsPrintersAreDiscoverable` and `WindowsPrintToPdfWritesFile`. The 12 `Remote...` groups must PASS.
-7. **Chuvadi.Print.Pdf tests.**
+7. **Chuvadi.Print.Pdf.Raster tests.**
    ```powershell
-   dotnet test staging/Chuvadi.Print.Pdf.Tests -c Release
+   dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
    ```
    Expected: 27 passed.
 8. **Preview images.** Look at the two folders:
    ```powershell
-   explorer artifacts\bin\Chuvadi.Print.Pdf.Tests\Release\net10.0\print-pdf-preview
-   explorer artifacts\bin\Chuvadi.Print.Pdf.Tests\Release\net10.0\layout-print-preview
+   explorer artifacts\bin\Chuvadi.Print.Pdf.Raster.Tests\Release\net10.0\print-pdf-preview
+   explorer artifacts\bin\Chuvadi.Print.Pdf.Raster.Tests\Release\net10.0\layout-print-preview
    ```
    Expected:
    - **print-pdf-preview**, two A5 sheets:

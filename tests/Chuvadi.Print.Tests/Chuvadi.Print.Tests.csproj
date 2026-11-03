@@ -22,6 +22,9 @@
        Test tooling below is dev-time only and never ships. -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Windows\Chuvadi.Print.Windows.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Ipp\Chuvadi.Print.Ipp.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Remote\Chuvadi.Print.Remote.csproj" />
     <ProjectReference Include="..\..\samples\Chuvadi.Print.ManualTests\Chuvadi.Print.ManualTests.csproj" />
   </ItemGroup>
 

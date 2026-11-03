@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Chuvadi.Print.Pdf: the adapter between Chuvadi.Print and Chuvadi.Pdf (BASELINE P01/P02, decisions D-14, D-28, D-29).
+    Chuvadi.Print.Pdf.Raster: the adapter between Chuvadi.Print and Chuvadi.Pdf (BASELINE P01/P02, decisions D-14, D-28, D-29).
 
     Lives under staging/ (not src/) and outside Chuvadi.slnx and CI until Chuvadi.Pdf moves into the monorepo:
     it consumes the Chuvadi.Pdf packages from your local package folder (staging/nuget.config), never a
@@ -16,11 +16,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>Chuvadi.Print.Pdf</RootNamespace>
-    <AssemblyName>Chuvadi.Print.Pdf</AssemblyName>
+    <RootNamespace>Chuvadi.Print.Pdf.Raster</RootNamespace>
+    <AssemblyName>Chuvadi.Print.Pdf.Raster</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Product>Chuvadi.Print.Pdf</Product>
+    <Product>Chuvadi.Print.Pdf.Raster</Product>
     <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
@@ -42,7 +42,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Chuvadi.Print.Pdf.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Print.Pdf.Raster.Tests" />
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 

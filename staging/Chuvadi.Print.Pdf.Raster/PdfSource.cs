@@ -6,7 +6,7 @@ using Chuvadi.Pdf.Documents;
 using Chuvadi.Pdf.Operations;
 using Chuvadi.Pdf.Primitives;
 
-namespace Chuvadi.Print.Pdf
+namespace Chuvadi.Print.Pdf.Raster
 {
     /// <summary>
     /// One opened source PDF plus, on demand, copies with annotations and/or form fields baked into the page

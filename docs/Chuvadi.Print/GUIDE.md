@@ -4,14 +4,17 @@ Chuvadi.Print is a pure-BCL printing library for .NET 10 (no NuGet dependencies)
 settings for printing it. It works out exactly what goes on every sheet and delivers that to a printer, a file
 or a remote agent, recording one audit event per job.
 
-| Layer | Namespace / package | What it gives you | Since |
+Each layer below is its own package (D-107); the namespace is the package name. Chuvadi.Print.Windows,
+Chuvadi.Print.Ipp and Chuvadi.Print.Remote each need only the core, Chuvadi.Print.
+
+| Layer | Package (= namespace) | What it gives you | Since |
 |---|---|---|---|
 | A1 | `Chuvadi.Print` | Settings, paper sizes, margins, page selection, alignment, spool envelope, audit | 0.1.0 |
 | A2 | `Chuvadi.Print` | `PrintJob`, `IPageRasterizer`, page layout, print plan, colour conversion, PNG preview | 0.2.0 |
 | A3 | `Chuvadi.Print.Windows` | Windows printers through the GDI spooler (P/Invoke only) | 0.3.0 |
 | A4 | `Chuvadi.Print.Ipp` | Driverless IPP printing on any OS: PWG Raster or PDF passthrough | 0.4.0 |
 | A6 | `Chuvadi.Print.Remote` | An embeddable print hub and dial-out print agents | 0.5.0 |
-| A5 | package **Chuvadi.Print.Pdf** (`staging/`) | PDF rendering (`PdfPageRasterizer`) over Chuvadi.Pdf | 0.1.0 |
+| A5 | package **Chuvadi.Print.Pdf.Raster** (`staging/`) | PDF rendering (`PdfPageRasterizer`) over Chuvadi.Pdf | 0.1.0 |
 
 The architectural invariants (P01–P09) are in [BASELINE.md](BASELINE.md). How Docs/Sheets reports get printed is
 in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
@@ -47,7 +50,7 @@ PrintJob job = new PrintJob("report.pdf")          // or bytes, a stream, PrintJ
     .WithPaper(PaperSize.A4).WithScale(ScaleMode.FitToPage).WithAlignment(ContentAlignment.Center)
     .WithColor(ColorMode.Monochrome).WithMonochrome(MonochromeConversion.ErrorDiffusion)
     .WithTitle("Discharge summary").WithUser("user1").WithTenant("tenant-a")
-    .WithRasterizer(new PdfPageRasterizer())          // Chuvadi.Print.Pdf
+    .WithRasterizer(new PdfPageRasterizer())          // Chuvadi.Print.Pdf.Raster
     .WithAuditSink(new FileAuditSink("print-audit.log"));
 
 PrintPlan plan = job.Plan();                         // what will print, before printing
@@ -135,7 +138,7 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
 
-## 5. PDF rendering (A5, package Chuvadi.Print.Pdf)
+## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
   rendered at the resolution and pixel format the job asks for. Annotations and form fields are printed by
@@ -208,5 +211,5 @@ await agent.RunAsync(stoppingToken);
   - `--preview <folder>`: writes PNG sheets for visual checking.
   - `--windows-printer "<name>" [--windows-output <folder>]`: an 11-job proof set.
   - `--ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]`: a proof set over IPP.
-- **Chuvadi.Print.Pdf**: `dotnet test staging/Chuvadi.Print.Pdf.Tests` (needs the Chuvadi.Pdf packages in the local feed).
+- **Chuvadi.Print.Pdf.Raster**: `dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests` (needs the Chuvadi.Pdf packages in the local feed).
 - **Windows**: everything only Windows can prove is in [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md).

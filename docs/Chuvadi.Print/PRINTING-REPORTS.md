@@ -8,7 +8,7 @@ Chuvadi.Docs / Chuvadi.Sheets   build the report (docx / xlsx)
 Chuvadi.Layout                  lays it out and renders it to PDF bytes     (owned by the Layout chat)
         |
 Chuvadi.Print                   PrintJob: settings, plan, audit, spool envelope
-        |-- PdfPageRasterizer (Chuvadi.Print.Pdf) --> WindowsPrinterTarget / IppPrinterTarget / ImageFileTarget
+        |-- PdfPageRasterizer (Chuvadi.Print.Pdf.Raster) --> WindowsPrinterTarget / IppPrinterTarget / ImageFileTarget
         |-- IppDocumentTarget                      --> an IPP printer that accepts PDF (no rendering)
         '-- PrintHub.Submit   (Chuvadi.Print.Remote) --> a PrintAgent at the branch, which prints with any of the above
 ```
@@ -28,7 +28,7 @@ byte[] pdf = layout.ToPdf(dischargeSummaryDocx);          // Chuvadi.Layout (pla
 PrintResult result = new PrintJob(pdf)
     .WithTitle("Discharge summary").WithUser("user1").WithTenant("tenant-a")
     .WithCopies(2, collate: true).WithDuplex(Duplex.Vertical).WithColor(ColorMode.Monochrome)
-    .WithRasterizer(new PdfPageRasterizer())                // Chuvadi.Print.Pdf
+    .WithRasterizer(new PdfPageRasterizer())                // Chuvadi.Print.Pdf.Raster
     .WithAuditSink(new FileAuditSink(@"D:\print\audit.log"))
     .PrintTo(new WindowsPrinterTarget("Ward-3 Laser"));  // or new IppPrinterTarget("ipp://...")
 ```
@@ -54,13 +54,14 @@ own resolution. Exactly one audit event is recorded per job (P06).
 
 | Need | Packages |
 |---|---|
-| Print to a Windows or IPP printer (rendered) | Chuvadi.Print, Chuvadi.Print.Pdf |
-| PDF passthrough to an IPP printer | Chuvadi.Print |
-| Remote printing | Chuvadi.Print (hub and agent); the agent also needs Chuvadi.Print.Pdf to render |
+| Print to a Windows printer (rendered) | Chuvadi.Print, Chuvadi.Print.Windows, Chuvadi.Print.Pdf.Raster |
+| Print to an IPP printer (rendered) | Chuvadi.Print, Chuvadi.Print.Ipp, Chuvadi.Print.Pdf.Raster |
+| PDF passthrough to an IPP printer | Chuvadi.Print, Chuvadi.Print.Ipp |
+| Remote printing | Chuvadi.Print, Chuvadi.Print.Remote (hub and agent); the agent also needs the target package (Windows or IPP) and Chuvadi.Print.Pdf.Raster to render |
 
 ## Verified
 
-The tests in `staging/Chuvadi.Print.Pdf.Tests/LayoutCompositionTests.cs` run this composition. A stand-in for
+The tests in `staging/Chuvadi.Print.Pdf.Raster.Tests/LayoutCompositionTests.cs` run this composition. A stand-in for
 Layout (`StubLayout`, which writes the PDF with the Chuvadi PDF authoring API) produces the report, which is then:
 - printed to a device: 2 copies, double-sided, monochrome, one audit event;
 - carried through the spool envelope and printed on the other side.
