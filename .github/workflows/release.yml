@@ -129,9 +129,13 @@ jobs:
       # Release notes: the CHANGELOG section of each released package (heading "## <version> ...").
       # Never the generated list of every PR since the previous tag, which mixes all libraries.
       - name: Release notes from the package CHANGELOG
+        id: notes
         shell: bash
         run: |
           TAGV="${GITHUB_REF_NAME#*-v}"
+          # A version with a hyphen (1.0.0-rc.1, 2.0.0-preview.1) is a pre-release, so GitHub does not mark it "Latest".
+          # The test is on the VERSION only: every tag prefix (print-v, layout-docs-v ...) contains a hyphen.
+          case "$TAGV" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;; esac
           : > RELEASE_NOTES.md
           for p in ${{ steps.pkg.outputs.packages }}; do
             f="src/$p/CHANGELOG.md"
@@ -150,6 +154,7 @@ jobs:
           files: dist/*.nupkg
           body_path: RELEASE_NOTES.md
           generate_release_notes: false
+          prerelease: ${{ steps.notes.outputs.prerelease }}
 
       # No nuget.org push for now (D-46): NUGET_API_KEY is not configured until the licence
       # is decided. To enable later, add a step here that pushes dist/*.nupkg, guarded by
