@@ -2,6 +2,30 @@
 
 ## 0.1.0 (unreleased)
 
+Floating tables (d46; plan claude/layout-columns-floating-tables-plan.md, decisions Q1 to Q4 and A, B):
+
+- New `FlowTable.Floating` (`FloatingTablePosition`): a floating table is placed where the file states it (ECMA-376
+  17.4.57) and text flows around it on both sides, at least the stated distances away (it was laid out in the flow at
+  its horizontal position only). Anchors: the page, the margins or the column across (`TableHorizontalAnchor`); the
+  page, the margins or the following paragraph down (`TableVerticalAnchor`); offsets, or relative positions
+  (`TableHorizontalAlignment` left, center, right, inside, outside; `TableVerticalAlignment` top, center, bottom,
+  inside, outside), the relative one winning except down from the paragraph, where the standard allows only the
+  offset. When the file does not state the anchors, the page (the standard's default, not Word's: Q1).
+- Where the standard is silent, Word 2021 as measured with calib-floating.docx (Q2):
+  - a table anchored to its paragraph that is taller than the space left continues at the top of the next page (or
+    column), at the same horizontal position, and the text after it starts there beside it (T5);
+  - a table positioned on the page or the margins that reaches above its paragraph is placed first and the text above
+    flows around it too (T3; the same passes as for pictures);
+  - text keeps the distance away from the outside of the table's right border (T1: 272 + 150 + 0.75 + 9 = 431.75).
+- Arun's decisions: a table positioned on the page or the margins is placed exactly there, whole, even past the bottom
+  margin (A; Word moves and splits such a table and leaves a near-empty page); when either of two tables does not allow
+  overlapping (`AllowOverlap`, from w:tblOverlap; allowed when not stated, 17.4.56), the later one moves down until it
+  is clear (B). Text never overlaps a floating table (the distances are minimums), also where Word lets a heading run
+  over one (T4).
+- Output: of the 88 corpus and fixture documents only d46 changes (lines matched 77.8%, was 33.3%; pixels 13.2%, was
+  36.3%; one word on one row falls on the other side of the table in LibreOffice). All calib-floating tables sit where
+  Word puts them, except T2 (decision A) and T6 (the standard's anchors, Q1).
+
 Newspaper columns (d22; plan claude/layout-columns-floating-tables-plan.md, decisions Q1 to Q4 of 3 Nov 2026):
 
 - Multi-column sections are laid out in their columns (they were laid out as one column with

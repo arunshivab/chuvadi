@@ -43,6 +43,10 @@ namespace Chuvadi.Layout.ManualTests
             {
                 yield return a;
             }
+            foreach (Action a in FloatingGroups())
+            {
+                yield return a;
+            }
         }
     }
 }

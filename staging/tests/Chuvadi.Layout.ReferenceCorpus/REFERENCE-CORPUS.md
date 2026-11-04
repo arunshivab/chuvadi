@@ -102,7 +102,7 @@ pagination differences (below), not Layout faults found so far.
 | d43-tracked-comments.docx | notes | 1 | 1 | fail | 64.7% | 20.99% | libreoffice-differs |
 | d44-fields.docx | notes | 1 | 1 | pass | 100% | 5.99% | pass |
 | d45-text-boxes.docx | images | 1 | 1 | fail | 63.2% | 10.74% | libreoffice-differs |
-| d46-floating-table.docx | tables | 1 | 1 | fail | 33.3% | 36.27% | layout-gap |
+| d46-floating-table.docx | tables | 1 | 1 | fail | 77.8% | 13.18% | libreoffice-differs |
 | d47-symbols.docx | fonts and sizes | 1 | 1 | pass | 100% | 6.82% | pass |
 | d48-embedded-font.docx | fonts and sizes | 1 | 1 | pass | 100% | 5.12% | pass |
 
@@ -155,7 +155,7 @@ pagination differences (below), not Layout faults found so far.
 - **d43-tracked-comments.docx** (libreoffice-differs): LibreOffice exports the markup (deleted text shown); Layout lays out the final view (changes accepted, comment balloons not drawn), as the Docs integration guide says. To confirm what Word prints by default (Print Markup).
 - **d44-fields.docx** (pass): Complex fields (REF, PAGEREF, SEQ) show their cached results; bookmark and field markers take no room.
 - **d45-text-boxes.docx** (libreoffice-differs): Fill, outline, insets and text match. LibreOffice places the right-aligned box 8.45 pt further left (it keeps the 9 pt wrap distance inside the margin); Layout aligns the box edge to the margin, so lines beside it hold about one word more. To confirm in Word.
-- **d46-floating-table.docx** (layout-gap): The floating table is placed 200 pt from the margin in the text flow; Layout does not yet wrap text beside floating tables or apply their vertical position (a warning says so). LibreOffice wraps the text beside it.
+- **d46-floating-table.docx** (libreoffice-differs): The floating table is placed as the file states it (200 pt from the margin, at the top of the next paragraph) with text on both sides, as in Word 2021 (calibration T1, the same settings, matches Word line for line). One word on the last row beside the table falls on the other side of the table in LibreOffice.
 - **d47-symbols.docx** (pass): w:sym characters drawn in their font.
 - **d48-embedded-font.docx** (pass): DejaVu Serif comes only from the document (LibreOffice and Layout both use the embedded font; it is in neither font set).
 

@@ -27,3 +27,7 @@ tabs, tables, pictures inline and floating with wrapping, text boxes, footnotes 
 accepted, watermarks, PAGE/NUMPAGES/SECTIONPAGES fields and the document's embedded fonts. What is approximated or
 not yet laid out is reported in `doc.Warnings`. For a file of unknown kind, use Chuvadi.Layout.Documents
 (`AutoDetectLayout.Open`).
+
+Layout follows the file and its standard (ECMA-376); where the standard is silent it follows Word 2021 as measured.
+Point by point, including where Layout differs from Word or WPS Office on purpose (floating tables, columns):
+[FILE-FIDELITY.md](https://github.com/arunshivab/chuvadi/blob/main/docs/Chuvadi.Layout/FILE-FIDELITY.md).

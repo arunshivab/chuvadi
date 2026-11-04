@@ -27,6 +27,12 @@ namespace Chuvadi.Layout.Docs
         /// <summary>A header or footer is being converted.</summary>
         private bool _inStory;
 
+        /// <summary>Reading a text box's content (a floating table there is laid out in line).</summary>
+        private bool _inTextBox;
+
+        /// <summary>Reading the document body (not a header, footer, note or text box).</summary>
+        private bool _inBody;
+
         private void ReadNoteReferences()
         {
             _noteLabels = new Dictionary<D.Run, string>(ReferenceEqualityComparer.Instance);
@@ -169,8 +175,10 @@ namespace Chuvadi.Layout.Docs
             };
             double inner = Math.Max(1, width - flowBox.InsetLeft - flowBox.InsetRight);
             LayoutColor? outer = _behind;
+            bool outerBox = _inTextBox;
             try
             {
+                _inTextBox = true;
                 _behind = flowBox.Fill ?? outer;
                 foreach (object b in box.Blocks)
                 {
@@ -182,6 +190,7 @@ namespace Chuvadi.Layout.Docs
             }
             finally
             {
+                _inTextBox = outerBox;
                 _behind = outer;
                 _page = page;
             }

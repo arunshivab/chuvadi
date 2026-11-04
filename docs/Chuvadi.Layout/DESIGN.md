@@ -306,7 +306,8 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
     the next); footnotes in table cells and headers keep their label but their text is not laid out; numbering
     that restarts on each page counts through the section. Endnotes always go to the end of the document.
   - Tracked changes are laid out as accepted (no markup view); comment balloons are not drawn.
-  - Floating tables are placed at their horizontal position in the flow: no vertical position and no wrapping.
+  - Floating tables inside a table cell, header, footer, note or text box are placed at their horizontal position in
+    their container's flow (body floating tables are positioned and wrapped).
   - Text boxes are drawn upright; tables inside an inline text box are not laid out. Shapes other than text boxes,
     frames (`w:framePr`) and content-control boundaries are not modelled by Chuvadi.Docs.
   - Page borders, line numbers, vertical page alignment, diagonal and rotated cells,
@@ -373,6 +374,12 @@ the table draws no borders of its own), `GetListLabels`, and `doc.Sections`.
   ECMA-376 is silent the rules follow Word 2021 as measured with calib-columns.docx (balancing, separator extent and
   width, the paragraph mark after a column break, footnotes in their column). `doNotBalanceTextColumns` is not read
   yet (needs a Chuvadi.Docs settings model).
+- **Floating tables.** `w:tblpPr` in the body becomes `FlowTable.Floating`: the table is placed at its anchor and offset
+  (or relative position) and text flows on both sides, the stated distances away, from the outside of its right
+  border. Omitted anchors are the page (the standard). Paragraph-anchored tables taller than the space left continue at
+  the top of the next page; page- and margin-anchored tables are placed whole exactly where stated and, above their
+  paragraph, placed first so the text above flows around them; `w:tblOverlap="never"` moves the later table down.
+  Point by point, against the standard, Word and WPS: [FILE-FIDELITY.md](FILE-FIDELITY.md).
 - **Tables.** The grid is the file's column widths, else the table width (points or percent) shared equally, worked
   out from the column the table is placed in. Grid columns skipped by `gridBefore`/`gridAfter` become empty, borderless cells. Legacy `hMerge` runs become spans.
 - **Watermarks** are drawn by the engine: the text is shaped, its glyph outlines are stretched to the watermark box
