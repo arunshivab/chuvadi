@@ -1116,20 +1116,38 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         return InterpretRawValue(cellType, rawValue, styleIndex, isFormula);
     }
 
+    private System.Text.StringBuilder? _textBuffer;   // reused by ReadElementText for multi-node content
+
     private string ReadElementText()
     {
         // Read everything inside the current element until its close.
         if (_xml.IsEmptyElement) return string.Empty;
         int depth = _xml.Depth;
-        var sb = new System.Text.StringBuilder();
+
+        // Common case, <v>123</v>: one text node, then the end tag. Return the node's string
+        // directly, without a StringBuilder. The result is the same string either way.
+        string? first = null;
         while (_xml.Read())
         {
             if (_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == depth)
-                return sb.ToString();
+                return first ?? string.Empty;
             if (_xml.NodeType is XmlNodeType.Text or XmlNodeType.SignificantWhitespace or XmlNodeType.Whitespace)
-                sb.Append(_xml.Value);
+            {
+                if (first is null) { first = _xml.Value; continue; }
+                // A second text node (split by a comment, CDATA boundary, etc.): concatenate.
+                var sb = _textBuffer ??= new System.Text.StringBuilder();
+                sb.Clear().Append(first).Append(_xml.Value);
+                while (_xml.Read())
+                {
+                    if (_xml.NodeType == XmlNodeType.EndElement && _xml.Depth == depth)
+                        return sb.ToString();
+                    if (_xml.NodeType is XmlNodeType.Text or XmlNodeType.SignificantWhitespace or XmlNodeType.Whitespace)
+                        sb.Append(_xml.Value);
+                }
+                return sb.ToString();
+            }
         }
-        return sb.ToString();
+        return first ?? string.Empty;
     }
 
     private object? InterpretRawValue(string? cellType, string rawValue, int styleIndex, bool isFormula)

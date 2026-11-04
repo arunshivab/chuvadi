@@ -550,12 +550,9 @@ public sealed class Sheet
     /// <summary>Gets or creates a cell at the given (1-based row, 1-based column).</summary>
     public Cell Cell(int row, int column)
     {
-        if (!_cells.TryGetValue((row, column), out var cell))
-        {
-            cell = new Cell(row, column) { Owner = this };
-            _cells[(row, column)] = cell;
-        }
-        return cell;
+        // One hash lookup for both the find and the insert.
+        ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(_cells, (row, column), out _);
+        return slot ??= new Cell(row, column) { Owner = this };
     }
 
     /// <summary>Returns a range descriptor for the given A1 range.</summary>
@@ -1073,8 +1070,8 @@ public sealed class Cell
     /// </summary>
     public CellStyle? Style
     {
-        get => _style;
-        set { _style = value; StyleIndex = -1; }
+        get => _style?.Value;
+        set { _style = value is CellStyle st ? new CellStyleBox(st) : null; StyleIndex = -1; }
     }
 
     /// <summary>
@@ -1084,14 +1081,19 @@ public sealed class Cell
     /// </summary>
     public int StyleIndex { get; private set; } = -1;
 
-    /// <summary>Load path: record the file's style index and its resolved style together.</summary>
-    internal void SetLoadedStyle(int styleIndex, CellStyle? style)
+    /// <summary>
+    /// Load path: record the file's style index and its resolved style together. Cells with the
+    /// same index share one <see cref="CellStyleBox"/>; it is immutable and never handed out, so
+    /// sharing is invisible to callers (<see cref="Style"/> returns a copy of the value).
+    /// </summary>
+    internal void SetLoadedStyle(int styleIndex, CellStyleBox? style)
     {
         _style = style;
         StyleIndex = styleIndex;
     }
 
-    private CellStyle? _style;
+    // The style is held by reference (8 bytes per cell) instead of inline (264 bytes per cell).
+    private CellStyleBox? _style;
     private object? _value;
     private string? _formula;
     private string? _arrayRange;
@@ -1125,7 +1127,7 @@ public sealed class Cell
 
     private string? DisplayFormatCode(Workbook? wb)
     {
-        if (_style is CellStyle st)
+        if (_style?.Value is CellStyle st)
         {
             if (st.NumberFormat is not null) return st.NumberFormat;
             if (st.NumberFormatId is int id && wb is not null) return SerialDate.DisplayCode(wb.StyleTable, id);
@@ -1150,6 +1152,16 @@ public sealed class Cell
     internal bool IsFormula => _formula is not null;
     internal bool IsEmpty => _value is null && _formula is null;
     internal string? ArrayRangeInternal => _arrayRange;
+}
+
+/// <summary>
+/// An immutable holder for one resolved <see cref="CellStyle"/>, so cells can refer to a style
+/// instead of each carrying a 264-byte copy. Internal; never exposed.
+/// </summary>
+internal sealed class CellStyleBox
+{
+    public readonly CellStyle Value;
+    public CellStyleBox(CellStyle value) { Value = value; }
 }
 
 /// <summary>

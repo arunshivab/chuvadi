@@ -28,6 +28,20 @@ internal static class WorkbookLoader
             DisplayCulture = reader.Options.DisplayCulture ?? System.Globalization.CultureInfo.InvariantCulture,
         };
 
+        // One shared, immutable holder per cell format (see Cell.SetLoadedStyle).
+        var boxes = new CellStyleBox?[styles.CellFormats.Count];
+        var boxed = new bool[boxes.Length];
+        CellStyleBox? StyleBoxFor(int index)
+        {
+            if (index < 0 || index >= boxes.Length) return reader.ResolveStyle(index) is CellStyle st ? new CellStyleBox(st) : null;
+            if (!boxed[index])
+            {
+                boxes[index] = reader.ResolveStyle(index) is CellStyle s ? new CellStyleBox(s) : null;
+                boxed[index] = true;
+            }
+            return boxes[index];
+        }
+
         foreach (var sheetInfo in reader.Sheets)
         {
             var sheet = wb.AddSheet(sheetInfo.Name);
@@ -59,7 +73,7 @@ internal static class WorkbookLoader
                     if (styleIndex >= 0)
                     {
                         // xf 0 is the workbook default: Style stays null (see DefaultCellStyle).
-                        cell.SetLoadedStyle(styleIndex, reader.ResolveStyle(styleIndex));
+                        cell.SetLoadedStyle(styleIndex, StyleBoxFor(styleIndex));
                     }
                 }
             }
