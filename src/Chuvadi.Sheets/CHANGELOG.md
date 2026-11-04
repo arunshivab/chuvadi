@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.8.0 (unreleased)
+
+Performance only: `Workbook.Load` needs about a third of the memory and less time. No change to
+the public API, to any value, style or text a caller reads, to saved output, or to exceptions.
+
+### Performance
+- **Styles are shared, not copied into every cell.** A loaded cell referred to its resolved style
+  by carrying a full copy (264 bytes, present even in unstyled cells). Cells now refer to one
+  immutable, internal holder per cell format. `Cell.Style` still returns the same `CellStyle`
+  value, as a copy, so nothing a caller can reach is shared or mutable. Setting `Cell.Style`
+  works as before.
+- **Adding a cell takes one hash lookup instead of two.**
+- **Fewer allocations while reading cell values:** a cell's `<v>` or `<f>` text is taken straight
+  from the XML reader when it is a single text node, without a `StringBuilder` per value.
+- **Measured** on a 10 MB workbook (1.75 million cells, read from memory, 2 cores, warm):
+  - model memory 641 MB → 213 MB (383 → 127 bytes per cell), peak working set 1.8 GB → 0.66 GB;
+  - allocations 1,090 MB → 427 MB, garbage-collector pauses about 1.0–1.3 s → 0.4 s;
+  - `Workbook.Load` about 2.9 s → 1.6–1.8 s; the slowest single load 9.8 s → 1.9 s.
+
+### Tests
+- **New `perf` manual group, 3 checks** (`LoadBenchmarkTest`), run with `all` or `-- perf`. It
+  generates the 10 MB workbook in memory and checks:
+  - the model and the streaming reader return the same value for every cell;
+  - the loaded model keeps at most 200 bytes per cell;
+  - load times are printed against the 2 s target. Only a generous 15 s limit fails the check.
+- Not part of the xUnit suite, which runs tests in parallel and would distort the measurements.
+
 ## 1.7.0 (2026-10-29)
 
 The Layout importer's requests from running it over the Apache POI corpus: rich text,
