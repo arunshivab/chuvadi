@@ -11,16 +11,16 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Print.Ipp</Product>
-    <Description>Driverless IPP printing for Chuvadi.Print on any OS: a complete RFC 8010 encoder and decoder, IppClient (every common operation, IPPS), printer capabilities, PWG Raster writer and reader, IppPrinterTarget (rendered pages as PWG Raster) and IppDocumentTarget (PDF passthrough). No NuGet dependencies.</Description>
+    <Description>Driverless IPP printing for Chuvadi.Print on any OS: a complete RFC 8010 encoder and decoder, IppClient (every common operation, IPPS with certificate pinning), printer capabilities and a capability cache, PWG Raster writer and reader, IppPrinterTarget (rendered pages as PWG Raster) and IppDocumentTarget (PDF passthrough), IPP and CUPS print routes, and RawSocketTarget (raw TCP port 9100). No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0-rc.1</Version>
+    <Version>1.0.0-rc.2</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;ipp;ipp-everywhere;pwg-raster;driverless;network-printer</PackageTags>
+    <PackageTags>print;printing;ipp;ipp-everywhere;pwg-raster;driverless;network-printer;cups;raw;9100</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

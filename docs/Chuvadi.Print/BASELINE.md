@@ -80,7 +80,11 @@ Invariants the packages must always satisfy. Changes to these are deliberate, do
   `InMemoryJobStore`); leases with expiry and retry limits; idempotent job ids; a crash-safe agent journal
   so a job is never printed twice. Wire protocol v1. (0.5.0)
 
-- **1.0.0-rc.1 (this release)**: A1–A6 complete, public API frozen for 1.x (additive changes only).
+- **1.0.0-rc.1**: A1–A6 complete, public API frozen for 1.x (additive changes only); the D-48 removal and the
+  package split (D-107).
+- **1.0.0-rc.2 (this release)**: Phase 1 part 1 (D-96, D-132): the route chooser,
+  the route in the audit trail, the IPP capability cache, IPPS certificate pinning, and raw delivery (TCP 9100
+  and the Windows RAW datatype). Additive API only.
   User guide: [GUIDE.md](GUIDE.md). Release gate: [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md), then the
   tag `print-v1.0.0`.
 

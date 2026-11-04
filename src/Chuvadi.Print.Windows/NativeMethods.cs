@@ -55,6 +55,7 @@ namespace Chuvadi.Print.Windows
         internal const int ERROR_INSUFFICIENT_BUFFER = 122;
         internal const int ERROR_INVALID_PRINTER_NAME = 1801;
         internal const int ERROR_CANCELLED = 1223;
+        internal const int ERROR_INVALID_DATATYPE = 1804;
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct PRINTER_INFO_2
@@ -91,6 +92,32 @@ namespace Chuvadi.Print.Windows
             public IntPtr lpszDatatype;
             public uint fwType;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DOC_INFO_1
+        {
+            public IntPtr pDocName;
+            public IntPtr pOutputFile;
+            public IntPtr pDatatype;
+        }
+
+        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
+        internal static extern int StartDocPrinterW(IntPtr hPrinter, uint level, ref DOC_INFO_1 pDocInfo);
+
+        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
+        internal static extern bool StartPagePrinter(IntPtr hPrinter);
+
+        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
+        internal static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBuf, uint cbBuf, out uint pcWritten);
+
+        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
+        internal static extern bool EndPagePrinter(IntPtr hPrinter);
+
+        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
+        internal static extern bool EndDocPrinter(IntPtr hPrinter);
+
+        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
+        internal static extern bool AbortPrinter(IntPtr hPrinter);
 
         [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
         internal static extern bool EnumPrintersW(uint flags, string? name, uint level, IntPtr pPrinterEnum,

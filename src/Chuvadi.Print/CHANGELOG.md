@@ -1,6 +1,43 @@
 # Chuvadi.Print — Changelog
 
-## 1.0.0-rc.1 (unreleased)
+## 1.0.0-rc.2 (unreleased)
+
+Phase 1 of the vector and delivery plan, part 1 (D-96, D-132). For all four packages.
+
+- **Route chooser** (core): `PrintRouter` asks each `IPrintRoute` in D-96 order (`PdfAsIs`, `PageDescription`,
+  `Cups`, `WindowsQueue`, `Raster`) and prints on the first that can. Site overrides (`ForcedRoute`,
+  `DisabledRoutes`), a per-job override, and `Choose` to see the decision without printing. A route that fails
+  while printing is not retried on another route, so nothing is printed twice. `RasterRoute` wraps any
+  `IPrintTarget`.
+- **Fonts rule** (D-132 item 2): a PDF is sent as-is only when every font is embedded.
+  `PrintJobOptions.DocumentFonts` (default `Unknown`) and `PrintJob.WithFontsEmbedded()` let an application
+  mark its own PDFs; `IPdfFontInspector` is the hook for a Chuvadi.Pdf inspector later. Unknown fonts go to
+  raster.
+- **Audit route** (D-132 item 1, output change): `PrintAuditEvent.Route` and `AuditRecord.Route` (Remote). It is
+  `Raster` for `PrintTo`, `Document` for `SubmitTo`, or the router's choice with
+  `(fallback: Kind: reason; ...)`. `FileAuditSink` writes it as a new 13th column, **last**, so the 12 existing
+  columns keep their positions.
+- **IPP routes** (Chuvadi.Print.Ipp): `IppPdfRoute` (`PdfAsIs`, or `Cups` through `IppPdfRoute.ForCups`) and
+  `IppRasterRoute` (PWG Raster). `IppRoutes.CreateRouter` and `CreateCupsRouter` build both. Only an explicit
+  `application/pdf` in document-format-supported counts as accepting PDF (D-132 item 3).
+- **Capability cache** (Chuvadi.Print.Ipp): `IppCapabilityCache`, 10 minutes, then read again; also read again
+  after a failed read or a failed job (D-132 item 6).
+- **Certificate pinning** (Chuvadi.Print.Ipp): `IppClientOptions.PinnedCertificates` (SHA-256 fingerprints);
+  `IppCertificates.GetServerCertificate`, `Fingerprint` and `Matches`. Without pins nothing changes.
+  `AcceptAnyServerCertificate` still wins.
+- **Raw delivery**: `IRawPrintTarget` (core). `RawSocketTarget` (TCP 9100, any OS, Chuvadi.Print.Ipp) and
+  `WindowsRawPrinterTarget` (Windows queue with the RAW datatype through `StartDocPrinter`/`WritePrinter`,
+  Chuvadi.Print.Windows). Both pass bytes unchanged and also implement `IDocumentTarget`.
+- **Unchanged** (D-132 item 4): `IppDocumentTarget` still sends a PDF as application/octet-stream to a printer
+  that lists only that, and still reads the printer's capabilities on each job. `IppPrinterTarget` and
+  `WindowsPrinterTarget` behave as before.
+- **ManualTests**: three new groups (`RouterFallsBackToRasterAndAuditsWhy`, `RouterSendsEmbeddedPdfAsIs`,
+  `RawSocketDeliversBytesUnchanged`, total 56), and the options `--route-printer`, `--ipp-certificate`,
+  `--raw-printer` and `--windows-raw-printer`. WINDOWS-VERIFICATION.md gains section D2.
+- **Still to come in Phase 1** (part 2): the saved-printer registry, DNS-SD discovery, CUPS-Get-Printers queue
+  listing, and the back-side table re-derived from the PWG specification (D-132 item 5).
+
+## 1.0.0-rc.1 (2026-11-04)
 
 - **Package split (D-107, D-125)**: Chuvadi.Print is now four packages at one version, released together by the
   `print-v*` tag. Chuvadi.Print (core: settings, layout, plan, `PrintJob`, rasterisation interface, spool

@@ -49,6 +49,17 @@ namespace Chuvadi.Print.Ipp
         /// certificates; enable only on trusted networks. Default false.
         /// </summary>
         public bool AcceptAnyServerCertificate { get; set; }
+
+        /// <summary>
+        /// SHA-256 fingerprints of the printer certificates to trust for ipps:// and https:// (certificate pinning).
+        /// When the list is not empty, a connection succeeds only when the printer's certificate matches one of
+        /// them, whether or not it is self-signed or issued for another name; any other certificate is refused,
+        /// even one a public authority issued. Fingerprints are hex, upper or lower case, with or without colons or
+        /// spaces; <see cref="IppCertificates.GetServerCertificate"/> and <see cref="IppCertificates.Fingerprint"/>
+        /// read one from a printer. <see cref="AcceptAnyServerCertificate"/> wins over this list. Read when the
+        /// client is created; not used with a caller-supplied HttpClient. Default empty.
+        /// </summary>
+        public IList<string> PinnedCertificates { get; } = new List<string>();
     }
 
     /// <summary>
@@ -82,7 +93,14 @@ namespace Chuvadi.Print.Ipp
             {
                 var handler = new SocketsHttpHandler { Credentials = options.Credentials, PreAuthenticate = options.Credentials is not null };
                 if (options.AcceptAnyServerCertificate)
+                {
                     handler.SslOptions.RemoteCertificateValidationCallback = static (_, _, _, _) => true;
+                }
+                else if (options.PinnedCertificates.Count > 0)
+                {
+                    string[] pins = IppCertificates.NormalizeAll(options.PinnedCertificates);
+                    handler.SslOptions.RemoteCertificateValidationCallback = (_, certificate, _, _) => IppCertificates.MatchesAny(certificate, pins);
+                }
                 _http = new HttpClient(handler, disposeHandler: true) { Timeout = options.Timeout };
                 _ownsHttp = true;
             }
