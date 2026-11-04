@@ -22,6 +22,7 @@ namespace Chuvadi.Sheets.Zip;
 ///
 /// Thread-safety: NOT thread-safe. Use one writer per thread.
 /// </summary>
+[System.Obsolete("Chuvadi.Sheets.Zip is obsolete and will be removed in the next major version. Use the Chuvadi.Zip package (namespace Chuvadi.Zip) instead.")]
 public sealed class ZipWriter : IDisposable, IAsyncDisposable
 {
     private readonly Stream _outputStream;
