@@ -495,8 +495,8 @@ option writes the same bytes as 1.4.0, except where the schema-order fix applies
 
 ## 1.4.0 (not released separately; included in 1.7.0)
 
-Read-side additions for Anjal Mail and the Layout engine: display text, password on the
-streaming reader, hostile-input limits and cancellation, macro detection, full page setup.
+Read-side additions: display text, password on the streaming reader, hostile-input limits and
+cancellation, macro detection, full page setup.
 Additive and source-compatible; writer output is unchanged.
 
 ### Features

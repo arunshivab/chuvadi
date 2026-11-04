@@ -82,17 +82,17 @@ internal static class FeaturesPolishTest
                 sheet.WriteRow(row => row
                     .Cell(95)
                     .Cell("Dr. Mehta")
-                    .Comment("Approved", "Arun", "Excellent work, no concerns. Signed off."));
+                    .Comment("Approved", "Asha", "Excellent work, no concerns. Signed off."));
 
                 sheet.WriteRow(row => row
                     .Cell(72)
                     .Cell("Dr. Reddy")
-                    .Comment("Pending", "Arun", "Awaiting second review per protocol section 4.3."));
+                    .Comment("Pending", "Asha", "Awaiting second review per protocol section 4.3."));
 
                 sheet.WriteRow(row => row
                     .Cell(88)
                     .Cell("Dr. Singh")
-                    .Comment("Approved", "Arun", "Looks good. Minor formatting note in section 2."));
+                    .Comment("Approved", "Asha", "Looks good. Minor formatting note in section 2."));
             }
 
             // ---- Sheet 3: Freeze + table on same sheet ----

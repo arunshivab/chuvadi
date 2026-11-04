@@ -159,7 +159,7 @@ var title = new RichText(new RichTextRun("Total: ", new RichTextFont { Bold = tr
 sh.Cell("A1").RichText = title;                                    // Value is "Total: 42"
 sh.AddHyperlink("A2", target: "https://example.com", tooltip: "site");
 sh.AddHyperlink("A3", location: "'Other Sheet'!B5");
-sh.AddComment("B2", "Arun", "Checked");
+sh.AddComment("B2", "Asha", "Checked");
 foreach (var run in book.Sheets[0].FindCell(1, 1)?.RichText?.Runs ?? Array.Empty<RichTextRun>())
     Console.WriteLine($"{run.Text}: bold={run.Font?.Bold} colour={run.ResolvedColor}");
 
