@@ -232,7 +232,7 @@ Tighten them further with `Clone()` and set the values you need. Compressed pack
 ## Documents (docx) in short
 
 `AutoDetectLayout.Open` sniffs a docx; `DocsLayout.Open(stream, DocsImportOptions, LayoutOptions)` (Chuvadi.Layout.Docs)
-takes options, and `DocsLayout.Open(Chuvadi.Docs.Word.Document, ...)` lays out a document already loaded or built.
+takes options, and `DocsLayout.Open(Chuvadi.Docs.Model.Document, ...)` lays out a document already loaded or built.
 
 - `PageCount` starts from the page count Word recorded (docProps/app.xml) and becomes exact when the forward pass ends.
 - Watermarks, headers and footers (with Word's linking), list numbers, tables and floating pictures are laid out.

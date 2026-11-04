@@ -1,4 +1,4 @@
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Fonts;
 using Chuvadi.Layout.Docs;
@@ -121,7 +121,7 @@ public class DocsImport160Tests
         TextBox box = new TextBox
         {
             Placement = ImagePlacement.Floating,
-            Position = new FloatingPosition { HorizontalAnchor = Chuvadi.Docs.Word.HorizontalAnchor.Margin, HAlign = HorizontalAlignment.Right, VerticalAnchor = Chuvadi.Docs.Word.VerticalAnchor.Paragraph, Wrap = TextWrap.Square },
+            Position = new FloatingPosition { HorizontalAnchor = Chuvadi.Docs.Model.HorizontalAnchor.Margin, HAlign = HorizontalAlignment.Right, VerticalAnchor = Chuvadi.Docs.Model.VerticalAnchor.Paragraph, Wrap = TextWrap.Square },
             WidthPt = 150,
             HeightPt = 80,
             FillHex = "EAF1FB",

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// One paragraph: a sequence of runs (text spans with their own formatting) plus
@@ -220,7 +220,7 @@ public sealed class Paragraph
     public Paragraph InternalLink(string text, string bookmarkName, TextFormat? format = null)
     {
         if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text required.", nameof(text));
-        Word.Bookmark.CheckName(bookmarkName);
+        Model.Bookmark.CheckName(bookmarkName);
         _runs.Add(new Run(text, format ?? TextFormat.None) { HyperlinkAnchor = bookmarkName });
         return this;
     }
@@ -263,7 +263,7 @@ public sealed class Paragraph
         return Field(f, cachedResult, format);
     }
 
-    /// <summary>Appends a field from a <see cref="Word.Field"/> object with its cached result.</summary>
+    /// <summary>Appends a field from a <see cref="Model.Field"/> object with its cached result.</summary>
     public Paragraph Field(Field field, string? cachedResult = null, TextFormat? format = null)
     {
         if (field is null) throw new ArgumentNullException(nameof(field));
@@ -295,11 +295,11 @@ public sealed class Paragraph
 
     /// <summary>Appends a REF field showing the text of bookmark <paramref name="bookmarkName"/> (with a link to it).</summary>
     public Paragraph Ref(string bookmarkName, string? cachedResult = null, TextFormat? format = null)
-        => Field($"REF {Word.Bookmark.CheckName(bookmarkName)} \\h", cachedResult, format, dirty: cachedResult is null);
+        => Field($"REF {Model.Bookmark.CheckName(bookmarkName)} \\h", cachedResult, format, dirty: cachedResult is null);
 
     /// <summary>Appends a PAGEREF field showing the page number of bookmark <paramref name="bookmarkName"/>.</summary>
     public Paragraph PageRef(string bookmarkName, string? cachedResult = null, TextFormat? format = null)
-        => Field($"PAGEREF {Word.Bookmark.CheckName(bookmarkName)} \\h", cachedResult, format, dirty: cachedResult is null);
+        => Field($"PAGEREF {Model.Bookmark.CheckName(bookmarkName)} \\h", cachedResult, format, dirty: cachedResult is null);
 
     /// <summary>Appends a SEQ field (figure / table numbering), e.g. <c>Seq("Figure", "1")</c> for "Figure 1".</summary>
     public Paragraph Seq(string identifier, string? cachedResult = null, TextFormat? format = null)

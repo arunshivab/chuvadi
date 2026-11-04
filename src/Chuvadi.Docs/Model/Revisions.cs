@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>Kind of a tracked change.</summary>
 public enum RevisionType

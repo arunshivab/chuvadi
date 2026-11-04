@@ -75,7 +75,7 @@ namespace Chuvadi.Layout.Documents
             {
                 return DocsLayout.Open(bytes, null, options, ct);
             }
-            catch (LayoutFormatException ex) when (ex.InnerException is Chuvadi.Docs.Word.DocxFormatException)
+            catch (LayoutFormatException ex) when (ex.InnerException is Chuvadi.Docs.Model.DocxFormatException)
             {
                 // Not a Word document: a workbook, or nothing readable (Chuvadi.Sheets says which).
             }

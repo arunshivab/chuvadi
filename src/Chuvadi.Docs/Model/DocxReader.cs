@@ -7,7 +7,7 @@ using System.Xml;
 using Chuvadi.Docs.Internal;
 using Chuvadi.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Read-only access to a .docx — body paragraphs (text + style name) and tables (text

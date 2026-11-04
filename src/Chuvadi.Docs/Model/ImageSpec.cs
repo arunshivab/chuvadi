@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using Chuvadi.Docs.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Describes an image to insert into a document. Create via the factory methods, which give

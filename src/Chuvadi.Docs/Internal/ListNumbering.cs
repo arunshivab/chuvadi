@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 namespace Chuvadi.Docs.Internal;
 

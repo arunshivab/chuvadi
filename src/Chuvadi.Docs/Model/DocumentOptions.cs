@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Page size, orientation and margins of a section (w:pgSz, w:pgMar, w:paperSrc). The preset

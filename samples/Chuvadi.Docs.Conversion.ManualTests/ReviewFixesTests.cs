@@ -4,9 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Chuvadi.Docs.Conversion;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Markup.Markdown;
-using Paragraph = Chuvadi.Docs.Word.Paragraph;
+using Paragraph = Chuvadi.Docs.Model.Paragraph;
 using static Chuvadi.Docs.Conversion.ManualTests.Program;
 
 namespace Chuvadi.Docs.Conversion.ManualTests;

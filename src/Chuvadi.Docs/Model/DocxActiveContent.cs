@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// What ACTIVE or REMOTE content a document carries — macros, ActiveX controls, embedded

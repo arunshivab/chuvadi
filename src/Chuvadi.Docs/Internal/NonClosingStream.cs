@@ -7,7 +7,7 @@ namespace Chuvadi.Docs.Internal;
 
 /// <summary>
 /// Pass-through stream whose Dispose flushes but does NOT dispose the wrapped stream. Used so
-/// <see cref="Word.Document.SaveTo(Stream)"/> leaves the caller's stream open: the shared
+/// <see cref="Model.Document.SaveTo(Stream)"/> leaves the caller's stream open: the shared
 /// package writer's ZipArchive otherwise disposes whatever stream it is given.
 /// </summary>
 internal sealed class NonClosingStream : Stream

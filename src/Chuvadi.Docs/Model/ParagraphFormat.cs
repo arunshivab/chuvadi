@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Paragraph-level formatting — the complete set of commonly used WordprocessingML paragraph

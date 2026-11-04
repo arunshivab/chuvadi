@@ -1,6 +1,6 @@
 using System;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Character-level (run) formatting — the complete set of commonly used WordprocessingML run
@@ -157,7 +157,7 @@ public sealed class TextFormat
 
     // ---- Effects --------------------------------------------------------------------
 
-    /// <summary>Underline style; takes precedence over <see cref="Underline"/>. <see cref="Word.UnderlineStyle.None"/> removes an inherited underline. Null = per <see cref="Underline"/>.</summary>
+    /// <summary>Underline style; takes precedence over <see cref="Underline"/>. <see cref="Model.UnderlineStyle.None"/> removes an inherited underline. Null = per <see cref="Underline"/>.</summary>
     public UnderlineStyle? UnderlineStyle { get; init; }
 
     /// <summary>Underline color as 6-digit hex without '#', or "auto". Null = inherit (text color).</summary>
@@ -229,7 +229,7 @@ public sealed class TextFormat
     /// Original toggles written as EXPLICITLY OFF (<c>w:val="0"</c>), cancelling bold, italic or
     /// strikethrough inherited from a style. Applies only where the matching bool is false.
     /// Document.Load sets these from the file, so explicit-off runs round-trip.
-    /// (For underline use <see cref="UnderlineStyle"/> = <see cref="Word.UnderlineStyle.None"/>.)
+    /// (For underline use <see cref="UnderlineStyle"/> = <see cref="Model.UnderlineStyle.None"/>.)
     /// </summary>
     public RunToggles ExplicitlyOff { get; init; }
 
@@ -253,7 +253,7 @@ public sealed class TextFormat
         && ThemeColor is null && ThemeColorTint is null && ThemeColorShade is null && ShadingHex is null && Shading is null;
 
     /// <summary>The underline that will actually be written: <see cref="UnderlineStyle"/> if set, else Single when <see cref="Underline"/>.</summary>
-    public UnderlineStyle? EffectiveUnderline => UnderlineStyle ?? (Underline ? Word.UnderlineStyle.Single : null);
+    public UnderlineStyle? EffectiveUnderline => UnderlineStyle ?? (Underline ? Model.UnderlineStyle.Single : null);
 
     public static readonly TextFormat None = new();
     public static readonly TextFormat BoldText = new() { Bold = true };

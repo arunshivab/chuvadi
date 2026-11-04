@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 using System.Xml;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 namespace Chuvadi.Docs.Internal;
 
@@ -110,7 +110,7 @@ internal static class RunProperties
         }
 
         if (f.Shading is not null) FormattingXml.WriteShading(x, f.Shading);
-        else if (f.ShadingHex is not null) FormattingXml.WriteShading(x, Word.Shading.Fill(f.ShadingHex));
+        else if (f.ShadingHex is not null) FormattingXml.WriteShading(x, Model.Shading.Fill(f.ShadingHex));
 
         if (f.VerticalPosition is VerticalTextPosition vp)
             Val(x, "vertAlign", vp switch

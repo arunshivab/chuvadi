@@ -2,7 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>The kind of a <see cref="StyleDefinition"/> (ST_StyleType).</summary>
 public enum StyleType

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>Vertical placement of a text box's content (a:bodyPr/@anchor).</summary>
 public enum TextBoxVerticalAnchor

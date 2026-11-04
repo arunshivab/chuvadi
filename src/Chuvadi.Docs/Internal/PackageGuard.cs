@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Threading;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Internal.Crypto;
 
 namespace Chuvadi.Docs.Internal;

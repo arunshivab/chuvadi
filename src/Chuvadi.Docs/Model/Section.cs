@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>How a section starts relative to the previous one (w:type).</summary>
 public enum SectionStart

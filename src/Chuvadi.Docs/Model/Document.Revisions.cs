@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Chuvadi.Docs.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>One tracked change in the document.</summary>
 /// <param name="Paragraph">The paragraph the change is in.</param>
@@ -15,7 +15,7 @@ public sealed record RevisionInfo(Paragraph Paragraph, Run? Run, RevisionMark Ma
     /// <summary>For an inserted or deleted table row: the row (<see cref="Paragraph"/> is its first cell's first paragraph).</summary>
     public TableRow? Row { get; init; }
 
-    /// <summary>For a paragraph-level entry: true when it is the paragraph mark's formatting change (<see cref="Word.Paragraph.MarkFormatChange"/>).</summary>
+    /// <summary>For a paragraph-level entry: true when it is the paragraph mark's formatting change (<see cref="Model.Paragraph.MarkFormatChange"/>).</summary>
     public bool IsMarkFormatChange { get; init; }
 }
 

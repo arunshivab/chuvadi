@@ -18,7 +18,7 @@ LaidOutPage first = doc.GetPage(0);                    // display list, boxes, t
 | Member | What it does |
 |---|---|
 | `DocsLayout.Open(Stream / byte[], DocsImportOptions?, LayoutOptions?, ct)` | lays out a .docx (encrypted too, with `LayoutOptions.Password`) |
-| `DocsLayout.Open(Chuvadi.Docs.Word.Document, …)` | lays out a document already loaded or built with Chuvadi.Docs |
+| `DocsLayout.Open(Chuvadi.Docs.Model.Document, …)` | lays out a document already loaded or built with Chuvadi.Docs |
 | `DocsImporter.Import(…)` | builds the flow IR (`FlowDocument`) only, for callers that lay it out themselves |
 | `DocsImportOptions` | headers and footers, pictures, watermarks, hidden text, auto paragraph spacing |
 

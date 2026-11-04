@@ -4,7 +4,7 @@ using System.Text;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
-using D = Chuvadi.Docs.Word;
+using D = Chuvadi.Docs.Model;
 
 namespace Chuvadi.Layout.Docs
 {

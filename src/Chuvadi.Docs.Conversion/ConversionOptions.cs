@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Markup.Markdown;
 using Chuvadi.Markup.Sanitization;
 

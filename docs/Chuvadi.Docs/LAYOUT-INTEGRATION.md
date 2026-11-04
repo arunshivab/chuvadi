@@ -1,6 +1,6 @@
 # Chuvadi.Docs — integration guide for a paginator (Chuvadi.Layout)
 
-This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.6.0** (Phase 9: comments and tracked changes; Phase 8: fields, footnotes/endnotes, bookmarks, text boxes, floating tables, embedded fonts; earlier: exact image anchoring, hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Word` namespace.
+This page lists exactly which public APIs a layout engine should call to lay out a loaded `.docx` the way Word does. It is accurate as of Chuvadi.Docs **1.6.0** (Phase 9: comments and tracked changes; Phase 8: fields, footnotes/endnotes, bookmarks, text boxes, floating tables, embedded fonts; earlier: exact image anchoring, hyperlink targets, positional tabs, `SizeStated`, Word-only main parts, the default tab stop). Everything lives in the `Chuvadi.Docs.Model` namespace.
 
 ## 1. Load
 

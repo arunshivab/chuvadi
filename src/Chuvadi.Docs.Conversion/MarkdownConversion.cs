@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using Chuvadi.Docs.Conversion.Internal;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Markup.Html;
 using Md = Chuvadi.Markup.Markdown;
 

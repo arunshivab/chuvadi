@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using Chuvadi.Docs.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// An in-memory Word document: an ordered list of blocks (paragraphs and tables) plus page

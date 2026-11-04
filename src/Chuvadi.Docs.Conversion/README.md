@@ -8,7 +8,7 @@ Conversions for [Chuvadi.Docs](../Chuvadi.Docs/README.md) documents: **plain tex
 
 ```csharp
 using Chuvadi.Docs.Conversion;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 // Markdown → docx
 var doc = MarkdownConversion.Import(File.ReadAllText("README.md"));

@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Chuvadi.Docs.Conversion;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using static Chuvadi.Docs.Conversion.ManualTests.Program;
 
 namespace Chuvadi.Docs.Conversion.ManualTests;
