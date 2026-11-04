@@ -391,8 +391,9 @@ internal static class StyleApiTest
             Fixture.Write(p, sheetXml: SampleSheetXml, stylesXml: SampleStylesXml, themeXml: "<a:theme xmlns:a=\"x\"><broken>");
             Expect.True(!Workbook.Load(p).StyleTable.Theme.IsPresent, "lenient: no theme");
             var threw = false;
+            // 2.0.0: malformed XML is reported as XlsxFormatException, the XmlException inside it.
             try { using var r = XlsxReader.Open(p, new XlsxReaderOptions { StrictXml = true }); }
-            catch (System.Xml.XmlException) { threw = true; }
+            catch (XlsxFormatException ex) when (ex.InnerException is System.Xml.XmlException) { threw = true; }
             Expect.True(threw, "strict: throws");
         });
 

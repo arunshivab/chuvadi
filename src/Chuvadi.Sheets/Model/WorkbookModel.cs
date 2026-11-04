@@ -276,7 +276,7 @@ public sealed class Workbook
 
         using var fileStream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
         using var reader = XlsxReader.Open(fileStream, password, opts);   // decrypts when needed
-        return WorkbookLoader.Load(reader);
+        return Internal.MalformedInput.Run(() => WorkbookLoader.Load(reader));
     }
 
     /// <summary>Loads a workbook from an open stream. The stream is not closed.</summary>
@@ -294,7 +294,7 @@ public sealed class Workbook
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         using var reader = XlsxReader.Open(input, password, ModelOptions(options));
-        return WorkbookLoader.Load(reader);
+        return Internal.MalformedInput.Run(() => WorkbookLoader.Load(reader));
     }
 
     /// <summary>The caller's options (copied, never mutated) with headers off for the model loader.</summary>

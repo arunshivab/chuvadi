@@ -149,7 +149,7 @@ public sealed class DrawingObject
     /// the bytes are read when asked, while the <see cref="XlsxReader"/> is open (read limits
     /// apply). Treat the array as read-only.
     /// </summary>
-    public byte[]? GetImageBytes() => ImageData ?? ImageLoader?.Invoke();
+    public byte[]? GetImageBytes() => ImageData ?? (ImageLoader is { } load ? Internal.MalformedInput.Run(load) : null);
 
     /// <summary>For a linked picture: the external target (file path or URL), or null.</summary>
     public string? LinkedImageTarget { get; internal set; }

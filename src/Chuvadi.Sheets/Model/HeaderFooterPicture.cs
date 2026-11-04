@@ -51,7 +51,7 @@ public sealed class HeaderFooterPicture
     /// <see cref="XlsxReaderOptions.LoadImageData"/>). For the streaming reader they are read
     /// on demand while the <see cref="XlsxReader"/> is open. Treat the array as read-only.
     /// </summary>
-    public byte[]? GetImageBytes() => ImageData ?? ImageLoader?.Invoke();
+    public byte[]? GetImageBytes() => ImageData ?? (ImageLoader is { } load ? Internal.MalformedInput.Run(load) : null);
 
     internal static bool TryParsePosition(string id, out HeaderFooterSection section, out HeaderFooterPart part, out HeaderFooterPageKind kind)
     {

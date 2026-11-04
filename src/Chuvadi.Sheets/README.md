@@ -191,7 +191,8 @@ using (var zip = ZipWriter.Create("bundle.zip"))
   work, and to streams that are already open or held in memory.
 - Wrapped in a Compound File Binary (CFB) container — same format Excel uses.
   The reader supports DIFAT-extended containers (large encrypted files).
-- Wrong password and missing password both throw `XlsxPasswordRequiredException`.
+- Wrong password and missing password both throw `XlsxPasswordRequiredException`. A damaged
+  container or a failed integrity check throws `XlsxFormatException` (see Errors below).
 - Encryption is available on both the `Workbook` model and the streaming `XlsxWriter`
   (via `XlsxWriterOptions.Encryption`); the streaming path encrypts in 4096-byte
   segments with an incrementally computed HMAC, so even very large exports never hold
@@ -217,6 +218,27 @@ open-password (`EncryptionOptions`).
   security model.
 - Zip password protection is intentionally not provided (classic ZipCrypto is broken
   and AES-zip is not in the BCL). Use workbook encryption instead.
+
+## Errors
+
+Since 2.0.0 the read API reports a malformed file with one exception type. Every exception the
+readers throw is one of these:
+
+| Exception | When |
+|---|---|
+| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part, a damaged relationship (`.rels`) entry, a truncated part, or (with a password given) a damaged encrypted container or a failed integrity check. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, ...). |
+| `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. Without a password the encrypted container is not read, so damage to it is found only once a password is supplied. |
+| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. |
+| `InvalidDataException` | `MaxPartBytes` was exceeded (a limit, as in 1.x; not a malformed file). |
+| `OperationCanceledException` | The `CancellationToken` was cancelled. |
+| `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |
+| I/O exceptions (`FileNotFoundException`, `UnauthorizedAccessException`, ...) | Opening a path failed. |
+
+This applies to `XlsxReader.Open`, `Workbook.Load`, row enumeration, `ReadLayout`,
+`ReadDrawings`, `ReadComments`, `ReadHeaderFooterPictures`, `ReadChartSheet`,
+`GetImageBytes` and the `ReadXlsx` extensions. With `StrictXml` off (the default), a malformed
+theme or chart part is still skipped rather than reported, as before. The obsolete
+`Chuvadi.Sheets.Zip` API keeps its own `ZipFormatException`.
 
 ## Reading styles: what round-trips
 

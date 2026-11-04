@@ -84,6 +84,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void Layout17() => Layout17Test.Run(_dir);
+
+    [Fact]
+    public void Errors() => ErrorsTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

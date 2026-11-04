@@ -71,7 +71,7 @@ public sealed class XlsxReader : IDisposable
         bool found = false;
         foreach (var c in ChartSheets) if (ReferenceEquals(c, chartSheet)) { found = true; break; }
         if (!found) throw new ArgumentException("Not a chart sheet of this workbook; use one from ChartSheets.", nameof(chartSheet));
-        return ReadChartSheetCore(chartSheet, eager: false, _options.LoadImageData);
+        return MalformedInput.Run(() => ReadChartSheetCore(chartSheet, eager: false, _options.LoadImageData));
     }
 
     internal ChartSheet ReadChartSheetCore(SheetInfo info, bool eager, bool loadImages)
@@ -292,7 +292,18 @@ public sealed class XlsxReader : IDisposable
                     ct.ThrowIfCancellationRequested();
                     throw;
                 }
-                catch (Chuvadi.Internal.Crypto.PackagePasswordException ex) { throw new XlsxPasswordRequiredException(ex.Message, ex); }
+                catch (Chuvadi.Internal.Crypto.PackagePasswordException ex) when (IsPasswordProblem(ex, password))
+                {
+                    throw new XlsxPasswordRequiredException(ex.Message, ex);
+                }
+                catch (Chuvadi.Internal.Crypto.PackagePasswordException ex)
+                {
+                    // A password was given and the container itself is damaged (it cannot be
+                    // parsed, or its EncryptionInfo / EncryptedPackage stream is missing): that
+                    // is a malformed file. 1.x reported it as a password problem. The inner
+                    // exception is the parser's error, when there is one.
+                    throw new XlsxFormatException("The file is not a valid xlsx workbook: " + ex.Message, ex.InnerException!);
+                }
                 owned = source = new MemoryStream(plaintext, writable: false);
                 ct.ThrowIfCancellationRequested();
             }
@@ -305,7 +316,16 @@ public sealed class XlsxReader : IDisposable
             }
 
             // The package layer closes the stream it is given: shield a caller-owned stream.
-            pkg = OoxmlPackage.Open(owned is null && !ownsStream ? new NonClosingStream(source) : source);
+            try
+            {
+                pkg = OoxmlPackage.Open(owned is null && !ownsStream ? new NonClosingStream(source) : source);
+            }
+            catch (ArgumentException ex)
+            {
+                // The package layer rejects a damaged .rels entry (an empty relationship Id, ...)
+                // with ArgumentException: from here that is a malformed file, not a caller error.
+                throw MalformedInput.Wrap(ex);
+            }
 
             // Find the workbook part via root relationships.
             string? workbookUri = null;
@@ -329,14 +349,24 @@ public sealed class XlsxReader : IDisposable
                 foreach (var rt in sstRich) if (rt is not null) RichTextXml.Resolve(rt, styleTable);
             return new XlsxReader(pkg, sst, styleTable, wb, macros, options, budget, owned) { SharedRichText = sstRich };
         }
-        catch
+        catch (Exception ex)
         {
             pkg?.Dispose();
             owned?.Dispose();
             if (ownsStream) input.Dispose();
+            if (MalformedInput.Is(ex)) throw MalformedInput.Wrap(ex);
             throw;
         }
     }
+
+    /// <summary>
+    /// The shared decryptor reports four things as PackagePasswordException: no password given,
+    /// a wrong password ("Incorrect password."), a container that cannot be parsed, and a missing
+    /// EncryptionInfo or EncryptedPackage stream. Only the first two are password problems.
+    /// (Without a password the container is not parsed, so damage is not detected then.)
+    /// </summary>
+    private static bool IsPasswordProblem(Chuvadi.Internal.Crypto.PackagePasswordException ex, string? password)
+        => string.IsNullOrEmpty(password) || ex.Message == "Incorrect password.";
 
     /// <summary>VBA project parts, Excel 4.0 macro sheets, or a macro-enabled main part.</summary>
     private static bool DetectMacros(OoxmlPackage pkg)
@@ -708,6 +738,11 @@ public sealed class SheetReader
     public SheetLayoutInfo ReadLayout()
     {
         if (_layoutInfo is not null) return _layoutInfo;
+        return MalformedInput.Run(ReadLayoutCore);
+    }
+
+    private SheetLayoutInfo ReadLayoutCore()
+    {
         var collector = new SheetLayoutCollector(_book.StyleTable);
         var ct = _book.Options.CancellationToken;
         ct.ThrowIfCancellationRequested();
@@ -756,7 +791,7 @@ public sealed class SheetReader
         if (_drawings is not null) return _drawings;
         var layout = ReadLayout();
         _book.Options.CancellationToken.ThrowIfCancellationRequested();
-        return _drawings = DrawingReader.Read(_book, _info.PartUri, layout.DrawingRelId, eager: false, loadImages: true);
+        return _drawings = MalformedInput.Run(() => DrawingReader.Read(_book, _info.PartUri, layout.DrawingRelId, eager: false, loadImages: true));
     }
 
     private IReadOnlyList<CellComment>? _comments;
@@ -771,7 +806,7 @@ public sealed class SheetReader
         if (_comments is not null) return _comments;
         var layout = ReadLayout();
         _book.Options.CancellationToken.ThrowIfCancellationRequested();
-        return _comments = LegacyDrawingReader.ReadComments(_book, _info.PartUri, layout.LegacyDrawingRelId);
+        return _comments = MalformedInput.Run(() => LegacyDrawingReader.ReadComments(_book, _info.PartUri, layout.LegacyDrawingRelId));
     }
 
     private IReadOnlyList<HeaderFooterPicture>? _hfPictures;
@@ -786,7 +821,7 @@ public sealed class SheetReader
         if (_hfPictures is not null) return _hfPictures;
         var layout = ReadLayout();
         _book.Options.CancellationToken.ThrowIfCancellationRequested();
-        return _hfPictures = LegacyDrawingReader.ReadHeaderFooterPictures(_book, _info.PartUri, layout.LegacyDrawingHFRelId, eager: false, loadImages: true);
+        return _hfPictures = MalformedInput.Run(() => LegacyDrawingReader.ReadHeaderFooterPictures(_book, _info.PartUri, layout.LegacyDrawingHFRelId, eager: false, loadImages: true));
     }
 
     /// <summary>Skips the current element's subtree, checking the token as it goes (sheetData can be huge).</summary>
@@ -851,7 +886,7 @@ internal sealed class RowEnumerable : IEnumerable<RowReader>
     private readonly SheetReader _sheet;
     private readonly SheetLayoutCollector? _layout;
     public RowEnumerable(SheetReader sheet, SheetLayoutCollector? layout) { _sheet = sheet; _layout = layout; }
-    public IEnumerator<RowReader> GetEnumerator() => new RowEnumerator(_sheet, _layout);
+    public IEnumerator<RowReader> GetEnumerator() => MalformedInput.Run(() => new RowEnumerator(_sheet, _layout));
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
@@ -913,6 +948,12 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     object IEnumerator.Current => Current;
 
     public bool MoveNext()
+    {
+        try { return MoveNextCore(); }
+        catch (Exception ex) when (MalformedInput.Is(ex)) { throw MalformedInput.Wrap(ex); }
+    }
+
+    private bool MoveNextCore()
     {
         // Loop in case we need to skip past the header row internally.
         while (true)
