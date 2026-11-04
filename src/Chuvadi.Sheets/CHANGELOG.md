@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-05)
 
 A major version: the public namespace is renamed, and every error caused by a malformed file now
 has one exception type. Also: the old zip API is marked obsolete, and saving many relationships
@@ -33,7 +33,11 @@ has one exception type. Also: the old zip API is marked obsolete, and saving man
     - a missing or wrong password is `XlsxPasswordRequiredException`; without a password the
       container is not read, so damage is reported only once a password is given;
     - read limits are `XlsxLimitExceededException`, except `MaxPartBytes`, which is still
-      `InvalidDataException`;
+      `InvalidDataException`, with the same message and not wrapped. New in 2.0: that exception
+      carries `Data["Chuvadi.Sheets.ReadLimit"] = true` (a boxed `bool`), set at both places
+      the limit is checked: when the zip declares a part larger than the limit, and when more
+      bytes than the limit are actually inflated from a part. It tells a size limit apart from
+      a malformed file;
     - cancellation is `OperationCanceledException`;
     - with `StrictXml` off, a malformed theme or chart part is still skipped.
   - Migrate:
