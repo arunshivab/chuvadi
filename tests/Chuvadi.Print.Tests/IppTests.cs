@@ -364,14 +364,21 @@ public class IppMappingTests
         Assert.Empty(approx);
     }
 
+    // PWG 5102.4-2012 section 4.3.2.8, Table 9 "Transform Values for Backside Images", every row.
+    // Vertical = TwoSidedLongEdge, Horizontal = TwoSidedShortEdge.
     [Theory]
-    [InlineData(Duplex.Vertical, PwgSheetBack.Normal, 1, 1)]
+    [InlineData(Duplex.Simplex, PwgSheetBack.Normal, 1, 1)]
+    [InlineData(Duplex.Simplex, PwgSheetBack.Flipped, 1, 1)]
+    [InlineData(Duplex.Simplex, PwgSheetBack.Rotated, 1, 1)]
+    [InlineData(Duplex.Simplex, PwgSheetBack.ManualTumble, 1, 1)]
     [InlineData(Duplex.Vertical, PwgSheetBack.Flipped, 1, -1)]
-    [InlineData(Duplex.Horizontal, PwgSheetBack.Flipped, -1, 1)]
-    [InlineData(Duplex.Vertical, PwgSheetBack.Rotated, -1, -1)]
-    [InlineData(Duplex.Horizontal, PwgSheetBack.Rotated, 1, 1)]
     [InlineData(Duplex.Vertical, PwgSheetBack.ManualTumble, 1, 1)]
+    [InlineData(Duplex.Vertical, PwgSheetBack.Normal, 1, 1)]
+    [InlineData(Duplex.Vertical, PwgSheetBack.Rotated, -1, -1)]
+    [InlineData(Duplex.Horizontal, PwgSheetBack.Flipped, -1, 1)]
     [InlineData(Duplex.Horizontal, PwgSheetBack.ManualTumble, -1, -1)]
+    [InlineData(Duplex.Horizontal, PwgSheetBack.Normal, 1, 1)]
+    [InlineData(Duplex.Horizontal, PwgSheetBack.Rotated, 1, 1)]
     public void Back_side_transform_follows_sheet_back(Duplex duplex, PwgSheetBack back, int crossFeed, int feed)
         => Assert.Equal((crossFeed, feed), IppPrinterTarget.BackTransform(duplex, back));
 

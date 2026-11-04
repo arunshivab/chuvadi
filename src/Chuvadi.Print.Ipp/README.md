@@ -8,6 +8,8 @@ print queues are in Chuvadi.Print.Windows.
 - **Driverless IPP printing** (`Chuvadi.Print.Ipp`), on any OS: send rendered pages as PWG Raster to any IPP Everywhere printer, or pass the PDF itself through to printers that accept it. Includes a complete IPP encoder/decoder, client, and PWG Raster reader/writer.
 - **Routing**: `IppRoutes` builds a `PrintRouter` that sends the PDF as-is when every font is embedded and the printer lists `application/pdf`, and PWG Raster otherwise. `IppCapabilityCache` keeps printer capabilities for 10 minutes.
 - **Certificate pinning** for `ipps://` printers with their own certificates (`IppClientOptions.PinnedCertificates`, `IppCertificates`).
+- **Discovery** (`NetworkPrinterDiscovery`): finds IPP, IPPS and raw-port printers on the local network with DNS-SD, only when you ask.
+- **CUPS queues** (`CupsQueues`): lists a CUPS server's queues over IPP.
 - **Raw port 9100** (`RawSocketTarget`): bytes unchanged to a network printer's raw port (PostScript, PCL, ZPL, ESC/POS).
 
 ```csharp

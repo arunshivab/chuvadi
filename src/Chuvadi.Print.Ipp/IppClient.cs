@@ -291,6 +291,27 @@ namespace Chuvadi.Print.Ipp
             return Send(request, null, cancellationToken);
         }
 
+        /// <summary>
+        /// CUPS-Get-Printers (CUPS extension, operation 0x4002): one printer-attributes group per queue on a CUPS
+        /// server. Send it to the server itself, for example ipp://localhost:631/. <paramref name="requested"/> null
+        /// asks for "printer-name", "printer-uri-supported", "printer-info", "printer-location",
+        /// "printer-make-and-model", "printer-state", "printer-is-accepting-jobs", "printer-is-shared" and
+        /// "document-format-supported". <paramref name="limit"/> caps the number of queues returned.
+        /// </summary>
+        public IReadOnlyList<IppAttributeGroup> CupsGetPrinters(IEnumerable<string>? requested = null, int? limit = null,
+                                                                CancellationToken cancellationToken = default)
+        {
+            if (limit.HasValue && limit.Value < 1) throw new ArgumentOutOfRangeException(nameof(limit));
+            IppMessage request = CreateRequest(IppOperation.CupsGetPrinters);
+            IppAttributeGroup op = request.Group(IppTag.OperationAttributes)!;
+            var values = new List<IppValue>();
+            foreach (string name in requested ?? CupsQueues.DefaultAttributes) values.Add(IppValue.Keyword(name));
+            if (values.Count > 0) op.Add(new IppAttribute("requested-attributes", values));
+            if (limit.HasValue) op.Add("limit", IppValue.Integer(limit.Value));
+            IppMessage response = Send(request, null, cancellationToken);
+            return new List<IppAttributeGroup>(response.GroupsOf(IppTag.PrinterAttributes));
+        }
+
         public void Dispose()
         {
             if (_ownsHttp) _http.Dispose();
