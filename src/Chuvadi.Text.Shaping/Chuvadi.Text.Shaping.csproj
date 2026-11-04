@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Chuvadi.Text.Shaping: OpenType text shaping. Depends only on Chuvadi.OpenType.
+    Pure BCL, no package references. Tag: text-shaping-vX.Y.Z.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Chuvadi.Text.Shaping</AssemblyName>
+    <RootNamespace>Chuvadi.Text.Shaping</RootNamespace>
+    <PackageId>Chuvadi.Text.Shaping</PackageId>
+    <Version>0.1.0</Version>
+    <Description>OpenType text shaping for Indic scripts and Latin. Pure .NET; depends only on Chuvadi.OpenType.</Description>
+    <IsPackable>true</IsPackable>
+
+    <!-- Package metadata (as the other monorepo libraries) -->
+    <Product>Chuvadi.Text.Shaping</Product>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <PackageLicenseExpression>MIT AND Unicode-3.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>text;shaping;opentype;indic;tamil;devanagari;unicode</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chuvadi.OpenType\Chuvadi.OpenType.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Unicode License v3 notice ships with the package because the generated tables carry Unicode data. -->
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <None Include="Unicode\UnicodeLicense.txt" Pack="true" PackagePath="UnicodeLicense.txt" />
+    <InternalsVisibleTo Include="Chuvadi.Text.Shaping.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Text.Shaping.Gate" />
+  </ItemGroup>
+
+</Project>

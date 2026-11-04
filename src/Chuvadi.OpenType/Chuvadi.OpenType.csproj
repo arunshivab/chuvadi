@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Chuvadi.OpenType: reads OpenType / TrueType font files (sfnt and collections).
+    Pure BCL, no package references. Tag: opentype-vX.Y.Z.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Chuvadi.OpenType</AssemblyName>
+    <RootNamespace>Chuvadi.OpenType</RootNamespace>
+    <PackageId>Chuvadi.OpenType</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Reads OpenType and TrueType fonts: table directory, collections, cmap, metrics, glyph bounds and naming. Pure .NET, no dependencies.</Description>
+    <IsPackable>true</IsPackable>
+
+    <!-- Package metadata (as the other monorepo libraries) -->
+    <Product>Chuvadi.OpenType</Product>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>fonts;opentype;truetype;cff;cmap</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="Chuvadi.OpenType.Tests" />
+  </ItemGroup>
+
+</Project>
