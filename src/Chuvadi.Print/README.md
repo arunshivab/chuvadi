@@ -8,6 +8,8 @@ What v1.0 gives you:
 - **`PrintJob`**: plans the job, renders one page at a time (memory does not grow with document length), lays each page out on the sheet, converts colour, and sends it to a print target. One audit event per job.
 - **Spool envelope**: a checksummed binary package of PDF + settings + job metadata, for handing a job from a web host to a print agent.
 - **`ImageFileTarget`**: writes each printed sheet as a PNG — print preview, archiving, and visual verification.
+- **`PrintRouter`**: chooses how each job reaches a printer (the PDF as-is, CUPS, or rendered pages), in a fixed
+  order, and writes the route and any fallback to the audit trail.
 
 Devices and transports are separate packages, so an application takes only what it uses:
 

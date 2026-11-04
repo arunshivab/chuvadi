@@ -73,6 +73,11 @@ public class VerificationGroupTests
     [Fact] public void RemoteDocumentTargetPassesPdfThrough() => VerificationGroups.RemoteDocumentTargetPassesPdfThrough();
     [Fact] public void RemoteUnknownPrinterFailsOnce() => VerificationGroups.RemoteUnknownPrinterFailsOnce();
 
+    // ---- Phase 1: routing and raw delivery
+    [Fact] public void RouterFallsBackToRasterAndAuditsWhy() => VerificationGroups.RouterFallsBackToRasterAndAuditsWhy();
+    [Fact] public void RouterSendsEmbeddedPdfAsIs() => VerificationGroups.RouterSendsEmbeddedPdfAsIs();
+    [Fact] public void RawSocketDeliversBytesUnchanged() => VerificationGroups.RawSocketDeliversBytesUnchanged();
+
     private static void RunUnlessSkipped(Action group)
     {
         try { group(); }

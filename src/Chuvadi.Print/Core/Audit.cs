@@ -20,6 +20,15 @@ namespace Chuvadi.Print
         public DateTimeOffset? CompletedAt { get; init; }
         public string? TenantId { get; init; }
         public string? Error { get; init; }
+
+        /// <summary>
+        /// How the job was printed (D-96): <c>Raster</c> for <see cref="PrintJob.PrintTo"/>, <c>Document</c> for
+        /// <see cref="PrintJob.SubmitTo"/>, or the route a <see cref="PrintRouter"/> chose (<c>PdfAsIs</c>,
+        /// <c>PageDescription</c>, <c>Cups</c>, <c>WindowsQueue</c>, <c>Raster</c>), followed by
+        /// <c> (fallback: ...)</c> listing the routes skipped before it. <c>None</c> when no route could print the job.
+        /// Null for events recorded by older versions.
+        /// </summary>
+        public string? Route { get; init; }
     }
 
     /// <summary>Receives audit events. Phase 1 uses local sinks; Phase 2 supplies a coordinator sink.</summary>
@@ -36,7 +45,11 @@ namespace Chuvadi.Print
         public void Record(PrintAuditEvent auditEvent) { }
     }
 
-    /// <summary>Appends one tab-delimited line per event to a local file. Thread-safe.</summary>
+    /// <summary>
+    /// Appends one tab-delimited line per event to a local file. Thread-safe. Columns: job id, title, pages,
+    /// copies, printer, machine, user, status, started, completed, tenant, error, route (the route column was
+    /// added last in 1.0.0-rc.2, so older columns keep their positions).
+    /// </summary>
     public sealed class FileAuditSink : IPrintAuditSink
     {
         private readonly string _path;
@@ -62,7 +75,8 @@ namespace Chuvadi.Print
               .Append(e.StartedAt.ToString("o", CultureInfo.InvariantCulture)).Append('\t')
               .Append(e.CompletedAt?.ToString("o", CultureInfo.InvariantCulture) ?? string.Empty).Append('\t')
               .Append(Escape(e.TenantId)).Append('\t')
-              .Append(Escape(e.Error));
+              .Append(Escape(e.Error)).Append('\t')
+              .Append(Escape(e.Route));
             lock (_gate)
             {
                 File.AppendAllText(_path, sb.ToString() + Environment.NewLine, Encoding.UTF8);

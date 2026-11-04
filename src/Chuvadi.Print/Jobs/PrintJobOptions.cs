@@ -110,6 +110,15 @@ namespace Chuvadi.Print
         /// <summary>Receives a report after each impression. Default none.</summary>
         public IProgress<PrintProgress>? Progress { get; set; }
 
+        /// <summary>
+        /// What the application knows about the fonts in the PDF. A <see cref="PrintRouter"/> sends the PDF as-is
+        /// (to an IPP printer or a CUPS queue) only when every font is embedded (D-132), so that the printer can
+        /// never substitute a font. Set <see cref="FontEmbedding.AllEmbedded"/> for PDFs the application made
+        /// itself with embedded fonts. Default <see cref="FontEmbedding.Unknown"/>: the router asks its
+        /// <see cref="PrintRouter.FontInspector"/>, and without one it does not send the PDF as-is.
+        /// </summary>
+        public FontEmbedding DocumentFonts { get; set; } = FontEmbedding.Unknown;
+
         public PrintJobOptions Clone() => new()
         {
             Rasterizer = Rasterizer,
@@ -124,7 +133,8 @@ namespace Chuvadi.Print
             IncludeFormFields = IncludeFormFields,
             AntiAlias = AntiAlias,
             ThrowOnFailure = ThrowOnFailure,
-            Progress = Progress
+            Progress = Progress,
+            DocumentFonts = DocumentFonts
         };
 
         private static double? ValidateDpi(double? value, string name)

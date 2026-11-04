@@ -90,6 +90,9 @@ namespace Chuvadi.Print
         /// <summary>Identifies the job in results, audit events and spool envelopes. Defaults to a new GUID.</summary>
         public Guid JobId { get; set; } = Guid.NewGuid();
 
+        /// <summary>Set by <see cref="PrintRouter"/> for the duration of one routed print; replaces the default audit route.</summary>
+        internal string? RouteLabel { get; set; }
+
         /// <summary>The document bytes.</summary>
         public byte[] PdfBytes => _pdf;
 
@@ -225,6 +228,16 @@ namespace Chuvadi.Print
         public PrintJob WithAntiAlias(bool antiAlias = true) { _options.AntiAlias = antiAlias; return this; }
         public PrintJob WithThrowOnFailure(bool throwOnFailure = true) { _options.ThrowOnFailure = throwOnFailure; return this; }
         public PrintJob WithProgress(IProgress<PrintProgress>? progress) { _options.Progress = progress; return this; }
+
+        /// <summary>
+        /// Marks the PDF as having every font embedded (or not), for <see cref="PrintRouter"/>: see
+        /// <see cref="PrintJobOptions.DocumentFonts"/>. Use only for PDFs whose fonts the application controls.
+        /// </summary>
+        public PrintJob WithFontsEmbedded(bool allEmbedded = true)
+        {
+            _options.DocumentFonts = allEmbedded ? FontEmbedding.AllEmbedded : FontEmbedding.NotAllEmbedded;
+            return this;
+        }
 
         // ----------------------------------------------------------------- planning
 
@@ -395,7 +408,8 @@ namespace Chuvadi.Print
                 StartedAt = startedAt,
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = TenantId,
-                Error = error
+                Error = error,
+                Route = RouteLabel ?? AuditRoutes.Raster
             });
 
             if (failure is not null && options.ThrowOnFailure)
@@ -477,7 +491,8 @@ namespace Chuvadi.Print
                 StartedAt = startedAt,
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = TenantId,
-                Error = error
+                Error = error,
+                Route = RouteLabel ?? AuditRoutes.Document
             });
 
             if (failure is not null && options.ThrowOnFailure)

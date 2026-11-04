@@ -138,6 +138,44 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
 
+## 4a. Choosing a route, and raw delivery (Phase 1)
+
+A `PrintRouter` decides how each job reaches one printer (D-96). It asks each route, in this order, whether it can
+print the job, and uses the first that can:
+
+1. `PdfAsIs`: the PDF unchanged over IPP. Only when every font in the PDF is embedded (D-132), the printer is
+   accepting jobs, and it lists `application/pdf` itself (`application/octet-stream` does not count).
+2. `PageDescription`: PostScript or PCL XL made here (later phases).
+3. `Cups`: the PDF to a CUPS queue (Linux, macOS), under the same font rule.
+4. `WindowsQueue`: a Windows queue with vector output (a later phase).
+5. `Raster`: pages rendered here (PWG Raster, the GDI spooler, PNG).
+
+```csharp
+using PrintRouter router = IppRoutes.CreateRouter("ipp://ward3-printer.local/ipp/print");
+PrintRouteResult r = router.Print(job.WithFontsEmbedded());   // the app made this PDF with embedded fonts
+// r.Route == PdfAsIs; the audit event's Route column says "PdfAsIs".
+// Without WithFontsEmbedded: Route "Raster (fallback: PdfAsIs: fonts not known to be embedded)".
+```
+
+- **Fonts**: `PrintJobOptions.DocumentFonts` (or `WithFontsEmbedded`) says what the application knows. When it is
+  `Unknown`, the router asks its `FontInspector`; with none, the PDF is not sent as-is. A Chuvadi.Pdf inspector
+  comes with the Pdf chat's font access (0.3b).
+- **Overrides**: `router.ForcedRoute` and `router.DisabledRoutes` for a site, `router.Print(job, PrintRouteKind.Raster)`
+  for one job (wins over both). `router.Choose(job)` tells you the decision without printing.
+- **Audit**: every job records its route as the last column of the audit line: `Raster` for `PrintTo`,
+  `Document` for `SubmitTo`, or the router's choice with `(fallback: Kind: reason; ...)`. `None (...)` when no
+  route can print; the job then fails with every reason. A route that fails while printing is not retried on
+  another route, so nothing prints twice.
+- **Capabilities**: `IppCapabilityCache` keeps each printer's attributes for 10 minutes and reads them again after
+  a failed read or a failed job. Share one cache between routers for the same printers.
+- **CUPS**: `IppRoutes.CreateCupsRouter("ipp://localhost:631/printers/<queue>")`.
+- **Certificate pinning**: `IppClientOptions.PinnedCertificates` takes SHA-256 fingerprints; a pinned ipps://
+  printer is trusted with its own self-signed certificate and any other certificate is refused.
+  `IppCertificates.GetServerCertificate(uri)` and `IppCertificates.Fingerprint(cert)` read the fingerprint to pin.
+- **Raw delivery** (bytes unchanged, settings not applied): `RawSocketTarget` (TCP 9100, any OS, Chuvadi.Print.Ipp)
+  and `WindowsRawPrinterTarget` (a Windows queue with the RAW datatype, Chuvadi.Print.Windows). Both implement
+  `IRawPrintTarget.Send(bytes, title, token)` and `IDocumentTarget` (for `SubmitTo` with an audit event).
+
 ## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
@@ -211,5 +249,9 @@ await agent.RunAsync(stoppingToken);
   - `--preview <folder>`: writes PNG sheets for visual checking.
   - `--windows-printer "<name>" [--windows-output <folder>]`: an 11-job proof set.
   - `--ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]`: a proof set over IPP.
+  - `--route-printer <uri> [--ipp-insecure]`: the route an IPP printer gets for unknown and for embedded fonts (prints nothing).
+  - `--ipp-certificate <ipps-uri>`: the printer's certificate and SHA-256 fingerprint, for pinning.
+  - `--raw-printer socket://host[:port] [--raw-file <file>]`: a text line or a file to a raw port.
+  - `--windows-raw-printer "<queue>" [--windows-raw-file <port file>]`: a RAW job to a Windows queue.
 - **Chuvadi.Print.Pdf.Raster**: `dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests` (needs the Chuvadi.Pdf packages in the local feed).
 - **Windows**: everything only Windows can prove is in [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md).

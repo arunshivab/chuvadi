@@ -19,6 +19,9 @@ PrintResult printed = job.PrintTo(target);          // target.LastSpoolJobId = s
 
 // "Microsoft Print to PDF" with an output file writes a PDF, no dialog.
 job.PrintTo(new WindowsPrinterTarget("Microsoft Print to PDF").WithOutputFile(@"C:\out\summary.pdf"));
+
+// Bytes unchanged to a queue with the RAW datatype (for example a USB label printer reading ZPL).
+new WindowsRawPrinterTarget("Label Printer").Send(File.ReadAllBytes("labels.zpl"), "labels", CancellationToken.None);
 ```
 
 Full guide: [docs/Chuvadi.Print/GUIDE.md](https://github.com/arunshivab/chuvadi/blob/main/docs/Chuvadi.Print/GUIDE.md).

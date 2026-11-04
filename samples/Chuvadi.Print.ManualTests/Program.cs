@@ -12,7 +12,13 @@ namespace Chuvadi.Print.ManualTests
         ///   --windows-output &lt;folder&gt;     with --windows-printer: write each job to a file in this folder
         ///   --ipp-printer &lt;uri&gt;          also send the proof set to an IPP Everywhere printer (PWG Raster)
         ///   --ipp-pdf &lt;file&gt;             with --ipp-printer: also pass this PDF through unchanged
-        ///   --ipp-insecure                 with --ipp-printer: accept the printer's self-signed TLS certificate (ipps)
+        ///   --ipp-insecure                 with --ipp-printer or --route-printer: accept the printer's self-signed TLS certificate (ipps)
+        ///   --route-printer &lt;uri&gt;        show which route an IPP printer gets for unknown and for embedded fonts (prints nothing)
+        ///   --ipp-certificate &lt;uri&gt;      show an ipps:// printer's certificate and SHA-256 fingerprint, for pinning
+        ///   --raw-printer socket://host[:port]  send a one-line text page (or --raw-file) to a printer's raw port
+        ///   --raw-file &lt;file&gt;            with --raw-printer: send this file unchanged
+        ///   --windows-raw-printer "&lt;queue&gt;"  send a short text job with the RAW datatype to a Windows queue
+        ///   --windows-raw-file &lt;path&gt;     with --windows-raw-printer: the queue's port file; check it holds exactly the bytes sent
         /// </summary>
         public static int Main(string[] args)
         {
@@ -93,7 +99,32 @@ namespace Chuvadi.Print.ManualTests
                 }
             }
 
+            failed += Scenario(args, "--route-printer", "Route", uri => Phase1Scenarios.RouteDecision(uri, Array.IndexOf(args, "--ipp-insecure") >= 0));
+            failed += Scenario(args, "--ipp-certificate", "IPP certificate", Phase1Scenarios.Certificate);
+            failed += Scenario(args, "--raw-printer", "Raw printer", uri => Phase1Scenarios.RawSocket(uri, Option(args, "--raw-file", null)));
+            failed += Scenario(args, "--windows-raw-printer", "Windows RAW", queue =>
+                OperatingSystem.IsWindows()
+                    ? Phase1Scenarios.WindowsRaw(queue, Option(args, "--windows-raw-file", null))
+                    : throw new PlatformNotSupportedException("--windows-raw-printer needs Windows"));
+
             return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>Runs one option-driven check; returns 1 when it failed.</summary>
+        private static int Scenario(string[] args, string option, string label, Func<string, string> run)
+        {
+            string? value = Option(args, option, null);
+            if (value is null) return 0;
+            try
+            {
+                Console.WriteLine("PASS  " + label + ": " + run(value));
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("FAIL  " + label + " -> " + ex.Message);
+                return 1;
+            }
         }
 
         private static string? Option(string[] args, string name, string? valueWhenMissing)

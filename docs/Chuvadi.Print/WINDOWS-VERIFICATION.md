@@ -12,15 +12,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 
 ## A. Preparation
 
-1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, and
-   the D-48 removal. Update your clone:
+1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, the D-48 removal,
+   the package split, and Phase 1 part 1 (rc.2). Update your clone:
    ```powershell
    cd C:\src\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
    ```
-   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.1</Version>`.
+   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.2</Version>`.
 2. **Local feed.** The Chuvadi.Pdf packages of the pinned version (3.22.1, the `ChuvadiPdfVersion` in
    `staging\Chuvadi.Print.Pdf.Raster\Chuvadi.Print.Pdf.Raster.csproj`) are in the local feed:
    ```powershell
@@ -45,20 +45,22 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    dotnet build Chuvadi.slnx -c Release
    dotnet test Chuvadi.slnx -c Release --no-build
    ```
-   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 176). No "Access is denied" from
+   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 207). No "Access is denied" from
    HttpListener: the IPP and hub tests listen on `localhost` without a URL reservation. If Windows Firewall
    asks about "dotnet", choose Cancel; the traffic is loopback only.
 6. **ManualTests.**
    ```powershell
    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
    ```
-   Expected: `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
-   `WindowsPrintersAreDiscoverable` and `WindowsPrintToPdfWritesFile`. The 12 `Remote...` groups must PASS.
+   Expected: `Total: 56`, `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
+   `WindowsPrintersAreDiscoverable` and `WindowsPrintToPdfWritesFile`. The 12 `Remote...` groups and the
+   three routing and raw groups (`RouterFallsBackToRasterAndAuditsWhy`, `RouterSendsEmbeddedPdfAsIs`,
+   `RawSocketDeliversBytesUnchanged`) must PASS.
 7. **Chuvadi.Print.Pdf.Raster tests.**
    ```powershell
    dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
    ```
-   Expected: 27 passed.
+   Expected: 16 passed.
 8. **Preview images.** Look at the two folders:
    ```powershell
    explorer artifacts\bin\Chuvadi.Print.Pdf.Raster.Tests\Release\net10.0\print-pdf-preview
@@ -101,6 +103,45 @@ PowerShell 5.x: run each command line on its own (no `&&`).
     ```
     Expected: 6 raster jobs and the PDF print. Duplex backs are the right way up. For `ipps://` with the
     printer's own certificate, add `--ipp-insecure`.
+
+## D2. Raw delivery (Phase 1)
+
+11a. **RAW queue writing to a file.** One-time setup in an **elevated** PowerShell. It makes a queue with the
+    inbox "Generic / Text Only" driver whose port is a file:
+    ```powershell
+    Add-PrinterDriver -Name "Generic / Text Only"
+    ```
+    ```powershell
+    Add-PrinterPort -Name "C:\Users\Public\chuvadi-raw.prn"
+    ```
+    ```powershell
+    Add-Printer -Name "Chuvadi RAW Test" -DriverName "Generic / Text Only" -PortName "C:\Users\Public\chuvadi-raw.prn"
+    ```
+    Then in a normal window:
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --windows-raw-printer "Chuvadi RAW Test" --windows-raw-file "C:\Users\Public\chuvadi-raw.prn"
+    ```
+    Expected: `PASS  Windows RAW: spooler job <n>, <m> bytes; port file matches byte for byte`.
+    To remove the queue afterwards (elevated): `Remove-Printer -Name "Chuvadi RAW Test"`.
+11b. **RAW refused by an XPS-only queue.**
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --windows-raw-printer "Microsoft Print to PDF"
+    ```
+    Expected: either `FAIL  Windows RAW -> Printer 'Microsoft Print to PDF' does not accept the RAW datatype ...`
+    or a PASS line whose job then fails in the queue. Record which one; both are acceptable (the queue's v4 driver
+    cannot print RAW data).
+11c. **Raw port 9100**, if a network printer has it open (most office lasers do):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --raw-printer socket://<printer-ip>:9100
+    ```
+    Expected: `PASS  Raw printer: 36 bytes sent ...` and a page with the line "Chuvadi.Print raw port 9100 check"
+    (printers that do not read plain text print nothing; record that).
+11d. **Route decision** for an IPP printer (prints nothing):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --route-printer "ipp://<printer-ip>/ipp/print"
+    ```
+    Expected: `fonts unknown -> Raster (fallback: PdfAsIs: fonts not known to be embedded)`, and for embedded
+    fonts `PdfAsIs` when the printer lists application/pdf, otherwise a Raster fallback naming why.
 
 ## E. Sign-off and tag
 
