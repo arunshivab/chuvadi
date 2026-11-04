@@ -45,17 +45,18 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    dotnet build Chuvadi.slnx -c Release
    dotnet test Chuvadi.slnx -c Release --no-build
    ```
-   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 207). No "Access is denied" from
+   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 229). No "Access is denied" from
    HttpListener: the IPP and hub tests listen on `localhost` without a URL reservation. If Windows Firewall
    asks about "dotnet", choose Cancel; the traffic is loopback only.
 6. **ManualTests.**
    ```powershell
    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
    ```
-   Expected: `Total: 56`, `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
+   Expected: `Total: 59`, `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
    `WindowsPrintersAreDiscoverable` and `WindowsPrintToPdfWritesFile`. The 12 `Remote...` groups and the
-   three routing and raw groups (`RouterFallsBackToRasterAndAuditsWhy`, `RouterSendsEmbeddedPdfAsIs`,
-   `RawSocketDeliversBytesUnchanged`) must PASS.
+   six Phase 1 groups (`RouterFallsBackToRasterAndAuditsWhy`, `RouterSendsEmbeddedPdfAsIs`,
+   `RawSocketDeliversBytesUnchanged`, `CupsQueuesAreListed`, `PrinterRegistryKeepsCapabilities`,
+   `BackSideTransformFollowsPwgTable9`) must PASS.
 7. **Chuvadi.Print.Pdf.Raster tests.**
    ```powershell
    dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
@@ -142,6 +143,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
     ```
     Expected: `fonts unknown -> Raster (fallback: PdfAsIs: fonts not known to be embedded)`, and for embedded
     fonts `PdfAsIs` when the printer lists application/pdf, otherwise a Raster fallback naming why.
+
+11e. **Discovery** on the network the printers are on (prints nothing):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --discover 5
+    ```
+    Expected: `PASS  Discovery: <n> service(s) found`, then one line per service with its name, type
+    (`_ipp._tcp`, `_ipps._tcp` or `_pdl-datastream._tcp`), URI, make and model, and `pdl` (the formats it
+    advertises). Record each printer's lines. If Windows Firewall asks about "dotnet", choose Cancel (no rule is
+    added). If discovery then finds nothing while a printer is on the same network, record that.
 
 ## E. Sign-off and tag
 

@@ -253,17 +253,27 @@ namespace Chuvadi.Print.Ipp
         // ------------------------------------------------------------------ helpers
 
         /// <summary>
-        /// Back-side transform for PWG Raster (as CUPS' cupsRasterInitPWGHeader applies it): returns the
-        /// cross-feed and feed transforms (1 = as is, -1 = mirrored) for a back side.
+        /// Back-side transform for PWG Raster: the CrossFeedTransform and FeedTransform header values
+        /// (1 = as is, -1 = reversed) for a back side, taken from PWG 5102.4-2012 section 4.3.2.8, Table 9
+        /// "Transform Values for Backside Images". <see cref="Duplex.Vertical"/> is two-sided-long-edge and
+        /// <see cref="Duplex.Horizontal"/> is two-sided-short-edge (IppJobTicket's sides mapping). The sheet-back
+        /// values are defined in PWG 5102.4 section 5.1.1 and reported by the printer as
+        /// pwg-raster-document-sheet-back (PWG 5100.14).
         /// </summary>
         internal static (int CrossFeed, int Feed) BackTransform(Duplex duplex, PwgSheetBack sheetBack)
         {
-            bool tumble = duplex == Duplex.Horizontal;
-            return sheetBack switch
+            if (duplex == Duplex.Simplex) return (1, 1);              // OneSided, any sheet-back
+            bool longEdge = duplex == Duplex.Vertical;
+            return (longEdge, sheetBack) switch
             {
-                PwgSheetBack.Flipped => tumble ? (-1, 1) : (1, -1),
-                PwgSheetBack.ManualTumble => tumble ? (-1, -1) : (1, 1),
-                PwgSheetBack.Rotated => tumble ? (1, 1) : (-1, -1),
+                (true, PwgSheetBack.Flipped) => (1, -1),
+                (true, PwgSheetBack.ManualTumble) => (1, 1),
+                (true, PwgSheetBack.Normal) => (1, 1),
+                (true, PwgSheetBack.Rotated) => (-1, -1),
+                (false, PwgSheetBack.Flipped) => (-1, 1),
+                (false, PwgSheetBack.ManualTumble) => (-1, -1),
+                (false, PwgSheetBack.Normal) => (1, 1),
+                (false, PwgSheetBack.Rotated) => (1, 1),
                 _ => (1, 1)
             };
         }

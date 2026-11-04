@@ -2,7 +2,7 @@
 
 ## 1.0.0-rc.2 (unreleased)
 
-Phase 1 of the vector and delivery plan, part 1 (D-96, D-132). For all four packages.
+Phase 1 of the vector and delivery plan (D-96, D-132, D-134). For all four packages.
 
 - **Route chooser** (core): `PrintRouter` asks each `IPrintRoute` in D-96 order (`PdfAsIs`, `PageDescription`,
   `Cups`, `WindowsQueue`, `Raster`) and prints on the first that can. Site overrides (`ForcedRoute`,
@@ -34,8 +34,24 @@ Phase 1 of the vector and delivery plan, part 1 (D-96, D-132). For all four pack
 - **ManualTests**: three new groups (`RouterFallsBackToRasterAndAuditsWhy`, `RouterSendsEmbeddedPdfAsIs`,
   `RawSocketDeliversBytesUnchanged`, total 56), and the options `--route-printer`, `--ipp-certificate`,
   `--raw-printer` and `--windows-raw-printer`. WINDOWS-VERIFICATION.md gains section D2.
-- **Still to come in Phase 1** (part 2): the saved-printer registry, DNS-SD discovery, CUPS-Get-Printers queue
-  listing, and the back-side table re-derived from the PWG specification (D-132 item 5).
+- **Phase 1 part 2**:
+  - **Saved printers** (core): `PrinterRegistry` and `SavedPrinter` (name, `PrinterConnection` Ipp, Cups,
+    RawSocket or WindowsQueue, address, pinned certificate, forced route, location, notes, and the capabilities as
+    last read with `CapabilitiesReadAt` and `CapabilitiesAge`). Saved as versioned JSON, written atomically.
+    Credentials are never stored.
+  - **IPP side** (Chuvadi.Print.Ipp): `IppCapabilityCache.StoreIn` and `LoadFrom` keep capabilities in a saved
+    printer; `IppRoutes.CreateRouter(SavedPrinter)` applies its pin, forced route and name.
+  - **Network discovery** (Chuvadi.Print.Ipp): `NetworkPrinterDiscovery.Browse` finds IPP, IPPS and raw-port
+    printers with DNS-SD over multicast DNS (RFC 6762, RFC 6763), our own code. It runs only when the application
+    calls it (D-132 item 6), sends one-shot queries from a temporary port and never listens on port 5353 (P07).
+    `DiscoveredPrinter.ToSavedPrinter` turns a result into a saved printer.
+  - **CUPS queues** (Chuvadi.Print.Ipp): `IppClient.CupsGetPrinters` and `CupsQueues.List` list a CUPS server's
+    queues over IPP (CUPS-Get-Printers, D-94). `IppOperation` gains `CupsGetDefault` and `CupsGetPrinters`.
+  - **Back-side table** (D-132 item 5, D-53): `IppPrinterTarget`'s duplex back-side transforms are now written
+    directly from PWG 5102.4-2012 section 4.3.2.8, Table 9, and tested against every row of it. The values are
+    the same as before, so **output is unchanged**; no bug fix was needed.
+  - **ManualTests**: three more groups (`CupsQueuesAreListed`, `PrinterRegistryKeepsCapabilities`,
+    `BackSideTransformFollowsPwgTable9`, total 59), and the options `--discover [seconds]` and `--cups-server`.
 
 ## 1.0.0-rc.1 (2026-11-04)
 

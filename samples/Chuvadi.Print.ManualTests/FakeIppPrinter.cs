@@ -39,6 +39,9 @@ namespace Chuvadi.Print.ManualTests
         /// <summary>When set, the next Print-Job is answered with this status (then cleared).</summary>
         public IppStatusCode? FailNextJobWith { get; set; }
 
+        /// <summary>Queues answered to CUPS-Get-Printers, as a CUPS server would. Empty by default.</summary>
+        public List<IppAttributeGroup> CupsQueues { get; } = new();
+
         /// <summary>job-state reported by Get-Job-Attributes. Default completed.</summary>
         public IppJobState JobState { get; set; } = IppJobState.Completed;
 
@@ -149,6 +152,13 @@ namespace Chuvadi.Print.ManualTests
                     AddJob(response, Interlocked.Increment(ref _nextJobId), IppJobState.Pending);
                     break;
                 case IppOperation.ValidateJob:
+                    break;
+                case IppOperation.CupsGetPrinters:
+                    foreach (IppAttributeGroup queue in CupsQueues)
+                    {
+                        IppAttributeGroup group = response.AddGroup(IppTag.PrinterAttributes);
+                        foreach (IppAttribute a in queue.Attributes) group.Add(a);
+                    }
                     break;
                 case IppOperation.GetJobAttributes:
                 case IppOperation.CancelJob:

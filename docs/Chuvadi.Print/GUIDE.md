@@ -176,6 +176,36 @@ PrintRouteResult r = router.Print(job.WithFontsEmbedded());   // the app made th
   and `WindowsRawPrinterTarget` (a Windows queue with the RAW datatype, Chuvadi.Print.Windows). Both implement
   `IRawPrintTarget.Send(bytes, title, token)` and `IDocumentTarget` (for `SubmitTo` with an audit event).
 
+### Saved printers, discovery and CUPS queues
+
+```csharp
+// Find printers on the local network (only when you ask; nothing listens in the background).
+IReadOnlyList<DiscoveredPrinter> found = NetworkPrinterDiscovery.Browse();   // 3 seconds by default
+var registry = PrinterRegistry.Load("printers.json");                         // empty when the file is missing
+registry.Set(found[0].ToSavedPrinter("Ward 3 Laser"));
+registry.SaveTo("printers.json");
+
+// Later: a router for a saved printer, with its pinned certificate, forced route and saved capabilities.
+registry.TryGet("Ward 3 Laser", out SavedPrinter? ward3);
+var cache = new IppCapabilityCache();
+using PrintRouter router = IppRoutes.CreateRouter(ward3!, null, cache);
+router.Print(job);
+if (cache.StoreIn(ward3!)) { registry.Set(ward3!); registry.SaveTo("printers.json"); }
+
+// The queues of a CUPS server (Linux, macOS).
+foreach (CupsQueue q in CupsQueues.List()) Console.WriteLine(q.Name + " " + q.Uri);
+```
+
+- **Discovery** uses DNS-SD over multicast DNS (RFC 6762/6763) on every active IPv4 interface. It sends one-shot
+  queries from a temporary port and reads the answers; it never listens on port 5353. One entry per advertised
+  service: a printer offering IPP and the raw port appears twice. `Uri` is ready for `IppRoutes.CreateRouter` or
+  `RawSocketTarget.FromUri`.
+- **The registry** keeps names, connections, addresses, pins, forced routes and the last-read capabilities with
+  their age. It never stores credentials.
+- **CUPS queues** come from the CUPS-Get-Printers operation over IPP; each `CupsQueue.Uri` goes to
+  `IppRoutes.CreateCupsRouter`.
+- **Duplex backs** for PWG Raster follow PWG 5102.4 Table 9 (`pwg-raster-document-sheet-back`).
+
 ## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
@@ -251,6 +281,8 @@ await agent.RunAsync(stoppingToken);
   - `--ipp-printer <uri> [--ipp-pdf <file>] [--ipp-insecure]`: a proof set over IPP.
   - `--route-printer <uri> [--ipp-insecure]`: the route an IPP printer gets for unknown and for embedded fonts (prints nothing).
   - `--ipp-certificate <ipps-uri>`: the printer's certificate and SHA-256 fingerprint, for pinning.
+  - `--discover [seconds]`: the printers that answer on the local network.
+  - `--cups-server <uri>`: the queues of a CUPS server.
   - `--raw-printer socket://host[:port] [--raw-file <file>]`: a text line or a file to a raw port.
   - `--windows-raw-printer "<queue>" [--windows-raw-file <port file>]`: a RAW job to a Windows queue.
 - **Chuvadi.Print.Pdf.Raster**: `dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests` (needs the Chuvadi.Pdf packages in the local feed).

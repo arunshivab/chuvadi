@@ -10,6 +10,7 @@ What v1.0 gives you:
 - **`ImageFileTarget`**: writes each printed sheet as a PNG — print preview, archiving, and visual verification.
 - **`PrintRouter`**: chooses how each job reaches a printer (the PDF as-is, CUPS, or rendered pages), in a fixed
   order, and writes the route and any fallback to the audit trail.
+- **`PrinterRegistry`**: the printers an application has set up, with their last-read capabilities, saved as JSON.
 
 Devices and transports are separate packages, so an application takes only what it uses:
 

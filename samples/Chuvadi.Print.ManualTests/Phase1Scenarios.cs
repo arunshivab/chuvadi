@@ -74,6 +74,32 @@ namespace Chuvadi.Print.ManualTests
             return "fonts unknown -> " + unknown.AuditText + Environment.NewLine + "      fonts embedded -> " + embedded.AuditText;
         }
 
+        /// <summary>Lists the printers that answer on the local network (DNS-SD), one line each.</summary>
+        public static string Discover(string? seconds)
+        {
+            double s = 3;
+            if (seconds is not null && !double.TryParse(seconds, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out s))
+                throw new ArgumentException("--discover takes a number of seconds: " + seconds);
+            var found = NetworkPrinterDiscovery.Browse(new NetworkPrinterDiscoveryOptions { Duration = TimeSpan.FromSeconds(s) });
+            var sb = new StringBuilder(found.Count + " service(s) found");
+            foreach (DiscoveredPrinter p in found)
+                sb.Append(Environment.NewLine).Append("      ").Append(p.InstanceName).Append(" | ").Append(p.ServiceType)
+                  .Append(" | ").Append(p.Uri ?? "(no port)").Append(" | ").Append(p.MakeAndModel ?? "-")
+                  .Append(" | pdl=").Append(p.Txt.TryGetValue("pdl", out string? pdl) ? pdl : "-");
+            return sb.ToString();
+        }
+
+        /// <summary>Lists the queues of a CUPS server.</summary>
+        public static string Cups(string serverUri)
+        {
+            var queues = CupsQueues.List(serverUri);
+            var sb = new StringBuilder(queues.Count + " queue(s)");
+            foreach (CupsQueue q in queues)
+                sb.Append(Environment.NewLine).Append("      ").Append(q.Name).Append(" | ").Append(q.Uri ?? "-")
+                  .Append(" | ").Append(q.IsAcceptingJobs ? "accepting" : "not accepting");
+            return sb.ToString();
+        }
+
         /// <summary>Reads an ipps:// printer's certificate and returns its subject, dates and SHA-256 fingerprint for pinning.</summary>
         public static string Certificate(string printerUri)
         {

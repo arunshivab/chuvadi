@@ -77,6 +77,9 @@ public class VerificationGroupTests
     [Fact] public void RouterFallsBackToRasterAndAuditsWhy() => VerificationGroups.RouterFallsBackToRasterAndAuditsWhy();
     [Fact] public void RouterSendsEmbeddedPdfAsIs() => VerificationGroups.RouterSendsEmbeddedPdfAsIs();
     [Fact] public void RawSocketDeliversBytesUnchanged() => VerificationGroups.RawSocketDeliversBytesUnchanged();
+    [Fact] public void CupsQueuesAreListed() => VerificationGroups.CupsQueuesAreListed();
+    [Fact] public void PrinterRegistryKeepsCapabilities() => VerificationGroups.PrinterRegistryKeepsCapabilities();
+    [Fact] public void BackSideTransformFollowsPwgTable9() => VerificationGroups.BackSideTransformFollowsPwgTable9();
 
     private static void RunUnlessSkipped(Action group)
     {

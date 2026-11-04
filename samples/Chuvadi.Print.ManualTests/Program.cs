@@ -15,6 +15,8 @@ namespace Chuvadi.Print.ManualTests
         ///   --ipp-insecure                 with --ipp-printer or --route-printer: accept the printer's self-signed TLS certificate (ipps)
         ///   --route-printer &lt;uri&gt;        show which route an IPP printer gets for unknown and for embedded fonts (prints nothing)
         ///   --ipp-certificate &lt;uri&gt;      show an ipps:// printer's certificate and SHA-256 fingerprint, for pinning
+        ///   --discover [seconds]           list the printers that answer on the local network (DNS-SD, default 3 seconds)
+        ///   --cups-server &lt;uri&gt;          list the queues of a CUPS server (for example ipp://localhost:631/)
         ///   --raw-printer socket://host[:port]  send a one-line text page (or --raw-file) to a printer's raw port
         ///   --raw-file &lt;file&gt;            with --raw-printer: send this file unchanged
         ///   --windows-raw-printer "&lt;queue&gt;"  send a short text job with the RAW datatype to a Windows queue
@@ -100,6 +102,9 @@ namespace Chuvadi.Print.ManualTests
             }
 
             failed += Scenario(args, "--route-printer", "Route", uri => Phase1Scenarios.RouteDecision(uri, Array.IndexOf(args, "--ipp-insecure") >= 0));
+            if (Array.IndexOf(args, "--discover") >= 0)
+                failed += Scenario(args, "--discover", "Discovery", _ => Phase1Scenarios.Discover(Option(args, "--discover", null)), always: true);
+            failed += Scenario(args, "--cups-server", "CUPS", Phase1Scenarios.Cups);
             failed += Scenario(args, "--ipp-certificate", "IPP certificate", Phase1Scenarios.Certificate);
             failed += Scenario(args, "--raw-printer", "Raw printer", uri => Phase1Scenarios.RawSocket(uri, Option(args, "--raw-file", null)));
             failed += Scenario(args, "--windows-raw-printer", "Windows RAW", queue =>
@@ -111,9 +116,9 @@ namespace Chuvadi.Print.ManualTests
         }
 
         /// <summary>Runs one option-driven check; returns 1 when it failed.</summary>
-        private static int Scenario(string[] args, string option, string label, Func<string, string> run)
+        private static int Scenario(string[] args, string option, string label, Func<string, string> run, bool always = false)
         {
-            string? value = Option(args, option, null);
+            string? value = Option(args, option, always ? string.Empty : null);
             if (value is null) return 0;
             try
             {

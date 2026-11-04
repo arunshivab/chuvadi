@@ -82,9 +82,9 @@ Invariants the packages must always satisfy. Changes to these are deliberate, do
 
 - **1.0.0-rc.1**: A1–A6 complete, public API frozen for 1.x (additive changes only); the D-48 removal and the
   package split (D-107).
-- **1.0.0-rc.2 (this release)**: Phase 1 part 1 (D-96, D-132): the route chooser,
-  the route in the audit trail, the IPP capability cache, IPPS certificate pinning, and raw delivery (TCP 9100
-  and the Windows RAW datatype). Additive API only.
+- **1.0.0-rc.2 (this release)**: Phase 1 (D-96, D-132, D-134): the route chooser, the route in the audit
+  trail, the IPP capability cache, IPPS certificate pinning, raw delivery (TCP 9100 and the Windows RAW datatype),
+  saved printers, network discovery, CUPS queue listing, and the PWG back-side table. Additive API only.
   User guide: [GUIDE.md](GUIDE.md). Release gate: [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md), then the
   tag `print-v1.0.0`.
 

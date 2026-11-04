@@ -78,7 +78,13 @@ namespace Chuvadi.Print.Ipp
         CloseJob = 0x003B,
         IdentifyPrinter = 0x003C,
         ValidateDocument = 0x003D,
-        CancelMyJobs = 0x0039
+        CancelMyJobs = 0x0039,
+
+        /// <summary>CUPS-Get-Default (CUPS extension): the server's default queue.</summary>
+        CupsGetDefault = 0x4001,
+
+        /// <summary>CUPS-Get-Printers (CUPS extension): every queue on a CUPS server.</summary>
+        CupsGetPrinters = 0x4002
     }
 
     /// <summary>IPP job states (job-state enum).</summary>
