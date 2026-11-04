@@ -33,7 +33,12 @@ namespace Chuvadi.Layout.Engine.Flow
         }
 
         /// <summary>A floating object placed before the flow of a page because it overlaps text above its anchor.</summary>
-        private sealed record Preseed(AnchoredObjectInline Anchor, LayoutRect Rect, string Path);
+        /// <param name="Anchor">The anchored picture or text box (AnchoredObjectInline), or the floating table (FlowTable).</param>
+        /// <param name="Rect">Where it goes (for a table, its top-left corner and width; the height comes from laying it out).</param>
+        /// <param name="Path">Its path for warnings and boxes.</param>
+        /// <param name="TablePos">For a floating table: its position in the flow.</param>
+        /// <param name="AreaWidth">For a floating table: the width it was laid out in.</param>
+        private sealed record Preseed(object Anchor, LayoutRect Rect, string Path, FlowPosition TablePos = default, double AreaWidth = 0);
 
         /// <summary>
         /// Lays out one page from its checkpoint. Produces placements; ops are emitted separately.
@@ -46,7 +51,7 @@ namespace Chuvadi.Layout.Engine.Flow
             List<Preseed>? preseed = null;
             for (int pass = 0; ; pass++)
             {
-                PagePlan plan = PaginateOnce(record, ct, preseed, out List<Preseed> late, out HashSet<AnchoredObjectInline> reached);
+                PagePlan plan = PaginateOnce(record, ct, preseed, out List<Preseed> late, out HashSet<object> reached);
                 if (pass >= 3)
                 {
                     return plan;
@@ -114,9 +119,12 @@ namespace Chuvadi.Layout.Engine.Flow
             public required PagePlan Plan { get; init; }
             public required List<(double Top, double Bottom)> Bands { get; init; }
             public required List<WrapExclusion> Exclusions { get; init; }
-            public required HashSet<AnchoredObjectInline> Seeded { get; init; }
+            public required HashSet<object> Seeded { get; init; }
             public required List<Preseed> Late { get; init; }
-            public required HashSet<AnchoredObjectInline> Reached { get; init; }
+            public required HashSet<object> Reached { get; init; }
+
+            /// <summary>Floating tables placed on the page: their boxes and whether they let others overlap them.</summary>
+            public List<(LayoutRect Rect, bool AllowOverlap)> FloatingTables { get; init; } = new List<(LayoutRect, bool)>();
             public required PageRecord Record { get; init; }
             public required PageGeometry PageGeom { get; init; }
             public required double BodyTop { get; init; }
@@ -139,9 +147,10 @@ namespace Chuvadi.Layout.Engine.Flow
                     Plan = p,
                     Bands = new List<(double, double)>(Bands),
                     Exclusions = new List<WrapExclusion>(Exclusions),
-                    Seeded = new HashSet<AnchoredObjectInline>(Seeded, ReferenceEqualityComparer.Instance),
+                    Seeded = new HashSet<object>(Seeded, ReferenceEqualityComparer.Instance),
                     Late = new List<Preseed>(Late),
-                    Reached = new HashSet<AnchoredObjectInline>(Reached, ReferenceEqualityComparer.Instance),
+                    Reached = new HashSet<object>(Reached, ReferenceEqualityComparer.Instance),
+                    FloatingTables = new List<(LayoutRect, bool)>(FloatingTables),
                     Record = Record,
                     PageGeom = PageGeom,
                     BodyTop = BodyTop,
@@ -250,10 +259,10 @@ namespace Chuvadi.Layout.Engine.Flow
         /// set ends the region and starts a new one below it. A region ended that way is balanced first (Word's rule;
         /// the standard is silent): it gets the smallest height at which its content still fits its columns.
         /// </summary>
-        private PagePlan PaginateOnce(PageRecord record, CancellationToken ct, List<Preseed>? preseed, out List<Preseed> late, out HashSet<AnchoredObjectInline> reached)
+        private PagePlan PaginateOnce(PageRecord record, CancellationToken ct, List<Preseed>? preseed, out List<Preseed> late, out HashSet<object> reached)
         {
             late = new List<Preseed>();
-            reached = new HashSet<AnchoredObjectInline>(ReferenceEqualityComparer.Instance);
+            reached = new HashSet<object>(ReferenceEqualityComparer.Instance);
             PagePlan plan = new PagePlan();
             FlowPosition pos = record.Start;
             int pageSection = Math.Min(pos.Section, _doc.Sections.Count - 1);
@@ -267,7 +276,7 @@ namespace Chuvadi.Layout.Engine.Flow
                 Plan = plan,
                 Bands = new List<(double, double)>(),
                 Exclusions = new List<WrapExclusion>(),
-                Seeded = new HashSet<AnchoredObjectInline>(ReferenceEqualityComparer.Instance),
+                Seeded = new HashSet<object>(ReferenceEqualityComparer.Instance),
                 Late = late,
                 Reached = reached,
                 Record = record,
@@ -280,8 +289,16 @@ namespace Chuvadi.Layout.Engine.Flow
                 foreach (Preseed ps in preseed)
                 {
                     f.Seeded.Add(ps.Anchor);
-                    plan.Items.Add(Placed(ps.Anchor, ps.Rect, false, ps.Path));
-                    AddWrap(ps.Anchor, ps.Rect, f.Bands, f.Exclusions, ps.Path);
+                    if (ps.Anchor is FlowTable ft && ft.Floating is FloatingTablePosition fp)
+                    {
+                        // A table positioned on the page or margin that reaches above its paragraph: placed first, whole.
+                        double seededTop = ClearOfFloatingTables(f, fp, ps.Rect.X, ps.Rect.Width, ps.Rect.Y, ps.Rect.Height);
+                        PlaceFloatingTable(f, ft, fp, ps.TablePos, ps.Rect.X, ps.Rect.Width, ps.AreaWidth, seededTop, f.BodyTop, double.MaxValue, false, ps.Path, ct);
+                        continue;
+                    }
+                    AnchoredObjectInline a = (AnchoredObjectInline)ps.Anchor;
+                    plan.Items.Add(Placed(a, ps.Rect, false, ps.Path));
+                    AddWrap(a, ps.Rect, f.Bands, f.Exclusions, ps.Path);
                 }
             }
 
@@ -459,7 +476,7 @@ namespace Chuvadi.Layout.Engine.Flow
             bool placedAny = false;
             double contentBottom = top;
             FlowParagraph? previousParagraph = null;
-            HashSet<AnchoredObjectInline> seeded = f.Seeded;
+            HashSet<object> seeded = f.Seeded;
 
             while (true)
             {
@@ -499,6 +516,35 @@ namespace Chuvadi.Layout.Engine.Flow
                 (double areaLeft, double areaWidth) = single ? (marginLeft, marginWidth) : column;
                 FlowBlock block = section.Blocks[pos.Block];
                 string path = (pos.Section + 1).ToString(CultureInfo.InvariantCulture) + "/" + (pos.Block + 1).ToString(CultureInfo.InvariantCulture);
+
+                if (block is FlowTable floating && floating.Floating is FloatingTablePosition fpos)
+                {
+                    if (seeded.Contains(floating) && pos.Table is null)
+                    {
+                        f.Reached.Add(floating); // placed first on this page (it reaches above its paragraph)
+                        pos = new FlowPosition(pos.Section, pos.Block + 1, 0);
+                        continue;
+                    }
+                    bool pageWasEmpty = f.FirstOnPage;
+                    FloatingTableResult fr = FloatTable(f, floating, fpos, pos, column, single, y, top, bodyBottom, first && canForce, path, ct);
+                    if (fr.Placed)
+                    {
+                        first = false;
+                        placedAny = true;
+                        f.FirstOnPage = false;
+                        contentBottom = Math.Max(contentBottom, fr.Bottom);
+                    }
+                    if (fr.Late is Preseed lateTable && !pageWasEmpty)
+                    {
+                        f.Late.Add(lateTable);
+                    }
+                    if (fr.ColumnEnds)
+                    {
+                        return new ColumnResult(ColumnEnd.Full, fr.Next, y, contentBottom, placedAny);
+                    }
+                    pos = fr.Next; // the text that follows flows beside the table: y does not move
+                    continue;
+                }
 
                 if (block is FlowTable table)
                 {
@@ -862,7 +908,7 @@ namespace Chuvadi.Layout.Engine.Flow
         /// paragraph are reported in <paramref name="candidates"/> so the page can be laid out again with them first.
         /// </summary>
         private void PlaceAnchors(FlowParagraph p, PagePlan plan, List<(double Top, double Bottom)> bands, List<WrapExclusion> exclusions,
-            HashSet<AnchoredObjectInline> seeded, List<Preseed> candidates, PageGeometry page,
+            HashSet<object> seeded, List<Preseed> candidates, PageGeometry page,
             double areaLeft, double areaWidth, double columnLeft, double columnWidth, double paragraphTop, double bodyTop, double bodyBottom, string path, PageRecord record)
         {
             foreach (FlowInline inline in p.Inlines)

@@ -77,6 +77,7 @@ namespace Chuvadi.Layout.Docs
 
             // Body: a section ends at the paragraph that carries its properties.
             int si = 0;
+            _inBody = true;
             foreach (object block in _doc.Blocks)
             {
                 _ct.ThrowIfCancellationRequested();
@@ -91,6 +92,7 @@ namespace Chuvadi.Layout.Docs
                     si++;
                 }
             }
+            _inBody = false;
             AppendEndnotes(flow);
             return flow;
         }

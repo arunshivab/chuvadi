@@ -11,4 +11,7 @@ column cases where ECMA-376 is silent and Layout follows Word as measured from W
   relative to the column.
 - K7: the last section, starting in the next column.
 
+`calib-lastsection-nextpage.docx` and `calib-lastsection-continuous.docx` end with a short two-column section after a
+next-page and a continuous break: Word does not balance a document's last section (measured 4 Nov 2026).
+
 The tests in ColumnLayoutTests.cs check Layout against the positions read from Word's PDF.

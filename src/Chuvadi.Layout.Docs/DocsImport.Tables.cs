@@ -13,9 +13,54 @@ namespace Chuvadi.Layout.Docs
         private const double DefaultCellMarginSide = 5.4;
 
         /// <summary>
-        /// A floating table (w:tblpPr): its horizontal position becomes the table's alignment or indent, relative to the
-        /// column, margins or page. It is laid out in the text flow at its anchor: the vertical position is not applied
-        /// and text does not wrap beside it (a warning says so).
+        /// A floating table (w:tblpPr) in the body: its position as the file states it (ECMA-376 17.4.57; omitted anchors
+        /// are the page, omitted offsets and distances 0). The engine places it there and wraps text around it.
+        /// </summary>
+        private static FloatingTablePosition Floating(D.TableFloatingPosition fp, bool? overlap) => new FloatingTablePosition
+        {
+            HorizontalAnchor = fp.HorizontalAnchor switch
+            {
+                D.TableFloatAnchor.Margin => TableHorizontalAnchor.Margin,
+                D.TableFloatAnchor.Text => TableHorizontalAnchor.Column,
+                _ => TableHorizontalAnchor.Page,
+            },
+            VerticalAnchor = fp.VerticalAnchor switch
+            {
+                D.TableFloatAnchor.Margin => TableVerticalAnchor.Margin,
+                D.TableFloatAnchor.Text => TableVerticalAnchor.Paragraph,
+                _ => TableVerticalAnchor.Page,
+            },
+            HorizontalAlignment = fp.XAlign switch
+            {
+                D.TableFloatXAlign.Left => TableHorizontalAlignment.Left,
+                D.TableFloatXAlign.Center => TableHorizontalAlignment.Center,
+                D.TableFloatXAlign.Right => TableHorizontalAlignment.Right,
+                D.TableFloatXAlign.Inside => TableHorizontalAlignment.Inside,
+                D.TableFloatXAlign.Outside => TableHorizontalAlignment.Outside,
+                _ => null,
+            },
+            OffsetX = fp.XPt ?? 0,
+            VerticalAlignment = fp.YAlign switch
+            {
+                D.TableFloatYAlign.Inline => TableVerticalAlignment.Inline,
+                D.TableFloatYAlign.Top => TableVerticalAlignment.Top,
+                D.TableFloatYAlign.Center => TableVerticalAlignment.Center,
+                D.TableFloatYAlign.Bottom => TableVerticalAlignment.Bottom,
+                D.TableFloatYAlign.Inside => TableVerticalAlignment.Inside,
+                D.TableFloatYAlign.Outside => TableVerticalAlignment.Outside,
+                _ => null,
+            },
+            OffsetY = fp.YPt ?? 0,
+            DistanceLeft = Math.Max(0, fp.LeftFromTextPt ?? 0),
+            DistanceRight = Math.Max(0, fp.RightFromTextPt ?? 0),
+            DistanceTop = Math.Max(0, fp.TopFromTextPt ?? 0),
+            DistanceBottom = Math.Max(0, fp.BottomFromTextPt ?? 0),
+            AllowOverlap = overlap != false,
+        };
+
+        /// <summary>
+        /// A floating table inside a table cell, a header or footer, a note or a text box: its horizontal position becomes
+        /// the table's alignment or indent; it is laid out in the flow of its container (a warning says so).
         /// </summary>
         private void FloatTable(FlowTable ft, D.TableFloatingPosition fp)
         {
@@ -37,7 +82,7 @@ namespace Chuvadi.Layout.Docs
                 ft.Format = f with { Alignment = ParagraphAlignment.Left, Indent = fromPage ? x - page.MarginLeft : x };
             }
             Warn(LayoutWarningCodes.UnsupportedFeature, LayoutWarningSeverity.Fidelity,
-                "Floating tables are placed at their horizontal position in the text flow; their vertical position is not applied and text does not wrap beside them.");
+                "A floating table inside a table cell, header, footer, note or text box is placed at its horizontal position in the flow of its container; its vertical position is not applied and text does not wrap beside it.");
         }
 
         private FlowTable Table(D.DocTable t, int depth, double width)
@@ -66,7 +111,15 @@ namespace Chuvadi.Layout.Docs
             };
             if (tf.FloatingPosition is D.TableFloatingPosition fp)
             {
-                FloatTable(ft, fp);
+                if (depth == 1 && _inBody && !_inStory && !_inTextBox && _noteMark is null)
+                {
+                    ft.Floating = Floating(fp, tf.AllowOverlap);
+                    ft.Format = ft.Format with { Indent = 0, Alignment = ParagraphAlignment.Left };
+                }
+                else
+                {
+                    FloatTable(ft, fp);
+                }
             }
             if (tf.RightToLeft == true)
             {

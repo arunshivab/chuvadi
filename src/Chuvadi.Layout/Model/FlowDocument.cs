@@ -491,6 +491,9 @@ namespace Chuvadi.Layout.Model
         public IList<double> ColumnWidths { get; } = new List<double>();
 
         public TableFormat Format { get; set; } = new TableFormat();
+
+        /// <summary>The table floats (w:tblpPr): placed at this position with text around it. Null = in line with the text.</summary>
+        public FloatingTablePosition? Floating { get; set; }
     }
 
     /// <summary>Table-level formatting.</summary>

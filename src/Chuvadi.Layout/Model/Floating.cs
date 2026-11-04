@@ -178,4 +178,102 @@ namespace Chuvadi.Layout.Model
 
         public FlowTextBox Box { get; }
     }
+
+    /// <summary>What a floating table's horizontal position is measured from (w:tblpPr/@w:horzAnchor).</summary>
+    public enum TableHorizontalAnchor
+    {
+        /// <summary>The page edge (the standard's default when the file does not say).</summary>
+        Page,
+
+        /// <summary>The text margins.</summary>
+        Margin,
+
+        /// <summary>The text column the table is in (w:horzAnchor="text").</summary>
+        Column,
+    }
+
+    /// <summary>What a floating table's vertical position is measured from (w:tblpPr/@w:vertAnchor).</summary>
+    public enum TableVerticalAnchor
+    {
+        /// <summary>The page edge (the standard's default when the file does not say).</summary>
+        Page,
+
+        /// <summary>The text margins.</summary>
+        Margin,
+
+        /// <summary>The top of the paragraph that follows the table (w:vertAnchor="text").</summary>
+        Paragraph,
+    }
+
+    /// <summary>Relative horizontal position of a floating table (w:tblpXSpec).</summary>
+    public enum TableHorizontalAlignment
+    {
+        Left,
+        Center,
+        Right,
+
+        /// <summary>The inside edge: left on odd pages, right on even pages.</summary>
+        Inside,
+
+        /// <summary>The outside edge: right on odd pages, left on even pages.</summary>
+        Outside,
+    }
+
+    /// <summary>Relative vertical position of a floating table (w:tblpYSpec).</summary>
+    public enum TableVerticalAlignment
+    {
+        /// <summary>In line with the text: laid out at the anchor's top.</summary>
+        Inline,
+        Top,
+        Center,
+        Bottom,
+
+        /// <summary>The inside edge (the top).</summary>
+        Inside,
+
+        /// <summary>The outside edge (the bottom).</summary>
+        Outside,
+    }
+
+    /// <summary>
+    /// Where a floating table sits (w:tblpPr) and how text keeps away from it. ECMA-376 17.4.57: omitted anchors are the
+    /// page, omitted offsets and distances 0; a relative position wins over the offset, except that a vertical position
+    /// relative to the paragraph uses the offset only. Text flows on both sides of the table, at least the distances away.
+    /// </summary>
+    public sealed record FloatingTablePosition
+    {
+        public TableHorizontalAnchor HorizontalAnchor { get; init; } = TableHorizontalAnchor.Page;
+
+        public TableVerticalAnchor VerticalAnchor { get; init; } = TableVerticalAnchor.Page;
+
+        /// <summary>Relative horizontal position; null uses <see cref="OffsetX"/>.</summary>
+        public TableHorizontalAlignment? HorizontalAlignment { get; init; }
+
+        /// <summary>Distance of the table's left edge from the anchor (w:tblpX), in points; negative = before it.</summary>
+        public double OffsetX { get; init; }
+
+        /// <summary>Relative vertical position; null uses <see cref="OffsetY"/>. Ignored for <see cref="TableVerticalAnchor.Paragraph"/>.</summary>
+        public TableVerticalAlignment? VerticalAlignment { get; init; }
+
+        /// <summary>Distance of the table's top from the anchor (w:tblpY), in points; negative = above it.</summary>
+        public double OffsetY { get; init; }
+
+        /// <summary>Least distance between the table and the text on its left (w:leftFromText).</summary>
+        public double DistanceLeft { get; init; }
+
+        /// <summary>Least distance between the table and the text on its right (w:rightFromText).</summary>
+        public double DistanceRight { get; init; }
+
+        /// <summary>Least distance between the table and the text above it (w:topFromText).</summary>
+        public double DistanceTop { get; init; }
+
+        /// <summary>Least distance between the table and the text below it (w:bottomFromText).</summary>
+        public double DistanceBottom { get; init; }
+
+        /// <summary>
+        /// Other floating tables may overlap this one (w:tblOverlap; true when the file does not say). When either of two
+        /// tables does not allow it, the later one is moved down until they no longer overlap.
+        /// </summary>
+        public bool AllowOverlap { get; init; } = true;
+    }
 }

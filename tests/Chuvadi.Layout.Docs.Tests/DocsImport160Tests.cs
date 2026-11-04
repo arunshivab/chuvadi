@@ -161,18 +161,46 @@ public class DocsImport160Tests
     }
 
     [Fact]
-    public void Floating_table_takes_its_horizontal_position()
+    public void Floating_table_takes_its_position_as_the_file_states_it()
     {
         Document d = A4();
         DocTable t = d.AddTable(1);
         t.ColumnWidthsPt = new double[] { 100 };
-        t.Format.FloatingPosition = new TableFloatingPosition { HorizontalAnchor = TableFloatAnchor.Margin, XPt = 200 };
+        t.Format.FloatingPosition = new TableFloatingPosition { HorizontalAnchor = TableFloatAnchor.Margin, XPt = 200, LeftFromTextPt = 9 };
+        t.Format.AllowOverlap = false;
         t.AddRow("cell");
         List<LayoutWarning> warnings = new List<LayoutWarning>();
         FlowDocument flow = DocsImportTests.Import(d, null, warnings);
         FlowTable ft = flow.Sections[0].Blocks.OfType<FlowTable>().Single();
-        Assert.Equal(200, ft.Format.Indent, 3);
-        Assert.Contains(warnings, w => w.Message.Contains("Floating tables", StringComparison.Ordinal));
+        FloatingTablePosition fp = Assert.IsType<FloatingTablePosition>(ft.Floating);
+        Assert.Equal(TableHorizontalAnchor.Margin, fp.HorizontalAnchor);
+        Assert.Equal(TableVerticalAnchor.Page, fp.VerticalAnchor); // not stated: the page (ECMA-376 17.4.57)
+        Assert.Equal(200, fp.OffsetX, 3);
+        Assert.Equal(0, fp.OffsetY, 3);
+        Assert.Equal(9, fp.DistanceLeft, 3);
+        Assert.False(fp.AllowOverlap);
+        Assert.Equal(0, ft.Format.Indent, 3);
+        Assert.DoesNotContain(warnings, w => w.Message.Contains("Floating tables", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Floating_table_in_a_cell_stays_in_the_flow_of_the_cell()
+    {
+        Document d = A4();
+        DocTable outer = d.AddTable(1);
+        outer.ColumnWidthsPt = new double[] { 300 };
+        TableCell cell = outer.AddRow("outer").Cells[0];
+        DocTable inner = cell.AddTable(1);
+        inner.ColumnWidthsPt = new double[] { 100 };
+        inner.Format.FloatingPosition = new TableFloatingPosition { HorizontalAnchor = TableFloatAnchor.Margin, XPt = 50 };
+        inner.AddRow("inner");
+        List<LayoutWarning> warnings = new List<LayoutWarning>();
+        FlowDocument flow = DocsImportTests.Import(d, null, warnings);
+        FlowTable o = flow.Sections[0].Blocks.OfType<FlowTable>().Single();
+        FlowTable i = o.Rows[0].Cells[0].Blocks.OfType<FlowTable>().Single();
+        Assert.Null(i.Floating);
+        Assert.Equal(50, i.Format.Indent, 3);
+        Assert.Contains(warnings, w => w.Message.Contains("floating table inside a table cell", StringComparison.Ordinal));
     }
 
     [Fact]
