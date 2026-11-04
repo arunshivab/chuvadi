@@ -19,7 +19,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Chuvadi.OpenType;
-using Chuvadi.TestSupport;
 
 namespace Chuvadi.Text.Shaping.Gate;
 
@@ -61,13 +60,9 @@ internal static class Program
         {
             if (!fonts.ContainsKey(l.Font))
             {
-                byte[] bytes = File.ReadAllBytes(Path.Combine(o.Pack, "fonts", l.Font));
-                if (Woff2Decoder.IsWoff2(bytes))
-                {
-                    bytes = Woff2Decoder.Decode(bytes);
-                }
-
-                fonts[l.Font] = (bytes, OpenTypeFont.Load(bytes));
+                // WOFF2 files are decoded by Chuvadi.OpenType itself; the decoded sfnt is kept for the byte-array checks.
+                OpenTypeFont font = OpenTypeFont.Load(File.ReadAllBytes(Path.Combine(o.Pack, "fonts", l.Font)));
+                fonts[l.Font] = (font.Data.ToArray(), font);
             }
         }
 

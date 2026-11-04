@@ -116,7 +116,7 @@ public sealed class OpenTypeFont
         }
     }
 
-    /// <summary>Gets the font data this face was loaded from (the whole collection for a face of a collection).</summary>
+    /// <summary>Gets the font data this face reads from: the bytes given (the whole collection for a face of a collection), or for WOFF and WOFF2 the decoded sfnt or collection.</summary>
     public ReadOnlyMemory<byte> Data => _data;
 
     /// <summary>

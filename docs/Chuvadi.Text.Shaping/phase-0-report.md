@@ -21,6 +21,13 @@ swap" below.
 | WOFF2 decoder, test support only (not shipped) | tools/Chuvadi.Fonts.TestSupport | done |
 | Trace log, sources log, check test | docs/Chuvadi.OpenType/trace, docs/Chuvadi.Text.Shaping/trace | 34 + 12 rules; wrapper 4 rules |
 
+## Results on Arun's machine (Windows, 2026-11-05)
+
+Pushed as commit 17fa3b0 on feat/shaping-phase0 (from main 5818752). Chuvadi.OpenType tests 36/36, Chuvadi.Text.Shaping
+tests 15/15, whole Chuvadi.slnx 4,262/4,262. Local gate: 2,144 / 29,493 (7.27%), PHASE TARGET MET; byte-array parity
+29,493/29,493; font check clean on all 13 fonts. Every per-script count is identical to the Linux run. Still to run on
+Windows: the FontFace oracle and the pack's official harness (both need the Pdf font nupkgs).
+
 ## Results in my environment (Linux, .NET 10.0.403)
 
 - Local gate: exactly 2,144 of 29,493 lines (7.27%), the phase target (the skeleton's baseline). PHASE TARGET MET.
@@ -50,6 +57,42 @@ than the original, and the short 'loca' offsets overflowed past 128 KB. The resu
 for later glyphs in 7 of the 10 WOFF2 fonts. Advances were unaffected, which is why the gate still read
 2,144. Fixed by using the standard compact point encoding (with a switch to long 'loca' if the table is
 still too big), and guarded from now on by the gate's `--fontcheck`.
+
+## Decided (D-155, Arun, 2026-11-05)
+
+WOFF/WOFF2 in Chuvadi.OpenType; helpers H1, H2, H3, H4, H6 now (H5 only on request, H7 no, H8 with Arabic); C2 byte[]
+parse cache in the wrapper (documented); similarity timing G1 for engine phases 3-6, G2 elsewhere, hard stop before
+hand-over; the tools/ folder; tags opentype-v* and text-shaping-v*; licences MIT (Chuvadi.OpenType) and MIT AND
+Unicode-3.0 (Chuvadi.Text.Shaping).
+
+Next, in order (follow-up delivery on feat/shaping-phase0 after Arun's push):
+1. WOFF 1.0 and WOFF2 decoding in Chuvadi.OpenType (the WOFF2 decoder moves from tools/Chuvadi.Fonts.TestSupport into
+   src/Chuvadi.OpenType/Woff/; WOFF 1.0 added from the W3C spec); FontCollection reports the container kind.
+2. C2 in the wrapper: parsed font cached per byte array, documented.
+3. Phase 1: GDEF, GSUB and GPOS views. Similarity check: G2 (send the phase zip and continue).
+
+## Follow-up commit (2026-11-05): WOFF/WOFF2 and C2
+
+- WOFF 1.0 and WOFF 2.0 (with collections) decoded by Chuvadi.OpenType on load (R-OT-0036 to R-OT-0039); the WOFF2
+  decoder moved from tools/Chuvadi.Fonts.TestSupport into src/Chuvadi.OpenType/Woff/ (rules R-OT-0031 to 0034
+  unchanged). The decoded tables of all 10 pack WOFF2 fonts are identical to the phase-0 decoder's output.
+- Finding: the pack's LiPi Sans WOFF2 files put other tables between glyf and loca, which WOFF2 §4.1 forbids encoders
+  to do; the decoder pairs glyf with the next transformed loca instead of rejecting (R-OT-0039).
+- Finding for phase 3: the LiPi Sans fonts are variable fonts (fvar, gvar, avar, HVAR, STAT). Shaping uses the default
+  instance; GSUB/GPOS FeatureVariations and variation deltas at the default coordinates will be handled from the
+  spec in phase 1/3 and checked against the corpus.
+- New limit for approval: WOFF/WOFF2 data declaring more than 256 MiB of font data is refused (internal constant,
+  R-OT-0038). Option: expose it as a load option.
+- C2 in the wrapper (R-PW-0005): Shape(byte[]) caches the loaded face per array (documented in the method remarks).
+- Tests: Chuvadi.OpenType 41/41, Chuvadi.Text.Shaping 15/15; local gate 2,144 (phase target met), parity and font
+  check clean; pack harness through the wrapper (sandbox stand-ins) 2,144.
+
+## Merge conditions for the draft PR (D-158)
+
+1. The Zip chat's shared-files PR (slnx, CI, release prefixes, README, RELEASING) is merged and this branch is updated.
+2. This follow-up commit has landed; CI is green.
+3. The similarity checker reports phase 0 clean (or remediated), D-74.
+4. Arun approves.
 
 ## Pdf.Authoring swap (plan C1)
 

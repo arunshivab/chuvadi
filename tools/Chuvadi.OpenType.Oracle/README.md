@@ -7,7 +7,7 @@ Phase 0 exit check. Compares Chuvadi.OpenType with the published Chuvadi.Pdf.Fon
 - advance width and left side bearing of every glyph;
 - the glyph for every code point U+0000..U+10FFFF (surrogates skipped);
 - the (code point, glyph) pairs of `FontFace.CharacterMap` against `CharacterMap.EnumerateMappings()`;
-- for the WOFF2 fonts, our test-support decoder against Chuvadi.Pdf.Fonts.Woff2's `Woff2Unpacker`:
+- for the WOFF2 fonts, Chuvadi.OpenType's own WOFF2 decoding against Chuvadi.Pdf.Fonts.Woff2's `Woff2Unpacker`:
   identical bytes for every table except glyf/loca/hmtx/head, identical advances, side bearings and
   glyph boxes.
 
@@ -24,7 +24,7 @@ Needs Chuvadi.Pdf.Fonts.Rendering and Chuvadi.Pdf.Fonts.Woff2 3.26.0 (and their 
 `C:\Users\aruns\Documents\local-nuget`.
 
 ```powershell
-$pack = "C:\Users\aruns\Documents\cleanroom-shaping-pack"
+$pack = "C:\Users\aruns\Documents\cleanroom-shaping-pack\cleanroom-shaping-pack"
 dotnet run -c Release --project tools\Chuvadi.OpenType.Oracle -- $pack --out oracle-phase0.txt
 ```
 

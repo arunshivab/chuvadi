@@ -23,7 +23,6 @@
     <PackageReference Include="Chuvadi.Pdf.Fonts.Rendering" Version="$(ChuvadiVersion)" />
     <PackageReference Include="Chuvadi.Pdf.Fonts.Woff2" Version="$(ChuvadiVersion)" />
     <ProjectReference Include="..\..\src\Chuvadi.OpenType\Chuvadi.OpenType.csproj" />
-    <Compile Include="..\Chuvadi.Fonts.TestSupport\Woff2Decoder.cs" Link="TestSupport\Woff2Decoder.cs" />
   </ItemGroup>
 
 </Project>

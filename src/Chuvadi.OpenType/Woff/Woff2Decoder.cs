@@ -1,18 +1,16 @@
-// Test-support WOFF2 decoder (W3C WOFF File Format 2.0). It is compiled into the
-// test projects and the local gate only; it does not ship in any library. If
-// Arun approves WOFF/WOFF2 support in Chuvadi.OpenType, this file moves to
-// src/Chuvadi.OpenType/Woff/ unchanged apart from its namespace and visibility.
-// Single fonts only; WOFF2 collections are rejected.
-
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO.Compression;
+using Chuvadi.OpenType.Internal;
 
-namespace Chuvadi.TestSupport;
+namespace Chuvadi.OpenType.Woff;
 
-/// <summary>Decodes a WOFF2 file into sfnt bytes.</summary>
-public static class Woff2Decoder
+/// <summary>
+/// Decodes WOFF 2.0 (W3C Recommendation) into an sfnt font or, for a WOFF2 collection, a 'ttcf' collection.
+/// Brotli decompression comes from the .NET base class library.
+/// </summary>
+internal static class Woff2Decoder
 {
     // TRACE R-OT-0031
     private static readonly string[] KnownTags =
@@ -23,18 +21,24 @@ public static class Woff2Decoder
         "gvar", "hsty", "just", "lcar", "mort", "morx", "opbd", "prop", "trak", "Zapf", "Silf", "Glat", "Gloc", "Feat", "Sill",
     };
 
-    /// <summary>Returns whether the bytes start with the WOFF2 signature.</summary>
-    /// <param name="data">The file bytes.</param>
-    /// <returns>True for 'wOF2'.</returns>
-    public static bool IsWoff2(ReadOnlySpan<byte> data) => data.Length >= 4 && BinaryPrimitives.ReadUInt32BigEndian(data) == 0x774F4632u;
-
-    /// <summary>Decodes WOFF2 to sfnt.</summary>
-    /// <param name="woff2">The WOFF2 bytes.</param>
-    /// <returns>The sfnt bytes.</returns>
-    /// <exception cref="InvalidOperationException">The data is not a valid single-font WOFF2 file.</exception>
-    public static byte[] Decode(byte[] woff2)
+    /// <summary>Decodes WOFF2 data.</summary>
+    /// <exception cref="OpenTypeFormatException">The data is not valid WOFF2, or decodes to more than the limit.</exception>
+    internal static byte[] Decode(ReadOnlySpan<byte> input)
     {
-        ArgumentNullException.ThrowIfNull(woff2);
+        byte[] woff2 = input.ToArray();
+        try
+        {
+            return DecodeCore(woff2);
+        }
+        catch (Exception e) when (e is OverflowException or IndexOutOfRangeException or ArgumentException or InvalidOperationException)
+        {
+            // Every structural fault in damaged data surfaces as OpenTypeFormatException.
+            throw new OpenTypeFormatException("Invalid WOFF2 data: " + e.Message, e);
+        }
+    }
+
+    private static byte[] DecodeCore(byte[] woff2)
+    {
         Reader r = new Reader(woff2, 0);
         if (r.U32() != 0x774F4632u)
         {
@@ -42,15 +46,10 @@ public static class Woff2Decoder
         }
 
         uint flavor = r.U32();
-        if (flavor == 0x74746366u)
-        {
-            throw Invalid("collections are not supported by this decoder");
-        }
-
         _ = r.U32(); // length
         int numTables = r.U16();
-        _ = r.U16(); // reserved
-        _ = r.U32(); // totalSfntSize
+        _ = r.U16(); // reserved: a decoder must not reject a non-zero value
+        _ = r.U32(); // totalSfntSize: reference only
         int compressedSize = checked((int)r.U32());
         r.Skip(24); // majorVersion, minorVersion, metaOffset, metaLength, metaOrigLength, privOffset, privLength
 
@@ -69,73 +68,177 @@ public static class Woff2Decoder
             streamTotal += transformLength;
         }
 
+        // TRACE R-OT-0037
+        List<(uint Flavor, int[] Indexes)> fonts = new List<(uint, int[])>();
+        if (flavor == 0x74746366u)
+        {
+            _ = r.U32(); // collection version: output is always written as version 1.0
+            int numFonts = r.Read255UInt16();
+            for (int k = 0; k < numFonts; k++)
+            {
+                int n = r.Read255UInt16();
+                uint fontFlavor = r.U32();
+                int[] idx = new int[n];
+                for (int i = 0; i < n; i++)
+                {
+                    idx[i] = r.Read255UInt16();
+                    if (idx[i] >= entries.Count)
+                    {
+                        throw Invalid("a collection font refers to a table that is not in the directory");
+                    }
+                }
+
+                fonts.Add((fontFlavor, idx));
+            }
+        }
+        else
+        {
+            int[] all = new int[entries.Count];
+            for (int i = 0; i < all.Length; i++)
+            {
+                all[i] = i;
+            }
+
+            fonts.Add((flavor, all));
+        }
+
+        // TRACE R-OT-0038
+        if (streamTotal > WoffLimits.MaxDecodedBytes)
+        {
+            throw new OpenTypeFormatException("The WOFF2 data would decode to more than " + WoffLimits.MaxDecodedBytes + " bytes.");
+        }
+
         byte[] stream = new byte[checked((int)streamTotal)];
-        if (!BrotliDecoder.TryDecompress(woff2.AsSpan(r.Position, compressedSize), stream, out int written) || written != stream.Length)
+        if (r.Position + (long)compressedSize > woff2.Length ||
+            !BrotliDecoder.TryDecompress(woff2.AsSpan(r.Position, compressedSize), stream, out int written) || written != stream.Length)
         {
             throw Invalid("the Brotli stream does not decode to the table directory's total length");
         }
 
-        Dictionary<string, byte[]> tables = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        Entry? glyfEntry = null;
-        Entry? locaEntry = null;
-        Entry? hmtxEntry = null;
-        foreach (Entry e in entries)
+        byte[]?[] data = new byte[entries.Count][];
+        short[]?[] xMinsByGlyf = new short[entries.Count][];
+        int[] locaFormatByGlyf = new int[entries.Count];
+        Dictionary<int, int> locaOf = new Dictionary<int, int>();
+        for (int i = 0; i < entries.Count; i++)
         {
-            if (e.Transformed && e.Tag == "glyf")
+            Entry e = entries[i];
+            if (!e.Transformed)
             {
-                glyfEntry = e;
+                data[i] = stream.AsSpan((int)e.StreamOffset, (int)e.TransformLength).ToArray();
             }
-            else if (e.Transformed && e.Tag == "loca")
+            else if (e.Tag == "glyf")
             {
-                locaEntry = e;
+                // TRACE R-OT-0039
+                // Its transformed loca is the next transformed loca entry in the directory, with transformLength 0.
+                // (Encoders must put it right after glyf; fonts in the wild sometimes have tables in between.)
+                int l = -1;
+                for (int k = i + 1; k < entries.Count && l < 0; k++)
+                {
+                    if (entries[k].Tag == "loca" && entries[k].Transformed)
+                    {
+                        l = k;
+                    }
+                }
+
+                if (l < 0 || entries[l].TransformLength != 0 || locaOf.ContainsValue(l))
+                {
+                    throw Invalid("a transformed glyf table needs its own transformed loca entry of length 0");
+                }
+
+                ReadOnlySpan<byte> t = stream.AsSpan((int)e.StreamOffset, (int)e.TransformLength);
+                if (t.Length < 36)
+                {
+                    throw Invalid("the transformed glyf header is truncated");
+                }
+
+                int numGlyphs = BinaryPrimitives.ReadUInt16BigEndian(t.Slice(4));
+                int indexFormatDeclared = BinaryPrimitives.ReadUInt16BigEndian(t.Slice(6));
+                if (entries[l].OrigLength != (uint)((numGlyphs + 1) * (indexFormatDeclared == 0 ? 2 : 4)))
+                {
+                    throw Invalid("the loca entry's original length does not match the glyf table's glyph count and index format");
+                }
+
+                (byte[] glyf, byte[] loca, short[] mins, int indexFormat) = ReconstructGlyf(t);
+                data[i] = glyf;
+                data[l] = loca;
+                locaOf[i] = l;
+                xMinsByGlyf[i] = mins;
+                locaFormatByGlyf[i] = indexFormat;
             }
-            else if (e.Transformed && e.Tag == "hmtx")
+            else if (e.Tag == "loca")
             {
-                hmtxEntry = e;
+                // Filled in with its glyf; checked below.
             }
-            else if (e.Transformed)
+            else if (e.Tag != "hmtx")
             {
                 throw Invalid("unknown transform for table " + e.Tag);
             }
-            else
-            {
-                tables[e.Tag] = stream.AsSpan((int)e.StreamOffset, (int)e.TransformLength).ToArray();
-            }
         }
 
-        short[]? xMins = null;
-        if (glyfEntry is not null)
+        // Per font: the transformed hmtx needs that font's hhea, maxp and glyf; head gets the loca format used.
+        foreach ((uint _, int[] idx) in fonts)
         {
-            if (locaEntry is null || locaEntry.TransformLength != 0)
+            int glyf = Find(entries, idx, "glyf");
+            int loca = Find(entries, idx, "loca");
+            int head = Find(entries, idx, "head");
+            if ((glyf >= 0) != (loca >= 0) || (glyf >= 0 && entries[glyf].Transformed != entries[loca].Transformed) ||
+                (glyf >= 0 && entries[glyf].Transformed && (!locaOf.TryGetValue(glyf, out int pairedLoca) || pairedLoca != loca)))
             {
-                throw Invalid("a transformed glyf table needs a transformed loca entry of length 0");
+                throw Invalid("a font's glyf and loca tables are not a pair");
             }
 
-            (byte[] glyf, byte[] loca, short[] mins, int indexFormat) = ReconstructGlyf(stream.AsSpan((int)glyfEntry.StreamOffset, (int)glyfEntry.TransformLength));
-            tables["glyf"] = glyf;
-            tables["loca"] = loca;
-            xMins = mins;
-            if (tables.TryGetValue("head", out byte[]? head) && head.Length >= 54)
+            if (glyf >= 0 && entries[glyf].Transformed && head >= 0 && data[head]!.Length >= 54)
             {
-                BinaryPrimitives.WriteInt16BigEndian(head.AsSpan(50), (short)indexFormat);
+                BinaryPrimitives.WriteInt16BigEndian(data[head].AsSpan(50), (short)locaFormatByGlyf[glyf]);
+            }
+
+            int hmtx = Find(entries, idx, "hmtx");
+            if (hmtx >= 0 && entries[hmtx].Transformed && data[hmtx] is null)
+            {
+                int hhea = Find(entries, idx, "hhea");
+                int maxp = Find(entries, idx, "maxp");
+                if (entries[hmtx].Transform != 1 || glyf < 0 || xMinsByGlyf[glyf] is null || hhea < 0 || maxp < 0)
+                {
+                    throw Invalid("unsupported hmtx transform");
+                }
+
+                data[hmtx] = ReconstructHmtx(stream.AsSpan((int)entries[hmtx].StreamOffset, (int)entries[hmtx].TransformLength), data[hhea]!, data[maxp]!, xMinsByGlyf[glyf]!);
             }
         }
-        else if (locaEntry is not null)
+
+        for (int i = 0; i < entries.Count; i++)
         {
-            throw Invalid("loca is transformed but glyf is not");
-        }
-
-        if (hmtxEntry is not null)
-        {
-            if (hmtxEntry.Transform != 1 || xMins is null)
+            if (entries[i].Tag == "loca" && entries[i].Transformed && data[i] is null)
             {
-                throw Invalid("unsupported hmtx transform");
+                throw Invalid("loca is transformed but no transformed glyf goes with it");
             }
-
-            tables["hmtx"] = ReconstructHmtx(stream.AsSpan((int)hmtxEntry.StreamOffset, (int)hmtxEntry.TransformLength), tables, xMins);
         }
 
-        return BuildSfnt(flavor, tables);
+        TableData[] tables = new TableData[entries.Count];
+        for (int i = 0; i < entries.Count; i++)
+        {
+            tables[i] = new TableData(TagValue(entries[i].Tag), data[i] ?? Array.Empty<byte>());
+        }
+
+        if (flavor != 0x74746366u)
+        {
+            return SfntWriter.WriteFont(flavor, tables, recomputeChecksums: true);
+        }
+
+        return SfntWriter.WriteCollection(tables, fonts);
+    }
+
+    private static int Find(List<Entry> entries, int[] idx, string tag)
+    {
+        foreach (int i in idx)
+        {
+            if (entries[i].Tag == tag)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     // TRACE R-OT-0032
@@ -450,10 +553,13 @@ public static class Woff2Decoder
     }
 
     // TRACE R-OT-0034
-    private static byte[] ReconstructHmtx(ReadOnlySpan<byte> t, Dictionary<string, byte[]> tables, short[] xMins)
+    private static byte[] ReconstructHmtx(ReadOnlySpan<byte> t, byte[] hhea, byte[] maxp, short[] xMins)
     {
-        byte[] hhea = tables["hhea"];
-        byte[] maxp = tables["maxp"];
+        if (hhea.Length < 36 || maxp.Length < 6)
+        {
+            throw Invalid("a transformed hmtx needs the font's hhea and maxp");
+        }
+
         int numberOfHMetrics = BinaryPrimitives.ReadUInt16BigEndian(hhea.AsSpan(34));
         int numGlyphs = BinaryPrimitives.ReadUInt16BigEndian(maxp.AsSpan(4));
         Reader r = new Reader(t.ToArray(), 0);
@@ -484,73 +590,6 @@ public static class Woff2Decoder
         return o.ToArray();
     }
 
-    private static byte[] BuildSfnt(uint flavor, Dictionary<string, byte[]> tables)
-    {
-        List<string> tags = new List<string>(tables.Keys);
-        tags.Sort(StringComparer.Ordinal);
-        int n = tags.Count;
-        int searchRange = 1;
-        int entrySelector = 0;
-        while (searchRange * 2 <= n)
-        {
-            searchRange *= 2;
-            entrySelector++;
-        }
-
-        searchRange *= 16;
-        int headerLength = 12 + (16 * n);
-        long total = headerLength;
-        foreach (string tag in tags)
-        {
-            total += (tables[tag].Length + 3) & ~3;
-        }
-
-        byte[] font = new byte[total];
-        Span<byte> f = font;
-        BinaryPrimitives.WriteUInt32BigEndian(f, flavor);
-        BinaryPrimitives.WriteUInt16BigEndian(f.Slice(4), (ushort)n);
-        BinaryPrimitives.WriteUInt16BigEndian(f.Slice(6), (ushort)searchRange);
-        BinaryPrimitives.WriteUInt16BigEndian(f.Slice(8), (ushort)entrySelector);
-        BinaryPrimitives.WriteUInt16BigEndian(f.Slice(10), (ushort)((n * 16) - searchRange));
-        int offset = headerLength;
-        int headOffset = -1;
-        for (int i = 0; i < n; i++)
-        {
-            byte[] data = tables[tags[i]];
-            if (tags[i] == "head" && data.Length >= 12)
-            {
-                BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(8), 0);
-                headOffset = offset;
-            }
-
-            data.CopyTo(f.Slice(offset));
-            int rec = 12 + (16 * i);
-            BinaryPrimitives.WriteUInt32BigEndian(f.Slice(rec), TagValue(tags[i]));
-            BinaryPrimitives.WriteUInt32BigEndian(f.Slice(rec + 4), Checksum(f.Slice(offset, (data.Length + 3) & ~3)));
-            BinaryPrimitives.WriteUInt32BigEndian(f.Slice(rec + 8), (uint)offset);
-            BinaryPrimitives.WriteUInt32BigEndian(f.Slice(rec + 12), (uint)data.Length);
-            offset += (data.Length + 3) & ~3;
-        }
-
-        if (headOffset >= 0)
-        {
-            BinaryPrimitives.WriteUInt32BigEndian(f.Slice(headOffset + 8), unchecked(0xB1B0AFBAu - Checksum(f)));
-        }
-
-        return font;
-    }
-
-    private static uint Checksum(ReadOnlySpan<byte> s)
-    {
-        uint sum = 0;
-        for (int i = 0; i + 3 < s.Length; i += 4)
-        {
-            sum = unchecked(sum + BinaryPrimitives.ReadUInt32BigEndian(s.Slice(i)));
-        }
-
-        return sum;
-    }
-
     private static void Put16(List<byte> l, int v)
     {
         l.Add((byte)(v >> 8));
@@ -569,8 +608,7 @@ public static class Woff2Decoder
         new string(new[] { (char)(v >> 24), (char)((v >> 16) & 0xFF), (char)((v >> 8) & 0xFF), (char)(v & 0xFF) });
 
     private static uint TagValue(string tag) => ((uint)tag[0] << 24) | ((uint)tag[1] << 16) | ((uint)tag[2] << 8) | tag[3];
-
-    private static InvalidOperationException Invalid(string what) => new InvalidOperationException("Invalid WOFF2 data: " + what + ".");
+    private static OpenTypeFormatException Invalid(string what) => new OpenTypeFormatException("Invalid WOFF2 data: " + what + ".");
 
     private sealed record Entry(string Tag, int Transform, bool Transformed, uint OrigLength, uint TransformLength, long StreamOffset);
 

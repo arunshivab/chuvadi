@@ -12,16 +12,23 @@ public sealed class FontCollection
     private readonly ReadOnlyMemory<byte> _data;
     private readonly int[] _faceOffsets;
 
-    private FontCollection(ReadOnlyMemory<byte> data, FontContainerKind kind, int[] faceOffsets, uint version)
+    private FontCollection(ReadOnlyMemory<byte> data, FontContainerKind kind, int[] faceOffsets, uint version, bool isCollection)
     {
         _data = data;
         Kind = kind;
         _faceOffsets = faceOffsets;
         CollectionVersion = version;
+        IsCollection = isCollection;
     }
 
-    /// <summary>Gets the container kind.</summary>
+    /// <summary>Gets the container format the data came in: plain sfnt, 'ttcf' collection, WOFF or WOFF2.</summary>
     public FontContainerKind Kind { get; }
+
+    /// <summary>Gets whether the (decoded) data is a 'ttcf' collection: true for <see cref="FontContainerKind.Collection"/> and for a WOFF2 collection.</summary>
+    public bool IsCollection { get; }
+
+    /// <summary>Gets the font data the faces read from: the bytes given, or for WOFF and WOFF2 the decoded sfnt or collection.</summary>
+    public ReadOnlyMemory<byte> Data => _data;
 
     /// <summary>Gets the number of fonts in the data (1 for a plain sfnt).</summary>
     public int Count => _faceOffsets.Length;
@@ -62,7 +69,7 @@ public sealed class FontCollection
             throw new ArgumentOutOfRangeException(nameof(faceIndex), faceIndex, "The face index is outside the collection.");
         }
 
-        return OpenTypeFont.Create(_data, faceIndex, _faceOffsets[faceIndex], Kind == FontContainerKind.Collection);
+        return OpenTypeFont.Create(_data, faceIndex, _faceOffsets[faceIndex], IsCollection);
     }
 
     internal static bool TryLoad(ReadOnlyMemory<byte> data, out FontCollection? result, out string? error)
@@ -75,14 +82,40 @@ public sealed class FontCollection
             return false;
         }
 
-        // TRACE R-OT-0003
+        // TRACE R-OT-0036
         uint signature = BigEndian.U32(s, 0);
+        FontContainerKind kind = FontContainerKind.Sfnt;
+        if (signature == 0x774F4646u || signature == 0x774F4632u)
+        {
+            try
+            {
+                data = signature == 0x774F4646u ? Woff.Woff1Decoder.Decode(s) : Woff.Woff2Decoder.Decode(s);
+            }
+            catch (OpenTypeFormatException e)
+            {
+                error = e.Message;
+                return false;
+            }
+
+            kind = signature == 0x774F4646u ? FontContainerKind.Woff : FontContainerKind.Woff2;
+            s = data.Span;
+            signature = BigEndian.U32(s, 0);
+        }
+
+        return TryReadContainer(data, s, signature, kind, out result, out error);
+    }
+
+    private static bool TryReadContainer(ReadOnlyMemory<byte> data, ReadOnlySpan<byte> s, uint signature, FontContainerKind kind, out FontCollection? result, out string? error)
+    {
+        result = null;
+
+        // TRACE R-OT-0003
         switch (signature)
         {
             case 0x00010000u:
             case 0x4F54544Fu: // 'OTTO'
             case 0x74727565u: // 'true'
-                result = new FontCollection(data, FontContainerKind.Sfnt, new[] { 0 }, 0);
+                result = new FontCollection(data, kind, new[] { 0 }, 0, false);
                 error = null;
                 return true;
 
@@ -110,18 +143,13 @@ public sealed class FontCollection
                         offsets[i] = off;
                     }
 
-                    result = new FontCollection(data, FontContainerKind.Collection, offsets, version);
+                    result = new FontCollection(data, kind == FontContainerKind.Sfnt ? FontContainerKind.Collection : kind, offsets, version, true);
                     error = null;
                     return true;
                 }
 
-            case 0x774F4646u: // 'wOFF'
-            case 0x774F4632u: // 'wOF2'
-                error = "WOFF and WOFF2 data are not read by this version of Chuvadi.OpenType; decompress to sfnt first.";
-                return false;
-
             default:
-                error = "The data does not start with a known sfnt or collection signature.";
+                error = "The data does not start with a known sfnt, collection, WOFF or WOFF2 signature.";
                 return false;
         }
     }

@@ -7,8 +7,9 @@ Status: phase 0 of design note v1 (unreleased 0.1.0).
 
 ## What it reads
 
-- Containers: a single sfnt (0x00010000, 'OTTO', 'true') and 'ttcf' collections (`FontCollection`).
-  WOFF/WOFF2 are refused with a clear message until Arun decides on WOFF support.
+- Containers: a single sfnt (0x00010000, 'OTTO', 'true'), 'ttcf' collections, WOFF 1.0 and WOFF 2.0 (including
+  WOFF2 collections), decoded on load (`FontCollection.Kind`, `IsCollection`, `Data`). A WOFF or WOFF2 file that
+  declares more than 256 MiB of font data is refused.
 - Table directory (`Tables`, `HasTable`, `TryGetTable`, `GetTableData`).
 - `FaceProgram`: the face as a standalone sfnt for embedding (for a collection face, rebuilt once with its own
   directory and checksums, 'DSIG' left out; D-153). `IsCff` is true for CFF version 1 only; CFF2 fonts load
@@ -21,6 +22,8 @@ Status: phase 0 of design note v1 (unreleased 0.1.0).
   extremes included, CID-keyed fonts supported).
 
 Next (phase 1): read-only views of GDEF, GSUB and GPOS.
+
+Decoding uses only .NET's own Brotli and zlib.
 
 Not read in this version: glyph names, glyph outlines, vertical metrics, variable-font tables, colour and
 bitmap glyphs, CFF2 bounds, the deprecated accented-glyph form of CFF endchar.

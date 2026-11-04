@@ -59,6 +59,7 @@ public class LoadingTests
         Assert.Throws<OpenTypeFormatException>(() => OpenTypeFont.Load(new byte[4]));
         Assert.Throws<OpenTypeFormatException>(() => OpenTypeFont.Load(Encoding.ASCII.GetBytes("this is not a font at all")));
         Assert.Throws<OpenTypeFormatException>(() => OpenTypeFont.Load(Encoding.ASCII.GetBytes("wOF2-------------")));
+        Assert.Throws<OpenTypeFormatException>(() => OpenTypeFont.Load(Encoding.ASCII.GetBytes("wOFF-------------")));
     }
 
     [Fact]

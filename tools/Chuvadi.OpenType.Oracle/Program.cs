@@ -10,7 +10,6 @@ using System.Text;
 using Chuvadi.OpenType;
 using Chuvadi.Pdf.Fonts.Rendering;
 using Chuvadi.Pdf.Fonts.Woff2;
-using Chuvadi.TestSupport;
 
 namespace Chuvadi.OpenType.Oracle;
 
@@ -83,10 +82,10 @@ internal static class Program
                 diffs.Add($"CharacterMap: {extra} pairs in ours that FontFace.CharacterMap does not list");
             }
 
-            // Our test-support WOFF2 decoder against the published unpacker: same tables, same metrics and bounds.
+            // Chuvadi.OpenType's own WOFF2 decoding against the published unpacker: same tables, same metrics and bounds.
             if (woff2)
             {
-                OpenTypeFont mine = OpenTypeFont.Load(Woff2Decoder.Decode(raw));
+                OpenTypeFont mine = OpenTypeFont.Load(raw);
                 foreach (TableRecord t in ours.Tables)
                 {
                     string tag = t.Tag.ToString();

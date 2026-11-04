@@ -33,6 +33,7 @@ Short names used below:
 ## R-OT-0003
 - Rule: The first four bytes identify the container: 0x00010000, 'OTTO' or 'true' = one sfnt font; 'ttcf' = a collection. 'wOFF' and 'wOF2' are recognised and refused with a clear message in this version. Anything else is not a font.
 - Source: spec. OTFF "Table Directory" (sfntVersion 0x00010000 or 'OTTO'; 'true' noted as used by Apple), OTFF "Font Collections"; WOFF2 §3.2 signature. Refusing WOFF: decision pending Arun's approval of WOFF support (design note v1, [APPROVE]).
+- Superseded in part: WOFF and WOFF2 are decoded on load since 2026-11-05 (R-OT-0036, D-155).
 - Code: src/Chuvadi.OpenType/FontCollection.cs
 
 ## R-OT-0004
@@ -171,26 +172,50 @@ Short names used below:
 - Code: src/Chuvadi.OpenType/Tables/CffOutlines.cs
 
 ## R-OT-0031
-- Rule: WOFF2 (test-support decoder): header fields, table directory entries (flags with known-tag index 0–62 or 63 + explicit tag; transform version in bits 6–7; null transform is 0 except 3 for glyf/loca), UIntBase128 (no leading 0x80, at most 5 bytes, no overflow) and 255UInt16 (253 = word, 254 = +506, 255 = +253). The Brotli stream must decode to the sum of the table lengths. Collections are refused.
+- Rule: WOFF2 decoder: header fields, table directory entries (flags with known-tag index 0–62 or 63 + explicit tag; transform version in bits 6–7; null transform is 0 except 3 for glyf/loca), UIntBase128 (no leading 0x80, at most 5 bytes, no overflow) and 255UInt16 (253 = word, 254 = +506, 255 = +253). The Brotli stream must decode to the sum of the table lengths. (Collections: see R-OT-0037.)
 - Source: spec. WOFF2 §3.1 "255UInt16 Data Type", "UIntBase128 Data Type", §3.2 "WOFF2 Header", §4.1 "Table directory format" (Known Table Tags), §5 "Compressed data format". Brotli via the .NET BCL (System.IO.Compression.BrotliDecoder).
-- Code: tools/Chuvadi.Fonts.TestSupport/Woff2Decoder.cs
+- Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+- Moved: from tools/Chuvadi.Fonts.TestSupport into the library on 2026-11-05 (D-155); the rule is unchanged.
 
 ## R-OT-0032
 - Rule: WOFF2 transformed 'glyf' (version 0): the seven stream sizes, then nContour, nPoints (255UInt16 per contour), flag, glyph, composite, bbox (bitmap of 4 × floor((numGlyphs+31)/32) bytes, then int16 values) and instruction streams, plus the optional overlapSimpleBitmap. Empty, simple and composite glyphs are rebuilt as standard 'glyf' records (simple glyph coordinates written as int16 deltas), the bounding box computed from all points unless explicit, glyph records padded to 4 bytes, and 'loca' rebuilt in indexFormat.
 - Source: spec. WOFF2 §5.1 "Transformed glyf table format", "Reconstruction of Glyph Records", "Decoding of Empty Glyphs", "Decoding of Simple Glyphs", "Decoding of Composite Glyphs", "Decoding of Bounding Boxes"; §5.3 "Transformed loca table format"; OT-glyf for the output record layout.
-- Code: tools/Chuvadi.Fonts.TestSupport/Woff2Decoder.cs
+- Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+- Moved: from tools/Chuvadi.Fonts.TestSupport into the library on 2026-11-05 (D-155); the rule is unchanged.
 
 ## R-OT-0033
 - Rule: WOFF2 point triplets: the flag's top bit set means off-curve; the low 7 bits index the 128-row triplet table (byte count, X/Y bits, delta X/Y, signs).
 - Source: spec. WOFF2 §5.2 "Decoding of variable-length X and Y coordinates", Triplet Encoding table.
-- Code: tools/Chuvadi.Fonts.TestSupport/Woff2Decoder.cs
+- Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+- Moved: from tools/Chuvadi.Fonts.TestSupport into the library on 2026-11-05 (D-155); the rule is unchanged.
 
 ## R-OT-0034
 - Rule: WOFF2 transformed 'hmtx' (version 1): flags (bit 0: lsb[] omitted, bit 1: leftSideBearing[] omitted; other bits must be 0), advanceWidth[numberOfHMetrics], then the arrays present; omitted side bearings are the glyphs' xMin from the rebuilt 'glyf' (0 for empty glyphs).
 - Source: spec. WOFF2 §5.4 "Transformed hmtx table format".
-- Code: tools/Chuvadi.Fonts.TestSupport/Woff2Decoder.cs
+- Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+- Moved: from tools/Chuvadi.Fonts.TestSupport into the library on 2026-11-05 (D-155); the rule is unchanged.
 
 ## R-OT-0035
 - Rule: `FaceProgram` of a collection face is a new sfnt: the face's sfntVersion; numTables, searchRange (16 × the largest power of two <= numTables), entrySelector (its log2) and rangeShift (numTables × 16 − searchRange); table records sorted by tag; each table copied unchanged and padded with zeros to a 4-byte boundary; each record's checksum the uint32 sum of the padded table; 'head' checkSumAdjustment set to 0 for the sums and then to 0xB1B0AFBA minus the whole font's sum. The face's 'DSIG' table is left out. For a plain sfnt, FaceProgram is the loaded bytes unchanged.
 - Source: spec. OTFF "Table Directory" (TableDirectory fields and their formulas, "The records in the array must be sorted in ascending order by tag", 4-byte alignment) and "Calculating Checksums" (checksum algorithm, checkSumAdjustment = 0xB1B0AFBA − sum). Dropping DSIG: decision D-153 (Arun, 2026-11-05).
 - Code: src/Chuvadi.OpenType/Internal/SfntWriter.cs
+
+## R-OT-0036
+- Rule: Data starting with 'wOFF' is WOFF 1.0 and is decoded on load; data starting with 'wOF2' is WOFF 2.0 (R-OT-0031 to R-OT-0034, R-OT-0037). WOFF 1.0: 44-byte header (signature, flavor, length, numTables, reserved, totalSfntSize, versions, metadata and private block offsets and lengths) and 20-byte table directory entries (tag, offset, compLength, origLength, origChecksum). The file is rejected when the reserved field is not zero, a block or table lies outside the file or overlaps another, compLength > origLength, totalSfntSize differs from 12 + 16 × numTables + the padded table lengths, or a zlib-compressed table does not inflate to exactly origLength. compLength = origLength means stored uncompressed. The sfnt is rebuilt with the tables in their file order, the directory sorted by tag with recomputed searchRange, entrySelector and rangeShift, and the stored checksums kept, so a well-formed input font comes back byte for byte. FontCollection.Kind reports Woff or Woff2; Data is the decoded font.
+- Source: spec. WOFF 1.0 §4 "WOFF Header", §5 "Table Directory", §6 "Font Data Tables"; zlib via the .NET BCL (System.IO.Compression.ZLibStream). Supporting WOFF: D-155.
+- Code: src/Chuvadi.OpenType/Woff/Woff1Decoder.cs, src/Chuvadi.OpenType/FontCollection.cs
+
+## R-OT-0037
+- Rule: A WOFF2 file whose flavor is 'ttcf' carries a collection directory after the table directory: version (uint32), numFonts (255UInt16), then per font numTables (255UInt16), flavor (uint32) and numTables table indexes (255UInt16) into the table directory. Tables are decoded once and shared; each font's glyf and loca must be a pair (loca right after glyf when transformed); a transformed hmtx uses that font's hhea, maxp and glyf. The output is a 'ttcf' version 1.0 collection with each table stored once, recomputed checksums, and each font's head.checkSumAdjustment computed over that font's own directory and tables.
+- Source: spec. WOFF2 §4.2 "Collection directory format" (including "a decoder MUST either set the TTC Header fields {ulDsigTag, ulDsigLength, ulDsigOffset} … to null or convert the TTC header format to version 1"), §5.1 and §5.4; OTFF "Font Collections". Per-font checkSumAdjustment in a collection: decision (the specifications do not say how to compute it for shared tables).
+- Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs, src/Chuvadi.OpenType/Internal/SfntWriter.cs
+
+## R-OT-0038
+- Rule: A WOFF or WOFF2 file that declares more than 256 MiB of decoded font data is refused with OpenTypeFormatException before anything that size is allocated.
+- Source: decision (hostile-input guard; the specifications set no limit). The limit is internal; making it an option is listed for Arun.
+- Code: src/Chuvadi.OpenType/Woff/WoffLimits.cs, src/Chuvadi.OpenType/Woff/Woff1Decoder.cs, src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+
+## R-OT-0039
+- Rule: A transformed WOFF2 'glyf' is paired with the next transformed 'loca' entry in the table directory, which need not come right after it; each transformed loca belongs to exactly one glyf, and in a collection each font's glyf and loca must be that pair.
+- Source: spec + decision. WOFF2 §4.1 requires encoders to put loca right after glyf and §5.3 requires loca's transformLength to be 0; the pack's LiPi Sans WOFF2 files have other tables between them (found by running the decoder on the pack fonts, 2026-11-05), so the decoder accepts the next transformed loca instead of rejecting the file.
+- Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs

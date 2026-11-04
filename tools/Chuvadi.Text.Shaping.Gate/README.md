@@ -13,12 +13,12 @@ wrapper) stays the official gate; this one is for daily work and adds:
   lsb = xMin when head flags bit 1 is set);
 - `--expect-lines <n>`: a phase target (exactly n matching lines) instead of the final 100% gate.
 
-The WOFF2 fonts are decoded by the test-support decoder in `tools/Chuvadi.Fonts.TestSupport/`.
+The WOFF2 fonts are decoded by Chuvadi.OpenType itself (D-155).
 
 ## Run (PowerShell 5, from the worktree root)
 
 ```powershell
-$pack = "C:\Users\aruns\Documents\cleanroom-shaping-pack"
+$pack = "C:\Users\aruns\Documents\cleanroom-shaping-pack\cleanroom-shaping-pack"
 dotnet run -c Release --project tools\Chuvadi.Text.Shaping.Gate -- --pack $pack --parity --fontcheck --expect-lines 2144 --out gate-phase0.txt
 dotnet run -c Release --project tools\Chuvadi.Text.Shaping.Gate -- --pack $pack --diffs 0 --bench 20
 ```

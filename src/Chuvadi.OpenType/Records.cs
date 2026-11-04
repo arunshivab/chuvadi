@@ -45,4 +45,10 @@ public enum FontContainerKind
 
     /// <summary>A TrueType/OpenType collection ('ttcf').</summary>
     Collection,
+
+    /// <summary>WOFF 1.0, decoded on load to the sfnt it packages.</summary>
+    Woff,
+
+    /// <summary>WOFF 2.0, decoded on load to the sfnt (or, for a WOFF2 collection, the 'ttcf' collection) it packages.</summary>
+    Woff2,
 }

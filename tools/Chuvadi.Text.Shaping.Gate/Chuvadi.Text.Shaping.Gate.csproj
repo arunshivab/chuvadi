@@ -22,7 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Text.Shaping\Chuvadi.Text.Shaping.csproj" />
-    <Compile Include="..\Chuvadi.Fonts.TestSupport\Woff2Decoder.cs" Link="TestSupport\Woff2Decoder.cs" />
     <None Include="corpus-features.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

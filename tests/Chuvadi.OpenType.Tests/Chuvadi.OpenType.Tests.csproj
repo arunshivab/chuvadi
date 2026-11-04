@@ -19,7 +19,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.OpenType\Chuvadi.OpenType.csproj" />
-    <Compile Include="..\..\tools\Chuvadi.Fonts.TestSupport\Woff2Decoder.cs" Link="TestSupport\Woff2Decoder.cs" />
     <Compile Include="..\..\tools\Chuvadi.Fonts.TestSupport\TraceLogCheck.cs" Link="TestSupport\TraceLogCheck.cs" />
   </ItemGroup>
 
