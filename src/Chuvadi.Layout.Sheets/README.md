@@ -19,7 +19,7 @@ foreach (LaidOutPage page in doc.GetPages())
 | Member | What it does |
 |---|---|
 | `SheetsLayout.Open(Stream / byte[], SheetsImportOptions?, LayoutOptions?, ct)` | lays out an .xlsx (encrypted too, with `LayoutOptions.Password`) |
-| `SheetsLayout.Open(Chuvadi.Sheets.Excel.Workbook, …)` | lays out a workbook already loaded (load it with `IncludeStyledEmptyCells = true`) |
+| `SheetsLayout.Open(Chuvadi.Sheets.Model.Workbook, …)` | lays out a workbook already loaded (load it with `IncludeStyledEmptyCells = true`) |
 | `SheetsImporter.Import(…)` | builds the grid IR (`GridWorkbook`) only |
 | `SheetsImportOptions` | sheets, hidden sheets, default paper, conditional formats, today, display culture, images, black and white, draft |
 

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 
@@ -18,6 +18,10 @@ namespace Chuvadi.Sheets.ManualTests;
 /// information, against the 2 s target; only a generous 15 s limit fails the test, so a busy
 /// machine does not.
 ///
+/// Sheets 2.0.0 adds a save of 50,000 hyperlinks (the shared package checked relationship ids
+/// by scanning a list, which made this quadratic: about 6 s; now milliseconds) and a check
+/// that a duplicate relationship id is refused exactly as before.
+///
 /// Not run by the xUnit suite: tests there run in parallel, which would distort both the
 /// timings and the memory measurement.
 /// </summary>
@@ -26,6 +30,7 @@ internal static class LoadBenchmarkTest
     private const int RowsPerSheet = 52_000;
     private const double MaxBytesPerCell = 200;
     private const double HardLimitMs = 15_000;
+    private const int HyperlinkCount = 50_000;
 
     public static void Run(string outputDir)
     {
@@ -91,6 +96,52 @@ internal static class LoadBenchmarkTest
             Console.WriteLine($"          (2 s target: Workbook.Load {(model.Median <= 2000 ? "met" : "not met")}, XlsxReader {(stream.Median <= 2000 ? "met" : "not met")} on this machine)");
             if (model.Max > HardLimitMs || stream.Max > HardLimitMs)
                 throw new Exception($"a load took longer than {HardLimitMs:F0} ms");
+        });
+
+        // ---- 2.0.0: relationship ids (shared OoxmlPackage) -------------------------------
+
+        Check($"saving {HyperlinkCount:N0} hyperlinks: every link kept, in order (fails only above {HardLimitMs / 1000:F0} s)", () =>
+        {
+            var wb = new Workbook();
+            var sheet = wb.AddSheet("Links");
+            for (int i = 1; i <= HyperlinkCount; i++)
+            {
+                sheet.Cell(i, 1).Value = "link " + i;
+                sheet.Hyperlinks.Add(new Hyperlink($"A{i}", target: $"https://example.com/item/{i}"));
+            }
+            Collect();
+            var sw = Stopwatch.StartNew();
+            var ms = new MemoryStream();
+            wb.SaveTo(ms);
+            sw.Stop();
+            var saved = ms.ToArray();   // SaveTo closes the stream; ToArray still works
+            var back = Workbook.Load(new MemoryStream(saved, writable: false))["Links"];
+            if (back.Hyperlinks.Count != HyperlinkCount) throw new Exception($"{back.Hyperlinks.Count} links read back");
+            for (int i = 0; i < HyperlinkCount; i += 997)
+                if (back.Hyperlinks[i].Reference != $"A{i + 1}" || back.Hyperlinks[i].Target != $"https://example.com/item/{i + 1}")
+                    throw new Exception($"link {i + 1}: {back.Hyperlinks[i].Reference} {back.Hyperlinks[i].Target}");
+            Console.WriteLine($"          (saved {HyperlinkCount:N0} hyperlinks in {sw.ElapsedMilliseconds:N0} ms; {saved.Length / 1024:N0} KB)");
+            if (sw.ElapsedMilliseconds > HardLimitMs) throw new Exception($"saving took {sw.ElapsedMilliseconds} ms");
+        });
+
+        Check("a duplicate relationship id is still refused, with the same exception and message", () =>
+        {
+            using var pkg = Chuvadi.Internal.OoxmlPackage.Create(new MemoryStream());
+            pkg.AddRelationship("/xl/workbook.xml", "/xl/worksheets/sheet1.xml", "http://example.com/rel", "rId1");
+            pkg.AddExternalRelationship("/xl/workbook.xml", "https://example.com/", "http://example.com/link", "rId2");
+            try
+            {
+                pkg.AddExternalRelationship("/xl/workbook.xml", "https://example.com/again", "http://example.com/link", "rId1");
+                throw new Exception("no exception");
+            }
+            catch (InvalidOperationException ex)
+            {
+                const string expected = "Relationship ID 'rId1' is already used for source '/xl/workbook.xml'.";
+                if (ex.Message != expected) throw new Exception($"message: {ex.Message}");
+            }
+            // Ids are per source and compared exactly (ordinal): these are all allowed.
+            pkg.AddRelationship("/xl/worksheets/sheet1.xml", "/xl/drawings/drawing1.xml", "http://example.com/rel", "rId1");
+            pkg.AddExternalRelationship("/xl/workbook.xml", "https://example.com/case", "http://example.com/link", "RID1");
         });
 
         Console.WriteLine();

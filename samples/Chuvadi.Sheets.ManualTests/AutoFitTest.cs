@@ -3,19 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 
 /// <summary>
 /// Column auto-fit (Sheets 1.3.0) across the Workbook model, the streaming SheetWriter and the
 /// one-line export. Expected widths come from real font rendering (Pillow + the metric-compatible
-/// fonts), not from the library's own tables: Calibri 11 "Apulki Medical Center, Baner, Pune"
-/// is 14.18 em → 208 px → width (208 + 5) / 7 = 30.4 characters.
+/// fonts), not from the library's own tables: Calibri 11 "Example Medical Center, Northvale"
+/// is 14.23 em → 209 px → width (209 + 5) / 7 = 30.6 characters.
 /// </summary>
 internal static class AutoFitTest
 {
-    private const string LongText = "Apulki Medical Center, Baner, Pune";
+    private const string LongText = "Example Medical Center, Northvale";
 
     public static void Run(string outputDir)
     {
@@ -58,7 +58,7 @@ internal static class AutoFitTest
             wb.SaveTo(modelPath);
 
             var b = Back(modelPath);
-            Between(30.0, 32.0, b.Columns[1].Width, "A (long text, real 30.4)");
+            Between(30.0, 32.0, b.Columns[1].Width, "A (long text, real 30.6)");
             Between(11.5, 13.5, b.Columns[2].Width, "B (\"1,234,567.89\", real 12.1)");
             Between(8.43, 8.43, b.Columns[3].Width, "C (min width)");
             Between(60, 60, b.Columns[4].Width, "D (max width)");

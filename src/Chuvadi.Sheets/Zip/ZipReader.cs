@@ -23,6 +23,7 @@ namespace Chuvadi.Sheets.Zip;
 /// }
 /// </code>
 /// </summary>
+[System.Obsolete("Chuvadi.Sheets.Zip is obsolete and will be removed in the next major version. Use the Chuvadi.Zip package (namespace Chuvadi.Zip) instead.")]
 public sealed class ZipReader : IDisposable
 {
     private readonly Stream _inputStream;

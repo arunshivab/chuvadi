@@ -1,6 +1,9 @@
+// The tests of the obsolete Chuvadi.Sheets.Zip API (and the ones that use it to inspect saved
+// packages) stay until it is removed in the next major version.
+#pragma warning disable CS0618
 using System;
 using System.IO;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 using Chuvadi.Sheets.ManualTests;
 
 namespace Chuvadi.Sheets.Tests;
@@ -84,6 +87,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void Layout17() => Layout17Test.Run(_dir);
+
+    [Fact]
+    public void Errors() => ErrorsTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

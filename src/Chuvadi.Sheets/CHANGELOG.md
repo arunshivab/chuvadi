@@ -1,5 +1,72 @@
 # Changelog
 
+## 2.0.0 (unreleased)
+
+A major version: the public namespace is renamed, and every error caused by a malformed file now
+has one exception type. Also: the old zip API is marked obsolete, and saving many relationships
+(hyperlinks, pictures) is no longer quadratic. Values, styles, text and saved output are unchanged.
+
+### Breaking changes and how to migrate
+
+- **Namespace `Chuvadi.Sheets.Excel` is now `Chuvadi.Sheets.Model`** (D-97, matching
+  `Chuvadi.Docs.Model`). Every type keeps its name and members.
+  - Replace `using Chuvadi.Sheets.Excel;` with `using Chuvadi.Sheets.Model;`, and any fully
+    qualified `Chuvadi.Sheets.Excel.` names the same way.
+  - Recompile: code built against 1.x does not run against 2.0 (the type names changed).
+  - Chuvadi.Layout.Sheets, Chuvadi.Layout.Docs tests and the Layout samples are updated in the
+    same release (namespace lines only).
+- **Every malformed-input error is `XlsxFormatException`**, with the original exception as
+  `InnerException`.
+  - Covered: `XlsxReader.Open`, `Workbook.Load`, row enumeration, `ReadLayout`,
+    `ReadDrawings`, `ReadComments`, `ReadHeaderFooterPictures`, `ReadChartSheet`,
+    `GetImageBytes` and the `ReadXlsx` extensions.
+
+  | The file has | 1.x threw | 2.0 throws |
+  |---|---|---|
+  | No zip, a damaged or truncated zip, a missing part | `InvalidDataException` | `XlsxFormatException` (`InvalidDataException` inside) |
+  | Malformed XML in a part (including with `StrictXml`) | `XmlException` | `XlsxFormatException` (`XmlException` inside) |
+  | A damaged relationship entry, such as an empty `Id` | `ArgumentException` | `XlsxFormatException` (`ArgumentException` inside) |
+  | A failed integrity check of an encrypted file | `InvalidDataException` | `XlsxFormatException` (`InvalidDataException` inside) |
+  | **Bug fix:** a damaged encrypted container, with a password given | `XlsxPasswordRequiredException` | `XlsxFormatException` |
+
+  - Unchanged:
+    - a missing or wrong password is `XlsxPasswordRequiredException`; without a password the
+      container is not read, so damage is reported only once a password is given;
+    - read limits are `XlsxLimitExceededException`, except `MaxPartBytes`, which is still
+      `InvalidDataException`;
+    - cancellation is `OperationCanceledException`;
+    - with `StrictXml` off, a malformed theme or chart part is still skipped.
+  - Migrate:
+    - `catch (XmlException)` and `catch (InvalidDataException)` around reads become
+      `catch (XlsxFormatException)`;
+    - keep `catch (InvalidDataException)` only for `MaxPartBytes`;
+    - see the README, "Errors", for the full list.
+- **`Chuvadi.Sheets.Zip` is obsolete** (D-150) and will be removed in the next major version:
+  use the Chuvadi.Zip package.
+  - Its types and extension methods now produce warning CS0618.
+  - `ZipFormatException` is not marked yet, because Chuvadi.Layout.Sheets still names it; it is
+    removed with the rest.
+
+### Performance
+
+- **Saving many relationships is linear** (shared package code, D-149).
+  - The package checked each new relationship id against every earlier one; it now uses a set.
+    Saving 50,000 hyperlinks took 6.8 s and now takes 0.37 s.
+  - The relationships are written in the same order.
+  - A duplicate id is refused with the same exception and message.
+
+### Tests
+
+- **New `errors` group, 10 checks, also an xUnit fact (22 in total).** Covers:
+  - not a zip, truncated zip, malformed sheet XML, missing parts;
+  - a damaged relationship entry and a malformed comments part;
+  - unchanged behaviours (lenient theme, `MaxPartBytes`);
+  - encrypted files: no or wrong password, damaged container, failed integrity check.
+- **`perf` group, 2 more checks (5 in total):** saving 50,000 hyperlinks, and the
+  duplicate-relationship-id error.
+- **Fictional data:** test data and the README example use fictional names; the 1.4.0 entry
+  below no longer names an application.
+
 ## 1.8.0 (2026-11-04)
 
 Performance only: `Workbook.Load` needs about a third of the memory and less time. No change to
@@ -495,8 +562,8 @@ option writes the same bytes as 1.4.0, except where the schema-order fix applies
 
 ## 1.4.0 (not released separately; included in 1.7.0)
 
-Read-side additions for Anjal Mail and the Layout engine: display text, password on the
-streaming reader, hostile-input limits and cancellation, macro detection, full page setup.
+Read-side additions: display text, password on the streaming reader, hostile-input limits and
+cancellation, macro detection, full page setup.
 Additive and source-compatible; writer output is unchanged.
 
 ### Features

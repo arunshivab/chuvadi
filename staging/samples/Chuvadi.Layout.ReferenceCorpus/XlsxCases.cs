@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Chuvadi.Sheets.Excel;
-using SheetsBorder = Chuvadi.Sheets.Excel.BorderStyle;
+using Chuvadi.Sheets.Model;
+using SheetsBorder = Chuvadi.Sheets.Model.BorderStyle;
 
 namespace Chuvadi.Layout.ReferenceCorpus
 {

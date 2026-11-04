@@ -78,6 +78,9 @@ public static class Program
             if (testName is "all" or "layout17")
                 Layout17Test.Run(outputDir);
 
+            if (testName is "all" or "errors")
+                ErrorsTest.Run(outputDir);
+
             if (testName is "all" or "perf")
                 LoadBenchmarkTest.Run(outputDir);
 

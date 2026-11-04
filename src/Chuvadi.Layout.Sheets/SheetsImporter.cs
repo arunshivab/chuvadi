@@ -6,9 +6,9 @@ using System.Threading;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Model;
-using Chuvadi.Sheets.Excel;
-using SheetsBorder = Chuvadi.Sheets.Excel.Border;
-using SheetsUnderline = Chuvadi.Sheets.Excel.UnderlineStyle;
+using Chuvadi.Sheets.Model;
+using SheetsBorder = Chuvadi.Sheets.Model.Border;
+using SheetsUnderline = Chuvadi.Sheets.Model.UnderlineStyle;
 using LayoutUnderline = Chuvadi.Layout.Model.UnderlineStyle;
 
 namespace Chuvadi.Layout.Sheets

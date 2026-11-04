@@ -1,6 +1,9 @@
+// The tests of the obsolete Chuvadi.Sheets.Zip API (and the ones that use it to inspect saved
+// packages) stay until it is removed in the next major version.
+#pragma warning disable CS0618
 using System;
 using System.IO;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 

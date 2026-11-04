@@ -58,6 +58,13 @@ internal sealed class OoxmlPackage : IDisposable
     private readonly Dictionary<string, List<PackageRelationship>> _relationships;
 
     /// <summary>
+    /// Write mode: the relationship ids already used per source, so adding a relationship checks
+    /// for a duplicate in constant time instead of scanning the list (saving 50,000 hyperlinks
+    /// was quadratic). The lists above keep the order relationships are written in.
+    /// </summary>
+    private readonly Dictionary<string, HashSet<string>> _relationshipIds;
+
+    /// <summary>
     /// Read mode: every zip entry keyed by its normalised part name ("/" + the entry name with
     /// '\' turned into '/'), matched case-insensitively. Some third-party writers store
     /// "[content_types].xml" in lower case and use '\' as the separator ("xl\styles.xml").
@@ -74,6 +81,7 @@ internal sealed class OoxmlPackage : IDisposable
         var comparer = writeMode ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
         _parts = new Dictionary<string, PackagePart>(comparer);
         _relationships = new Dictionary<string, List<PackageRelationship>>(comparer);
+        _relationshipIds = new Dictionary<string, HashSet<string>>(comparer);
         if (!writeMode)
         {
             _entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
@@ -186,12 +194,14 @@ internal sealed class OoxmlPackage : IDisposable
             list = new List<PackageRelationship>();
             _relationships[sourceUri] = list;
         }
-        foreach (var existing in list)
+        if (!_relationshipIds.TryGetValue(sourceUri, out var ids))
         {
-            if (existing.Id == rel.Id)
-                throw new InvalidOperationException(
-                    $"Relationship ID '{rel.Id}' is already used for source '{sourceUri}'.");
+            ids = new HashSet<string>(StringComparer.Ordinal);   // same test as the former `==` scan
+            _relationshipIds[sourceUri] = ids;
         }
+        if (!ids.Add(rel.Id))
+            throw new InvalidOperationException(
+                $"Relationship ID '{rel.Id}' is already used for source '{sourceUri}'.");
         list.Add(rel);
     }
 

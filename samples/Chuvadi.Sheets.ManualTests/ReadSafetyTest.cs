@@ -7,7 +7,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 
@@ -136,7 +136,7 @@ internal static class ReadSafetyTest
         {
             var wb = new Workbook();
             var s = wb.AddSheet("Secret");
-            s.Cell("A1").Value = "Name"; s.Cell("A2").Value = "Arun";
+            s.Cell("A1").Value = "Name"; s.Cell("A2").Value = "Asha";
             wb.SaveTo(encPath, new EncryptionOptions { Password = "pw" });
             wb.SaveTo(plainPath);
         }
@@ -144,7 +144,7 @@ internal static class ReadSafetyTest
         Check("C3: Open(path, password, options) reads an encrypted file", () =>
         {
             using var r = XlsxReader.Open(encPath, "pw", null);
-            Eq("Arun", r.Sheet(1).Rows.First().GetString("Name"), "value");
+            Eq("Asha", r.Sheet(1).Rows.First().GetString("Name"), "value");
         });
 
         Check("C3: missing or wrong password → XlsxPasswordRequiredException", () =>
@@ -157,11 +157,11 @@ internal static class ReadSafetyTest
         {
             using var fs = File.OpenRead(encPath);
             using (var r = XlsxReader.Open(fs, "pw", new XlsxReaderOptions()))
-                Eq("Arun", r.Sheet(1).Rows.First().GetString("Name"), "value");
+                Eq("Asha", r.Sheet(1).Rows.First().GetString("Name"), "value");
             True(fs.CanRead, "caller stream still open");
             using var ps = File.OpenRead(plainPath);
             using (var r = XlsxReader.Open(ps, "ignored", null))
-                Eq("Arun", r.Sheet(1).Rows.First().GetString("Name"), "unencrypted ignores password");
+                Eq("Asha", r.Sheet(1).Rows.First().GetString("Name"), "unencrypted ignores password");
             True(ps.CanRead, "unencrypted: caller stream still open");
         });
 
@@ -214,7 +214,7 @@ internal static class ReadSafetyTest
             using var ns = new NonSeekable(new MemoryStream(bytes));
             var o = XlsxReaderOptions.ForUntrustedInput();
             using var r2 = XlsxReader.Open(ns, o);
-            Eq("Arun", r2.Sheet(1).Rows.First().GetString("Name"), "non-seekable with limits");
+            Eq("Asha", r2.Sheet(1).Rows.First().GetString("Name"), "non-seekable with limits");
         });
 
         Check("C4: cancellation stops a large read within a second", () =>
@@ -288,7 +288,7 @@ internal static class ReadSafetyTest
              "<pageSetup paperSize=\"9\" scale=\"80\" fitToWidth=\"1\" fitToHeight=\"0\" firstPageNumber=\"3\" useFirstPageNumber=\"1\" " +
              "pageOrder=\"overThenDown\" orientation=\"landscape\" blackAndWhite=\"1\" cellComments=\"atEnd\" errors=\"dash\" horizontalDpi=\"600\" verticalDpi=\"600\" copies=\"2\"/>" +
              "<headerFooter differentFirst=\"1\" scaleWithDoc=\"0\">" +
-             "<oddHeader>&amp;L&amp;\"Arial,Bold\"Apulki  Medical&amp;CPage &amp;P of &amp;N</oddHeader>" +
+             "<oddHeader>&amp;L&amp;\"Arial,Bold\"Example  Medical&amp;CPage &amp;P of &amp;N</oddHeader>" +
              "<oddFooter>&amp;RPrinted &amp;D</oddFooter><firstHeader>&amp;CCover</firstHeader></headerFooter>" +
              "<rowBreaks count=\"2\" manualBreakCount=\"2\"><brk id=\"20\" max=\"16383\" man=\"1\"/><brk id=\"45\" max=\"16383\" man=\"1\"/></rowBreaks>" +
              "<colBreaks count=\"1\" manualBreakCount=\"1\"><brk id=\"6\" max=\"1048575\" man=\"1\"/></colBreaks>",
@@ -330,7 +330,7 @@ internal static class ReadSafetyTest
             True(m.IsDefined, "margins defined");
             Eq(0.25, m.Left, "left"); Eq(0.5, m.Top, "top"); Eq(0.2, m.Header, "header"); Eq(0.2, m.Footer, "footer");
             var h = p.HeaderFooter;
-            Eq("&L&\"Arial,Bold\"Apulki  Medical&CPage &P of &N", h.OddHeader ?? "null", "odd header verbatim");
+            Eq("&L&\"Arial,Bold\"Example  Medical&CPage &P of &N", h.OddHeader ?? "null", "odd header verbatim");
             Eq("&RPrinted &D", h.OddFooter ?? "null", "odd footer");
             Eq("&CCover", h.FirstHeader ?? "null", "first header");
             True(h.EvenHeader is null, "no even header");
@@ -383,7 +383,7 @@ internal static class ReadSafetyTest
             var saved = Path.Combine(outputDir, "read140_pagesetup_resaved.xlsx");
             Workbook.Load(pagePath).SaveTo(saved);
             var back = Workbook.Load(saved).Sheets[0];
-            Eq("&L&\"Arial,Bold\"Apulki  Medical&CPage &P of &N", back.PageSetup.HeaderFooter.OddHeader ?? "null", "header survives");
+            Eq("&L&\"Arial,Bold\"Example  Medical&CPage &P of &N", back.PageSetup.HeaderFooter.OddHeader ?? "null", "header survives");
             Eq("&RPrinted &D", back.PageHeader is null ? "null" : back.PageFooter ?? "null", "footer survives");
         });
 

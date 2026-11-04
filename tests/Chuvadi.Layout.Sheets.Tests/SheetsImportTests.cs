@@ -3,9 +3,9 @@ using Chuvadi.Layout.Fonts;
 using Chuvadi.Layout.Sheets;
 using Chuvadi.Layout.Tests;
 using Chuvadi.Layout.Model;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 using CellAddress = Chuvadi.Layout.Model.CellAddress;
-using SheetsBorderStyle = Chuvadi.Sheets.Excel.BorderStyle;
+using SheetsBorderStyle = Chuvadi.Sheets.Model.BorderStyle;
 
 namespace Chuvadi.Layout.Sheets.Tests;
 
