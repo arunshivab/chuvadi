@@ -468,7 +468,7 @@ public class DocsImportTests
     public void A_workbook_renamed_docx_is_rejected_by_the_document_reader()
     {
         // A workbook written with Chuvadi.Sheets (a test-only reference of this project).
-        Chuvadi.Sheets.Excel.Workbook wb = new Chuvadi.Sheets.Excel.Workbook();
+        Chuvadi.Sheets.Model.Workbook wb = new Chuvadi.Sheets.Model.Workbook();
         wb.AddSheet("Charges").Cell("A1").Value = "Schedule of Charges";
         using MemoryStream saved = new MemoryStream();
         wb.SaveTo(saved);

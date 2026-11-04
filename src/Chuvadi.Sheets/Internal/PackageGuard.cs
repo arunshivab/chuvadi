@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.Internal;
 

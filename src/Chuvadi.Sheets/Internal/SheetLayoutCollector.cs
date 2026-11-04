@@ -4,17 +4,17 @@ using System.Globalization;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.Internal;
 
 /// <summary>
 /// Collects sheet-level layout metadata (sheet format defaults, column spans, row attributes
 /// and merged ranges) during the single streaming pass that
-/// <see cref="Chuvadi.Sheets.Excel.RowEnumerator"/> already makes over a sheet's XML. Used by
+/// <see cref="Chuvadi.Sheets.Model.RowEnumerator"/> already makes over a sheet's XML. Used by
 /// <see cref="WorkbookLoader"/> so a sheet part is parsed exactly once.
 ///
-/// The streaming <see cref="Chuvadi.Sheets.Excel.XlsxReader"/> API does not pass a collector,
+/// The streaming <see cref="Chuvadi.Sheets.Model.XlsxReader"/> API does not pass a collector,
 /// so its hot path is unchanged.
 /// </summary>
 internal sealed class SheetLayoutCollector

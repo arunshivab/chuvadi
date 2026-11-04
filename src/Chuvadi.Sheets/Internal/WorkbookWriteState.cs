@@ -1,6 +1,6 @@
 using System;
 using System.Threading;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.Internal;
 

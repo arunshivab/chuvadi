@@ -149,9 +149,9 @@ namespace Chuvadi.Layout.ManualTests
 
         private static byte[] Xlsx(int rows, int cols)
         {
-            Chuvadi.Sheets.Excel.Workbook wb = new Chuvadi.Sheets.Excel.Workbook();
-            Chuvadi.Sheets.Excel.Sheet s = wb.AddSheet("Data");
-            Chuvadi.Sheets.Excel.CellStyle num = new Chuvadi.Sheets.Excel.CellStyleBuilder().Format("#,##0.00").Build();
+            Chuvadi.Sheets.Model.Workbook wb = new Chuvadi.Sheets.Model.Workbook();
+            Chuvadi.Sheets.Model.Sheet s = wb.AddSheet("Data");
+            Chuvadi.Sheets.Model.CellStyle num = new Chuvadi.Sheets.Model.CellStyleBuilder().Format("#,##0.00").Build();
             for (int r = 1; r <= rows; r++)
             {
                 for (int c = 1; c <= cols; c++)

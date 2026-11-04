@@ -251,7 +251,7 @@ Chuvadi.Sheets/
 ├── CHANGELOG.md
 ├── src/
 │   └── Chuvadi.Sheets/
-│       ├── Excel/        ← public xlsx namespace (Chuvadi.Sheets.Excel)
+│       ├── Model/        ← public xlsx namespace (Chuvadi.Sheets.Model)
 │       ├── Zip/          ← public zip namespace (Chuvadi.Sheets.Zip)
 │       └── Internal/     ← OOXML packaging, writers, CFB/crypto plumbing
 ├── samples/
@@ -299,7 +299,7 @@ open them in Excel to verify visually.
 - **Pure BCL.** No NuGet, no third-party DLLs. Only what ships in the .NET runtime.
 - **Streaming-first.** 100K+ row exports without holding the workbook in memory.
 - **Excel as ground truth.** Files must open in Excel without warnings.
-- **One assembly, multiple namespaces.** `Chuvadi.Sheets.Excel` and
+- **One assembly, multiple namespaces.** `Chuvadi.Sheets.Model` and
   `Chuvadi.Sheets.Zip` are public; `Chuvadi.Sheets.Internal` houses shared plumbing.
 
 ## Constraints baked in
