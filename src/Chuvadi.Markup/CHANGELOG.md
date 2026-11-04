@@ -1,5 +1,14 @@
 # Chuvadi.Markup — Changelog
 
+## 1.1.0 (unreleased)
+
+- **Behaviour change (D-127, R5-03): `MaxOutputChars` is exact.** Output stops at exactly the limit, in every
+  renderer and serializer (`MarkdownHtmlRenderer`, `MarkdownWriter`, `HtmlSerializer` and so `HtmlSanitizer`,
+  `PlainText.ToHtml`). A caller writing to a `TextWriter` has received exactly `MaxOutputChars` characters when
+  `MarkupLimitExceededException` is thrown, and its `Actual` is always the limit plus one. Before, `Actual` was the
+  length including the whole write that crossed the limit, a `TextWriter` had received only the output before that
+  write, and `MarkdownWriter` reported the full text length and wrote nothing. Output below the limit is unchanged.
+
 ## 1.0.0 (2026-11-03)
 
 First stable release.

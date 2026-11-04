@@ -43,7 +43,12 @@ namespace Chuvadi.Markup
         /// <summary>Maximum length of a single attribute value; longer values are truncated by the tokenizer and a parse error recorded. Default 32 Mi.</summary>
         public int MaxAttributeValueChars { get; set; } = 32 * 1024 * 1024;
 
-        /// <summary>Maximum output length in chars for renderers and serializers. Throws. Default 128 Mi.</summary>
+        /// <summary>
+        /// Maximum output length in chars for renderers and serializers. Throws. Exact: output stops at this many
+        /// chars; when writing to a <see cref="System.IO.TextWriter"/>, exactly this many chars have been written
+        /// before <see cref="MarkupLimitExceededException"/> is thrown, and its <see cref="MarkupLimitExceededException.Actual"/>
+        /// is this limit plus one. Default 128 Mi.
+        /// </summary>
         public long MaxOutputChars { get; set; } = 128L * 1024 * 1024;
 
         /// <summary>Maximum decoded size of a single <c>data:</c> URI the sanitizer keeps; larger URIs are removed. Default 16 MiB.</summary>
