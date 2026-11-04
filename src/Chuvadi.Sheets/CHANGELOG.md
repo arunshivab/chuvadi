@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.0 (unreleased)
+## 1.8.0 (2026-11-04)
 
 Performance only: `Workbook.Load` needs about a third of the memory and less time. No change to
 the public API, to any value, style or text a caller reads, to saved output, or to exceptions.
