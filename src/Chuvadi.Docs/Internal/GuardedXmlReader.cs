@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Xml;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 namespace Chuvadi.Docs.Internal;
 

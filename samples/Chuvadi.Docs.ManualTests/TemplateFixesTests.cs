@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Xml.Linq;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using static Chuvadi.Docs.ManualTests.Program;
 
 namespace Chuvadi.Docs.ManualTests;

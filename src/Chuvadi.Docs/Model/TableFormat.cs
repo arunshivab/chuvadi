@@ -1,6 +1,6 @@
 using System;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Table-level formatting (w:tblPr): style, width, alignment, indent, layout, borders, default

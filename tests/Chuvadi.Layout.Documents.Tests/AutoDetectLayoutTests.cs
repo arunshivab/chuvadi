@@ -1,5 +1,5 @@
 using System.Text;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Layout.Documents;
 using Chuvadi.Layout.Tests;
 

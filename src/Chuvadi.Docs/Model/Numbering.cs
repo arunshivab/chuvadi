@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>Number format of a list level (ST_NumberFormat, every value of the schema).</summary>
 public enum NumberFormat

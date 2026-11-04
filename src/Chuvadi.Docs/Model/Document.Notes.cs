@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using Chuvadi.Docs.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 public sealed partial class Document
 {

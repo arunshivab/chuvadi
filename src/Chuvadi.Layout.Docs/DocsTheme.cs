@@ -4,8 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Xml;
 using Chuvadi.Layout.Drawing;
-using DocsThemeColor = Chuvadi.Docs.Word.ThemeColor;
-using DocsThemeFont = Chuvadi.Docs.Word.ThemeFont;
+using DocsThemeColor = Chuvadi.Docs.Model.ThemeColor;
+using DocsThemeFont = Chuvadi.Docs.Model.ThemeFont;
 
 namespace Chuvadi.Layout.Docs
 {

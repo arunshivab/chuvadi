@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Xml;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 namespace Chuvadi.Docs.Internal;
 
@@ -180,11 +180,11 @@ internal static class ParagraphProperties
         if (f.Alignment is ParagraphAlignment a) Val(x, "jc", AlignToken(a));
         if (f.FontAlignment is FontAlignment fa) Val(x, "textAlignment", fa switch
         {
-            Word.FontAlignment.Auto => "auto",
-            Word.FontAlignment.Top => "top",
-            Word.FontAlignment.Center => "center",
-            Word.FontAlignment.Baseline => "baseline",
-            Word.FontAlignment.Bottom => "bottom",
+            Model.FontAlignment.Auto => "auto",
+            Model.FontAlignment.Top => "top",
+            Model.FontAlignment.Center => "center",
+            Model.FontAlignment.Baseline => "baseline",
+            Model.FontAlignment.Bottom => "bottom",
             _ => throw new ArgumentOutOfRangeException(nameof(ParagraphFormat.FontAlignment), fa, "Undefined FontAlignment value."),
         });
         if (f.OutlineLevel is int ol)
@@ -239,11 +239,11 @@ internal static class ParagraphProperties
                 case "textAlignment":
                     f.FontAlignment = Attr(sub, "val") switch
                     {
-                        "auto" => Word.FontAlignment.Auto,
-                        "top" => Word.FontAlignment.Top,
-                        "center" => Word.FontAlignment.Center,
-                        "baseline" => Word.FontAlignment.Baseline,
-                        "bottom" => Word.FontAlignment.Bottom,
+                        "auto" => Model.FontAlignment.Auto,
+                        "top" => Model.FontAlignment.Top,
+                        "center" => Model.FontAlignment.Center,
+                        "baseline" => Model.FontAlignment.Baseline,
+                        "bottom" => Model.FontAlignment.Bottom,
                         _ => null,
                     };
                     break;

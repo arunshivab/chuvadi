@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Options for <see cref="DocxReader"/> and <see cref="Document.Load(Stream, string?, DocxReaderOptions?, System.Threading.CancellationToken)"/>:

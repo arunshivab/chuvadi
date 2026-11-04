@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>Which face of a font an embedded font file is.</summary>
 public enum EmbeddedFontStyle

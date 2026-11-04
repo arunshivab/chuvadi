@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Chuvadi.Docs.ManualTests;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 namespace Chuvadi.Docs.Tests;
 
@@ -170,7 +170,7 @@ public class VerificationSuiteTests
     {
         // 80x40 @96dpi PNG -> 60x30 pt.
         var png = ImageTests.SamplePng80x40();
-        var spec = Chuvadi.Docs.Word.ImageSpec.FromBytes(png);
+        var spec = Chuvadi.Docs.Model.ImageSpec.FromBytes(png);
         Assert.Equal("image/png", spec.ContentType);
         Assert.True(System.Math.Abs(spec.WidthPt - 60) < 0.5);
         Assert.True(System.Math.Abs(spec.HeightPt - 30) < 0.5);
@@ -182,16 +182,16 @@ public class VerificationSuiteTests
         var dir = FreshOutDir();
         var path = System.IO.Path.Combine(dir, "rt.docx");
         var png = ImageTests.SamplePng80x40();
-        var doc = new Chuvadi.Docs.Word.Document();
-        doc.AddImage(Chuvadi.Docs.Word.ImageSpec.Inline(png, "image/png", 60, 30));
+        var doc = new Chuvadi.Docs.Model.Document();
+        doc.AddImage(Chuvadi.Docs.Model.ImageSpec.Inline(png, "image/png", 60, 30));
         doc.SaveTo(path);
 
-        using var reader = Chuvadi.Docs.Word.DocxReader.Open(path);
+        using var reader = Chuvadi.Docs.Model.DocxReader.Open(path);
         var imgs = reader.Images();
         Assert.Single(imgs);
         Assert.Equal(png.Length, imgs[0].Bytes.Length);
         Assert.True(System.Math.Abs(imgs[0].WidthPt - 60) < 0.5);
-        Assert.Equal(Chuvadi.Docs.Word.ImagePlacement.Inline, imgs[0].Placement);
+        Assert.Equal(Chuvadi.Docs.Model.ImagePlacement.Inline, imgs[0].Placement);
     }
 
     [Fact]
@@ -200,22 +200,22 @@ public class VerificationSuiteTests
         var dir = FreshOutDir();
         var path = System.IO.Path.Combine(dir, "float.docx");
         var png = ImageTests.SamplePng80x40();
-        var pos = new Chuvadi.Docs.Word.FloatingPosition
+        var pos = new Chuvadi.Docs.Model.FloatingPosition
         {
-            HorizontalAnchor = Chuvadi.Docs.Word.HorizontalAnchor.Page,
-            VerticalAnchor = Chuvadi.Docs.Word.VerticalAnchor.Page,
-            HAlign = Chuvadi.Docs.Word.HorizontalAlignment.Center,
-            VAlign = Chuvadi.Docs.Word.VerticalAlignment.Center,
-            Wrap = Chuvadi.Docs.Word.TextWrap.None,
+            HorizontalAnchor = Chuvadi.Docs.Model.HorizontalAnchor.Page,
+            VerticalAnchor = Chuvadi.Docs.Model.VerticalAnchor.Page,
+            HAlign = Chuvadi.Docs.Model.HorizontalAlignment.Center,
+            VAlign = Chuvadi.Docs.Model.VerticalAlignment.Center,
+            Wrap = Chuvadi.Docs.Model.TextWrap.None,
             BehindText = true,
         };
-        var doc = new Chuvadi.Docs.Word.Document();
-        doc.AddImage(Chuvadi.Docs.Word.ImageSpec.Float(png, "image/png", 200, 100, pos));
+        var doc = new Chuvadi.Docs.Model.Document();
+        doc.AddImage(Chuvadi.Docs.Model.ImageSpec.Float(png, "image/png", 200, 100, pos));
         doc.SaveTo(path);
 
-        using var reader = Chuvadi.Docs.Word.DocxReader.Open(path);
+        using var reader = Chuvadi.Docs.Model.DocxReader.Open(path);
         var img = Assert.Single(reader.Images());
-        Assert.Equal(Chuvadi.Docs.Word.ImagePlacement.Floating, img.Placement);
+        Assert.Equal(Chuvadi.Docs.Model.ImagePlacement.Floating, img.Placement);
         Assert.NotNull(img.Position);
         Assert.True(img.Position!.BehindText);
     }

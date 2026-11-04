@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>Cell-level formatting carried by table styles and their conditional formats (w:tcPr subset).</summary>
 public sealed class TableCellFormat
@@ -45,7 +45,7 @@ public sealed class TableCellFormat
     /// <summary>The direct formatting of a cell, as a <see cref="TableCellFormat"/>.</summary>
     public static TableCellFormat FromCell(TableCell cell) => new()
     {
-        Shading = cell.Shading ?? (cell.ShadeHex is { } h ? Word.Shading.Fill(h) : null),
+        Shading = cell.Shading ?? (cell.ShadeHex is { } h ? Model.Shading.Fill(h) : null),
         Borders = cell.Borders,
         Margins = cell.Margins,
         VerticalAlignment = cell.VerticalAlignment,

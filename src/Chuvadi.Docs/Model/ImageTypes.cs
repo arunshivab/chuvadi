@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>Whether an image flows inline with text or floats with absolute positioning.</summary>
 public enum ImagePlacement

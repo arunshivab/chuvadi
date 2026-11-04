@@ -9,7 +9,7 @@ using System.Text;
 using System.Xml;
 using Chuvadi.Docs.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Fills <c>{{Placeholder}}</c> values into a .docx template designed in Word, preserving

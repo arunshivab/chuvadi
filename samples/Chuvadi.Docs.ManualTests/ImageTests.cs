@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using static Chuvadi.Docs.ManualTests.Program;
 
 namespace Chuvadi.Docs.ManualTests;

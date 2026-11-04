@@ -14,7 +14,7 @@ Part of the [Chuvadi](https://github.com/arunshivab/chuvadi) document library fa
 ## Write a report
 
 ```csharp
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 var doc = new Document();
 doc.AddParagraph("Quarterly Report", ParagraphStyle.Title);

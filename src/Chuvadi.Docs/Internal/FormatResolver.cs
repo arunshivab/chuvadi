@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 
 namespace Chuvadi.Docs.Internal;
 
@@ -366,7 +366,7 @@ internal static class FormatResolver
             b.Color = f.ColorHex; b.ThemeColor = f.ThemeColor; b.Tint = f.ThemeColorTint; b.Shade = f.ThemeColorShade;
             b.Highlight = f.Highlight;
             b.Underline = f.EffectiveUnderline; b.UnderlineColor = f.UnderlineColorHex;
-            b.Shading = f.Shading ?? (f.ShadingHex is { } hex ? Word.Shading.Fill(hex) : null);
+            b.Shading = f.Shading ?? (f.ShadingHex is { } hex ? Model.Shading.Fill(hex) : null);
             b.VertAlign = f.VerticalPosition; b.Position = f.BaselineShiftPt; b.Spacing = f.CharacterSpacingPt;
             b.Scale = f.HorizontalScalePercent; b.Kern = f.KerningMinSizePt;
             b.CsFlag = f.ComplexScript; b.Rtl = f.RightToLeft; b.NoProof = f.NoProof;

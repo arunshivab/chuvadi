@@ -42,7 +42,7 @@ namespace Chuvadi.Layout.Docs
         }
 
         /// <summary>Lays out a document already loaded or built with Chuvadi.Docs.</summary>
-        public static LaidOutDocument Open(Chuvadi.Docs.Word.Document document, DocsImportOptions? importOptions = null, LayoutOptions? options = null,
+        public static LaidOutDocument Open(Chuvadi.Docs.Model.Document document, DocsImportOptions? importOptions = null, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(document);

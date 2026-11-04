@@ -1,4 +1,4 @@
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Engine;
 using Chuvadi.Layout.Docs;
@@ -65,7 +65,7 @@ public class DocsImportTests
         Document doc = new Document();
         doc.AddHeading("Title text", 1);
         doc.AddParagraph().Text("plain ").Text("bold", TextFormat.BoldText).Text(" red", new TextFormat { ColorHex = "C00000", SizePt = 14 })
-            .Text(" wavy", new TextFormat { UnderlineStyle = Chuvadi.Docs.Word.UnderlineStyle.Wave, Caps = true, Highlight = "yellow" })
+            .Text(" wavy", new TextFormat { UnderlineStyle = Chuvadi.Docs.Model.UnderlineStyle.Wave, Caps = true, Highlight = "yellow" })
             .Hyperlink("link", "https://example.org");
         FlowDocument flow = Import(doc);
         List<FlowParagraph> ps = Paragraphs(flow.Sections[0].Blocks).ToList();
@@ -96,8 +96,8 @@ public class DocsImportTests
     public void Theme_colours_tints_and_fonts_resolve()
     {
         Document doc = new Document();
-        doc.AddParagraph().Text("accent", new TextFormat { ThemeColor = Chuvadi.Docs.Word.ThemeColor.Accent1 })
-            .Text("tinted", new TextFormat { ThemeColor = Chuvadi.Docs.Word.ThemeColor.Accent1, ThemeColorTint = 0x99 })
+        doc.AddParagraph().Text("accent", new TextFormat { ThemeColor = Chuvadi.Docs.Model.ThemeColor.Accent1 })
+            .Text("tinted", new TextFormat { ThemeColor = Chuvadi.Docs.Model.ThemeColor.Accent1, ThemeColorTint = 0x99 })
             .Text("theme font", new TextFormat { AsciiThemeFont = ThemeFont.MajorAscii });
         List<TextRun> runs = Paragraphs(Import(doc).Sections[0].Blocks).Single().Inlines.OfType<TextRun>().ToList();
         Assert.Equal(LayoutColor.FromHex("4472C4"), runs[0].Format.Color); // Office theme accent 1
@@ -112,14 +112,14 @@ public class DocsImportTests
         Document doc = new Document();
         doc.AddParagraph("centred").Configure(f =>
         {
-            f.Alignment = Chuvadi.Docs.Word.ParagraphAlignment.Center;
+            f.Alignment = Chuvadi.Docs.Model.ParagraphAlignment.Center;
             f.SpaceBeforePt = 6;
             f.SpaceAfterPt = 12;
             f.LineSpacing = LineSpacing.Exactly(18);
             f.IndentLeftPt = 36;
             f.HangingIndentPt = 18;
             f.KeepWithNext = true;
-            f.TabStops.Add(new Chuvadi.Docs.Word.TabStop(200, Chuvadi.Docs.Word.TabAlignment.Right, Chuvadi.Docs.Word.TabLeader.Dot));
+            f.TabStops.Add(new Chuvadi.Docs.Model.TabStop(200, Chuvadi.Docs.Model.TabAlignment.Right, Chuvadi.Docs.Model.TabLeader.Dot));
             f.Borders = new ParagraphBorders { Bottom = BorderSpec.Single(1.5, "FF0000") };
             f.Shading = Shading.Fill("EEEEEE");
         });
@@ -151,8 +151,8 @@ public class DocsImportTests
     public void Breaks_tabs_and_page_fields()
     {
         Document doc = new Document();
-        doc.AddParagraph().Text("a").Tab().Text("b").LineBreak().Text("c").Break(Chuvadi.Docs.Word.BreakType.Page).Text("d");
-        doc.Footer.Add(new Chuvadi.Docs.Word.Paragraph().PageNumber(includeTotal: true));
+        doc.AddParagraph().Text("a").Tab().Text("b").LineBreak().Text("c").Break(Chuvadi.Docs.Model.BreakType.Page).Text("d");
+        doc.Footer.Add(new Chuvadi.Docs.Model.Paragraph().PageNumber(includeTotal: true));
         FlowDocument flow = Import(doc);
         FlowParagraph p = Paragraphs(flow.Sections[0].Blocks).First();
         // A loaded document carries tabs and line breaks as characters in the run text (the engine honours both).
@@ -178,12 +178,12 @@ public class DocsImportTests
         doc.Page.LeftMarginPt = 50;
         doc.Header.SetText("Shared header");
         doc.AddParagraph("first section");
-        Chuvadi.Docs.Word.Section second = doc.AddSectionBreak(Chuvadi.Docs.Word.SectionStart.OddPage);
+        Chuvadi.Docs.Model.Section second = doc.AddSectionBreak(Chuvadi.Docs.Model.SectionStart.OddPage);
         second.Page.Orientation = PageOrientation.Landscape;
         second.PageNumbering.Format = NumberFormat.LowerRoman;
         second.PageNumbering.Start = 1;
         doc.AddParagraph("second section");
-        Chuvadi.Docs.Word.Section third = doc.AddSectionBreak();
+        Chuvadi.Docs.Model.Section third = doc.AddSectionBreak();
         third.Header.LinkToPrevious = false; // blank
         doc.AddParagraph("third section");
 
@@ -214,11 +214,11 @@ public class DocsImportTests
         TableRow r1 = t.AddRow("a", "b", "c");
         r1.Cell(0).ColumnSpan = 2;
         TableRow r2 = t.AddRow("d", "e", "f");
-        r2.Cell(2).VerticalMerge = Chuvadi.Docs.Word.VerticalMerge.Restart;
+        r2.Cell(2).VerticalMerge = Chuvadi.Docs.Model.VerticalMerge.Restart;
         TableRow r3 = t.AddRow("g", "h", "i");
-        r3.Cell(2).VerticalMerge = Chuvadi.Docs.Word.VerticalMerge.Continue;
+        r3.Cell(2).VerticalMerge = Chuvadi.Docs.Model.VerticalMerge.Continue;
         r3.HeightPt = 40;
-        r3.HeightRule = Chuvadi.Docs.Word.RowHeightRule.Exact;
+        r3.HeightRule = Chuvadi.Docs.Model.RowHeightRule.Exact;
         r3.CantSplit = true;
         DocTable nested = r3.Cell(0).AddTable(1);
         nested.AddRow("inner");
@@ -293,9 +293,9 @@ public class DocsImportTests
         doc.AddParagraph("before").Image(ImageSpec.Inline(Png1x1, "image/png", 72, 36));
         doc.AddParagraph("anchor").Image(ImageSpec.Float(Png1x1, "image/png", 100, 50, new FloatingPosition
         {
-            HorizontalAnchor = Chuvadi.Docs.Word.HorizontalAnchor.Page,
-            HAlign = Chuvadi.Docs.Word.HorizontalAlignment.Center,
-            VerticalAnchor = Chuvadi.Docs.Word.VerticalAnchor.Paragraph,
+            HorizontalAnchor = Chuvadi.Docs.Model.HorizontalAnchor.Page,
+            HAlign = Chuvadi.Docs.Model.HorizontalAlignment.Center,
+            VerticalAnchor = Chuvadi.Docs.Model.VerticalAnchor.Paragraph,
             VerticalOffsetPt = 10,
             Wrap = TextWrap.TopAndBottom,
         }));
@@ -316,17 +316,17 @@ public class DocsImportTests
         Document doc = new Document();
         ImageSpec img = ImageSpec.Float(Png1x1, "image/png", 100, 50, new FloatingPosition
         {
-            HorizontalAnchor = Chuvadi.Docs.Word.HorizontalAnchor.Margin,
+            HorizontalAnchor = Chuvadi.Docs.Model.HorizontalAnchor.Margin,
             HorizontalOffsetPercent = 50,
             HorizontalOffsetPt = 7,
-            VerticalAnchor = Chuvadi.Docs.Word.VerticalAnchor.Paragraph,
+            VerticalAnchor = Chuvadi.Docs.Model.VerticalAnchor.Paragraph,
             VerticalOffsetPt = 12,
             Wrap = TextWrap.Tight,
-            WrapSide = Chuvadi.Docs.Word.WrapSide.Left,
+            WrapSide = Chuvadi.Docs.Model.WrapSide.Left,
             DistanceLeftPt = 4,
             DistanceRightPt = 6,
         });
-        img.Crop = new Chuvadi.Docs.Word.ImageCrop(0.1, 0, 0.2, 0);
+        img.Crop = new Chuvadi.Docs.Model.ImageCrop(0.1, 0, 0.2, 0);
         img.RelativeWidth = new RelativeSize(25, RelativeSizeFrame.Margin);
         doc.AddParagraph("anchor").Image(img);
         FlowDocument flow = Import(doc);
@@ -388,7 +388,7 @@ public class DocsImportTests
     {
         Document doc = new Document();
         doc.AddParagraph().Text("Left").PositionalTab(PositionalTabAlignment.Center).Text("Mid")
-            .PositionalTab(PositionalTabAlignment.Right, PositionalTabBase.Margin, Chuvadi.Docs.Word.TabLeader.Dot).Text("Right");
+            .PositionalTab(PositionalTabAlignment.Right, PositionalTabBase.Margin, Chuvadi.Docs.Model.TabLeader.Dot).Text("Right");
         FlowDocument flow = Import(doc);
         List<TabInline> tabs = Paragraphs(flow.Sections[0].Blocks).First().Inlines.OfType<TabInline>().ToList();
         Assert.Equal(2, tabs.Count);

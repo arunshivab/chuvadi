@@ -6,7 +6,7 @@ using System.Xml;
 using Chuvadi.Docs.Internal;
 using Chuvadi.Internal;
 
-namespace Chuvadi.Docs.Word;
+namespace Chuvadi.Docs.Model;
 
 /// <summary>
 /// Image-reading members of <see cref="DocxReader"/>. Parses w:drawing elements (inline and

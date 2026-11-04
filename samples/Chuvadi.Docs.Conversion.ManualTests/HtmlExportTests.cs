@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using Chuvadi.Docs.Conversion;
-using Chuvadi.Docs.Word;
+using Chuvadi.Docs.Model;
 using Chuvadi.Markup.Html;
 using Chuvadi.Markup.Sanitization;
 using static Chuvadi.Docs.Conversion.ManualTests.Program;
