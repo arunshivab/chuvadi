@@ -5,7 +5,7 @@ using System.Text;
 namespace Chuvadi.Markup.Internal
 {
     /// <summary>
-    /// Output sink for renderers and serializers. Enforces <see cref="MarkupLimits.MaxOutputChars"/>
+    /// Output sink for renderers and serializers. Enforces <see cref="MarkupLimits.MaxOutputChars"/> exactly
     /// and writes either to an internal <see cref="StringBuilder"/> or to a caller's <see cref="TextWriter"/>.
     /// </summary>
     internal sealed class OutputSink
@@ -31,16 +31,15 @@ namespace Chuvadi.Markup.Internal
 
         public char LastChar { get; private set; } = '\n';
 
-        private void Account(int n)
-        {
-            _written += n;
-            if (_written > _max)
-                throw new MarkupLimitExceededException(nameof(MarkupLimits.MaxOutputChars), _max, _written);
-        }
+        // MaxOutputChars is exact (D-127 R5-03): output stops at exactly the limit. A write that would
+        // pass it delivers the characters that still fit, then throws with Actual = limit + 1.
+        private MarkupLimitExceededException Exceeded()
+            => new MarkupLimitExceededException(nameof(MarkupLimits.MaxOutputChars), _max, _max + 1);
 
         public void Write(char c)
         {
-            Account(1);
+            if (_written >= _max) throw Exceeded();
+            _written++;
             if (_sb is not null) _sb.Append(c); else _writer!.Write(c);
             LastChar = c;
         }
@@ -48,7 +47,13 @@ namespace Chuvadi.Markup.Internal
         public void Write(string? s)
         {
             if (string.IsNullOrEmpty(s)) return;
-            Account(s.Length);
+            long room = _max - _written;
+            if (s.Length > room)
+            {
+                WritePart(s.AsSpan(0, (int)room));
+                throw Exceeded();
+            }
+            _written += s.Length;
             if (_sb is not null) _sb.Append(s); else _writer!.Write(s);
             LastChar = s[s.Length - 1];
         }
@@ -56,9 +61,23 @@ namespace Chuvadi.Markup.Internal
         public void Write(ReadOnlySpan<char> s)
         {
             if (s.IsEmpty) return;
-            Account(s.Length);
+            long room = _max - _written;
+            if (s.Length > room)
+            {
+                WritePart(s.Slice(0, (int)room));
+                throw Exceeded();
+            }
+            _written += s.Length;
             if (_sb is not null) _sb.Append(s); else _writer!.Write(s);
             LastChar = s[s.Length - 1];
+        }
+
+        private void WritePart(ReadOnlySpan<char> part)
+        {
+            if (part.IsEmpty) return;
+            _written += part.Length;
+            if (_sb is not null) _sb.Append(part); else _writer!.Write(part);
+            LastChar = part[part.Length - 1];
         }
 
         public override string ToString() => _sb?.ToString() ?? string.Empty;

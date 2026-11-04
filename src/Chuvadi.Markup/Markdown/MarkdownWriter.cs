@@ -58,22 +58,35 @@ namespace Chuvadi.Markup.Markdown
     public static class MarkdownWriter
     {
         /// <summary>Writes a document (or any block or inline subtree) to Markdown text.</summary>
+        /// <exception cref="MarkupLimitExceededException">The text would be longer than <see cref="MarkupLimits.MaxOutputChars"/>.</exception>
         public static string Write(MarkdownNode node, MarkdownWriterOptions? options = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(node);
             options ??= new MarkdownWriterOptions();
-            var w = new Impl(options, cancellationToken);
-            string text = w.Run(node);
+            string text = new Impl(options, cancellationToken).Run(node);
             if (text.Length > options.Limits.MaxOutputChars)
-                throw new MarkupLimitExceededException(nameof(MarkupLimits.MaxOutputChars), options.Limits.MaxOutputChars, text.Length);
+                throw new MarkupLimitExceededException(nameof(MarkupLimits.MaxOutputChars), options.Limits.MaxOutputChars, options.Limits.MaxOutputChars + 1);
             return text;
         }
 
         /// <summary>Writes Markdown text to a writer.</summary>
+        /// <exception cref="MarkupLimitExceededException">
+        /// The text would be longer than <see cref="MarkupLimits.MaxOutputChars"/>; exactly that many characters
+        /// have then been written.
+        /// </exception>
         public static void Write(MarkdownNode node, TextWriter writer, MarkdownWriterOptions? options = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(writer);
-            writer.Write(Write(node, options, cancellationToken));
+            ArgumentNullException.ThrowIfNull(node);
+            options ??= new MarkdownWriterOptions();
+            string text = new Impl(options, cancellationToken).Run(node);
+            long max = options.Limits.MaxOutputChars;
+            if (text.Length > max)
+            {
+                writer.Write(text.AsSpan(0, (int)max));
+                throw new MarkupLimitExceededException(nameof(MarkupLimits.MaxOutputChars), max, max + 1);
+            }
+            writer.Write(text);
         }
 
         private sealed class Impl
