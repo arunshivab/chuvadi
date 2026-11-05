@@ -20,11 +20,13 @@
     <Project Path="src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj" />
     <Project Path="src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj" />
     <Project Path="src/Chuvadi.Markup/Chuvadi.Markup.csproj" />
+    <Project Path="src/Chuvadi.OpenType/Chuvadi.OpenType.csproj" />
     <Project Path="src/Chuvadi.Print/Chuvadi.Print.csproj" />
     <Project Path="src/Chuvadi.Print.Ipp/Chuvadi.Print.Ipp.csproj" />
     <Project Path="src/Chuvadi.Print.Remote/Chuvadi.Print.Remote.csproj" />
     <Project Path="src/Chuvadi.Print.Windows/Chuvadi.Print.Windows.csproj" />
     <Project Path="src/Chuvadi.Sheets/Chuvadi.Sheets.csproj" />
+    <Project Path="src/Chuvadi.Text.Shaping/Chuvadi.Text.Shaping.csproj" />
     <Project Path="src/Chuvadi.Zip/Chuvadi.Zip.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -37,8 +39,10 @@
     <Project Path="tests/Chuvadi.Layout.Sheets.Tests/Chuvadi.Layout.Sheets.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Tests/Chuvadi.Layout.Tests.csproj" />
     <Project Path="tests/Chuvadi.Markup.Tests/Chuvadi.Markup.Tests.csproj" />
+    <Project Path="tests/Chuvadi.OpenType.Tests/Chuvadi.OpenType.Tests.csproj" />
     <Project Path="tests/Chuvadi.Print.Tests/Chuvadi.Print.Tests.csproj" />
     <Project Path="tests/Chuvadi.Sheets.Tests/Chuvadi.Sheets.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Text.Shaping.Tests/Chuvadi.Text.Shaping.Tests.csproj" />
     <Project Path="tests/Chuvadi.Zip.Tests/Chuvadi.Zip.Tests.csproj" />
   </Folder>
 </Solution>

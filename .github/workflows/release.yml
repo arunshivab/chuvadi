@@ -13,13 +13,15 @@ name: Release
 #   git tag -s layout-documents-v0.1.0 -m "Chuvadi.Layout.Documents 0.1.0" && git push origin layout-documents-v0.1.0
 #   git tag -s layout-fonts-v0.1.0  -m "Chuvadi.Layout.Fonts 0.1.0"  && git push origin layout-fonts-v0.1.0
 #   git tag -s layout-markup-v0.1.0 -m "Chuvadi.Layout.Markup 0.1.0" && git push origin layout-markup-v0.1.0
+#   git tag -s opentype-v0.1.0      -m "Chuvadi.OpenType 0.1.0"      && git push origin opentype-v0.1.0
+#   git tag -s text-shaping-v0.1.0  -m "Chuvadi.Text.Shaping 0.1.0"  && git push origin text-shaping-v0.1.0
 # The prefix selects which package is built, tested, packed, and released.
 # docs-v* releases TWO packages at one version: Chuvadi.Docs and Chuvadi.Docs.Conversion.
 # Packages are attached to the GitHub release only; nothing is pushed to nuget.org for now.
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*", "opentype-v*", "text-shaping-v*"]
 
 permissions:
   contents: write
@@ -46,6 +48,8 @@ jobs:
             zip-v*)    NAME="Chuvadi.Zip" ;;
             markup-v*) NAME="Chuvadi.Markup" ;;
             fonts-v*)  NAME="Chuvadi.Fonts" ;;
+            opentype-v*)     NAME="Chuvadi.OpenType" ;;
+            text-shaping-v*) NAME="Chuvadi.Text.Shaping" ;;
             layout-documents-v*) NAME="Chuvadi.Layout.Documents" ;;
             layout-docs-v*)   NAME="Chuvadi.Layout.Docs" ;;
             layout-sheets-v*) NAME="Chuvadi.Layout.Sheets" ;;
@@ -81,6 +85,8 @@ jobs:
           dotnet test tests/Chuvadi.Layout.Sheets.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Documents.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Markup.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.OpenType.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Text.Shaping.Tests -c Release --no-build
           dotnet run -c Release --no-build --project samples/Chuvadi.Sheets.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Docs.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Docs.Conversion.ManualTests
@@ -90,8 +96,8 @@ jobs:
           dotnet run -c Release --no-build --project samples/Chuvadi.Fonts.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
-      - name: Check the versions of a multi-package release match the tag
-        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') }}
+      - name: Check the package versions match the tag (docs, print, opentype, text-shaping)
+        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') }}
         shell: bash
         run: |
           TAGV="${GITHUB_REF_NAME#*-v}"
