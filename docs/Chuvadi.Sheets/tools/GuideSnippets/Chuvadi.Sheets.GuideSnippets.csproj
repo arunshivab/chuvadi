@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compiles and runs every C# example in docs/Chuvadi.Sheets/GUIDE.md against the Chuvadi.Sheets source,
+    so the guide cannot drift from the library. Pure BCL, not packaged, not in Chuvadi.slnx.
+
+      dotnet run -c Release - -project docs/Chuvadi.Sheets/tools/GuideSnippets - - - -extract
+      dotnet run -c Release - -project docs/Chuvadi.Sheets/tools/GuideSnippets
+
+    The first command regenerates Snippets.g.cs from GUIDE.md; the second builds it and runs every example in a
+    temporary folder. (The dashes are spaced out here only because XML comments cannot contain two in a row.)
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Sheets.GuideSnippets</RootNamespace>
+    <AssemblyName>Chuvadi.Sheets.GuideSnippets</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- Examples are written for readers: unused variables and the like are fine; real errors still fail. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS0168;CS0219;CS8321;CS1998;CS8602;CS8604;CS8600;CS8629;CS0618;CS4014</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Chuvadi.Sheets\Chuvadi.Sheets.csproj" />
+  </ItemGroup>
+
+</Project>
