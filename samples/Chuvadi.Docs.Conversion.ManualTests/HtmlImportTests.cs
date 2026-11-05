@@ -141,7 +141,7 @@ public static class HtmlImportTests
             AssertTrue(doc.GetText().Contains('x') && sw.ElapsedMilliseconds < 15000, sw.ElapsedMilliseconds + " ms");
             // Formatting elements nested this deep exceed the parser's work budget: the documented exception, quickly.
             sw.Restart();
-            AssertThrows<Chuvadi.Markup.MarkupLimitExceededException>(() => HtmlConversion.Import(string.Concat(Enumerable.Repeat("<div><b>", 20000)) + "x"), "work budget");
+            AssertThrows<DocxLimitExceededException>(() => HtmlConversion.Import(string.Concat(Enumerable.Repeat("<div><b>", 20000)) + "x"), "work budget");
             AssertTrue(sw.ElapsedMilliseconds < 15000, "budget stops it quickly: " + sw.ElapsedMilliseconds + " ms");
             var wide = "<table><tr>" + string.Concat(Enumerable.Repeat("<td>c</td>", 200)) + "</tr></table>";
             var r = HtmlConversion.ImportDetailed(wide);

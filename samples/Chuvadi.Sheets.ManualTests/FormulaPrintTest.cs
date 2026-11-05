@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Xml;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 using Chuvadi.Sheets.Internal;
 
 namespace Chuvadi.Sheets.ManualTests;
@@ -388,7 +388,7 @@ internal static class FormulaPrintTest
                 p.BlackAndWhite = true; p.Draft = true; p.CellComments = PrintCellComments.AtEnd; p.Errors = PrintErrors.Dash;
                 p.HorizontalDpi = 600; p.VerticalDpi = 600; p.Copies = 2;
                 p.Margins.Set(0.5, 0.5, 1, 1); p.Margins.Header = 0.4; p.Margins.Footer = 0.4;
-                p.HeaderFooter.OddHeader = "&CApulki  Report"; p.HeaderFooter.OddFooter = "&RPage &P of &N";
+                p.HeaderFooter.OddHeader = "&CExample  Report"; p.HeaderFooter.OddFooter = "&RPage &P of &N";
                 p.HeaderFooter.DifferentOddEven = true; p.HeaderFooter.EvenFooter = "&LEven";
                 p.HeaderFooter.DifferentFirst = true; p.HeaderFooter.FirstHeader = "&CCover";
                 p.HeaderFooter.ScaleWithDocument = false; p.HeaderFooter.AlignWithMargins = false;
@@ -420,7 +420,7 @@ internal static class FormulaPrintTest
                 True(p.HorizontalDpi == 600 && p.VerticalDpi == 600 && p.Copies == 2, "dpi/copies");
                 True(p.Margins.Left == 0.5 && p.Margins.Top == 1 && p.Margins.Header == 0.4, "margins");
                 var h = p.HeaderFooter;
-                True(h.OddHeader == "&CApulki  Report" && h.OddFooter == "&RPage &P of &N" && h.EvenFooter == "&LEven" && h.FirstHeader == "&CCover", "header/footer text (double space kept)");
+                True(h.OddHeader == "&CExample  Report" && h.OddFooter == "&RPage &P of &N" && h.EvenFooter == "&LEven" && h.FirstHeader == "&CCover", "header/footer text (double space kept)");
                 True(h.DifferentOddEven && h.DifferentFirst && !h.ScaleWithDocument && !h.AlignWithMargins, "header/footer flags");
                 True(p.PrintGridlines && p.PrintHeadings && p.CenterHorizontally && p.CenterVertically, "print options");
                 True(p.RowBreaks.Count == 1 && p.RowBreaks[0].Id == 25 && p.ColumnBreaks[0].Id == 1, "breaks");
@@ -474,7 +474,7 @@ internal static class FormulaPrintTest
             {
                 var sh = w.AddSheet("O");
                 sh.WriteHeader("H1", "H2");
-                sh.WriteRow(rb => rb.Hyperlink("https://example.com", "link").Comment(5, "Arun", "note"));
+                sh.WriteRow(rb => rb.Hyperlink("https://example.com", "link").Comment(5, "Asha", "note"));
                 sh.AddConditionalFormat("B2:B2", ConditionalFormat.DataBar.Blue);
                 sh.AddDataValidation("B2:B2", DataValidation.WholeNumber(0, 10));
                 sh.AddTable("A1:B2", "T1", TableStyle.Medium2, "H1", "H2");

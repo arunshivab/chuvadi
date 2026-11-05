@@ -246,6 +246,44 @@ public class DocxFormatException : Exception
 }
 
 /// <summary>
+/// Thrown when input to an importer (the Markdown, HTML and text importers of
+/// Chuvadi.Docs.Conversion) exceeds a configured limit. The call produces no partial result.
+/// Follows the family pattern of Chuvadi.Sheets' <c>XlsxLimitExceededException</c>: the same
+/// property names and types, the same message style, and it derives from
+/// <see cref="System.IO.IOException"/>. It is never wrapped. When a lower-level library detected
+/// the limit (Chuvadi.Markup), its exception is the <see cref="Exception.InnerException"/>.
+/// </summary>
+[System.Serializable]
+public sealed class DocxLimitExceededException : System.IO.IOException
+{
+    /// <summary>The option that was exceeded, e.g. "MaxInputChars".</summary>
+    public string LimitName { get; }
+
+    /// <summary>The configured limit.</summary>
+    public double Limit { get; }
+
+    /// <summary>The value that exceeded it (as far as known when the check failed).</summary>
+    public double Actual { get; }
+
+    public DocxLimitExceededException(string limitName, double limit, double actual, string detail)
+        : base($"{limitName} exceeded ({actual} > {limit}): {detail}")
+    {
+        LimitName = limitName;
+        Limit = limit;
+        Actual = actual;
+    }
+
+    /// <summary>As the four-argument constructor, keeping the lower-level exception that detected the limit.</summary>
+    public DocxLimitExceededException(string limitName, double limit, double actual, string detail, Exception innerException)
+        : base($"{limitName} exceeded ({actual} > {limit}): {detail}", innerException)
+    {
+        LimitName = limitName;
+        Limit = limit;
+        Actual = actual;
+    }
+}
+
+/// <summary>
 /// "Restrict editing" protection written into settings.xml. Like sheet protection in Excel,
 /// this is COOPERATIVE locking — the content remains readable by anyone and a determined
 /// user can strip it. For confidentiality, use <see cref="EncryptionOptions"/> instead.

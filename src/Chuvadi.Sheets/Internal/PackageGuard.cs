@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.Internal;
 
@@ -56,8 +56,8 @@ internal static class PackageGuard
                 declaredTotal += e.Length;
 
                 if (o.MaxPartBytes is long maxPart && e.Length > maxPart)
-                    throw new InvalidDataException(
-                        $"Decompressed size limit of {maxPart} bytes exceeded for package part '{e.FullName}' (declared {e.Length}).");
+                    throw MalformedInput.Limit(new InvalidDataException(
+                        $"Decompressed size limit of {maxPart} bytes exceeded for package part '{e.FullName}' (declared {e.Length})."));
 
                 if (o.MaxCompressionRatio is double maxRatio && e.Length > RatioCheckFloor)
                 {
@@ -147,8 +147,8 @@ internal sealed class ReadBudget
             if (n <= 0) return;
             _read += n;
             if (_maxPart is long m && _read > m)
-                throw new InvalidDataException(
-                    $"Decompressed size limit of {m} bytes exceeded for package part '{_name}'.");
+                throw MalformedInput.Limit(new InvalidDataException(
+                    $"Decompressed size limit of {m} bytes exceeded for package part '{_name}'."));
             _budget.Consume(n, _name);
         }
 

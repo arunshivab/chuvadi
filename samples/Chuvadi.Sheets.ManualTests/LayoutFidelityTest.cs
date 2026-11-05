@@ -7,7 +7,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Xml;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 
@@ -469,7 +469,7 @@ internal static class LayoutFidelityTest
             var d = Workbook.Load(fx)["Data"].Drawings;
             Eq(4, d.Count, "top-level objects");
             var pic = d[0];
-            True(pic.Kind == DrawingKind.Picture && pic.Name == "Picture 1" && pic.Description == "Apulki logo", "picture identity");
+            True(pic.Kind == DrawingKind.Picture && pic.Name == "Picture 1" && pic.Description == "Example logo", "picture identity");
             True(pic.Anchor is { Type: DrawingAnchorType.TwoCell, EditAs: DrawingEditAs.OneCell }, "anchor type");
             Eq(new DrawingPoint(7, 19050, 2, 38100), pic.Anchor.From!.Value, "from (1-based)");
             Eq(new DrawingPoint(10, 0, 9, 0), pic.Anchor.To!.Value, "to");
@@ -595,7 +595,7 @@ internal static class LayoutFidelityTest
             $"xmlns:r=\"{R}\">" +
             "<xdr:twoCellAnchor editAs=\"oneCell\"><xdr:from><xdr:col>6</xdr:col><xdr:colOff>19050</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from>" +
             "<xdr:to><xdr:col>9</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>8</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>" +
-            "<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"2\" name=\"Picture 1\" descr=\"Apulki logo\"/><xdr:cNvPicPr/></xdr:nvPicPr>" +
+            "<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"2\" name=\"Picture 1\" descr=\"Example logo\"/><xdr:cNvPicPr/></xdr:nvPicPr>" +
             "<xdr:blipFill><a:blip r:embed=\"rId1\"/><a:srcRect l=\"10000\" r=\"5000\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>" +
             "<xdr:spPr><a:xfrm rot=\"5400000\"><a:off x=\"100\" y=\"200\"/><a:ext cx=\"1905000\" cy=\"1333500\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>" +
             "<xdr:oneCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>13</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx=\"2286000\" cy=\"457200\"/>" +

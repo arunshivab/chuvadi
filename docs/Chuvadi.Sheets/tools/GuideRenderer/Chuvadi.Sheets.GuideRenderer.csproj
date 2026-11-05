@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Renders docs/Chuvadi.Sheets/GUIDE.md to the guide PDF with Chuvadi's own tools:
+    Chuvadi.Layout.Markup (Markdown layout), Chuvadi.Layout.Fonts (bundled OFL fonts) and
+    Chuvadi.Layout.Pdf (PDF output, built on chuvadi-pdf).
+    Not part of any package, not in Chuvadi.slnx or CI. Like staging/samples/Chuvadi.Layout.Viewer, it takes
+    chuvadi-pdf as version-pinned packages from the local feed (D-29: ChuvadiPdf.props and the nuget.config here).
+  -->
+  <Import Project="..\..\..\..\staging\src\Chuvadi.Layout.Pdf\ChuvadiPdf.props" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Sheets.GuideRenderer</RootNamespace>
+    <AssemblyName>Chuvadi.Sheets.GuideRenderer</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Chuvadi.Layout.Markup\Chuvadi.Layout.Markup.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Chuvadi.Layout.Fonts\Chuvadi.Layout.Fonts.csproj" />
+    <ProjectReference Include="..\..\..\..\staging\src\Chuvadi.Layout.Pdf\Chuvadi.Layout.Pdf.csproj" />
+    <!-- Lossless Flate compression of the page content streams (Chuvadi.Pdf's own compressor). -->
+    <PackageReference Include="Chuvadi.Pdf.Operations" Version="[$(ChuvadiPdfVersion)]" />
+  </ItemGroup>
+
+</Project>

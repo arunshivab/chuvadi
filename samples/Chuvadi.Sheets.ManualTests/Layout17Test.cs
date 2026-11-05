@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 
@@ -357,7 +357,7 @@ internal static class Layout17Test
             var s = Workbook.Load(notes)["N"];
             Eq(2, s.Comments.Count, "comments");
             var c0 = s.Comments[0];
-            True(c0.Reference == "B1" && c0.Row == 1 && c0.Column == 2 && c0.Author == "Arun" && c0.Text == "Arun:\nfirst note", $"c0: {c0}");
+            True(c0.Reference == "B1" && c0.Row == 1 && c0.Column == 2 && c0.Author == "Asha" && c0.Text == "Asha:\nfirst note", $"c0: {c0}");
             True(c0.RichText!.Runs.Count == 2 && c0.RichText.Runs[0].Font!.Bold == true, "runs");
             Eq(new CommentAnchor(3, 15, 1, 2, 5, 15, 5, 8), c0.Anchor!.Value, "anchor (1-based)");
             True(!c0.Visible, "hidden");
@@ -376,7 +376,7 @@ internal static class Layout17Test
             wb.SaveTo(o);
             var c = Workbook.Load(o)["N"].Comments;
             Eq(3, c.Count, "comments");
-            True(c[0].Text == "Arun:\nfirst note" && c[0].RichText!.Runs[0].Font!.Bold == true, "runs kept");
+            True(c[0].Text == "Asha:\nfirst note" && c[0].RichText!.Runs[0].Font!.Bold == true, "runs kept");
             Eq(new CommentAnchor(3, 15, 1, 2, 5, 15, 5, 8), c[0].Anchor!.Value, "anchor kept");
             True(c[1].Visible && !c[0].Visible, "visibility kept");
             True(c[2].Reference == "A9" && c[2].Author == "Me" && c[2].Text == "added", "added");
@@ -641,8 +641,8 @@ internal static class Layout17Test
             ["xl/_rels/workbook.xml.rels"] = Rels(("rId1", R + "/worksheet", "worksheets/sheet1.xml")),
             ["xl/worksheets/sheet1.xml"] = $"<worksheet xmlns=\"{Main}\" xmlns:r=\"{R}\"><sheetData><row r=\"1\"><c r=\"B1\"><v>1</v></c></row></sheetData><legacyDrawing r:id=\"rId2\"/></worksheet>",
             ["xl/worksheets/_rels/sheet1.xml.rels"] = Rels(("rId1", R + "/comments", "../comments1.xml"), ("rId2", R + "/vmlDrawing", "../drawings/vmlDrawing1.vml")),
-            ["xl/comments1.xml"] = $"<comments xmlns=\"{Main}\"><authors><author>Arun</author><author>Bob</author></authors><commentList>" +
-                "<comment ref=\"B1\" authorId=\"0\"><text><r><rPr><b/><sz val=\"9\"/><rFont val=\"Tahoma\"/></rPr><t>Arun:</t></r><r><rPr><sz val=\"9\"/><rFont val=\"Tahoma\"/></rPr><t xml:space=\"preserve\">\nfirst note</t></r></text></comment>" +
+            ["xl/comments1.xml"] = $"<comments xmlns=\"{Main}\"><authors><author>Asha</author><author>Bob</author></authors><commentList>" +
+                "<comment ref=\"B1\" authorId=\"0\"><text><r><rPr><b/><sz val=\"9\"/><rFont val=\"Tahoma\"/></rPr><t>Asha:</t></r><r><rPr><sz val=\"9\"/><rFont val=\"Tahoma\"/></rPr><t xml:space=\"preserve\">\nfirst note</t></r></text></comment>" +
                 "<comment ref=\"C4\" authorId=\"1\"><text><t>plain</t></text></comment></commentList></comments>",
             ["xl/drawings/vmlDrawing1.vml"] = vml,
         });

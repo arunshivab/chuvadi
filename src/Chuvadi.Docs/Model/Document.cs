@@ -523,34 +523,73 @@ public sealed partial class Document
     }
 
     /// <summary>
-    /// Saves to an ENCRYPTED .docx requiring <see cref="EncryptionOptions.Password"/> to
-    /// open in Word. The plaintext package is spooled to a temp file (deleted afterwards),
-    /// never held fully in memory, then encrypted with OOXML Agile Encryption.
+    /// Saves to an ENCRYPTED .docx file (created or overwritten) requiring
+    /// <see cref="EncryptionOptions.Password"/> to open in Word. The file is written beside the
+    /// target and replaces it only when the save succeeded, so a failing save leaves an existing
+    /// file untouched. See <see cref="SaveTo(Stream, EncryptionOptions)"/> for how the plaintext
+    /// package is kept off the disk.
     /// </summary>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)] // SaveTo(null, encryption) binds here (ArgumentException), not ambiguous
     public void SaveTo(string path, EncryptionOptions encryption)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        if (encryption is null) throw new ArgumentNullException(nameof(encryption));
-        if (string.IsNullOrEmpty(encryption.Password))
-            throw new ArgumentException("Encryption password cannot be empty.", nameof(encryption));
+        ValidateEncryption(encryption);
 
-        var tempPath = Path.Combine(Path.GetTempPath(), $"chuvadi_docs_pkg_{Guid.NewGuid():N}.tmp");
+        var full = Path.GetFullPath(path);
+        var temp = Path.Combine(Path.GetDirectoryName(full) ?? ".", "." + Path.GetFileName(full) + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp");
         try
         {
-            using (var spool = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None,
-                bufferSize: 64 * 1024))
-            {
-                SaveTo(spool);
-            }
-            using var spoolRead = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-            Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                output, spoolRead, spoolRead.Length, encryption.Password, encryption.SpinCount);
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                SaveEncrypted(stream, encryption);
+            File.Move(temp, full, overwrite: true);
         }
         finally
         {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
+    }
+
+    /// <summary>
+    /// Saves an ENCRYPTED .docx package (OOXML Agile Encryption) to a stream, which is flushed and
+    /// left OPEN (the caller disposes it). The plaintext package is never held fully in memory:
+    /// it is spooled to a temporary file that is encrypted with a one-time AES key held only in
+    /// memory, created readable by the current user only, and deleted when the save ends.
+    /// </summary>
+    public void SaveTo(Stream output, EncryptionOptions encryption)
+    {
+        if (output is null) throw new ArgumentNullException(nameof(output));
+        ValidateEncryption(encryption);
+        SaveEncrypted(output, encryption);
+    }
+
+    private static void ValidateEncryption(EncryptionOptions encryption)
+    {
+        if (encryption is null) throw new ArgumentNullException(nameof(encryption));
+        if (string.IsNullOrEmpty(encryption.Password))
+            throw new ArgumentException("Encryption password cannot be empty.", nameof(encryption));
+    }
+
+    private void SaveEncrypted(Stream output, EncryptionOptions encryption)
+    {
+        using var spool = new EncryptedSpool();
+        SaveTo(spool);
+        spool.Position = 0;
+        // The compound-file writer seeks back to its start: a seekable output gets a view that
+        // starts at the caller's position; a non-seekable one is written once from memory.
+        if (output.CanSeek)
+        {
+            Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
+                new OffsetStream(output), spool, spool.Length, encryption.Password, encryption.SpinCount);
+        }
+        else
+        {
+            using var buffer = new MemoryStream();
+            Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
+                buffer, spool, spool.Length, encryption.Password, encryption.SpinCount);
+            buffer.Position = 0;
+            buffer.CopyTo(output);
+        }
+        output.Flush();
     }
 
     // ---- Loading --------------------------------------------------------------------
@@ -599,16 +638,25 @@ public sealed partial class Document
         options ??= new DocxReaderOptions();
         cancellationToken.ThrowIfCancellationRequested();
 
-        var source = PackageGuard.EnsureSeekable(input, options, cancellationToken, out var buffered);
-        using var _ = buffered;
-
-        if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(source))
+        // Every failure while reading the package is reported as DocxFormatException (Docs 2.0);
+        // the contract exceptions (limits, password, cancellation) pass through unchanged.
+        try
         {
-            byte[] plaintext = PackageGuard.Decrypt(source, password, options, cancellationToken);
-            using var ms = new MemoryStream(plaintext);
-            return DocumentLoader.Load(ms, options, cancellationToken);
+            var source = PackageGuard.EnsureSeekable(input, options, cancellationToken, out var buffered);
+            using var _ = buffered;
+
+            if (Chuvadi.Internal.Crypto.EncryptedPackageReader.IsEncryptedPackage(source))
+            {
+                byte[] plaintext = PackageGuard.Decrypt(source, password, options, cancellationToken);
+                using var ms = new MemoryStream(plaintext);
+                return DocumentLoader.Load(ms, options, cancellationToken);
+            }
+            return DocumentLoader.Load(source, options, cancellationToken);
         }
-        return DocumentLoader.Load(source, options, cancellationToken);
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.ReadMessage);
+        }
     }
 
     /// <summary>All document text: paragraphs and table cells, newline-separated.</summary>

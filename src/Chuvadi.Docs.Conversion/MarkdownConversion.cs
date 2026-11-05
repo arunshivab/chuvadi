@@ -45,12 +45,19 @@ public static class MarkdownConversion
     {
         if (markdown is null) throw new ArgumentNullException(nameof(markdown));
         var o = options ?? new MarkdownImportOptions();
-        var ast = Md.MarkdownParser.Parse(markdown, o.Parser, cancellationToken);
-        var doc = target ?? new Document();
-        var b = new DocBuilder(doc, o, cancellationToken);
-        new MdImporter(b, o, cancellationToken).Blocks(ast);
-        b.Finish();
-        return new ConversionResult(doc, b.Warnings, b.Blocked);
+        try
+        {
+            var ast = Md.MarkdownParser.Parse(markdown, o.Parser, cancellationToken);
+            var doc = target ?? new Document();
+            var b = new DocBuilder(doc, o, cancellationToken);
+            new MdImporter(b, o, cancellationToken).Blocks(ast);
+            b.Finish();
+            return new ConversionResult(doc, b.Warnings, b.Blocked);
+        }
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "Markdown");
+        }
     }
 
     /// <summary>Reads Markdown from <paramref name="reader"/> into a new document.</summary>
@@ -62,12 +69,19 @@ public static class MarkdownConversion
     {
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         var o = options ?? new MarkdownImportOptions();
-        var ast = Md.MarkdownParser.Parse(reader, o.Parser, cancellationToken);
-        var doc = target ?? new Document();
-        var b = new DocBuilder(doc, o, cancellationToken);
-        new MdImporter(b, o, cancellationToken).Blocks(ast);
-        b.Finish();
-        return new ConversionResult(doc, b.Warnings, b.Blocked);
+        try
+        {
+            var ast = Md.MarkdownParser.Parse(reader, o.Parser, cancellationToken);
+            var doc = target ?? new Document();
+            var b = new DocBuilder(doc, o, cancellationToken);
+            new MdImporter(b, o, cancellationToken).Blocks(ast);
+            b.Finish();
+            return new ConversionResult(doc, b.Warnings, b.Blocked);
+        }
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "Markdown");
+        }
     }
 
     private sealed class MdImporter

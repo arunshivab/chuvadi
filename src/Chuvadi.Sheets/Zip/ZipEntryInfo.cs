@@ -9,6 +9,7 @@ namespace Chuvadi.Sheets.Zip;
 /// and <see cref="ZipExtensions.ListZipEntries"/>. The entry is "open for read" via the
 /// <see cref="OpenRead"/> method as long as the parent reader/archive is still alive.
 /// </summary>
+[System.Obsolete("Chuvadi.Sheets.Zip is obsolete and will be removed in the next major version. Use the Chuvadi.Zip package (namespace Chuvadi.Zip) instead.")]
 public sealed class ZipEntryInfo
 {
     private readonly ZipArchiveEntry _entry;

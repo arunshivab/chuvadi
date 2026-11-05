@@ -41,6 +41,8 @@ public class VerificationSuiteTests
     [Fact] public void Suite_LoaderHandoff() => LoaderHandoffTests.Run(FreshOutDir());
     [Fact] public void Suite_FieldsNotes() => FieldsNotesTests.Run(FreshOutDir());
     [Fact] public void Suite_CommentsRevisions() => CommentsRevisionsTests.Run(FreshOutDir());
+    [Fact] public void Suite_ErrorContract() => ErrorContractTests.Run(FreshOutDir());
+    [Fact] public void Suite_EncryptedSave() => EncryptedSaveTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 

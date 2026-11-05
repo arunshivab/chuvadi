@@ -4,7 +4,7 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using Chuvadi.Sheets.Excel;
+using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
 

@@ -34,7 +34,7 @@ public static class TextTests
             AssertEqual(" c \nde", p[1].GetText(), "control character removed");
             var flowed = TextConversion.Import(src, new TextImportOptions { ParagraphMode = TextParagraphMode.BlankLineSeparatedReflow, RemoveControlCharacters = false });
             AssertEqual("c d�e", flowed.Blocks.OfType<Paragraph>().ElementAt(1).GetText(), "re-flowed");
-            AssertThrows<InvalidDataException>(() => TextConversion.Import(new string('x', 100), new TextImportOptions { MaxInputChars = 10 }), "size cap");
+            AssertThrows<DocxLimitExceededException>(() => TextConversion.Import(new string('x', 100), new TextImportOptions { MaxInputChars = 10 }), "size cap");
             var reader = TextConversion.Import(new StringReader("r1\nr2"));
             AssertEqual(2, reader.Blocks.Count, "reader overload");
         });

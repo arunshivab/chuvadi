@@ -10,6 +10,7 @@ namespace Chuvadi.Sheets.Zip;
 /// model. Exceeding any limit throws <see cref="ZipFormatException"/> and stops extraction
 /// (already-extracted files are left in place for the caller to clean up).
 /// </summary>
+[System.Obsolete("Chuvadi.Sheets.Zip is obsolete and will be removed in the next major version. Use the Chuvadi.Zip package (namespace Chuvadi.Zip) instead.")]
 public sealed class ZipExtractionLimits
 {
     /// <summary>Maximum number of entries the archive may contain. Null = unlimited.</summary>

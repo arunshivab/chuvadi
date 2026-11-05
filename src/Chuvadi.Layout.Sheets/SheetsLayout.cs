@@ -42,7 +42,7 @@ namespace Chuvadi.Layout.Sheets
         }
 
         /// <summary>Lays out a workbook already loaded with Chuvadi.Sheets (load it with <c>IncludeStyledEmptyCells = true</c>).</summary>
-        public static LaidOutDocument Open(Chuvadi.Sheets.Excel.Workbook workbook, SheetsImportOptions? importOptions = null, LayoutOptions? options = null,
+        public static LaidOutDocument Open(Chuvadi.Sheets.Model.Workbook workbook, SheetsImportOptions? importOptions = null, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(workbook);

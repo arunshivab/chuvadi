@@ -45,7 +45,7 @@ public static class TextConversion
         while ((n = reader.Read(buffer, 0, buffer.Length)) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (sb.Length + n > o.MaxInputChars) throw new InvalidDataException($"Text input exceeds {o.MaxInputChars} characters.");
+            if ((long)sb.Length + n > o.MaxInputChars) throw new DocxLimitExceededException(nameof(TextImportOptions.MaxInputChars), o.MaxInputChars, (long)sb.Length + n, "the text input is longer than allowed.");
             sb.Append(buffer, 0, n);
         }
         return Import(sb.ToString(), o, cancellationToken);
@@ -57,7 +57,7 @@ public static class TextConversion
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (target is null) throw new ArgumentNullException(nameof(target));
         var o = options ?? new TextImportOptions();
-        if (text.Length > o.MaxInputChars) throw new InvalidDataException($"Text input exceeds {o.MaxInputChars} characters.");
+        if (text.Length > o.MaxInputChars) throw new DocxLimitExceededException(nameof(TextImportOptions.MaxInputChars), o.MaxInputChars, text.Length, "the text input is longer than allowed.");
         if (text.Length > 0 && text[0] == '\ufeff') text = text.Substring(1);
 
         var lines = SplitLines(text);
