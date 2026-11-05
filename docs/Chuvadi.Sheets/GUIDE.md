@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.0.0 (released 2026-11-05) |
+| Library version | Chuvadi.Sheets 2.0.1 (2.0.0 released 2026-11-05) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -89,17 +89,16 @@ it a sound base for viewers and converters (Chuvadi.Layout.Sheets lays out and r
 ## 2.2 Getting the package
 
 Chuvadi.Sheets is published as a NuGet package attached to its GitHub release, not on nuget.org. Download
-`Chuvadi.Sheets.2.0.0.nupkg` from the release page (tag `sheets-v2.0.0`), put it in a folder, and use that folder
+`Chuvadi.Sheets.2.0.1.nupkg` from the release page (tag `sheets-v2.0.1`), put it in a folder, and use that folder
 as a package source.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\local-nuget | Out-Null
-Copy-Item .\Chuvadi.Sheets.2.0.0.nupkg C:\local-nuget\
-Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.0.nupkg -Algorithm SHA256
+Copy-Item .\Chuvadi.Sheets.2.0.1.nupkg C:\local-nuget\
+Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.1.nupkg -Algorithm SHA256
 ```
 
-The release page shows the package's SHA-256 digest; the hash printed here should be the same. For 2.0.0 it is
-`17d0d0beefc09b60da9c2a472a1a42ac5040579aebb28ac7a95926a9e2db137a`.
+The release page shows the package's SHA-256 digest; the hash printed here should be the same.
 
 Add a `nuget.config` next to your solution so the folder is a source:
 
@@ -115,7 +114,7 @@ Add a `nuget.config` next to your solution so the folder is a source:
 Then reference the package:
 
 ```powershell
-dotnet add package Chuvadi.Sheets --version 2.0.0
+dotnet add package Chuvadi.Sheets --version 2.0.1
 ```
 
 ## 2.3 Building from source
@@ -208,7 +207,8 @@ using (var writer = XlsxWriter.Create("large.xlsx"))
 ```
 
 Rows go to a temporary file as they are written, so memory stays flat however many rows there are; `Save`
-assembles the package. Calling `Save` is required: disposing the writer alone produces no file.
+assembles the package. Calling `Save` is required: disposing the writer alone produces no file, and leaves an
+existing file of that name as it was.
 
 ## 3.4 Export a list in one line
 
@@ -245,7 +245,8 @@ header text.
 
 # 4 Upgrading from 1.x
 
-Chuvadi.Sheets 2.0.0 is a major version with three breaking changes. Values, styles, display text and saved
+Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 is a bug-fix release on top of it
+(section 4.5). Values, styles, display text and saved
 output are the same as in 1.8.0; the public API is the same apart from the namespace and the obsolete zip types.
 
 ## 4.1 The namespace is now `Chuvadi.Sheets.Model`
@@ -280,15 +281,37 @@ full list.
 
 ## 4.3 `Chuvadi.Sheets.Zip` is obsolete
 
-The zip API (`ZipWriter`, `ZipReader`, the zip extension methods) produces warning CS0618 and will be removed in the
-next major version. Use the Chuvadi.Zip package instead. `ZipFormatException` is not marked, because
-Chuvadi.Layout.Sheets still named it when 2.0.0 was released; it goes with the rest.
+The zip API (`ZipWriter`, `ZipReader`, `ZipFormatException`, the zip extension methods) produces warning CS0618 and
+will be removed in the next major version. Use the Chuvadi.Zip package instead. `ZipFormatException` was marked in
+2.0.1; in 2.0.0 it was left unmarked because Chuvadi.Layout.Sheets still named it.
 
 ## 4.4 Also new in 2.0.0
 
 - Saving many relationships (hyperlinks, pictures) is linear: 50,000 hyperlinks save in about 0.4 s instead of 6.8 s.
 - The `InvalidDataException` thrown for `MaxPartBytes` carries `Data["Chuvadi.Sheets.ReadLimit"] = true`, so a size
   limit can be told apart from a damaged zip (chapter 26).
+
+## 4.5 Changes in 2.0.1
+
+2.0.1 fixes bugs that 2.0.0 and every 1.x release share. The public API is the same; only these behaviours
+change.
+
+| What | 2.0.0 | 2.0.1 |
+|---|---|---|
+| Encrypted files larger than about 7 MB | Saved without error, but no reader could open them (bug fix) | Written correctly; checked with this library, msoffcrypto-tool and LibreOffice (chapter 25) |
+| Saving to a stream | Closed the stream, although documented as left open (bug fix) | Left open, after the written bytes (section 6.4) |
+| An encrypted save to a stream that already holds bytes | Overwrote them from the start (bug fix) | Written from the stream's position, after them |
+| An encrypted save to a non-seekable stream | `NotSupportedException` (bug fix) | Works, like an unencrypted save |
+| Saving to a path that exists | The file was emptied first, so a failed save destroyed it (bug fix) | Written beside it and replaced only when the save succeeds (section 7.6) |
+| Temporary files of an encrypted save | The package and sheet data in plaintext (bug fix) | Encrypted with a key held only in memory (section 7.6) |
+| Temporary files on Linux and macOS | Readable by other users with the usual umask (bug fix) | Readable by the current user only |
+| `ZipFormatException` | Not marked obsolete | Obsolete, warning CS0618 (section 4.3) |
+
+With the safe replace, a path save creates or replaces the file only at `Save`: until then the output goes to
+`.<name>.<8 hex digits>.tmp` in the same folder. Everything else is as before: a missing folder, a read-only or
+locked file, or a folder of that name fails at `XlsxWriter.Create` (or `SaveTo`) with the same exception; a
+replaced file keeps its permissions (and on Windows its attributes and security settings); and a symbolic link is
+kept, with the file it points to replaced.
 
 # 5 Choosing a write API
 
@@ -393,15 +416,18 @@ var wb = new Workbook();
 wb.AddSheet("Data").Cell("A1").Value = "Hello";
 
 var ms = new MemoryStream();
-wb.SaveTo(ms);
-byte[] bytes = ms.ToArray();                     // take the bytes with ToArray after saving
-Console.WriteLine($"{bytes.Length:N0} bytes");
+wb.SaveTo(ms);                                   // the stream stays open, positioned after the file
+Console.WriteLine($"{ms.Length:N0} bytes, position {ms.Position:N0}");
+
+ms.Position = 0;                                 // read it back from the same stream
+Console.WriteLine(Workbook.Load(ms)["Data"].Cell("A1").Value);
 ```
 
-Take the bytes with `ToArray()` after `SaveTo(stream)`: in 2.0.0 the stream is closed by the save, although the
-method's documentation says it is not. `ToArray()` works on a closed `MemoryStream`; reading `Length` or
-`Position` does not. When saving to a stream you need to keep open, such as an HTTP response body, write to a
-`MemoryStream` first and copy the bytes.
+The stream is flushed and left open: the save writes from the stream's current position, leaves the position after
+the last byte written, and never closes it, so you can keep using it or hand it on, as with an HTTP response body.
+The stream need not be seekable. The same holds for `XlsxWriter.Create(stream)`, `ToXlsx(stream)` and
+`new XlsxExport(stream)`, encrypted or not. (2.0.0 and earlier closed the stream after an unencrypted save, although
+the documentation said it did not.)
 
 # 7 The streaming writer
 
@@ -487,7 +513,11 @@ sheet.WriteRow(new RowFormat { Hidden = true });  // an empty row that carries o
 writer.Save();
 ```
 
-Column spans set with `SetColumns` must not overlap. A span with a width wins over auto-fit for its columns.
+Spans set with `SetColumns` and `SetColumnWidth` are written exactly as given, in the order of the calls; overlapping
+spans are neither merged nor rejected. Applications differ on the columns two spans share. After
+`SetColumnWidth(1, 3, 5)` and then `SetColumnWidth(2, 4, 30)`, `Workbook.Load` applies the later span (widths 5,
+30, 30, 30) and LibreOffice 24.2 the earlier one (5, 5, 5, 30). For one width per column everywhere, do not
+overlap spans. A span with a width wins over auto-fit for its columns.
 
 ## 7.4 Auto-fit
 
@@ -531,14 +561,21 @@ calls against the same writer at the same time.
 ## 7.6 Temporary files and inline strings
 
 - Each sheet spools to a temporary file named `chuvadi_sheets_*.tmp` in `Path.GetTempPath()` or in
-  `XlsxWriterOptions.TempDirectory`. Temporary files are deleted when the writer is disposed.
+  `XlsxWriterOptions.TempDirectory`. Each one is opened exclusively, readable by the current user only on Linux
+  and macOS, and deleted when it is copied into the package, when the writer is disposed, or by the operating
+  system if the process ends.
 - Strings go through a shared strings table by default, which keeps files small when strings repeat. At save time
   the sheet files are streamed into the package in one pass, with each string's placeholder replaced by its final
   index.
 - `UseInlineStrings = true` writes each string in its cell instead: no shared strings table and no
   post-processing pass, at the cost of larger files when strings repeat.
-- An encrypted save (chapter 25) stages the plaintext package in a temporary file that is deleted after
-  encryption. Consider both temporary files when handling highly sensitive data.
+- An encrypted save (chapter 25) also spools the package before encrypting it. For an encrypted save every
+  temporary file, the sheet spools included, is itself encrypted (AES-256-CTR) with a one-time key held only in
+  memory, so neither the package nor the data reaches the disk in plaintext, even if the process crashes.
+- A save to a path writes `.<name>.<8 hex digits>.tmp` beside the target and replaces the target only when the
+  save succeeds: a failed or cancelled save, or a writer disposed without `Save`, leaves an existing file as it was
+  and removes the temporary file. A replaced file keeps its permissions (on Windows also its attributes and
+  security settings), and a symbolic link stays a link.
 
 # 8 Values and types
 
@@ -1108,8 +1145,20 @@ Console.WriteLine(string.Join(", ", copied));
 ## 16.3 Header names
 
 With `TreatFirstRowAsHeaders` (the default) the first row is read as headers: it is not returned, and its text
-(matched case-insensitively) addresses columns in `row["Name"]`, `GetString("Name")` and the other named
-overloads. With headers off, every row is returned and only 0-based indexes work.
+addresses columns in `row["Name"]`, `TryGet("Name", ...)`, `GetString("Name")` and the other named overloads.
+
+- Only text cells in row 1 become headers, exactly as written: spaces are not trimmed, and numbers or dates in
+  row 1 give no name.
+- Names match case-insensitively (ordinal, ignoring case): `row["name"]` and `row["NAME"]` find the column headed
+  `Name`. When two headers differ only in case or repeat, the first (leftmost) one wins.
+- A name that is not a header reads like an empty cell: `row["Nmae"]` is `null`, `TryGet` returns `false`,
+  `GetDisplayString` returns `""`, `GetFormula` and `GetRichText` return `null`, and the typed getters
+  (`GetString`, `GetInt32`, `GetInt64`, `GetDouble`, `GetDecimal`, `GetBool`, `Get<T>`) throw
+  `InvalidOperationException` ("Cell 'Nmae' is null or missing."), except `GetDateTime`, which throws
+  `InvalidCastException` ("Cell 'Nmae' is not a date."). No exception names the unknown header, so check names
+  against the header row when they come from outside.
+- With headers off, every row is returned and only 0-based indexes work: any name throws
+  `InvalidOperationException` ("Header index not built; enable TreatFirstRowAsHeaders.").
 
 ## 16.4 Options that change what is read
 
@@ -1491,14 +1540,19 @@ Excel asks for the password when it opens either file. The encryption is the for
 - OOXML Agile Encryption, [MS-OFFCRYPTO] sections 2.3.4.10 to 2.3.4.15;
 - AES-256-CBC for the content, an iterated SHA-512 key derivation, and an HMAC-SHA512 integrity check that is
   verified on read: a tampered or damaged file fails instead of decrypting to garbage;
-- a Compound File Binary container, as Excel writes, including DIFAT-extended containers for large files.
+- a Compound File Binary container, as Excel writes; above about 7 MB it is extended with DIFAT sectors
+  ([MS-CFB] section 2.5), as Excel does.
 
 `EncryptionOptions.SpinCount` sets the key-derivation iterations: 100,000 by default, as modern Excel writes.
 Higher is slower to attack and slower to open; do not go below 50,000.
 
 The streaming writer encrypts in 4,096-byte segments with an incrementally computed HMAC, so a large export is
-never held in memory as plaintext. It does stage the plaintext package in a temporary file, deleted after the
-encryption pass.
+never held in memory as plaintext. Its temporary files are encrypted with a one-time key held only in memory
+(section 7.6). A save to a stream writes from the stream's current position and works on a non-seekable stream.
+
+Before 2.0.1, a file that needed more than 109 FAT sectors (an encrypted file larger than about 7 MB) was saved
+without an error but could not be opened by any reader. 2.0.1 writes such files correctly, and files below that size
+are written byte for byte as before. Files saved by an earlier version cannot be repaired: save them again.
 
 Round trips are verified in the library and against an independent implementation of MS-OFFCRYPTO. Opening a
 sample file in desktop Excel remains a sensible final check for your own deployment.
@@ -1718,13 +1772,12 @@ async Task ExportAsync(IAsyncEnumerable<(int Id, string Name)> source, string pa
 # 30 The zip API (obsolete)
 
 `Chuvadi.Sheets.Zip` (`ZipWriter`, `ZipReader`, `ZipEntryInfo`, `ZipExtractionLimits` and the zip extension
-methods) is obsolete since 2.0.0. Using it produces warning CS0618:
+methods) is obsolete since 2.0.0, and `ZipFormatException` since 2.0.1. Using it produces warning CS0618:
 
 > Chuvadi.Sheets.Zip is obsolete and will be removed in the next major version. Use the Chuvadi.Zip package
 > (namespace Chuvadi.Zip) instead.
 
-It still works in 2.0.0 exactly as in 1.x, and keeps its own `ZipFormatException`, which is not marked obsolete
-because Chuvadi.Layout.Sheets still named it when 2.0.0 was released. New code should use Chuvadi.Zip, which is a separate package with
+It still works exactly as in 1.x, with its own `ZipFormatException`. New code should use Chuvadi.Zip, which is a separate package with
 its own guide (`docs/Chuvadi.Zip/GUIDE.md`). Zip password protection is not provided by either: classic ZipCrypto is
 broken and AES zip is not in the base class library. To protect a spreadsheet, encrypt the workbook (chapter 25).
 
@@ -1754,7 +1807,7 @@ broken and AES zip is not in the base class library. To protect a spreadsheet, e
 | Property | Default | Meaning |
 |---|---|---|
 | `UseInlineStrings` | `false` | Write strings in their cells instead of a shared strings table |
-| `TempDirectory` | `Path.GetTempPath()` | Where the per-sheet temporary files go |
+| `TempDirectory` | `Path.GetTempPath()` | Where the temporary files go (section 7.6) |
 | `Encryption` | `null` | `EncryptionOptions` for a password-encrypted file |
 | `DefaultDateFormat` | `yyyy-mm-dd` | Dates without a time and no style |
 | `DefaultDateTimeFormat` | `yyyy-mm-dd hh:mm:ss` | Dates with a time and no style |
@@ -1828,13 +1881,20 @@ sender for the real one.
 **Opening an encrypted file is slow on Windows the first time.** Antivirus scans it by trying Excel's default
 password at the file's spin count (chapter 25). Open from memory, or expect it once per file.
 
-**The streamed file is empty or missing.** Call `writer.Save()` before disposing the writer.
+**The streamed file is missing, or still the old file.** Call `writer.Save()` before disposing the writer: a path
+save creates or replaces the file only when `Save` succeeds.
+
+**A `.<name>.<8 hex digits>.tmp` file next to the output.** A path save was interrupted, for example the process
+was killed during `Save`. It is incomplete; delete it.
+
+**An encrypted file from an earlier version will not open.** Before 2.0.1, encrypted files larger than about 7 MB
+were written incorrectly (chapter 25). Save them again with 2.0.1.
 
 **`AutoFitColumns must be called before the first row is written.`** On the streaming writer, call it before
 `WriteHeader` and `WriteRow`.
 
-**A `MemoryStream` throws after `SaveTo`.** In 2.0.0 `Workbook.SaveTo(stream)` closes the stream; take the bytes with
-`ToArray()` (chapter 6).
+**A `MemoryStream` throws after `SaveTo` (2.0.0 and earlier).** Those versions closed the stream after an
+unencrypted save; take the bytes with `ToArray()`, or update to 2.0.1, which leaves it open (section 6.4).
 
 # 34 About this guide
 
@@ -1872,6 +1932,8 @@ a local function, such as an upload handler, are compiled but not run.
 
 ## 34.3 History
 
+- **2.0.1** (November 2026): updated for Chuvadi.Sheets 2.0.1 (section 4.5): streams left open, safe replace and
+  encrypted temporary files, large encrypted files, header-name rules, overlapping column spans.
 - **2.0** (November 2026): rebuilt from the library's README and its 2.0.0 API, replacing the 1.0 guide, whose
   source was lost. New: the `Chuvadi.Sheets.Model` namespace, one exception for malformed files, the
   `MaxPartBytes` marker, the obsolete zip API, and everything added from 1.1 to 1.8: reading styles, display text,

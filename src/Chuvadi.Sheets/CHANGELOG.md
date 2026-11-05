@@ -1,5 +1,61 @@
 # Changelog
 
+## 2.0.1 (unreleased)
+
+Bug fixes for saving (D-183, D-185, D-187). The public API is unchanged; `ZipFormatException` is now
+marked obsolete. Unencrypted saved bytes are unchanged; encrypted containers up to about 7 MB are
+byte-identical for the same encrypted package (the encryption itself is random per save, as before).
+
+### Bug fixes
+
+- **Encrypted files larger than about 7 MB could not be opened** (D-185). The shared compound-file
+  writer listed at most 109 FAT sectors and wrote no DIFAT sectors, so any container larger than
+  7,143,424 bytes was saved without an error but was unreadable: our reader reported a missing
+  EncryptionInfo stream, other tools an out-of-range directory. It now writes DIFAT sectors
+  ([MS-CFB] §2.5, §2.6.3) after the FAT sectors; files that need 109 FAT sectors or fewer are
+  byte-identical to 2.0.0. Present in every release since encryption was added; files saved
+  before must be saved again. The same fix reaches Chuvadi.Docs through the shared writer.
+- **Saving to a stream closed it** although documented as left open: `Workbook.SaveTo(Stream)`,
+  `XlsxWriter.Create(Stream)` with `Save`/`SaveAsync`, `ToXlsx(..., Stream)` and
+  `new XlsxExport(Stream)`. The stream is now flushed and left open, positioned after the written
+  bytes. Same in every 1.x release.
+- **An encrypted save to a stream overwrote it from the start and failed on a non-seekable
+  stream** (`NotSupportedException`). The compound-file writer no longer seeks: it writes from the
+  stream's current position and works on any writable stream.
+- **A path save emptied the target before the save succeeded.** `XlsxWriter.Create(path)`
+  truncated the file at once (a writer disposed without `Save`, or an app that failed before
+  `Save`, left 0 bytes), and `Workbook.SaveTo(path, EncryptionOptions)` truncated it before key
+  derivation. Every path save (`Workbook.SaveTo(path)`, `Workbook.SaveTo(path, EncryptionOptions)`,
+  `XlsxWriter.Create(path)`, `ToXlsx(path)`, `new XlsxExport(path)`) now writes
+  `.<name>.<8 hex>.tmp` beside the target and replaces the target only when the save succeeds.
+  A failed or cancelled save, or `Dispose` without `Save`, keeps an existing file and removes the
+  temporary file. Unchanged: a missing folder, a read-only or locked target, or a folder of that
+  name fails at `Create` (or `SaveTo`) with the same exception and message; a replaced file keeps
+  its permission bits on Unix and its attributes and security settings on Windows; a symbolic
+  link is kept and the file it points to is written. New: the file appears only at `Save`.
+- **Encrypted saves left plaintext on disk.** The package was staged in a plaintext temporary
+  file (`chuvadi_sheets_pkg_*.tmp`) that survived a crash, and the streaming writer's sheet spools
+  held the sheet XML in plaintext. For an encrypted save every temporary file is now encrypted
+  (AES-256-CTR, a one-time key and nonce held only in memory; the D-47/D-155 design, now shared
+  with Chuvadi.Docs as `Chuvadi.Internal.Crypto.EncryptedSpool`).
+- **Temporary files were readable by other users** on Linux and macOS with the usual umask. Every
+  spool is now created owner-only (mode 600), opened exclusively and deleted on close, so the
+  operating system removes it even if the process dies.
+
+### Obsolete
+
+- `Chuvadi.Sheets.Zip.ZipFormatException` is marked `[Obsolete]` with the same message as the
+  rest of `Chuvadi.Sheets.Zip` (warning CS0618). It was left unmarked in 2.0.0 only because
+  Chuvadi.Layout.Sheets still named it.
+
+### Documentation
+
+- Header names (`row["Name"]` and the named getters): matching rules, what an unknown name
+  returns, and the error with headers off (XML docs, guide 16.3).
+- `SetColumnWidth`/`SetColumns`: spans are written as given; applications differ on overlapping
+  spans (`Workbook.Load` applies the later span, LibreOffice the earlier), so do not overlap them.
+- The guide is updated for 2.0.1 (sections 4.3, 4.5, 6.4, 7.3, 7.6, 16.3, 25.1, 30, 33).
+
 ## 2.0.0 (2026-11-05)
 
 A major version: the public namespace is renamed, and every error caused by a malformed file now

@@ -8,9 +8,7 @@ namespace Chuvadi.Sheets.Zip;
 /// because the zip API is independent of the xlsx API.
 /// </summary>
 [Serializable]
-// Not marked [Obsolete] in 2.0: Chuvadi.Layout.Sheets still names this type in a catch filter
-// and builds with warnings as errors. It goes with the rest of Chuvadi.Sheets.Zip in the next
-// major version; use Chuvadi.Zip's exceptions instead.
+[System.Obsolete("Chuvadi.Sheets.Zip is obsolete and will be removed in the next major version. Use the Chuvadi.Zip package (namespace Chuvadi.Zip) instead.")]
 public sealed class ZipFormatException : Exception
 {
     public ZipFormatException(string message) : base(message) { }

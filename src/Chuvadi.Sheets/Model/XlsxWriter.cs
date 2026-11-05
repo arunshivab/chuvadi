@@ -88,32 +88,37 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
 
     // ---- Construction --------------------------------------------------------------
 
-    // Encryption mode: the package is assembled into _outputStream (a temp file) and then
-    // encrypted into _finalOutputStream during Save. Null when no encryption is requested.
+    // Encryption mode: the package is assembled into _outputStream (an EncryptedSpool, so the
+    // plaintext never reaches the disk) and then encrypted into _finalOutputStream during Save.
+    // Null when no encryption is requested.
     private readonly Stream? _finalOutputStream;
     private readonly bool _ownsFinalOutputStream;
-    private readonly string? _packageTempPath;
 
-    private XlsxWriter(Stream outputStream, bool ownsStream, XlsxWriterOptions options)
+    // Path saves (Sheets 2.0.1): the output goes to a temporary file beside the target, which
+    // replaces the target only when Save succeeds. Null for stream saves.
+    private readonly string? _targetPath;
+    private readonly string? _targetTempPath;
+    private bool _committed;
+
+    private XlsxWriter(Stream outputStream, bool ownsStream, XlsxWriterOptions options,
+        string? targetPath = null, string? targetTempPath = null, bool checkPassword = true)
     {
         _options = options;
         _state = new WorkbookWriteState(new SharedStringTable(), new StyleRegistry(), options);
         _tempDir = options.TempDirectory ?? Path.GetTempPath();
+        _targetPath = targetPath;
+        _targetTempPath = targetTempPath;
 
         if (options.Encryption is not null)
         {
-            if (string.IsNullOrEmpty(options.Encryption.Password))
+            if (checkPassword && string.IsNullOrEmpty(options.Encryption.Password))
                 throw new ArgumentException("Encryption password cannot be null or empty.", nameof(options));
 
-            // Assemble the plaintext package into a temp file; encrypt it into the real
-            // output at Save time. The package writer closes the temp stream at assembly
-            // end, so the file is reopened by name for the encryption pass.
+            // Assemble the plaintext package into an encrypted, owner-only spool that is deleted
+            // on close; encrypt it into the real output at Save time.
             _finalOutputStream = outputStream;
             _ownsFinalOutputStream = ownsStream;
-            _packageTempPath = Path.Combine(_tempDir, $"chuvadi_sheets_pkg_{Guid.NewGuid():N}.tmp");
-            _outputStream = new FileStream(
-                _packageTempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None,
-                bufferSize: 64 * 1024);
+            _outputStream = TempFiles.CreateSpool(_tempDir, "chuvadi_sheets_pkg_", encrypted: true);
             _ownsOutputStream = true;
         }
         else
@@ -123,18 +128,52 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         }
     }
 
-    /// <summary>Creates a writer that streams to the given file path. The file is created or overwritten.</summary>
+    /// <summary>
+    /// Creates a writer that saves to the given file path. The file is created or overwritten when
+    /// <see cref="Save"/> succeeds: until then the output goes to a temporary file beside it
+    /// (".&lt;name&gt;.&lt;8 hex&gt;.tmp"), so a failed save, or a writer disposed without Save,
+    /// leaves an existing file untouched. (Before 2.0.1 the file was truncated here, at Create.)
+    /// </summary>
     public static XlsxWriter Create(string path, XlsxWriterOptions? options = null)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        var stream = new FileStream(
-            path, FileMode.Create, FileAccess.Write, FileShare.None,
-            bufferSize: 64 * 1024,
-            options: FileOptions.Asynchronous);
-        return new XlsxWriter(stream, ownsStream: true, options ?? new XlsxWriterOptions());
+        options ??= new XlsxWriterOptions();
+        if (options.Encryption is not null && string.IsNullOrEmpty(options.Encryption.Password))
+            throw new ArgumentException("Encryption password cannot be null or empty.", nameof(options));
+        return CreateForPath(path, options, checkPassword: true);
     }
 
-    /// <summary>Creates a writer that streams to the given stream. The stream is NOT closed by the writer.</summary>
+    /// <summary>
+    /// A path writer. <paramref name="checkPassword"/> false keeps Workbook.SaveTo(path,
+    /// EncryptionOptions) exactly as before 2.0.1, which never checked the password itself.
+    /// </summary>
+    internal static XlsxWriter CreateForPath(string path, XlsxWriterOptions options, bool checkPassword)
+    {
+        var target = TempFiles.ResolveTarget(Path.GetFullPath(path));
+        TempFiles.ProbeWritable(target);
+        var temp = TempFiles.BesideTarget(target);
+        var stream = new FileStream(
+            temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+            bufferSize: 64 * 1024,
+            options: FileOptions.Asynchronous);
+        try
+        {
+            return new XlsxWriter(stream, ownsStream: true, options, target, temp, checkPassword);
+        }
+        catch
+        {
+            stream.Dispose();
+            TempFiles.TryDelete(temp);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Creates a writer that streams to the given stream. The stream is NOT closed by the writer:
+    /// Save writes the file from the stream's current position, flushes it and leaves it open
+    /// (since 2.0.1; earlier versions closed it after an unencrypted save). The stream need not be
+    /// seekable.
+    /// </summary>
     public static XlsxWriter Create(Stream output, XlsxWriterOptions? options = null)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
@@ -159,11 +198,12 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
                 throw new InvalidOperationException($"A sheet named '{name}' already exists.");
 
         var sheetIndex = _sheets.Count + 1;
-        var tempPath = Path.Combine(
-            _tempDir,
-            $"chuvadi_sheets_{Guid.NewGuid():N}_sheet{sheetIndex}.tmp");
+        // The row spool: owner-only and deleted on close; encrypted when the workbook is (D-187).
+        var spool = TempFiles.CreateSpool(_tempDir, "chuvadi_sheets_", encrypted: _options.Encryption is not null);
 
-        var sheet = new SheetWriter(_state, name, sheetIndex, tempPath);
+        SheetWriter sheet;
+        try { sheet = new SheetWriter(_state, name, sheetIndex, spool); }
+        catch { spool.Dispose(); throw; }
         _sheets.Add(sheet);
         return sheet;
     }
@@ -251,7 +291,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         BeginSave();
         AssemblePackage(useAsyncCopy: false, cancellation: CancellationToken.None)
             .GetAwaiter().GetResult();
-        EncryptPackageIfRequested();
+        FinishSave();
         _saved = true;
     }
 
@@ -265,40 +305,38 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     private async Task SaveAsyncImpl(CancellationToken ct)
     {
         await AssemblePackage(useAsyncCopy: true, cancellation: ct).ConfigureAwait(false);
-        EncryptPackageIfRequested(ct);
+        FinishSave(ct);
         _saved = true;
     }
 
     /// <summary>
-    /// Encryption mode post-step: the plaintext package now sits in the temp file (its
-    /// stream was closed when assembly finished). Re-open it, stream-encrypt it into the
-    /// real output, and delete the plaintext temp. No-op when encryption wasn't requested.
+    /// After assembly: in encryption mode, encrypt the package from its spool into the real output
+    /// (written from that stream's current position) and delete the spool. Then flush the output;
+    /// close it when the writer owns it; and for a path save, replace the target with the finished
+    /// temporary file. A caller's stream is left open.
     /// </summary>
-    private void EncryptPackageIfRequested(CancellationToken cancellation = default)
+    private void FinishSave(CancellationToken cancellation = default)
     {
-        if (_options.Encryption is null) return;
-
-        var enc = _options.Encryption;
-        try
+        if (_options.Encryption is { } enc)
         {
-            using var plaintext = new FileStream(
-                _packageTempPath!, FileMode.Open, FileAccess.Read, FileShare.Read,
-                bufferSize: 64 * 1024);
+            _outputStream.Flush();
+            _outputStream.Position = 0;
             Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                _finalOutputStream!, plaintext, plaintext.Length, enc.Password, enc.SpinCount, cancellation);
+                _finalOutputStream!, _outputStream, _outputStream.Length, enc.Password, enc.SpinCount, cancellation);
             _finalOutputStream!.Flush();
+            _outputStream.Dispose();                                // the spool is deleted on close
+            if (_ownsFinalOutputStream) _finalOutputStream.Dispose();
         }
-        finally
+        else
         {
-            try { if (File.Exists(_packageTempPath)) File.Delete(_packageTempPath!); } catch { }
+            _outputStream.Flush();
+            if (_ownsOutputStream) _outputStream.Dispose();
         }
 
-        // Match unencrypted Save semantics (where the package writer closes the output at
-        // assembly end): close an owned final output now so the file is complete and
-        // readable immediately after Save returns.
-        if (_ownsFinalOutputStream)
+        if (_targetPath is not null)
         {
-            try { _finalOutputStream!.Dispose(); } catch { }
+            TempFiles.Commit(_targetTempPath!, _targetPath);
+            _committed = true;
         }
     }
 
@@ -326,7 +364,8 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     /// </summary>
     private async Task AssemblePackage(bool useAsyncCopy, CancellationToken cancellation)
     {
-        using var pkg = OoxmlPackage.Create(_outputStream);
+        // The package writer closes the stream it is given; the writer decides when ours close.
+        using var pkg = OoxmlPackage.Create(new LeaveOpenStream(_outputStream));
 
         WriteWorkbookPart(pkg);
 
@@ -339,11 +378,9 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         {
             // Sheet XML body (with placeholder replacement).
             using (var dest = pkg.CreatePart(sheet.PartUri, CtWorksheet))
-            using (var src = new FileStream(
-                sheet.TempPath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                bufferSize: 64 * 1024,
-                options: FileOptions.SequentialScan | (useAsyncCopy ? FileOptions.Asynchronous : FileOptions.None)))
             {
+                var src = sheet.Spool;
+                src.Position = 0;
                 // The prologue (sheetPr, sheetViews, sheetFormatPr, cols), built at finalization,
                 // goes right after the <worksheet> start tag; it has no string placeholders.
                 // Then the normal copy continues.
@@ -369,6 +406,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
                         CopyWithPlaceholderReplacement(src, dest);
                 }
             }
+            sheet.ReleaseSpool();   // copied: the spool file is deleted now
 
             // Sheet-level relationships are collected here as we go.
             int sheetRelCounter = 0;
@@ -852,7 +890,7 @@ $@"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>
         foreach (var sheet in _sheets)
         {
             try { sheet.Dispose(); } catch { }
-            try { if (File.Exists(sheet.TempPath)) File.Delete(sheet.TempPath); } catch { }
+            sheet.ReleaseSpool();                                   // deleted on close
         }
 
         if (_ownsOutputStream)
@@ -863,10 +901,8 @@ $@"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>
         {
             try { _finalOutputStream.Dispose(); } catch { }
         }
-        if (_packageTempPath is not null)
-        {
-            try { if (File.Exists(_packageTempPath)) File.Delete(_packageTempPath); } catch { }
-        }
+        // A path save that did not complete leaves the target untouched; remove its temp file.
+        if (!_committed) TempFiles.TryDelete(_targetTempPath);
     }
 
     public ValueTask DisposeAsync()
