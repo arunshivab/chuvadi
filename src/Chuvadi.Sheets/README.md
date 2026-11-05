@@ -177,8 +177,12 @@ foreach (var run in book.Sheets[0].FindCell(1, 1)?.RichText?.Runs ?? Array.Empty
   shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine,
   then 9 ms once the scan result was cached. Both limits apply in full to the library's own
   work, and to streams that are already open or held in memory.
-- Wrapped in a Compound File Binary (CFB) container — same format Excel uses.
-  The reader supports DIFAT-extended containers (large encrypted files).
+- Wrapped in a Compound File Binary (CFB) container — same format Excel uses. Above about
+  7 MB the container is extended with DIFAT sectors ([MS-CFB] §2.5); the reader supports them too.
+  **Before 2.0.1 the writer did not write DIFAT sectors:** an encrypted file larger than about
+  7 MB was saved without an error but could not be opened by any reader. Save such files again.
+- An encrypted save to a stream writes from the stream's current position (bytes already in it
+  are kept), works on a non-seekable stream, and leaves the stream open (2.0.1).
 - Wrong password and missing password both throw `XlsxPasswordRequiredException`. A damaged
   container or a failed integrity check throws `XlsxFormatException` (see Errors below).
 - Encryption is available on both the `Workbook` model and the streaming `XlsxWriter`
@@ -196,9 +200,18 @@ open-password (`EncryptionOptions`).
 ### Security notes for integrators
 
 - The streaming writer spools sheet XML to temp files (`chuvadi_sheets_*.tmp` under
-  the OS temp directory, or `XlsxWriterOptions.TempDirectory`); they are deleted on
-  dispose. Encrypted saves stage the plaintext package in a temp file that is deleted
-  after the encryption pass. Consider both if you handle highly sensitive data.
+  the OS temp directory, or `XlsxWriterOptions.TempDirectory`). Since 2.0.1 every temp file is
+  opened exclusively, readable by the current user only on Linux and macOS (mode 600), and
+  deleted when closed, including by the operating system if the process dies.
+- Since 2.0.1 an encrypted save (`Workbook.SaveTo(path, EncryptionOptions)` or
+  `XlsxWriterOptions.Encryption`) writes no plaintext to disk: the package spool and the sheet
+  spools are encrypted with AES-256-CTR under a one-time key held only in memory. (Before 2.0.1
+  the package was staged in plaintext and could survive a crash.)
+- Since 2.0.1 a save to a path writes `.<name>.<8 hex>.tmp` beside the target and replaces the
+  target only when the save succeeds; a failed or cancelled save, or a writer disposed without
+  `Save`, leaves an existing file untouched. A replaced file keeps its permissions (and on Windows
+  its attributes and security settings); a symbolic link is kept. A save to a stream leaves the
+  stream open.
 - Decompression caps for untrusted input are opt-in: `XlsxReaderOptions.MaxPartBytes` and
   the other read limits (`XlsxReaderOptions.ForUntrustedInput()`) for reading xlsx. Set them whenever
   the input source is not fully trusted. Defaults are unlimited for compatibility.

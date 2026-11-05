@@ -168,7 +168,11 @@ public sealed class Workbook
         }
     }
 
-    /// <summary>Saves the workbook to the given xlsx file path.</summary>
+    /// <summary>
+    /// Saves the workbook to the given xlsx file path. The file is replaced only when the save
+    /// succeeds (it is written to a temporary file beside it first), so a failed save keeps an
+    /// existing file (since 2.0.1).
+    /// </summary>
     public void SaveTo(string path)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
@@ -179,7 +183,10 @@ public sealed class Workbook
         writer.Save();
     }
 
-    /// <summary>Saves the workbook to the given stream. The stream is not closed.</summary>
+    /// <summary>
+    /// Saves the workbook to the given stream, from its current position. The stream is flushed
+    /// and not closed (since 2.0.1; earlier versions closed it despite this documentation).
+    /// </summary>
     public void SaveTo(System.IO.Stream output)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
@@ -193,39 +200,23 @@ public sealed class Workbook
     /// <summary>
     /// Saves the workbook to an ENCRYPTED xlsx file. The file requires the password to open
     /// in Excel. Uses OOXML Agile Encryption (AES-256-CBC, PBKDF2-SHA512, HMAC-SHA512).
+    /// Since 2.0.1 no plaintext reaches the disk (the temporary files are encrypted with a
+    /// one-time key held only in memory, owner-only and deleted on close), and the file is
+    /// replaced only when the save succeeds, so a failed save keeps an existing file.
     /// </summary>
     public void SaveTo(string path, EncryptionOptions encryption)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
         if (encryption is null) throw new ArgumentNullException(nameof(encryption));
+        if (_sheets.Count == 0) throw new InvalidOperationException("Workbook has no sheets.");
 
-        // 1. Spool the plaintext package to a temp file rather than holding the whole
-        //    plaintext in managed memory. (The package writer closes the spool stream when
-        //    assembly finishes, so the file is written by name and reopened for the
-        //    encryption pass, then deleted.)
-        var tempPath = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
-            $"chuvadi_sheets_pkg_{Guid.NewGuid():N}.tmp");
-        try
-        {
-            using (var spool = new System.IO.FileStream(
-                tempPath, System.IO.FileMode.CreateNew, System.IO.FileAccess.ReadWrite,
-                System.IO.FileShare.None, bufferSize: 64 * 1024))
-            {
-                SaveTo(spool);
-            }
-
-            // 2. Encrypt + wrap in CFB, streaming the plaintext from the spool.
-            using var spoolRead = new System.IO.FileStream(
-                tempPath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
-            using var output = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None);
-            Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                output, spoolRead, spoolRead.Length, encryption.Password, encryption.SpinCount);
-        }
-        finally
-        {
-            try { if (System.IO.File.Exists(tempPath)) System.IO.File.Delete(tempPath); } catch { }
-        }
+        // Since 2.0.1 (D-183): the plaintext package and the row spools go to encrypted,
+        // owner-only temporary files that are deleted on close, and the encrypted file is written
+        // beside the target and replaces it only on success, so a failed save keeps the old file.
+        // The password is not checked here, as before 2.0.1.
+        using var writer = XlsxWriter.CreateForPath(path, new XlsxWriterOptions { Encryption = encryption }, checkPassword: false);
+        WorkbookSerializer.WriteWorkbook(writer, this);
+        writer.Save();
     }
 
     /// <summary>

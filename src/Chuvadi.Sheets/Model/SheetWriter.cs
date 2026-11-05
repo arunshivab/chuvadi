@@ -49,8 +49,10 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     private readonly WorkbookWriteState _state;
     private readonly string _name;
     private readonly int _sheetIndex;
-    private readonly string _tempPath;
-    private readonly FileStream _tempStream;
+    // The sheet's row spool (Sheets 2.0.1): an owner-only temporary file deleted on close, or,
+    // for an encrypted save, an EncryptedSpool. It stays open after FinalizeSheet; the XlsxWriter
+    // reads it back at Save and releases it (ReleaseSpool).
+    private readonly Stream _tempStream;
     private readonly XmlWriter _xml;
 
     // "Sheet shape" — the prologue (sheetPr, sheetViews, sheetFormatPr, cols) is built at
@@ -97,18 +99,12 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
     // ---- Construction --------------------------------------------------------------
 
-    internal SheetWriter(WorkbookWriteState state, string name, int sheetIndex, string tempPath)
+    internal SheetWriter(WorkbookWriteState state, string name, int sheetIndex, Stream spool)
     {
         _state = state;
         _name = name;
         _sheetIndex = sheetIndex;
-        _tempPath = tempPath;
-
-        _tempStream = new FileStream(
-            tempPath, FileMode.Create, FileAccess.Write, FileShare.Read,
-            bufferSize: 64 * 1024,
-            // useAsync=true: enables ReadAsync/WriteAsync without thread-pool blocking
-            options: FileOptions.SequentialScan | FileOptions.Asynchronous);
+        _tempStream = spool;
 
         _xml = XmlWriter.Create(_tempStream, new XmlWriterSettings
         {
@@ -134,7 +130,10 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
     /// <summary>
     /// Sets the width (in Excel column-width units) for one or more contiguous columns. Can be
-    /// called at any time until the workbook is saved.
+    /// called at any time until the workbook is saved. Spans are written as given, in call order;
+    /// overlapping spans are neither merged nor rejected, and applications differ on the shared
+    /// columns (Excel and Workbook.Load apply the later span, LibreOffice the earlier), so do not overlap
+    /// spans if each column should have one width everywhere.
     /// </summary>
     public SheetWriter SetColumnWidth(int columnFrom, int columnTo, double width)
     {
@@ -152,7 +151,9 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
     /// <summary>
     /// Sets width, visibility, outline level, collapsed state, best-fit flag and default style
-    /// for a span of columns (1-based, inclusive). Spans must not overlap. A span with a width
+    /// for a span of columns (1-based, inclusive). Spans are written as given, in call order, and
+    /// are not checked for overlap; applications differ on columns that two spans share (see
+    /// <see cref="SetColumnWidth(int, int, double)"/>), so do not overlap spans. A span with a width
     /// wins over auto-fit for its columns. Can be called at any time until save.
     /// </summary>
     public SheetWriter SetColumns(int columnFrom, int columnTo, ColumnFormat format)
@@ -934,8 +935,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         _xml.WriteEndDocument();
         _xml.Flush();
         _xml.Dispose();
-        _tempStream.Flush();
-        _tempStream.Dispose();
+        _tempStream.Flush();   // kept open: read back at Save, then released
 
         _finalized = true;
     }
@@ -1050,7 +1050,14 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
 
     // ---- Internal accessors used by XlsxWriter at save time ------------------------
 
-    internal string TempPath => _tempPath;
+    /// <summary>The finalized row spool, for the XlsxWriter to read back at Save.</summary>
+    internal Stream Spool => _tempStream;
+
+    /// <summary>Closes the spool (its file is deleted on close). Idempotent.</summary>
+    internal void ReleaseSpool()
+    {
+        try { _tempStream.Dispose(); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
     internal int SheetIndex => _sheetIndex;
     internal string PartUri => $"/xl/worksheets/sheet{_sheetIndex.ToString(CultureInfo.InvariantCulture)}.xml";
 

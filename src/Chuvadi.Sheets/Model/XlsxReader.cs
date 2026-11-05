@@ -1540,7 +1540,15 @@ public readonly struct RowReader
     public object? this[int column0Based]
         => column0Based >= 0 && column0Based < _count ? _buffer[column0Based] : null;
 
-    /// <summary>Raw value access by header name (requires TreatFirstRowAsHeaders).</summary>
+    /// <summary>
+    /// Raw value access by header name (requires TreatFirstRowAsHeaders). Header names are the
+    /// text cells of the first row, as written (not trimmed), matched ordinally ignoring case; when
+    /// names repeat, the first (leftmost) column wins. A name that is not a header returns null,
+    /// like a missing cell: the named typed getters then throw InvalidOperationException
+    /// ("Cell 'X' is null or missing."), GetDateTime throws InvalidCastException, TryGet returns
+    /// false, GetDisplayString returns an empty string. With headers off, every name-based member
+    /// throws InvalidOperationException ("Header index not built; enable TreatFirstRowAsHeaders.").
+    /// </summary>
     public object? this[string columnName]
     {
         get
