@@ -146,7 +146,7 @@ namespace Chuvadi.Layout.Acceptance
             {
                 o.FontSources.Add(new DirectoryFontSource(settings.FontFolders));
             }
-            o.FontSources.Add(BundledFontSource.Instance);
+            o.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
             // Complex scripts (Tamil and the other Indic scripts) are shaped, as apps do with PdfShaper.
             o.Shaper = new Chuvadi.Layout.Pdf.PdfShaper();
             return o;

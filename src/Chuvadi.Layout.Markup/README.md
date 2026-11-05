@@ -12,7 +12,7 @@ Chuvadi.Layout.Pdf. Pure BCL; requires **Chuvadi.Markup 1.0.0**.
 
 ```csharp
 var options = new LayoutOptions { Culture = CultureInfo.CurrentCulture };   // Letter or A4 by region (D-30)
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 using LaidOutDocument doc = MarkdownLayout.Open(File.ReadAllText("README.md"), new MarkdownImportOptions
 {
     ImageResolver = url => LoadImageBytesOrNull(url),     // never fetched by the library

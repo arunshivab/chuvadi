@@ -22,7 +22,7 @@ dotnet run -c Release --project staging\samples\Chuvadi.Layout.Viewer -- upload.
 | Chuvadi.Layout.Sheets | `SheetsLayout`: Excel workbooks through Chuvadi.Sheets | both |
 | Chuvadi.Layout.Documents | `AutoDetectLayout`: one call for docx, xlsx (encrypted too) and text, format detected | both |
 | Chuvadi.Fonts | `FontPack`: the LiPi Sans files (Latin and nine Indic scripts); Layout uses them as its built-in fonts | both |
-| Chuvadi.Layout.Fonts | `BundledFontSource`: OFL metric-compatible faces for the Office fonts | both |
+| Chuvadi.Layout.Fonts | `SubstituteFontPack`: OFL metric-compatible substitute faces, a pure data pack (add with `FontPackSource.For(SubstituteFontPack.Instance)`) | both |
 | Chuvadi.Layout.Markup | `MarkdownLayout` and `HtmlLayout`: Markdown, and sanitized HTML (mail, pages), into the same `LaidOutDocument` | both |
 | Chuvadi.Layout.Pdf | `PdfShaper` (Indic shaping), `ToPng`, `ToPdf`, `ToSvg` (delegates to `LayoutSvg`). Source in `staging/src/Chuvadi.Layout.Pdf` (D-37): it takes chuvadi-pdf as pinned packages, so it is built outside `Chuvadi.slnx` and CI until chuvadi-pdf joins the monorepo | both |
 
@@ -37,7 +37,7 @@ var options = new LayoutOptions
     Culture = CultureInfo.CurrentCulture,   // decides Letter or A4 when the file states no paper (D-30)
     Shaper = new PdfShaper(),               // Tamil, Devanagari and other complex scripts
 };
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 using LaidOutDocument doc = AutoDetectLayout.Open(stream, LayoutSourceFormat.Auto, options, ct);   // Chuvadi.Layout.Documents
 LaidOutPage page = doc.GetPage(0, ct);
 ```
@@ -86,7 +86,7 @@ the page is laid out.
 
 1. **Open on a background thread.** `AutoDetectLayout.Open(stream, Auto, options, ct)` (Chuvadi.Layout.Documents):
    - give it the document's file stream, or bytes the app already holds;
-   - set `AllowSystemFonts = true` so the user's installed fonts are used, and keep `BundledFontSource` as the fallback;
+   - set `AllowSystemFonts = true` so the user's installed fonts are used, and keep the substitute pack (`FontPackSource.For(SubstituteFontPack.Instance)`) as the fallback;
    - set `UseEmbeddedFonts = true` (the default).
 2. **Show the first page at once.**
    - Call `GetPage(0)`, then `ToSvg()`, and navigate the WebView2 to the result.
@@ -155,7 +155,7 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
         Shaper = new PdfShaper(),
         Now = DateTimeOffset.UtcNow,                               // or the message date, for DATE fields
     };
-    options.FontSources.Add(BundledFontSource.Instance);
+    options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 
     using var input = new MemoryStream(upload, writable: false);
     using LaidOutDocument doc = AutoDetectLayout.Open(input, LayoutSourceFormat.Auto, options, cts.Token);
@@ -260,7 +260,7 @@ policy.ResourceResolver = new DelegateResourceResolver(r =>
 SanitizeResult mail = HtmlSanitizer.Sanitize(htmlPartBytes, policy, mimeCharsetEncoding, ct);
 
 var options = new LayoutOptions { Culture = userCulture, Limits = LayoutLimits.ForUntrustedInput() };
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 options.Shaper = new PdfShaper();                          // Indic mail
 using LaidOutDocument doc = HtmlLayout.Open(mail, new HtmlImportOptions { Title = subject }, options, ct);
 using var pdf = new MemoryStream();

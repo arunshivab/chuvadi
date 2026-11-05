@@ -48,7 +48,7 @@ namespace Chuvadi.Layout.ManualTests
         internal static LayoutOptions Options()
         {
             LayoutOptions o = new LayoutOptions { Now = new DateTimeOffset(2026, 10, 28, 9, 30, 0, TimeSpan.FromHours(5.5)), DocumentName = "showcase.docx" };
-            o.FontSources.Add(BundledFontSource.Instance);
+            o.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
             return o;
         }
 

@@ -5,7 +5,7 @@ PDF, SVG and PNG output for [Chuvadi.Layout](https://github.com/arunshivab/chuva
 
 ```csharp
 var options = new LayoutOptions { Shaper = new PdfShaper() };
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 using LaidOutDocument doc = DocumentLayout.Open(flowDocument, options);
 
 string svg = doc.GetPage(0).ToSvg();          // on-screen viewer: one page, lazily (Chuvadi.Layout's own SVG writer)

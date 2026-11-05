@@ -9,7 +9,7 @@ using Chuvadi.Layout.Fonts;
 using Chuvadi.Layout.Sheets;
 
 var options = new LayoutOptions();                     // options.Password = "..." for encrypted workbooks
-options.FontSources.Add(BundledFontSource.Instance);   // Office metric-compatible substitutes (Chuvadi.Layout.Fonts)
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));   // metric-compatible substitutes (Chuvadi.Layout.Fonts)
 using LaidOutDocument doc = SheetsLayout.Open(File.OpenRead("charges.xlsx"),
     new SheetsImportOptions { DefaultPaperSizeCode = 9 }, options);   // A4 when the file states no paper
 foreach (LaidOutPage page in doc.GetPages())

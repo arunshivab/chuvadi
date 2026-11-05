@@ -31,19 +31,19 @@ namespace Chuvadi.Layout.ManualTests
             }
         }
 
-        private static FontResolver Bundled() => new FontResolver(new IFontSource[] { BundledFontSource.Instance, BuiltInFontSource.Instance });
+        private static FontResolver Bundled() => new FontResolver(new IFontSource[] { FontPackSource.For(SubstituteFontPack.Instance), FontPackSource.For(Chuvadi.Fonts.FontPack.Instance) });
 
         private static void L1_BundledPackLoadsEveryFace()
         {
             int n = 0;
-            foreach (FontFaceDescriptor d in BundledFontSource.Instance.GetFaces())
+            foreach (FontFaceDescriptor d in FontPackSource.For(SubstituteFontPack.Instance).GetFaces())
             {
-                FontFace f = BundledFontSource.Instance.LoadFace(d);
+                FontFace f = FontPackSource.For(SubstituteFontPack.Instance).LoadFace(d);
                 Check(f.FamilyName == d.FamilyName && f.Weight == d.Weight && f.IsItalic == d.IsItalic, "catalog mismatch for " + d.Key);
                 n++;
             }
             Check(n == 29, "expected 29 bundled faces, got " + n);
-            Check(BuiltInFontSource.Instance.GetFaces().Count == 22, "expected 22 built-in LiPi faces");
+            Check(FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).GetFaces().Count == 22, "expected 22 built-in LiPi faces");
         }
 
         private static void L1_OfficeFontsResolveToMetricCompatibleSubstitutes()
@@ -91,7 +91,7 @@ namespace Chuvadi.Layout.ManualTests
 
         private static void L1_EmbeddedFontDeobfuscationRoundTrip()
         {
-            byte[] font = BundledFontSource.ReadResource("Caladea-Regular.ttf");
+            byte[] font = SubstituteFontPack.ReadAllBytes("Caladea-Regular.ttf");
             const string Key = "{1A2B3C4D-5E6F-7081-92A3-B4C5D6E7F809}";
             byte[] back = EmbeddedFontObfuscation.Deobfuscate(EmbeddedFontObfuscation.Obfuscate(font, Key), Key);
             Check(FontFace.Load(back).FamilyName == "Caladea", "round trip failed");

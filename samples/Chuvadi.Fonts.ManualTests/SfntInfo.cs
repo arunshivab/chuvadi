@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Chuvadi.Fonts.ManualTests
 {
-    /// <summary>Reads the few table fields the checks need (name IDs, OS/2 weight, italic and fsType) from a TrueType file.</summary>
+    /// <summary>Reads the few table fields the checks need (name IDs, OS/2 weight, width, italic and fsType) from a TrueType file.</summary>
     internal sealed class SfntInfo
     {
         private readonly Dictionary<int, string> _names = new Dictionary<int, string>();
@@ -13,6 +13,8 @@ namespace Chuvadi.Fonts.ManualTests
         public uint Version { get; private set; }
 
         public int Weight { get; private set; }
+
+        public int WidthClass { get; private set; }
 
         public bool Italic { get; private set; }
 
@@ -33,6 +35,7 @@ namespace Chuvadi.Fonts.ManualTests
                 if (tag == "OS/2")
                 {
                     info.Weight = BinaryPrimitives.ReadUInt16BigEndian(b[(offset + 4)..]);
+                    info.WidthClass = BinaryPrimitives.ReadUInt16BigEndian(b[(offset + 6)..]);
                     info.FsType = BinaryPrimitives.ReadUInt16BigEndian(b[(offset + 8)..]);
                     info.Italic = (BinaryPrimitives.ReadUInt16BigEndian(b[(offset + 62)..]) & 1) != 0;
                 }

@@ -57,7 +57,7 @@ namespace Chuvadi.Layout.ManualTests
         }
 
         private static byte[] SubstituteBytes(string file)
-            => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : BundledFontSource.ReadResource(file);
+            => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : SubstituteFontPack.ReadAllBytes(file);
 
         /// <summary>The characters ordinary documents use: Basic Latin, Latin-1, Latin Extended-A, General Punctuation, currency.</summary>
         private static bool DocumentCharacters(int cp)

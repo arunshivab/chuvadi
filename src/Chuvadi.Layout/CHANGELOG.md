@@ -2,6 +2,20 @@
 
 ## 0.1.0 (unreleased)
 
+Font packs (D-195, D-197; claude/layout-fonts-pack-rule5.md):
+
+- New `FontPackSource : IFontSource`: a font source over any Chuvadi.Fonts `IFontFilePack`. `FontPackSource.For(pack)`
+  returns one shared source per pack (faces parsed once per process); `new FontPackSource(pack, origin)` a separate
+  one. Each face is described from the pack's `FontFileInfo` and parsed on first use.
+- The built-in fonts are now `FontPackSource.For(FontPack.Instance)` (the internal `BuiltInFontSource` is gone): the
+  same LiPi Sans faces, descriptors and search order.
+- Chuvadi.Layout.Fonts is a pure data pack and no longer references this engine. Its `BundledFontSource` is replaced
+  by `SubstituteFontPack` (`Files`, `Find`, `FindFamily`, `Open`, `TryOpen`, `ReadAllBytes`, `GetLicenseText`,
+  `Instance`). To lay out with it: `options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance))` (was
+  `options.FontSources.Add(BundledFontSource.Instance)`). The internal `ReadResource` becomes the public
+  `SubstituteFontPack.ReadAllBytes`. Same 29 files, byte for byte, and the same face descriptors, so the output is
+  unchanged. Pdf and Print can read the files without the engine.
+
 Tamil font slots and table overlap (D-191; claude/layout-tamil-overlap-rule5.md):
 
 - New `CharacterFormat.ComplexScriptRun` (bool?, additive): which characters take the complex-script font, size and

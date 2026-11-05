@@ -51,14 +51,14 @@ namespace Chuvadi.Layout.ManualTests
 
         private static void L2_SimpleShaperWithKerning()
         {
-            FontFace f = BundledFontSource.Instance.LoadFace(Find("LiberationSans-Regular.ttf"));
+            FontFace f = FontPackSource.For(SubstituteFontPack.Instance).LoadFace(Find("LiberationSans-Regular.ttf"));
             IReadOnlyList<ShapedGlyph> glyphs = SimpleShaper.Instance.Shape(f, "To", 0, 2, new ShapingOptions { Kerning = true });
             Check(glyphs.Count == 2 && glyphs[0].XAdvance < f.GetAdvance(glyphs[0].GlyphId), "'To' must kern in " + f.FullName);
         }
 
         private static FontFaceDescriptor Find(string key)
         {
-            foreach (FontFaceDescriptor d in BundledFontSource.Instance.GetFaces())
+            foreach (FontFaceDescriptor d in FontPackSource.For(SubstituteFontPack.Instance).GetFaces())
             {
                 if (d.Key == key)
                 {

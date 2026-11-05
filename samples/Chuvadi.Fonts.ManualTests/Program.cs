@@ -79,6 +79,23 @@ namespace Chuvadi.Fonts.ManualTests
                 Require(h == Expected.CombinedSha256, h);
             });
             yield return ("F4 licence text", () => Require(FontPack.LicenseText.Contains("OPEN FONT LICENSE", StringComparison.OrdinalIgnoreCase), "OFL text missing"));
+            yield return ("F5 the pack as an IFontFilePack (1.1.0)", () =>
+            {
+                IFontFilePack pack = FontPack.Instance;
+                Require(pack.Name == "Chuvadi.Fonts", pack.Name);
+                Require(pack.Files.Count == FontPack.Files.Count, "file count");
+                for (int i = 0; i < pack.Files.Count; i++)
+                {
+                    FontFileInfo f = pack.Files[i];
+                    FontPackFile p = FontPack.Files[i];
+                    Require(f.FileName == p.FileName && f.FamilyName == p.FamilyName && f.StyleName == p.StyleName && f.FullName == p.FullName
+                        && f.PostScriptName == p.PostScriptName && f.Weight == p.Weight && f.Italic == p.Italic && f.Length == p.Length && f.Sha256 == p.Sha256, f.FileName + ": differs from FontPack.Files");
+                    SfntInfo info = SfntInfo.Read(FontPack.ReadAllBytes(f.FileName));
+                    Require(f.TypographicFamilyName == (info.Name(16) ?? info.Name(1)), f.FileName + ": typographic family");
+                    Require(f.WidthClass == info.WidthClass, f.FileName + ": width class");
+                    Require(ReferenceEquals(pack.GetLicenseText(f.FileName), FontPack.LicenseText), f.FileName + ": licence");
+                }
+            });
         }
 
         private static void Require(bool condition, string message)

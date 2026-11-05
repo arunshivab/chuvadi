@@ -14,7 +14,7 @@ public class HtmlImportTests
     private static LayoutOptions Options(string culture = "en-IN")
     {
         LayoutOptions o = new LayoutOptions { Culture = new System.Globalization.CultureInfo(culture), Now = new DateTimeOffset(2026, 10, 28, 9, 0, 0, TimeSpan.FromHours(5.5)) };
-        o.FontSources.Add(BundledFontSource.Instance);
+        o.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         return o;
     }
 

@@ -20,6 +20,14 @@ namespace Chuvadi.Fonts
         /// <summary>Every font file in the pack, ordered by file name.</summary>
         public static IReadOnlyList<FontPackFile> Files { get; } = Array.AsReadOnly(FontPackCatalog.Files);
 
+        /// <summary>
+        /// The pack as an <see cref="IFontFilePack"/> (name "Chuvadi.Fonts"), for code that reads any font pack the
+        /// same way, such as Chuvadi.Layout's <c>FontPackSource</c>. Its files are <see cref="Files"/> as
+        /// <see cref="FontFileInfo"/>: the typographic family is the family and the width class 5 (normal) for every
+        /// LiPi Sans file, as their tables state.
+        /// </summary>
+        public static IFontFilePack Instance { get; } = new Pack();
+
         /// <summary>The SIL Open Font License 1.1 text that applies to every file of the pack.</summary>
         public static string LicenseText => _license ??= ReadLicense();
 
@@ -88,6 +96,40 @@ namespace Chuvadi.Fonts
                 index[f.FileName] = f;
             }
             return index;
+        }
+
+        private sealed class Pack : IFontFilePack
+        {
+            private readonly IReadOnlyList<FontFileInfo> _files;
+
+            public Pack()
+            {
+                FontFileInfo[] files = new FontFileInfo[FontPackCatalog.Files.Length];
+                for (int i = 0; i < files.Length; i++)
+                {
+                    FontPackFile f = FontPackCatalog.Files[i];
+                    // No LiPi Sans file has a typographic family (name ID 16), and all are of normal width (usWidthClass 5).
+                    files[i] = new FontFileInfo(f.FileName, f.FamilyName, f.FamilyName, f.StyleName, f.FullName,
+                        f.PostScriptName, f.Weight, f.Italic, 5, f.Length, f.Sha256);
+                }
+                _files = Array.AsReadOnly(files);
+            }
+
+            public string Name => "Chuvadi.Fonts";
+
+            public IReadOnlyList<FontFileInfo> Files => _files;
+
+            public Stream Open(string fileName) => FontPack.Open(fileName);
+
+            public string GetLicenseText(string fileName)
+            {
+                ArgumentNullException.ThrowIfNull(fileName);
+                if (Find(fileName) is null)
+                {
+                    throw new ArgumentException($"'{fileName}' is not a file of the font pack.", nameof(fileName));
+                }
+                return LicenseText;
+            }
         }
 
         private static string ReadLicense()
