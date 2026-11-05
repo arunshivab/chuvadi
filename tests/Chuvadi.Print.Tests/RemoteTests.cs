@@ -57,14 +57,16 @@ public class RemoteTests
     {
         using var rig = new RemoteRig();
         Guid id = rig.Submit().JobId;
-        // Fail every final report once the job is printing: the agent must keep the outcome and resend it.
-        var gate = new FailFinalReportsHandler(new PrintHubMessageHandler(rig.Hub, rig.HubUri));
+        // Fail the first two final reports, then hold the third open until the test cancels: the agent must keep the
+        // outcome and resend it. Cancelling only while a report is held open makes the outcome deterministic: the
+        // agent sees the cancellation inside the request, never in the gap between a 502 reply and its retry decision.
+        var gate = new FailFinalReportsHandler(new PrintHubMessageHandler(rig.Hub, rig.HubUri)) { HoldFromAttempt = 3 };
         PrintAgent agent = rig.NewAgent(o => o.HttpHandler = gate);
         using var cts = new CancellationTokenSource();
         Task<bool> once = agent.RunOnceAsync(cts.Token);
         DateTime deadline = DateTime.UtcNow.AddSeconds(10);
-        while (gate.FinalAttempts < 2 && DateTime.UtcNow < deadline) await Task.Delay(10);
-        Assert.True(gate.FinalAttempts >= 2);
+        while (gate.FinalAttempts < 3 && DateTime.UtcNow < deadline) await Task.Delay(10);
+        Assert.True(gate.FinalAttempts >= 3, "two failed final reports, then a third held open");
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => once);
         Assert.Equal(HubJobState.Accepted, rig.Hub.GetJob(id)!.State);
@@ -171,6 +173,10 @@ public class RemoteTests
     {
         public FailFinalReportsHandler(HttpMessageHandler inner) : base(inner) { }
         public int FinalAttempts;
+
+        /// <summary>From this final-report attempt on, the request is held open until it is cancelled. 0 = never hold.</summary>
+        public int HoldFromAttempt { get; init; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/status") && request.Content is not null)
@@ -178,7 +184,8 @@ public class RemoteTests
                 string body = await request.Content.ReadAsStringAsync(ct);
                 if (body.Contains("\"Printed\""))
                 {
-                    Interlocked.Increment(ref FinalAttempts);
+                    int attempt = Interlocked.Increment(ref FinalAttempts);
+                    if (HoldFromAttempt > 0 && attempt >= HoldFromAttempt) await Task.Delay(Timeout.Infinite, ct);
                     return new HttpResponseMessage(HttpStatusCode.BadGateway) { RequestMessage = request };
                 }
             }
