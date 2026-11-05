@@ -11,7 +11,7 @@
 
     <!-- Package metadata -->
     <Product>Chuvadi.Print.Windows</Product>
-    <Description>Windows printing for Chuvadi.Print: printer discovery, driver capabilities (papers, trays, media types, resolutions, quality presets), DEVMODE mapping with all three paper-matching modes, WindowsPrinterTarget printing through the GDI spooler, and WindowsRawPrinterTarget sending bytes unchanged with the RAW datatype. P/Invoke to operating-system DLLs only; no native binaries. Builds on any OS, runs on Windows. No NuGet dependencies.</Description>
+    <Description>Windows printing for Chuvadi.Print: printer discovery, driver capabilities (papers, trays, media types, resolutions, quality presets), DEVMODE mapping with all three paper-matching modes, WindowsPrinterTarget printing through the GDI spooler, WindowsRawPrinterTarget sending bytes unchanged with the RAW datatype, and XpsWriter writing vector pages as XPS (ECMA-388) with embedded TrueType fonts. P/Invoke to operating-system DLLs only; no native binaries. Builds on any OS, runs on Windows. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>1.0.0-rc.2</Version>
@@ -20,7 +20,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;windows;gdi;spooler;printer;devmode;raw</PackageTags>
+    <PackageTags>print;printing;windows;gdi;spooler;printer;devmode;raw;xps</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

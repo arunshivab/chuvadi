@@ -1,6 +1,32 @@
 # Chuvadi.Print — Changelog
 
-## 1.0.0-rc.2 (unreleased)
+## Unreleased
+
+Phase 4 part 1 (D-189): the vector page model and the XPS writer. New API only; nothing existing changes.
+
+- **Vector page model** (core): `VectorPage` (points, origin top left, y down) holding `VectorPath`,
+  `VectorGlyphRun`, `VectorImageElement` and `VectorGroup` elements, each with its own `Transform`, `Clip`,
+  `Opacity` and `BlendMode`. Brushes `VectorSolidBrush` (sRGB with alpha), `VectorLinearGradientBrush` and
+  `VectorRadialGradientBrush` (PDF type 2 and 3 geometry, with `ExtendStart`/`ExtendEnd` and a `Transform`).
+  `VectorStroke` (width, caps, joins, miter limit, dashes), `VectorGeometry` (move, line, cubic, close, fill rule),
+  `VectorFont` (the font file), `VectorImage` (PNG or JPEG, size and resolution read from the file; `FromPixels`
+  encodes grey or RGB pixels as PNG), groups with `Isolated`, `Knockout` and `SoftMask`, and `VectorMatrix`.
+- **XPS writer** (Chuvadi.Print.Windows, runs on any OS): `XpsWriter.Write(pages, stream)` and
+  `Write(pages, path)` write an ECMA-388 package with System.IO.Compression's ZipArchive: TrueType fonts embedded
+  once each, obfuscated (ECMA-388 9.1.7.3); images once each; groups as nested Canvas elements; text as Glyphs
+  with Unicode where every glyph's text is known. Pages are written one at a time. The same pages give the same
+  bytes.
+- **What XPS cannot express is refused, not approximated**: `XpsWriter.CanWrite` names the first page and item.
+  Refused: blend modes other than Normal, knockout groups, soft masks (for now), gradients that do not extend,
+  radial gradients whose start circle is not a point inside the end circle, CFF fonts and font collections, fonts
+  whose OS/2 fsType forbids embedding (Restricted License, bitmap only), glyph ids past the font's glyph count,
+  CMYK JPEGs, strokes of zero width, all-zero dash patterns and values that are not finite. `Write` throws
+  `NotSupportedException` for such a page.
+- **ManualTests**: two new groups (`XpsSampleIsACompletePackage`, `XpsRefusesWhatItCannotExpress`, total 61) and
+  `--xps-sample <file.xps>` (with `--xps-font`) to write a two-page sample for viewing. WINDOWS-VERIFICATION.md
+  gains section D3.
+
+## 1.0.0-rc.2 (2026-11-04)
 
 Phase 1 of the vector and delivery plan (D-96, D-132, D-134). For all four packages.
 

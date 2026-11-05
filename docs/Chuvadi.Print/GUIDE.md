@@ -206,6 +206,35 @@ foreach (CupsQueue q in CupsQueues.List()) Console.WriteLine(q.Name + " " + q.Ur
   `IppRoutes.CreateCupsRouter`.
 - **Duplex backs** for PWG Raster follow PWG 5102.4 Table 9 (`pwg-raster-document-sheet-back`).
 
+## 4b. Vector pages and XPS (Phase 4, `Chuvadi.Print.Windows`)
+
+`VectorPage` (core) describes a page as vector content: paths, glyph runs, images and groups. Sizes and
+coordinates are in points, with the origin at the top left and y running down. Every element has its own
+`Transform` (into its parent's space), `Clip` (in its own space), `Opacity` and `BlendMode`.
+
+```csharp
+var page = new VectorPage(595.28, 841.89);                       // A4
+var font = new VectorFont(File.ReadAllBytes(@"C:\Windows\Fonts\arial.ttf"), "Arial");
+var run = new VectorGlyphRun(font, 12, new VectorSolidBrush(VectorColor.Black));
+run.Glyphs.Add(new VectorGlyph(glyphId: 43, x: 72, y: 100, advance: 8.67, text: "H"));   // id and advance from the font's cmap and hmtx
+page.Elements.Add(run);
+page.Elements.Add(new VectorImageElement(VectorImage.FromJpeg(File.ReadAllBytes("logo.jpg")), 72, 120, 144, 72));
+
+if (!XpsWriter.CanWrite(new[] { page }, out string? reason)) Console.WriteLine(reason);   // send to raster instead
+else XpsWriter.Write(new[] { page }, @"C:\out\report.xps");
+```
+
+- **Fonts** are TrueType files (the bytes of the .ttf, or a subset). Each is stored once, obfuscated as ECMA-388
+  requires. Glyph ids are the font's own; put the glyph's characters in `VectorGlyph.Text` so the document can
+  be searched and copied. Glyphs on different baselines become separate XPS Glyphs elements.
+- **Images** are PNG or JPEG files, stored once each; `VectorImage.FromPixels` encodes grey or RGB pixels as
+  PNG. An image fills the unit square of its own space; the four-number `VectorImageElement` constructor places
+  it as a rectangle. How a viewer smooths a scaled image is its own choice (XPS has no PDF /Interpolate).
+- **Groups** are written as nested Canvas elements; their opacity applies to the group as a whole.
+- **Refused content**: `CanWrite` names the first page and item XPS cannot express. Such pages go to raster;
+  the writer never approximates them. The list is in the CHANGELOG (Phase 4 part 1).
+- **Colour** is sRGB, 8 bits per channel with alpha. Gradients interpolate in sRGB and always extend (pad).
+
 ## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are

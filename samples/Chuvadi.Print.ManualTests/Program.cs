@@ -21,6 +21,8 @@ namespace Chuvadi.Print.ManualTests
         ///   --raw-file &lt;file&gt;            with --raw-printer: send this file unchanged
         ///   --windows-raw-printer "&lt;queue&gt;"  send a short text job with the RAW datatype to a Windows queue
         ///   --windows-raw-file &lt;path&gt;     with --windows-raw-printer: the queue's port file; check it holds exactly the bytes sent
+        ///   --xps-sample &lt;file.xps&gt;      write the two-page XPS sample for viewing in an XPS viewer
+        ///   --xps-font &lt;file.ttf&gt;        with --xps-sample: the TrueType font for its text (default Arial on Windows)
         /// </summary>
         public static int Main(string[] args)
         {
@@ -111,6 +113,7 @@ namespace Chuvadi.Print.ManualTests
                 OperatingSystem.IsWindows()
                     ? Phase1Scenarios.WindowsRaw(queue, Option(args, "--windows-raw-file", null))
                     : throw new PlatformNotSupportedException("--windows-raw-printer needs Windows"));
+            failed += Scenario(args, "--xps-sample", "XPS sample", file => Phase4Scenarios.WriteSample(file, Option(args, "--xps-font", null)));
 
             return failed == 0 ? 0 : 1;
         }
