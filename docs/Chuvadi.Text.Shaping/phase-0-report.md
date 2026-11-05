@@ -131,6 +131,37 @@ Rule 5 item (noted, Arun decides with the Pdf fix): when Pdf.Authoring moves to 
   dropped). Implemented with the cmap stage (phase 2 of the engine plan).
 - The oracle compares glyph boxes with FontFace.GetGlyphBounds (FontBox, from the 3.31.0 public signatures and
   XML docs); the D-158 oracle condition counts as met only after that run.
+- Result (Windows, 2026-11-05, on f9fee7b plus the oracle update): ORACLE AGREES, 0 differences on all 13 fonts,
+  glyph boxes included (the CFF test font too). D-158 oracle condition met.
+- Pack harness through the wrapper on the real Chuvadi.Pdf 3.31.0 packages (Windows, commit bdae60e): 2,144 of
+  29,493 lines, the phase-0 result; GATE FAILED is expected until phase 4.
+
+## Pdf answers d.2, d.4, d.6 and decision D-182 (2026-11-05)
+
+Received and kept in docs/Chuvadi.Text.Shaping/inputs/. D-182 (Arun): d.3 is option (a), Pdf supplies the updated
+harness, proven against 3.31.0; d.5 is generated from 3.31.0; the language is always set explicitly (the fonts' default
+language system) in the harness and in our tests and tools. Done: the local gate and the wrapper now pass
+Language.Default explicitly (no change in output: the library default was already 'dflt', and nothing reads the
+machine locale); gate 2,144 and pack harness 2,144 unchanged.
+
+Findings and items for Arun:
+- Unicode version: the reference build uses Unicode 18.0; we use UCD 17.0.0. Compared here: 18.0 only adds characters
+  (13,007) and changes Indic categories only for new characters (Odia U+0B53/U+0B54, U+11B0A, U+11DF0/U+11DF1) and
+  Gurung Khema U+16100; no corpus code point changes in any property we use. Recommendation: move to 18.0.0.
+- U+2044 fraction slash: the expected outputs use numerator/denominator forms around it with frac/numr/dnom off. The
+  Unicode Standard (fraction slash, digits on either side display as a fraction) is the spec basis; handled in phase 1
+  with the Latin words.
+- d.4: the D-73 baseline needs restating (see the reply to the coordinator, 2026-11-05).
+- d.6: the fixture fonts (3.9 MB) go into the tests in phase 5; storage for approval.
+
+## Merge and D-188 (2026-11-05)
+
+- Similarity checker: CLEAN on 17fa3b0, f9fee7b and bdae60e plus the wrapper (D-180); its two review items closed,
+  the last by the WOFF sources statement in docs/Chuvadi.OpenType/trace/sources.md. Arun approved merging #57 with no
+  opentype or text-shaping tags yet.
+- D-188: the gate passes the D-68 feature set explicitly (cpsp off); the contract's ShapingFeatures.Default becomes cpsp
+  on, matching 3.31.0 (the wrapper's ShapingFeatures already defaults cpsp on, C1/D-68). Pdf supplies the contract
+  change and a small cpsp-on expected file.
 
 ## Merge conditions for the draft PR (D-158)
 

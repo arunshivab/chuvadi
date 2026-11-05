@@ -68,7 +68,7 @@ internal static class Program
 
         Dictionary<string, ShapeOptions> optionsByScript = Scripts.ToDictionary(
             kv => kv.Key,
-            kv => new ShapeOptions { Script = kv.Value, UseDefaultFeatures = false, Features = features },
+            kv => new ShapeOptions { Script = kv.Value, Language = Language.Default, UseDefaultFeatures = false, Features = features }, // language always explicit (D-182)
             StringComparer.Ordinal);
 
         GlyphBuffer buffer = new GlyphBuffer();
