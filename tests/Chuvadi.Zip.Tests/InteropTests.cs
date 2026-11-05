@@ -222,7 +222,9 @@ with pyzipper.AESZipFile(sys.argv[1], 'w', compression=pyzipper.ZIP_DEFLATED, en
                     Assert.All(r.Entries.Where(e => !e.IsDirectory), e => Assert.Equal(ZipEncryption.ZipCrypto, e.Encryption));
                     Assert.Equal(big, r.ReadAllBytes(r.FindEntry("big.bin")!));
                     r.Verify();
-                    Assert.Throws<ZipPasswordRequiredException>(() => r.ReadAllBytes(r.FindEntry("big.bin")!, "bad"));
+                    // No wrong-password assertion here: Info-ZIP's zip picks random bytes for the ZipCrypto header, so a fixed wrong
+                    // password passes the one-byte check about 1 time in 128 and the failure then looks different. Wrong passwords
+                    // are tested on a fixed archive in ZipCryptoPasswordTests.
                 }
 
                 var z64 = Path.Combine(dir, "z64.zip");
