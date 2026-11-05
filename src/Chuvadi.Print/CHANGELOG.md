@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-Phase 4 part 1 (D-189): the vector page model and the XPS writer. New API only; nothing existing changes.
+Phase 4 part 1 (D-189): the vector page model and the XPS writer. New API only. One approved change to
+existing behaviour, in Chuvadi.Print.Remote:
+
+- **`PrintAgent.RunOnceAsync` cancellation** (D-189, error-type change): when the caller cancels while an exchange
+  with the hub is failing, `RunOnceAsync` now throws `OperationCanceledException` (the failure as its
+  `InnerException`) instead of the transport error, for example `RemotePrintException` "HTTP 502". Before, that
+  depended on timing. Failures without a cancellation keep their own types, `RunAsync` behaves as before, and a
+  journalled outcome is still delivered by the next cycle.
 
 - **Vector page model** (core): `VectorPage` (points, origin top left, y down) holding `VectorPath`,
   `VectorGlyphRun`, `VectorImageElement` and `VectorGroup` elements, each with its own `Transform`, `Clip`,

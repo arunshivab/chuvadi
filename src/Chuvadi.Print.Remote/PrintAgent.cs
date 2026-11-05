@@ -195,20 +195,34 @@ namespace Chuvadi.Print.Remote
         /// One cycle: hello (first time or after a failure), deliver outstanding reports, one poll, and print the
         /// job if one came. Returns true when a job was handled. Failures throw (see <see cref="RunAsync"/>).
         /// </summary>
+        /// <exception cref="OperationCanceledException">
+        /// <paramref name="cancellationToken"/> was cancelled. This is also the exception when an exchange with the
+        /// hub failed as the cancellation arrived; the failure is its <see cref="Exception.InnerException"/>.
+        /// </exception>
         public async Task<bool> RunOnceAsync(CancellationToken cancellationToken = default)
         {
             ThrowIfDisposed();
-            if (!_helloDone)
+            try
             {
-                await HelloAsync(cancellationToken).ConfigureAwait(false);
-                _helloDone = true;
-            }
-            await RecoverAsync(cancellationToken).ConfigureAwait(false);
+                if (!_helloDone)
+                {
+                    await HelloAsync(cancellationToken).ConfigureAwait(false);
+                    _helloDone = true;
+                }
+                await RecoverAsync(cancellationToken).ConfigureAwait(false);
 
-            JobLease? lease = await PollAsync(cancellationToken).ConfigureAwait(false);
-            if (lease is null) return false;
-            await ProcessAsync(lease, cancellationToken).ConfigureAwait(false);
-            return true;
+                JobLease? lease = await PollAsync(cancellationToken).ConfigureAwait(false);
+                if (lease is null) return false;
+                await ProcessAsync(lease, cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && IsTransient(ex) && cancellationToken.IsCancellationRequested)
+            {
+                // The caller cancelled while a hub exchange was failing: the cycle stopped because of the
+                // cancellation (a retry would have been cancelled too), so report it as one. Anything journalled is
+                // kept and delivered by the next cycle.
+                throw new OperationCanceledException("Cancelled while an exchange with the hub was failing: " + Describe(ex), ex, cancellationToken);
+            }
         }
 
         // ================================================================== protocol
