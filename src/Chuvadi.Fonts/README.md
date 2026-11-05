@@ -29,6 +29,21 @@ byte[] bold = FontPack.ReadAllBytes("LiPi-Sans-Tamil-Bold.ttf");      // a fresh
 | `FontPack.ReadAllBytes(fileName)` | a copy of the file's bytes |
 | `FontPack.LicenseText` | the SIL Open Font License 1.1 text |
 | `FontPackFile` | file name, family, style, full name, PostScript name, weight, italic, script, length, SHA-256 |
+| `FontPack.Instance` | the pack as an `IFontFilePack` (since 1.1.0) |
+| `IFontFilePack` | any font pack: `Name`, `Files` (`FontFileInfo`), `Open(fileName)`, `GetLicenseText(fileName)` (since 1.1.0) |
+| `FontFileInfo` | file name, family, typographic family, style, full name, PostScript name, weight, italic, width class, length, SHA-256 (since 1.1.0) |
+
+## Reading any font pack the same way (1.1.0)
+
+`IFontFilePack` describes a set of font files without parsing them. This package implements it
+(`FontPack.Instance`), and so does Chuvadi.Layout.Fonts (`SubstituteFontPack.Instance`, the metric-compatible
+substitutes for common document fonts). Chuvadi.Layout turns any of them into a font source:
+
+```csharp
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
+```
+
+An application can bring its own fonts the same way by implementing the interface.
 
 ## Licence
 

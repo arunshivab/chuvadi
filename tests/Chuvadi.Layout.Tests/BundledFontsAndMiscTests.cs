@@ -8,11 +8,11 @@ public class BundledFontsTests
     [Fact]
     public void Every_catalog_entry_loads_and_matches_its_parsed_identity()
     {
-        IReadOnlyList<FontFaceDescriptor> faces = BundledFontSource.Instance.GetFaces();
+        IReadOnlyList<FontFaceDescriptor> faces = FontPackSource.For(SubstituteFontPack.Instance).GetFaces();
         Assert.Equal(29, faces.Count);
         foreach (FontFaceDescriptor d in faces)
         {
-            FontFace f = BundledFontSource.Instance.LoadFace(d);
+            FontFace f = FontPackSource.For(SubstituteFontPack.Instance).LoadFace(d);
             Assert.Equal(d.FamilyName, f.FamilyName);
             Assert.Equal(d.SubfamilyName, f.SubfamilyName);
             Assert.Equal(d.Weight, f.Weight);
@@ -28,13 +28,13 @@ public class BundledFontsTests
     {
         foreach (string family in new[] { "Liberation Sans", "Liberation Serif", "Liberation Mono", "Carlito", "Caladea", "Gelasio" })
         {
-            List<FontFaceDescriptor> styles = BundledFontSource.Instance.GetFaces().Where(f => f.FamilyName == family).ToList();
+            List<FontFaceDescriptor> styles = FontPackSource.For(SubstituteFontPack.Instance).GetFaces().Where(f => f.FamilyName == family).ToList();
             Assert.Equal(4, styles.Count);
             Assert.Contains(styles, s => s.Weight == 700 && s.IsItalic);
         }
         // D-113: LiPi Sans is Chuvadi.Layout's built-in font source (Chuvadi.Fonts), no longer part of this pack.
-        Assert.DoesNotContain(BundledFontSource.Families, f => f.StartsWith("LiPi", StringComparison.Ordinal));
-        List<FontFaceDescriptor> lipi = BuiltInFontSource.Instance.GetFaces().Where(f => f.FamilyName == "LiPi Sans").ToList();
+        Assert.DoesNotContain(SubstituteFontPack.Files.Select(f => f.FamilyName).Distinct(), f => f.StartsWith("LiPi", StringComparison.Ordinal));
+        List<FontFaceDescriptor> lipi = FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).GetFaces().Where(f => f.FamilyName == "LiPi Sans").ToList();
         Assert.Equal(4, lipi.Count);
         Assert.Contains(lipi, s => s.Weight == 700 && s.IsItalic);
     }
@@ -61,9 +61,9 @@ public class BundledFontsTests
     [Fact]
     public void Unknown_resource_is_rejected()
     {
-        Assert.Throws<ArgumentException>(() => BundledFontSource.ReadResource("Nope.ttf"));
+        Assert.Throws<ArgumentException>(() => SubstituteFontPack.ReadAllBytes("Nope.ttf"));
         // The LiPi files are no longer in this pack (D-113, D-115).
-        Assert.Throws<ArgumentException>(() => BundledFontSource.ReadResource("LiPi-Sans-Tamil-Regular.ttf"));
+        Assert.Throws<ArgumentException>(() => SubstituteFontPack.ReadAllBytes("LiPi-Sans-Tamil-Regular.ttf"));
     }
 
     [Theory]
@@ -104,18 +104,18 @@ public class BundledFontsTests
     [Fact]
     public void Built_in_faces_load_and_match_the_font_pack()
     {
-        IReadOnlyList<FontFaceDescriptor> faces = BuiltInFontSource.Instance.GetFaces();
+        IReadOnlyList<FontFaceDescriptor> faces = FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).GetFaces();
         Assert.Equal(22, faces.Count);
         foreach (FontFaceDescriptor d in faces)
         {
-            FontFace f = BuiltInFontSource.Instance.LoadFace(d);
+            FontFace f = FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).LoadFace(d);
             Assert.Equal(d.FamilyName, f.FamilyName);
             Assert.Equal(d.SubfamilyName, f.SubfamilyName);
             Assert.Equal(d.Weight, f.Weight);
             Assert.Equal(d.IsItalic, f.IsItalic);
             Assert.Equal(d.WidthClass, f.WidthClass);
             Assert.Equal(FontOrigin.Bundled, f.Origin);
-            Assert.Same(f, BuiltInFontSource.Instance.LoadFace(d));
+            Assert.Same(f, FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).LoadFace(d));
         }
     }
 
@@ -137,7 +137,7 @@ public class BundledFontsTests
 
         // The app's own sources come before the built-in fonts.
         LayoutOptions mine = new LayoutOptions();
-        mine.FontSources.Add(BundledFontSource.Instance);
+        mine.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         IReadOnlyList<IFontSource> order = mine.CreateFontResolver().Sources;
         Assert.True(order.ToList().FindIndex(s => s.Name == "Chuvadi.Layout.Fonts") < order.ToList().FindIndex(s => s.Name == "Chuvadi.Fonts"));
     }
@@ -228,7 +228,7 @@ public class LayoutLimitsTests
     public void Options_build_resolver_with_embedded_first()
     {
         LayoutOptions o = new LayoutOptions();
-        o.FontSources.Add(BundledFontSource.Instance);
+        o.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         MemoryFontSource embedded = new MemoryFontSource("embedded", FontOrigin.Embedded);
         embedded.Add(TestFonts.Bytes("Carlito-Regular.ttf"));
         FontResolver r = o.CreateFontResolver(embedded);

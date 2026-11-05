@@ -73,7 +73,8 @@ namespace Chuvadi.Layout
         /// <summary>
         /// Font sources, searched in order after any fonts embedded in the document and (unless
         /// <see cref="PreferBundledFonts"/>) installed fonts. Typically the
-        /// Chuvadi.Layout.Fonts pack (BundledFontSource.Instance, the Office metric-compatible substitutes). Nothing is
+        /// Chuvadi.Layout.Fonts pack, the metric-compatible substitutes:
+        /// <c>FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance))</c> (see <see cref="FontPackSource"/>). Nothing is
         /// read from disk or the network unless a source does so itself.
         /// </summary>
         public IList<IFontSource> FontSources { get; } = new List<IFontSource>();
@@ -153,7 +154,7 @@ namespace Chuvadi.Layout
             sources.AddRange(FontSources);
             if (UseBuiltInFonts)
             {
-                sources.Add(BuiltInFontSource.Instance);
+                sources.Add(FontPackSource.For(Chuvadi.Fonts.FontPack.Instance));
             }
             if (AllowSystemFonts && PreferBundledFonts)
             {

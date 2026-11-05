@@ -216,7 +216,7 @@ public class DocsImport160Tests
         Assert.Equal(FontOrigin.Embedded, run.Font.Origin);
 
         LayoutOptions off = new LayoutOptions { AllowSystemFonts = false, UseEmbeddedFonts = false };
-        off.FontSources.Add(BundledFontSource.Instance);
+        off.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         using LaidOutDocument doc2 = Lay(d, off);
         Assert.Equal(FontOrigin.Bundled, Assert.Single(Flow.Runs(doc2.GetPage(0)), r => r.Text == "Embedded").Font.Origin);
     }

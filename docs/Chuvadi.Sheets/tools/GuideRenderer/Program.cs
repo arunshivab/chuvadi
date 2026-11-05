@@ -52,7 +52,7 @@ internal static class Program
             Shaper = new PdfShaper(),                       // complex scripts (the Tamil and Devanagari name on the title page)
             Culture = CultureInfo.InvariantCulture,
         };
-        options.FontSources.Add(BundledFontSource.Instance);
+        options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 
         var import = new MarkdownImportOptions
         {
