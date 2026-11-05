@@ -132,7 +132,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
     /// Sets the width (in Excel column-width units) for one or more contiguous columns. Can be
     /// called at any time until the workbook is saved. Spans are written as given, in call order;
     /// overlapping spans are neither merged nor rejected, and applications differ on the shared
-    /// columns (Workbook.Load applies the later span, LibreOffice the earlier), so do not overlap
+    /// columns (Excel and Workbook.Load apply the later span, LibreOffice the earlier), so do not overlap
     /// spans if each column should have one width everywhere.
     /// </summary>
     public SheetWriter SetColumnWidth(int columnFrom, int columnTo, double width)

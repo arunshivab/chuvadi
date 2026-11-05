@@ -515,8 +515,9 @@ writer.Save();
 
 Spans set with `SetColumns` and `SetColumnWidth` are written exactly as given, in the order of the calls; overlapping
 spans are neither merged nor rejected. Applications differ on the columns two spans share. After
-`SetColumnWidth(1, 3, 5)` and then `SetColumnWidth(2, 4, 30)`, `Workbook.Load` applies the later span (widths 5,
-30, 30, 30) and LibreOffice 24.2 the earlier one (5, 5, 5, 30). For one width per column everywhere, do not
+`SetColumnWidth(1, 3, 5)` and then `SetColumnWidth(2, 4, 30)`, Excel and `Workbook.Load` apply the later span
+(widths 5, 30, 30, 30; Excel's column-width box shows them as 4.29, 29.29, 29.29, 29.29, because it leaves out the
+cell padding) and LibreOffice 24.2 the earlier one (5, 5, 5, 30). For one width per column everywhere, do not
 overlap spans. A span with a width wins over auto-fit for its columns.
 
 ## 7.4 Auto-fit

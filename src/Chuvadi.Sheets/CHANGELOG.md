@@ -53,7 +53,7 @@ byte-identical for the same encrypted package (the encryption itself is random p
 - Header names (`row["Name"]` and the named getters): matching rules, what an unknown name
   returns, and the error with headers off (XML docs, guide 16.3).
 - `SetColumnWidth`/`SetColumns`: spans are written as given; applications differ on overlapping
-  spans (`Workbook.Load` applies the later span, LibreOffice the earlier), so do not overlap them.
+  spans (Excel and `Workbook.Load` apply the later span, LibreOffice the earlier), so do not overlap them.
 - The guide is updated for 2.0.1 (sections 4.3, 4.5, 6.4, 7.3, 7.6, 16.3, 25.1, 30, 33).
 
 ## 2.0.0 (2026-11-05)
