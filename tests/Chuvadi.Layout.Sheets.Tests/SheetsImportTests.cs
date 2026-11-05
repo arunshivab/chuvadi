@@ -245,7 +245,77 @@ public class SheetsImportTests
     {
         byte[] bytes = Save(Sample());
         Array.Resize(ref bytes, bytes.Length / 2);
-        Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(bytes), null, Options()));
+        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(bytes), null, Options()));
+        Assert.StartsWith("The workbook could not be read: ", ex.Message, StringComparison.Ordinal);
+        Assert.IsType<XlsxFormatException>(ex.InnerException); // Chuvadi.Sheets 2.0: one type for every malformed file
+        Assert.NotNull(ex.InnerException!.InnerException);
+    }
+
+    [Fact]
+    public void A_damaged_relationship_entry_is_a_format_error()
+    {
+        // Chuvadi.Sheets 1.x threw a bare ArgumentException for an empty relationship Id; 2.0 wraps it in XlsxFormatException.
+        byte[] bytes = Save(Sample());
+        using MemoryStream ms = new MemoryStream();
+        ms.Write(bytes);
+        using (System.IO.Compression.ZipArchive zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Update, leaveOpen: true))
+        {
+            System.IO.Compression.ZipArchiveEntry rels = zip.GetEntry("xl/_rels/workbook.xml.rels")!;
+            string xml;
+            using (StreamReader r = new StreamReader(rels.Open()))
+            {
+                xml = r.ReadToEnd();
+            }
+            Assert.Contains("Id=\"rId1\"", xml, StringComparison.Ordinal);
+            rels.Delete();
+            System.IO.Compression.ZipArchiveEntry again = zip.CreateEntry("xl/_rels/workbook.xml.rels");
+            using StreamWriter w = new StreamWriter(again.Open());
+            w.Write(xml.Replace("Id=\"rId1\"", "Id=\"\"", StringComparison.Ordinal));
+        }
+        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(ms.ToArray()), null, Options()));
+        Assert.IsType<XlsxFormatException>(ex.InnerException);
+        Assert.IsAssignableFrom<ArgumentException>(ex.InnerException!.InnerException);
+    }
+
+    [Fact]
+    public void A_damaged_encrypted_workbook_is_a_format_error_once_a_password_is_given()
+    {
+        // D-167: with a password, a damaged container is reported as unreadable, not as a password problem (Sheets 2.0).
+        byte[] enc = EncryptedFixtures.Open("sample-secret.xlsx").ToArray();
+        byte[] cut = enc[..2048]; // the compound-file header survives, the container does not
+        LayoutOptions o = Options();
+        o.Password = "secret";
+        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(cut), null, o));
+        Assert.StartsWith("The workbook could not be read: ", ex.Message, StringComparison.Ordinal);
+        Assert.IsType<XlsxFormatException>(ex.InnerException);
+
+        // Without a password the container is not read: still the password message.
+        LayoutFormatException none = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(cut), null, Options()));
+        Assert.Contains("Set LayoutOptions.Password", none.Message, StringComparison.Ordinal);
+        Assert.IsType<XlsxPasswordRequiredException>(none.InnerException);
+    }
+
+    [Fact]
+    public void A_part_larger_than_MaxSourceBytes_is_a_format_error_as_before()
+    {
+        // A small file whose sheet decompresses to more than LayoutLimits.MaxSourceBytes: Chuvadi.Sheets' MaxPartBytes
+        // (a bare InvalidDataException). Reported as in 1.x, a LayoutFormatException with that exception inside.
+        Workbook wb = new Workbook();
+        Sheet s = wb.AddSheet("Big");
+        for (int r = 1; r <= 2_000; r++)
+        {
+            s.Cell(r, 1).Value = r;
+        }
+        byte[] bytes = Save(wb);
+        LayoutOptions o = Options();
+        o.Limits = new LayoutLimits { MaxSourceBytes = bytes.Length + 16 };
+        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(bytes), null, o));
+        Assert.StartsWith("The workbook could not be read: Decompressed size limit of ", ex.Message, StringComparison.Ordinal);
+        Assert.IsType<InvalidDataException>(ex.InnerException);
+
+        // The same file within the limit lays out.
+        using LaidOutDocument doc = SheetsLayout.Open(new MemoryStream(bytes), null, Options());
+        Assert.True(doc.ResolvePageCount() > 1);
     }
 
     [Fact]

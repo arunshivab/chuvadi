@@ -65,7 +65,8 @@ namespace Chuvadi.Layout.Sheets
         };
 
         /// <summary>Reads an .xlsx (or an encrypted one, with <see cref="LayoutOptions.Password"/>) and builds the grid IR.</summary>
-        /// <exception cref="LayoutFormatException">The data is not a readable workbook, or the password is missing or wrong.</exception>
+        /// <exception cref="LayoutFormatException">The data is not a readable workbook (also a damaged encrypted workbook read with a
+        /// password), or the password is missing or wrong.</exception>
         /// <exception cref="LayoutLimitExceededException">The workbook exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static GridWorkbook Import(Stream source, SheetsImportOptions? options = null, LayoutOptions? layoutOptions = null,
             Action<LayoutWarning>? warning = null, CancellationToken cancellationToken = default)
@@ -107,8 +108,23 @@ namespace Chuvadi.Layout.Sheets
             {
                 throw new LayoutLimitExceededException(ex.LimitName, (long)ex.Limit, (long)ex.Actual);
             }
-            catch (Exception ex) when (ex is XlsxFormatException or InvalidDataException or System.Xml.XmlException or Chuvadi.Sheets.Zip.ZipFormatException)
+            catch (XlsxFormatException ex)
             {
+                // Chuvadi.Sheets 2.0: every malformed file, including a damaged encrypted one read with a password
+                // (1.x reported that as a password problem; D-167). The original error is ex.InnerException.
+                throw new LayoutFormatException("The workbook could not be read: " + ex.Message, ex);
+            }
+            catch (InvalidDataException ex)
+            {
+                // Chuvadi.Sheets 2.0 throws a bare InvalidDataException only for XlsxReaderOptions.MaxPartBytes (a part
+                // larger than LayoutLimits.MaxSourceBytes once decompressed). Reported as before, as a format error: the
+                // exception carries no limit and actual size to build a LayoutLimitExceededException from.
+                throw new LayoutFormatException("The workbook could not be read: " + ex.Message, ex);
+            }
+            catch (System.Xml.XmlException ex)
+            {
+                // Not thrown by Chuvadi.Sheets 2.0 (wrapped in XlsxFormatException); kept so that a malformed part can
+                // never escape as an XML error.
                 throw new LayoutFormatException("The workbook could not be read: " + ex.Message, ex);
             }
             return wb;
