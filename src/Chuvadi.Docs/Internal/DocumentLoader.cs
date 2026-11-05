@@ -53,19 +53,7 @@ internal static class DocumentLoader
     private static Document BuildModel(Stream packageStream, DocxReaderOptions options, CancellationToken ct)
     {
         using var pkg = OoxmlPackage.Open(packageStream);
-
-        string? documentUri = null;
-        foreach (var rel in pkg.GetRelationships("/"))
-        {
-            if (rel.Type.EndsWith("/officeDocument", StringComparison.Ordinal))
-            {
-                documentUri = "/" + rel.Target.TrimStart('/');
-                break;
-            }
-        }
-        if (documentUri is null)
-            throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
-        CheckMainPart(pkg, documentUri);
+        string documentUri = FindMainDocument(pkg);
 
         var doc = new Document();
 
@@ -1110,6 +1098,39 @@ internal static class DocumentLoader
         "application/vnd.ms-word.document.macroEnabled.main+xml",
         "application/vnd.ms-word.template.macroEnabledTemplate.main+xml",
     };
+
+    /// <summary>
+    /// The main document part of a Word package: the target of the root officeDocument
+    /// relationship, checked with <see cref="CheckMainPart"/>. Throws <see cref="DocxFormatException"/>
+    /// when there is none or it is not a Word document.
+    /// </summary>
+    internal static string FindMainDocument(OoxmlPackage pkg)
+    {
+        string? documentUri = null;
+        foreach (var rel in pkg.GetRelationships("/"))
+        {
+            if (rel.Type.EndsWith("/officeDocument", StringComparison.Ordinal))
+            {
+                documentUri = "/" + rel.Target.TrimStart('/');
+                break;
+            }
+        }
+        if (documentUri is null)
+            throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
+        CheckMainPart(pkg, documentUri);
+        return documentUri;
+    }
+
+    /// <summary>
+    /// Checks that <paramref name="packageBytes"/> is a Word package exactly as
+    /// <see cref="Document.Load(Stream, string?)"/> and <see cref="DocxReader.Open(Stream, string?, DocxReaderOptions?)"/>
+    /// do before reading it (used by the template entry points, Docs 2.0).
+    /// </summary>
+    internal static void CheckWordPackage(byte[] packageBytes)
+    {
+        using var pkg = OoxmlPackage.Open(new MemoryStream(packageBytes, writable: false));
+        FindMainDocument(pkg);
+    }
 
     /// <summary>
     /// Rejects a package whose main part is not a Word document (a workbook or presentation renamed

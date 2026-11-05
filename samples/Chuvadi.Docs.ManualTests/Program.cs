@@ -42,6 +42,8 @@ public static class Program
             ("LoaderHandoff", LoaderHandoffTests.Run),
             ("FieldsNotes", FieldsNotesTests.Run),
             ("CommentsRevisions", CommentsRevisionsTests.Run),
+            ("ErrorContract", ErrorContractTests.Run),
+            ("EncryptedSave", EncryptedSaveTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

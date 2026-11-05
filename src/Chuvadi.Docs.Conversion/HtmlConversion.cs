@@ -42,8 +42,15 @@ public static class HtmlConversion
     {
         if (html is null) throw new ArgumentNullException(nameof(html));
         var o = options ?? new HtmlImportOptions();
-        var r = HtmlSanitizer.Sanitize(html, o.Policy, encoding, cancellationToken);
-        return Build(r, null, o, cancellationToken).Document;
+        try
+        {
+            var r = HtmlSanitizer.Sanitize(html, o.Policy, encoding, cancellationToken);
+            return Build(r, null, o, cancellationToken).Document;
+        }
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "HTML");
+        }
     }
 
     /// <summary>Imports HTML bytes (into <paramref name="target"/>, or a new document when null) and reports what was left out.</summary>
@@ -51,8 +58,15 @@ public static class HtmlConversion
     {
         if (html is null) throw new ArgumentNullException(nameof(html));
         var o = options ?? new HtmlImportOptions();
-        var r = HtmlSanitizer.Sanitize(html, o.Policy, encoding, cancellationToken);
-        return Build(r, target, o, cancellationToken);
+        try
+        {
+            var r = HtmlSanitizer.Sanitize(html, o.Policy, encoding, cancellationToken);
+            return Build(r, target, o, cancellationToken);
+        }
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "HTML");
+        }
     }
 
     /// <summary>Reads HTML text from <paramref name="reader"/> into a new document.</summary>
@@ -60,17 +74,24 @@ public static class HtmlConversion
     {
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         var o = options ?? new HtmlImportOptions();
-        int max = o.Policy.Limits.MaxInputChars;
-        var sb = new StringBuilder();
-        var buffer = new char[81920];
-        int n;
-        while ((n = reader.Read(buffer, 0, buffer.Length)) > 0)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if ((long)sb.Length + n > max) throw new Chuvadi.Markup.MarkupLimitExceededException(nameof(Chuvadi.Markup.MarkupLimits.MaxInputChars), max, (long)sb.Length + n);
-            sb.Append(buffer, 0, n);
+            int max = o.Policy.Limits.MaxInputChars;
+            var sb = new StringBuilder();
+            var buffer = new char[81920];
+            int n;
+            while ((n = reader.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((long)sb.Length + n > max) throw new Chuvadi.Markup.MarkupLimitExceededException(nameof(Chuvadi.Markup.MarkupLimits.MaxInputChars), max, (long)sb.Length + n);
+                sb.Append(buffer, 0, n);
+            }
+            return Import(sb.ToString(), o, cancellationToken);
         }
-        return Import(sb.ToString(), o, cancellationToken);
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "HTML");
+        }
     }
 
     /// <summary>Reads HTML bytes from <paramref name="stream"/> (encoding sniffed unless given) into a new document.</summary>
@@ -79,17 +100,24 @@ public static class HtmlConversion
         if (stream is null) throw new ArgumentNullException(nameof(stream));
         var o = options ?? new HtmlImportOptions();
         // Up to four bytes per character: more input than that can never fit the character limit.
-        long max = 4L * o.Policy.Limits.MaxInputChars;
-        using var ms = new MemoryStream();
-        var buffer = new byte[81920];
-        int n;
-        while ((n = stream.Read(buffer, 0, buffer.Length)) > 0)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (ms.Length + n > max) throw new Chuvadi.Markup.MarkupLimitExceededException(nameof(Chuvadi.Markup.MarkupLimits.MaxInputChars), max, ms.Length + n);
-            ms.Write(buffer, 0, n);
+            long max = 4L * o.Policy.Limits.MaxInputChars;
+            using var ms = new MemoryStream();
+            var buffer = new byte[81920];
+            int n;
+            while ((n = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (ms.Length + n > max) throw new Chuvadi.Markup.MarkupLimitExceededException(nameof(Chuvadi.Markup.MarkupLimits.MaxInputChars), max, ms.Length + n);
+                ms.Write(buffer, 0, n);
+            }
+            return Import(ms.ToArray(), encoding, o, cancellationToken);
         }
-        return Import(ms.ToArray(), encoding, o, cancellationToken);
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "HTML");
+        }
     }
 
     /// <summary>Appends HTML to the body of <paramref name="target"/>.</summary>
@@ -104,8 +132,15 @@ public static class HtmlConversion
     {
         if (html is null) throw new ArgumentNullException(nameof(html));
         var o = options ?? new HtmlImportOptions();
-        var r = HtmlSanitizer.Sanitize(html, o.Policy, cancellationToken);
-        return Build(r, target, o, cancellationToken);
+        try
+        {
+            var r = HtmlSanitizer.Sanitize(html, o.Policy, cancellationToken);
+            return Build(r, target, o, cancellationToken);
+        }
+        catch (Chuvadi.Markup.MarkupLimitExceededException e)
+        {
+            throw InputLimits.From(e, "HTML");
+        }
     }
 
     private static ConversionResult Build(SanitizeResult r, Document? target, HtmlImportOptions o, CancellationToken ct)

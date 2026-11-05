@@ -27,6 +27,7 @@ public static class Program
             ("HtmlExport", HtmlExportTests.Run),
             ("RoundTrip", RoundTripTests.Run),
             ("ReviewFixes", ReviewFixesTests.Run),
+            ("InputLimits", InputLimitTests.Run),
         };
         var filter = args.Length > 0 ? args[0] : null;
         foreach (var (name, run) in groups)

@@ -357,6 +357,22 @@ var a = r.GetActiveContent();
 
 `Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent yet (charts and shapes, most fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
 
+## Errors
+
+Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers (`Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent`, `ContainsVbaProject`), and `DocxTemplate.Fill`, `GetPlaceholders` and `CheckTemplate` — reports a file it cannot read as one exception type:
+
+| Exception | When |
+|---|---|
+| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document. The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
+| `DocxSecurityLimitException` (a `DocxFormatException`) | A resource limit was exceeded (see **Untrusted input**). Thrown as itself, never wrapped. |
+| `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. |
+| `DocxTemplateException` | A fill problem: a strict fill with missing values, or a template limit (`MaxGeneratedItems`, …). Lists every problem. |
+| `OperationCanceledException` | The `CancellationToken` was cancelled. |
+
+Caller mistakes keep their own types: `ArgumentException` / `ArgumentNullException` for bad arguments, `FileNotFoundException` and other file-system errors when opening or writing a file by path (`SaveImages` writing a picture, for example), `ObjectDisposedException` for a disposed reader. `DocxReader` lazy readers (`Paragraphs()`, `Tables()`) throw while being enumerated, not when called.
+
+Docs.Conversion's importers report an input limit as `DocxLimitExceededException` (in `Chuvadi.Docs.Model`), with `LimitName`, `Limit` and `Actual`. Like Chuvadi.Sheets' `XlsxLimitExceededException` it derives from `IOException` and is never wrapped.
+
 ## Images
 
 Insert images inline (in the text flow) or floating (absolutely positioned, with text wrap):
@@ -421,6 +437,7 @@ DocxTemplate.Fill("template.docx", "out.docx",
 ```csharp
 // Encrypt: file cannot be opened without the password.
 doc.SaveTo("secret.docx", new EncryptionOptions { Password = "S3cret!" });
+doc.SaveTo(outputStream, new EncryptionOptions { Password = "S3cret!" });   // to a stream (left open)
 
 // Decrypt: works with Word-encrypted files too.
 var loaded = Document.Load("secret.docx", "S3cret!");
@@ -428,6 +445,8 @@ var loaded = Document.Load("secret.docx", "S3cret!");
 ```
 
 Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` reference implementation. Integrity (HMAC-SHA512) is verified on every decrypt.
+
+The plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path writes beside the target and replaces it only when the save succeeded, so a failing save leaves an existing file untouched.
 
 On Windows, real-time antivirus (Microsoft Defender) scans an encrypted Office file when it is opened, by trying the default Office password, which runs the full key derivation at the file's declared spin count. That happens inside the operating system's file-open call, before the library reads a byte, so neither `MaxSpinCount` nor the `CancellationToken` can shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine, then milliseconds once the scan result was cached. Both limits apply in full to the library's own work, and to streams that are already open or held in memory.
 

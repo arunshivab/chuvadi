@@ -207,9 +207,16 @@ public sealed partial class DocxReader : IDisposable
         {
             EnsureNotDisposed();
             if (_scan.ContainsVbaProject) return true;
-            foreach (var rel in _package.GetRelationships(_documentUri))
-                if (rel.Type == RelTypeVba) return true;
-            return false;
+            try
+            {
+                foreach (var rel in _package.GetRelationships(_documentUri))
+                    if (rel.Type == RelTypeVba) return true;
+                return false;
+            }
+            catch (Exception ex) when (!DocxErrors.IsContract(ex))
+            {
+                throw DocxErrors.Wrap(ex, DocxErrors.ReadMessage);
+            }
         }
     }
 
@@ -227,6 +234,15 @@ public sealed partial class DocxReader : IDisposable
     public DocxActiveContent GetActiveContent(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
+        try { return GetActiveContentCore(cancellationToken); }
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.ReadMessage);
+        }
+    }
+
+    private DocxActiveContent GetActiveContentCore(CancellationToken cancellationToken)
+    {
         bool activeX = _scan.HasActiveXParts;
         bool embedded = _scan.HasEmbeddedObjects;
         bool altChunks = false, remoteTemplate = false, externalResources = false;
@@ -368,7 +384,7 @@ public sealed partial class DocxReader : IDisposable
     public IEnumerable<ParagraphInfo> Paragraphs(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
-        return ParagraphsIterator(cancellationToken);
+        return DocxErrors.Guard(ParagraphsIterator(cancellationToken));
     }
 
     private IEnumerable<ParagraphInfo> ParagraphsIterator(CancellationToken ct)
@@ -388,7 +404,7 @@ public sealed partial class DocxReader : IDisposable
     public IEnumerable<string[][]> Tables(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
-        return TablesIterator(cancellationToken);
+        return DocxErrors.Guard(TablesIterator(cancellationToken));
     }
 
     private IEnumerable<string[][]> TablesIterator(CancellationToken ct)
@@ -409,9 +425,16 @@ public sealed partial class DocxReader : IDisposable
     public string ExtractText(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
-        var sb = new StringBuilder();
-        foreach (var uri in ReadOrder()) AppendTextFromPart(uri, sb, cancellationToken);
-        return sb.ToString();
+        try
+        {
+            var sb = new StringBuilder();
+            foreach (var uri in ReadOrder()) AppendTextFromPart(uri, sb, cancellationToken);
+            return sb.ToString();
+        }
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.ReadMessage);
+        }
     }
 
     /// <summary>Body, then headers and footers when enabled.</summary>

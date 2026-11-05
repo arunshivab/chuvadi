@@ -78,7 +78,7 @@ Inline tags arrive one at a time, so the content of an inline `<script>` or `<st
 **Limits and cancellation.**
 - Every entry point takes a `CancellationToken`.
 - Parsing runs under Chuvadi.Markup's `MarkupLimits`.
-- Input beyond them throws `MarkupLimitExceededException`. That is Markup's documented exception: hostile nesting stops quickly instead of running for minutes.
+- Input beyond them throws `DocxLimitExceededException` (from `Chuvadi.Docs.Model`, an `IOException`, with `LimitName`, `Limit` and `Actual`, as Chuvadi.Sheets' `XlsxLimitExceededException`), from every importer: Markdown, HTML and text. Markup's own `MarkupLimitExceededException` is its `InnerException`; the text importer's size cap (`TextImportOptions.MaxInputChars`) has none. Hostile nesting stops quickly instead of running for minutes.
 
 ## Export notes
 

@@ -28,11 +28,18 @@ public sealed partial class DocxReader
         EnsureNotDisposed();
         var result = new List<ImageInfo>();
 
-        CollectImagesFromPart(_documentUri, ImageHost.Body, result, cancellationToken);
-        if (_options.IncludeHeadersAndFooters)
+        try
         {
-            foreach (var uri in _headerUris) CollectImagesFromPart(uri, ImageHost.Header, result, cancellationToken);
-            foreach (var uri in _footerUris) CollectImagesFromPart(uri, ImageHost.Footer, result, cancellationToken);
+            CollectImagesFromPart(_documentUri, ImageHost.Body, result, cancellationToken);
+            if (_options.IncludeHeadersAndFooters)
+            {
+                foreach (var uri in _headerUris) CollectImagesFromPart(uri, ImageHost.Header, result, cancellationToken);
+                foreach (var uri in _footerUris) CollectImagesFromPart(uri, ImageHost.Footer, result, cancellationToken);
+            }
+        }
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.ReadMessage);
         }
         return result;
     }
