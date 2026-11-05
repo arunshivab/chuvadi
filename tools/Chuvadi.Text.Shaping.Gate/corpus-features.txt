@@ -1,0 +1,13 @@
+# Feature settings the local gate passes for every corpus line (UseDefaultFeatures = false).
+# PROVISIONAL: this mirrors the 3.26 contract's ShapingFeatures defaults with cpsp off, which is
+# what the pack says the expected outputs used. It will be replaced by the exact settings once the
+# Pdf chat sends the generation metadata (design note v1, item d.2).
+# Format: tag=value, one per line. Script-required features are not listed; the shaper always applies them.
+ccmp=1
+locl=1
+calt=1
+liga=1
+kern=1
+mark=1
+mkmk=1
+cpsp=0

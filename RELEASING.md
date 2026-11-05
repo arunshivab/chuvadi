@@ -20,10 +20,13 @@
 | `layout-documents-v*` | Chuvadi.Layout.Documents | `src/Chuvadi.Layout.Documents/Chuvadi.Layout.Documents.csproj` |
 | `layout-fonts-v*` | Chuvadi.Layout.Fonts | `src/Chuvadi.Layout.Fonts/Chuvadi.Layout.Fonts.csproj` |
 | `layout-markup-v*` | Chuvadi.Layout.Markup | `src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj` |
+| `opentype-v*` | Chuvadi.OpenType | `src/Chuvadi.OpenType/Chuvadi.OpenType.csproj` |
+| `text-shaping-v*` | Chuvadi.Text.Shaping | `src/Chuvadi.Text.Shaping/Chuvadi.Text.Shaping.csproj` |
 
 Chuvadi.Docs.Conversion has no tag of its own: it rides on `docs-v*`. Chuvadi.Print.Windows, .Ipp and
 .Remote ride on `print-v*`. The workflow refuses a `docs-v*` or `print-v*` tag when any `<Version>` of the
-packages it releases differs from the tag version.
+packages it releases differs from the tag version. The same check runs for `opentype-v*` and `text-shaping-v*`
+(one package each).
 
 **Release notes.** The GitHub release body is the `## <version>` section of each released package's
 `src/<package>/CHANGELOG.md` (the heading must start with the exact tag version, for example `## 1.0.0 (date)`),
@@ -40,7 +43,8 @@ match `layout-fonts-v…`: a case pattern matches from the start.)
 A package must be released after the packages it depends on. Chuvadi.Layout references
 Chuvadi.Fonts only; Chuvadi.Layout.Docs references Chuvadi.Layout and Chuvadi.Docs, Chuvadi.Layout.Sheets
 Chuvadi.Layout and Chuvadi.Sheets, Chuvadi.Layout.Documents both of those; Chuvadi.Layout.Fonts and
-Chuvadi.Layout.Markup reference Chuvadi.Layout (Layout.Markup also Chuvadi.Markup):
+Chuvadi.Layout.Markup reference Chuvadi.Layout (Layout.Markup also Chuvadi.Markup). Chuvadi.OpenType has no
+dependencies; Chuvadi.Text.Shaping references Chuvadi.OpenType only:
 
 1. `zip-v*`
 2. `markup-v*`
@@ -49,8 +53,9 @@ Chuvadi.Layout.Markup reference Chuvadi.Layout (Layout.Markup also Chuvadi.Marku
 5. `layout-v*`
 6. `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*`, `layout-markup-v*` (any order)
 7. `layout-documents-v*`
+8. `opentype-v*`, then `text-shaping-v*` (OpenType first; both after `fonts-v*`, and independent of the Layout packages)
 
-(`sheets-v1.7.0` is already released. `print-v*` is not scheduled: the Print packages are in progress.
+(`sheets-v2.0.0` is already released. `print-v*` is not scheduled: the Print packages are in progress.
 Chuvadi.Print.Windows, .Ipp and .Remote depend on Chuvadi.Print, and they release with it.)
 Push one tag, wait for its Release workflow to finish green, then push the next. Create each tag
 on a commit whose `release.yml` already knows the prefix: a tag runs the workflow file that exists

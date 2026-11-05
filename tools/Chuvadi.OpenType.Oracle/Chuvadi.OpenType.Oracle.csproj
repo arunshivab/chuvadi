@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Phase 0 exit check (design note v1): compares Chuvadi.OpenType with the
+    published Chuvadi.Pdf.Fonts.Rendering 3.31.0 FontFace public API on the pack
+    fonts, and our test-support WOFF2 decoder with Chuvadi.Pdf.Fonts.Woff2.
+    Uses only those packages' public members (CONTRACT.md, plus FontFace.GetGlyphBounds).
+    Run on Arun's machine; needs the 3.31.0 packages in the local feed.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <ChuvadiVersion Condition="'$(ChuvadiVersion)' == ''">3.31.0</ChuvadiVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Chuvadi.Pdf.Fonts.Rendering" Version="$(ChuvadiVersion)" />
+    <PackageReference Include="Chuvadi.Pdf.Fonts.Woff2" Version="$(ChuvadiVersion)" />
+    <ProjectReference Include="..\..\src\Chuvadi.OpenType\Chuvadi.OpenType.csproj" />
+  </ItemGroup>
+
+</Project>
