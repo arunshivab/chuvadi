@@ -132,22 +132,25 @@ namespace Chuvadi.Layout.Engine.Flow
             return w;
         }
 
-        /// <summary>Moves a table down until it overlaps no floating table it may not overlap (either one not allowing it).</summary>
+        /// <summary>
+        /// Moves a table down until it overlaps no floating table it may not overlap (either one not allowing it), to the
+        /// upper table's distance from text below it (decision B; Word, calib-overlap O2, keeps that distance too: N5).
+        /// </summary>
         private static double ClearOfFloatingTables(PageFill f, FloatingTablePosition fp, double x, double width, double yTop, double height)
         {
             for (int pass = 0; pass <= f.FloatingTables.Count; pass++)
             {
                 bool moved = false;
-                foreach ((LayoutRect r, bool allow) in f.FloatingTables)
+                foreach ((LayoutRect r, bool allow, double below) in f.FloatingTables)
                 {
                     if (fp.AllowOverlap && allow)
                     {
                         continue;
                     }
-                    bool overlaps = x < r.Right - Epsilon && x + width > r.X + Epsilon && yTop < r.Bottom - Epsilon && yTop + height > r.Y + Epsilon;
+                    bool overlaps = x < r.Right - Epsilon && x + width > r.X + Epsilon && yTop < r.Bottom + below - Epsilon && yTop + height > r.Y + Epsilon;
                     if (overlaps)
                     {
-                        yTop = r.Bottom;
+                        yTop = r.Bottom + below;
                         moved = true;
                     }
                 }
@@ -176,7 +179,7 @@ namespace Chuvadi.Layout.Engine.Flow
                     DistanceRight = fp.DistanceRight,
                     Side = FloatWrapSide.BothSides,
                 });
-                f.FloatingTables.Add((new LayoutRect(x, yTop, width, tp.Y - yTop), fp.AllowOverlap));
+                f.FloatingTables.Add((new LayoutRect(x, yTop, width, tp.Y - yTop), fp.AllowOverlap, fp.DistanceBottom));
             }
             return tp;
         }

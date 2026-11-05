@@ -124,7 +124,7 @@ namespace Chuvadi.Layout.Engine.Flow
             public required HashSet<object> Reached { get; init; }
 
             /// <summary>Floating tables placed on the page: their boxes and whether they let others overlap them.</summary>
-            public List<(LayoutRect Rect, bool AllowOverlap)> FloatingTables { get; init; } = new List<(LayoutRect, bool)>();
+            public List<(LayoutRect Rect, bool AllowOverlap, double DistanceBelow)> FloatingTables { get; init; } = new List<(LayoutRect, bool, double)>();
             public required PageRecord Record { get; init; }
             public required PageGeometry PageGeom { get; init; }
             public required double BodyTop { get; init; }
@@ -150,7 +150,7 @@ namespace Chuvadi.Layout.Engine.Flow
                     Seeded = new HashSet<object>(Seeded, ReferenceEqualityComparer.Instance),
                     Late = new List<Preseed>(Late),
                     Reached = new HashSet<object>(Reached, ReferenceEqualityComparer.Instance),
-                    FloatingTables = new List<(LayoutRect, bool)>(FloatingTables),
+                    FloatingTables = new List<(LayoutRect, bool, double)>(FloatingTables),
                     Record = Record,
                     PageGeom = PageGeom,
                     BodyTop = BodyTop,
