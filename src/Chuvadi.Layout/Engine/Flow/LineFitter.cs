@@ -58,7 +58,9 @@ namespace Chuvadi.Layout.Engine.Flow
     /// <summary>Breaks a measured paragraph into lines for a given text-area width.</summary>
     internal static class LineFitter
     {
-        private const double Epsilon = 0.01;
+        // How far a line may run past the right edge: floating-point noise only. The margins and indents are a hard limit
+        // in the file, and Word wraps a line 0.0008 pt too wide (F5, A7 part E).
+        private const double Epsilon = 1e-6;
 
         public static List<FittedLine> Fit(MeasuredParagraph m, double areaWidth, double defaultTabStop)
         {
@@ -247,7 +249,7 @@ namespace Chuvadi.Layout.Engine.Flow
                 visibleEnd--;
             }
             bool isLast = end >= n && !lineBreak && !pageBreak;
-            (double asc, double desc) = LineMetrics(m, s, end, isLast);
+            (double asc, double desc) = LineMetrics(m, s, end);
             (double height, double baseline) = ApplySpacing(pf, asc, desc);
             return new FittedLine
             {
@@ -409,7 +411,12 @@ namespace Chuvadi.Layout.Engine.Flow
             return Math.Max(0, w);
         }
 
-        private static (double Ascent, double Descent) LineMetrics(MeasuredParagraph m, int start, int end, bool includeMark)
+        /// <summary>
+        /// Ascent and descent of a line: its segments'. The paragraph mark counts only for a line with nothing else on it,
+        /// an empty paragraph or an empty last line (F6); so a line of pictures only is the pictures' height (F4).
+        /// Standard silent; follows Word 2021 as measured (A7 parts B and C).
+        /// </summary>
+        private static (double Ascent, double Descent) LineMetrics(MeasuredParagraph m, int start, int end)
         {
             double asc = 0, desc = 0;
             bool any = false;
@@ -427,7 +434,7 @@ namespace Chuvadi.Layout.Engine.Flow
                 desc = Math.Max(desc, seg.Descent);
                 any = true;
             }
-            if (includeMark || !any)
+            if (!any)
             {
                 asc = Math.Max(asc, m.MarkAscent);
                 desc = Math.Max(desc, m.MarkDescent);

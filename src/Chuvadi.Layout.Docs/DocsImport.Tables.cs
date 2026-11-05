@@ -9,8 +9,9 @@ namespace Chuvadi.Layout.Docs
 {
     internal sealed partial class DocsImport
     {
-        // Word's default cell margins (tblCellMar): 0.08 inch left and right, none top and bottom.
-        private const double DefaultCellMarginSide = 5.4;
+        // Cell margins when neither the table, its style nor Table Normal states any: 115 twips left and right
+        // (ECMA-376 Part 1, 17.4.34 and 17.4.11), none top and bottom (F3).
+        private const double DefaultCellMarginSide = 5.75;
 
         /// <summary>
         /// A floating table (w:tblpPr) in the body: its position as the file states it (ECMA-376 17.4.57; omitted anchors
@@ -280,6 +281,11 @@ namespace Chuvadi.Layout.Docs
                 {
                     _behind = outer;
                 }
+            }
+            if (fc.Blocks.Count >= 2 && fc.Blocks[^1] is FlowParagraph last && last.Inlines.Count == 0 && fc.Blocks[^2] is FlowTable)
+            {
+                // F2: the empty paragraph that must end a cell after a nested table takes no height (Word, every mode).
+                fc.Blocks.RemoveAt(fc.Blocks.Count - 1);
             }
             if (fc.Blocks.Count == 0)
             {

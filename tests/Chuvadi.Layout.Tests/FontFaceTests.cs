@@ -74,7 +74,7 @@ public class FontFaceTests
     }
 
     [Theory]
-    [InlineData("Carlito-Regular.ttf", 11.0, 7)]          // Excel reference: Calibri 11 \u2192 MDW 7 px (default column = 64 px)
+    [InlineData("Carlito-Regular.ttf", 11.0, 7)]          // Excel reference: Calibri 11 \u2192 MDW 7 px (default column = 61 px)
     [InlineData("LiberationSans-Regular.ttf", 10.0, 7)]   // Excel reference: Arial 10 \u2192 MDW 7 px
     public void Max_digit_width_reproduces_Excel_reference_points(string file, double size, int expected)
     {

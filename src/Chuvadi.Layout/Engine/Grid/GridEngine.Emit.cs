@@ -176,6 +176,7 @@ namespace Chuvadi.Layout.Engine.Grid
                 {
                     continue;
                 }
+                EmitContinuedText(sheet, geo, rec.ColumnFirst, row, cols, gx, gy, s, ops);
                 bool firstInRow = true;
                 foreach (Track col in cols)
                 {
@@ -511,14 +512,11 @@ namespace Chuvadi.Layout.Engine.Grid
                     '-' => TabLeader.Hyphen,
                     '_' => TabLeader.Underscore,
                     '\u00B7' => TabLeader.MiddleDot,
-                    _ => TabLeader.None,
+                    ' ' => TabLeader.None,
+                    _ => TabLeader.Dot, // drawn with the fill character itself (LeaderCharacter)
                 };
-                if (leader == TabLeader.None && fill != ' ')
-                {
-                    _ctx.Warn(LayoutWarningCodes.FillApproximated, LayoutWarningSeverity.Fidelity,
-                        $"The number-format fill character '{fill}' is drawn as space; its text is placed at the cell edges.");
-                }
-                p.Format = pf with { Alignment = ParagraphAlignment.Left, LeftIndent = 0, RightIndent = 0, TabStops = new[] { new TabStop(width, TabAlignment.Right, leader) } };
+                char? custom = leader == TabLeader.Dot && fill != '.' ? fill : null;
+                p.Format = pf with { Alignment = ParagraphAlignment.Left, LeftIndent = 0, RightIndent = 0, TabStops = new[] { new TabStop(width, TabAlignment.Right, leader, custom) } };
                 CharacterFormat f = Scaled(st.Font, scale);
                 if (at > 0)
                 {
@@ -558,8 +556,47 @@ namespace Chuvadi.Layout.Engine.Grid
             };
         }
 
+        /// <summary>
+        /// F11 (standard silent; follows Excel): text that overflows from a cell left of this page's first column, through
+        /// empty cells, continues on this page. The cell is laid out where it would be if the grid went on to the left, and
+        /// only the part on this page is drawn. Not with print-title columns, which sit between the two.
+        /// </summary>
+        private void EmitContinuedText(GridSheet sheet, GridGeometry geo, int firstColumn, Track row, List<Track> cols, double gx, double gy, double s, List<LayoutOp> ops)
+        {
+            const int MaxScan = 256;
+            if (firstColumn <= 0 || cols.Count == 0 || cols[0].Index != firstColumn || !IsEmpty(sheet, row.Index, firstColumn))
+            {
+                return;
+            }
+            int c = firstColumn - 1;
+            while (c >= 0 && firstColumn - c <= MaxScan && IsEmpty(sheet, row.Index, c))
+            {
+                c--;
+            }
+            if (c < 0 || firstColumn - c > MaxScan || InMerge(sheet, row.Index, c) || sheet.GetCell(row.Index, c) is not GridCell cell)
+            {
+                return;
+            }
+            if (cell.Kind == CellValueKind.Number || cell.Style.WrapText || cell.Style.ShrinkToFit || cell.Runs is null && cell.DisplayText.Length == 0
+                || EffectiveAlignment(cell) is not (CellHorizontalAlignment.Left or CellHorizontalAlignment.General or CellHorizontalAlignment.Center))
+            {
+                return;
+            }
+            List<Track> ext = new List<Track>();
+            double x = 0;
+            for (int k = firstColumn - 1; k >= c; k--)
+            {
+                double w = geo.ColumnWidth(k) * s;
+                x -= w;
+                ext.Insert(0, new Track(k, x, w));
+            }
+            ext.AddRange(cols);
+            LayoutRect rect = new LayoutRect(gx + ext[0].Start, gy + row.Start, ext[0].Size, row.Size);
+            EmitCellText(sheet, geo, cell, row.Index, c, rect, ext, gx, s, ops, sheet.Name + "!" + CellAddress.Format(row.Index, c), gx);
+        }
+
         private void EmitCellText(GridSheet sheet, GridGeometry geo, GridCell cell, int row, int col, LayoutRect rect, List<Track> cols, double gx, double s,
-            List<LayoutOp> ops, string path)
+            List<LayoutOp> ops, string path, double clipLeft = double.NegativeInfinity)
         {
             if (cell.DisplayText.Length == 0 && cell.Runs is null)
             {
@@ -636,7 +673,11 @@ namespace Chuvadi.Layout.Engine.Grid
                 CellVerticalAlignmentKind.Center or CellVerticalAlignmentKind.Justify or CellVerticalAlignmentKind.Distributed => rect.Y + ((rect.Height - total) / 2),
                 _ => rect.Bottom - total - onePx,
             };
-            ops.Add(new PushClipOp(clip));
+            if (clip.Right <= clipLeft)
+            {
+                return; // continued text that ends before this page
+            }
+            ops.Add(new PushClipOp(clip.X >= clipLeft ? clip : new LayoutRect(clipLeft, clip.Y, clip.Right - clipLeft, clip.Height)));
             double yy = top;
             StringBuilder ignore = new StringBuilder();
             List<LayoutBox> noBoxes = new List<LayoutBox>();

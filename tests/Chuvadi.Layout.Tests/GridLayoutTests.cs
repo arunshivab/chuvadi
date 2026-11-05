@@ -47,7 +47,7 @@ public class GridGeometryTests
     }
 
     [Fact]
-    public void Default_column_is_64_px_for_Calibri_11_and_rows_15_pt()
+    public void Default_column_is_61_px_for_Calibri_11_and_rows_15_pt()
     {
         GridSheet s = new GridSheet("S");
         s.Set(0, 0, "x");
@@ -55,7 +55,7 @@ public class GridGeometryTests
         using LaidOutDocument doc = Grid.Open(Grid.Book(s));
         LaidOutPage p = doc.GetPage(0);
         List<LayoutBox> cells = Grid.Cells(p).ToList();
-        Assert.Equal(48, cells[0].Rect.Width, 6);
+        Assert.Equal(45.75, cells[0].Rect.Width, 6); // 8 x 7 px + 5 px = 61 px (ECMA-376 18.3.1.81; W1)
         Assert.Equal(15, cells[0].Rect.Height, 6);
         Assert.Equal(50.4, cells[0].Rect.X, 6); // Excel default left margin 0.7 in
         Assert.Equal(54, cells[0].Rect.Y, 6);   // top margin 0.75 in
@@ -81,6 +81,9 @@ public class GridGeometryTests
 
 public class GridPaginationTests
 {
+    /// <summary>The default column width for Calibri 11: 61 px = 45.75 pt (ECMA-376 18.3.1.81; W1).</summary>
+    private const double Col = 45.75;
+
     [Fact]
     public void Rows_paginate_by_height_and_the_count_is_final_at_open()
     {
@@ -116,9 +119,9 @@ public class GridPaginationTests
         using LaidOutDocument doc = Grid.Open(Grid.Book(s));
         Assert.Equal(1, doc.PageCount);
         LayoutBox t1 = Grid.Cells(doc.GetPage(0)).Single(c => c.Path == "Sheet1!T1");
-        double scale = Math.Floor((595.3 - 100.8) / (20 * 48) * 100) / 100;
-        Assert.Equal(50.4 + (19 * 48 * scale), t1.Rect.X, 4);
-        Assert.Equal(48 * scale, t1.Rect.Width, 4);
+        double scale = Math.Floor((595.3 - 100.8) / (20 * Col) * 100) / 100;
+        Assert.Equal(50.4 + (19 * Col * scale), t1.Rect.X, 4);
+        Assert.Equal(Col * scale, t1.Rect.Width, 4);
     }
 
     [Fact]
@@ -191,6 +194,9 @@ public class GridPaginationTests
 
 public class GridCellRenderingTests
 {
+    /// <summary>The default column width for Calibri 11: 61 px = 45.75 pt (ECMA-376 18.3.1.81; W1).</summary>
+    private const double Col = 45.75;
+
     private static LaidOutPage One(GridSheet s) => Grid.Open(Grid.Book(s)).GetPage(0);
 
     [Fact]
@@ -203,7 +209,7 @@ public class GridCellRenderingTests
         GlyphRunOp text = Flow.Runs(p).Single(r => r.Text == "text");
         GlyphRunOp num = Flow.Runs(p).Single(r => r.Text == "42");
         Assert.Equal(50.4 + 1.5, text.X, 3);
-        Assert.Equal(50.4 + 48 - 1.5, num.X + num.Width, 3);
+        Assert.Equal(50.4 + Col - 1.5, num.X + num.Width, 3);
     }
 
     [Fact]
@@ -228,8 +234,8 @@ public class GridCellRenderingTests
         s.Set(2, 5, "wide"); // makes the used range span A:F, so A1 has empty neighbours on the page
         LaidOutPage p = One(s);
         List<PushClipOp> clips = p.DisplayList.OfType<PushClipOp>().ToList();
-        Assert.True(clips[0].Rect.Width > 48 * 2, "row 1 clip should extend over empty cells");
-        Assert.Equal(48, clips[1].Rect.Width, 6);
+        Assert.True(clips[0].Rect.Width > Col * 2, "row 1 clip should extend over empty cells");
+        Assert.Equal(Col, clips[1].Rect.Width, 6);
     }
 
     [Fact]
@@ -254,11 +260,11 @@ public class GridCellRenderingTests
         s.PageSetup = new GridPageSetup { PrintGridlines = true };
         LaidOutPage p = One(s);
         LayoutBox a1 = Grid.Cells(p).Single(c => c.Path == "S!A1");
-        Assert.Equal(144, a1.Rect.Width, 6);
+        Assert.Equal(3 * Col, a1.Rect.Width, 6);
         GlyphRunOp title = Flow.Runs(p).Single(r => r.Text == "Title");
-        Assert.Equal(50.4 + 72, title.X + (title.Width / 2), 2);
+        Assert.Equal(50.4 + (1.5 * Col), title.X + (title.Width / 2), 2);
         // No vertical gridline at x = A|B or B|C inside row 1.
-        double xAB = 50.4 + 48;
+        double xAB = 50.4 + Col;
         Assert.DoesNotContain(p.DisplayList.OfType<StrokeLineOp>(), l => Math.Abs(l.X1 - xAB) < 0.01 && Math.Abs(l.X2 - xAB) < 0.01 && l.Y1 < 54 + 1 && l.Y2 > 54 + 14);
     }
 
@@ -275,7 +281,7 @@ public class GridCellRenderingTests
         });
         LaidOutPage p = One(s);
         FillRectOp fill = Assert.Single(p.DisplayList.OfType<FillRectOp>());
-        Assert.Equal(new LayoutRect(50.4, 54, 48, 15), fill.Rect);
+        Assert.Equal(new LayoutRect(50.4, 54, Col, 15), fill.Rect);
         Assert.Contains(p.DisplayList.OfType<StrokeLineOp>(), l => l.Width == 0.75 && Math.Abs(l.Y1 - 69) < 0.01);
         GlyphRunOp run = Assert.Single(Flow.Runs(p));
         Assert.Equal("Liberation Sans", run.Font.FamilyName);

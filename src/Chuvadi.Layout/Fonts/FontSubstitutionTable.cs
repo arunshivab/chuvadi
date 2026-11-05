@@ -36,7 +36,8 @@ namespace Chuvadi.Layout.Fonts
 
         /// <summary>
         /// The default table. Metric-compatible: Arial/Helvetica → Liberation Sans, Times New Roman/Times →
-        /// Liberation Serif, Courier New/Courier → Liberation Mono, Calibri → Carlito, Cambria → Caladea.
+        /// Liberation Serif, Courier New/Courier → Liberation Mono, Calibri → Carlito. Cambria → Caladea is the nearest
+        /// design but not metric-compatible (Cambria is 6.5% wider and its lines are shorter; F1).
         /// Common Office families without a metric-compatible OFL equivalent map to the nearest design
         /// (not metric-compatible, reported as such). Indic scripts fall back to the matching LiPi Sans face.
         /// </summary>
@@ -60,7 +61,7 @@ namespace Chuvadi.Layout.Fonts
                 t.SetSubstitutes(f, new FontSubstitute(Mono, true));
             }
             t.SetSubstitutes("Calibri", new FontSubstitute("Carlito", true));
-            t.SetSubstitutes("Cambria", new FontSubstitute("Caladea", true));
+            t.SetSubstitutes("Cambria", new FontSubstitute("Caladea", false));
 
             foreach (string f in new[] { "Calibri Light", "Aptos", "Aptos Display", "Aptos Narrow", "Candara", "Corbel" })
             {

@@ -21,7 +21,7 @@ The LiPi Sans files (22) moved unchanged to Chuvadi.Fonts (D-113); their provena
 | Times New Roman | Liberation Serif | yes |
 | Courier New | Liberation Mono | yes |
 | Calibri | Carlito | yes |
-| Cambria | Caladea | yes |
+| Cambria | Caladea | no: Cambria is 6.5% wider and its lines are shorter (measured against Word 2021, A7 F1); reported as `Substitute` |
 | Georgia | Gelasio | stated by its designer; not yet measured, so reported as `Substitute` |
 | Segoe UI (Light, Semilight, Semibold) | Selawik (Light, Semilight, Semibold) | no (reported as `Substitute`) |
 | Calibri Light, Aptos, Consolas, … | nearest design | no (reported as `Substitute`) |

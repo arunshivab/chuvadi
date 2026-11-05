@@ -11,7 +11,7 @@ own packages, so an app takes only what it needs:
 | Chuvadi.Layout.Sheets | Excel workbooks (.xlsx), through Chuvadi.Sheets: `SheetsLayout.Open` |
 | Chuvadi.Layout.Documents | any of these, format detected: `AutoDetectLayout.Open` |
 | Chuvadi.Layout.Markup | Markdown and sanitized HTML, through Chuvadi.Markup |
-| Chuvadi.Layout.Fonts | the Office metric-compatible substitute fonts (Liberation, Carlito, Caladea) |
+| Chuvadi.Layout.Fonts | the Office substitute fonts (metric-compatible Liberation and Carlito; Caladea for Cambria) |
 
 PDF, SVG and PNG output ships separately as Chuvadi.Layout.Pdf; SVG is also in this package (`LayoutSvg`).
 

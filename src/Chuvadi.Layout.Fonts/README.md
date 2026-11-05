@@ -20,7 +20,8 @@ FontResolution calibri = fonts.Resolve(new FontRequest("Calibri"));   // → Car
 - **Liberation Sans / Serif / Mono:** metric-compatible with Arial / Times New Roman / Courier New.
   Four styles each.
 - **Carlito:** metric-compatible with Calibri. Four styles.
-- **Caladea:** metric-compatible with Cambria. Four styles.
+- **Caladea:** the nearest design to Cambria, but not metric-compatible with the Cambria Word uses (6.5% wider);
+  reported as `Substitute`. Four styles.
 - **Gelasio:** for Georgia (its designer states metric compatibility; Layout treats it as non-metric until measured).
   Four styles.
 - **Selawik:** for Segoe UI, a replacement design without Segoe UI's kerning. Regular, Bold, Light, Semilight and

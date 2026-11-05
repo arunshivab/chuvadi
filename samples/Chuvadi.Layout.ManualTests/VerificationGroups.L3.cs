@@ -26,7 +26,7 @@ namespace Chuvadi.Layout.ManualTests
             LaidOutPage p1 = doc.GetPage(0);
             Check(p1.GetText().StartsWith("Chuvadi.Layout flow showcase", StringComparison.Ordinal), "page 1 starts with the title");
             Check(p1.DisplayList.OfType<LinkOp>().Any(l => l.Uri == "https://example.org"), "hyperlink op present");
-            Check(doc.FontSubstitutions.Any(s => s.RequestedFamily == "Cambria" && s.MetricCompatible), "Cambria substitution reported");
+            Check(doc.FontSubstitutions.Any(s => s.RequestedFamily == "Cambria" && !s.MetricCompatible), "Cambria substitution reported, not metric-compatible (F1)");
             foreach (LaidOutPage page in doc.GetPages())
             {
                 foreach (LayoutBox line in page.Boxes.Where(b => b.Kind == LayoutBoxKind.Line))

@@ -1,14 +1,15 @@
 # Chuvadi.Layout: how a document is laid out, point by point
 
-This page says, for each layout point Chuvadi.Layout handles, what the file format's standard says, what Word 2021
-does, and what Layout does. Where Layout differs from Word or WPS Office on purpose, it says so here.
+This page says, for each layout point Chuvadi.Layout handles, what the file format's standard says, what Word 2021 or
+Excel 2021 does, and what Layout does. Where Layout differs from Word, Excel or WPS Office on purpose, it says so here;
+those points are also listed, for the whole Chuvadi family, in [docs/DIFFERENCES.md](../DIFFERENCES.md).
 
 ## The rule
 
 1. **The file and its standard decide.** For .docx and .xlsx that is ECMA-376 Part 1, 5th edition (2016). Where the
    standard is clear and Word does something else, Layout follows the standard.
-2. **Where the standard is silent, Layout follows Word 2021 as measured.** Each such point is marked "standard silent;
-   follows Word" below, with the test file that measured it.
+2. **Where the standard is silent, Layout follows Word 2021 (or Excel 2021) as measured.** Each such point is marked
+   "standard silent; follows Word" below, with the test file that measured it.
 3. **Word is measured from its own PDF export** (File > Save As > PDF), not from its screen. Word's screen layout can
    differ from its PDF export of the same file (see "Screen and print" below).
 
@@ -18,7 +19,40 @@ Sources:
   where Microsoft lists the points on which Word departs from the standard.
 - Word 2021 PDF exports of the calibration files in `tests/Chuvadi.Layout.Docs.Tests/Fixtures/floating` and
   `tests/Chuvadi.Layout.Docs.Tests/Fixtures/columns` (measured 3 to 5 November 2026).
+- Word and Excel 2021 PDF exports and Excel's own width readings for the A7 calibration files (3 November 2026):
+  parts B (paragraph mark), C (pictures), D (tables), E (right margin), and the Columns, Default and Overflow sheets.
 - WPS Office, observed on screen on 5 November 2026 (no measurements; noted only where it differs visibly).
+
+## Lines, paragraphs and tables (.docx)
+
+| Point | The standard | Word 2021 | Layout |
+|---|---|---|---|
+| Right margin and indents | The text area's limit | A line 0.0008 pt too wide wraps (A7 E1 to E3: exact, in every mode) | Same: a line may pass the edge only by floating-point noise |
+| Height of a line with text | Standard silent | The paragraph mark's size does not raise it (A7 B1: 8 pt text under an 11 pt mark keeps 9.7 pt) | Same (standard silent; follows Word) |
+| Height of an empty paragraph | Standard silent | The paragraph mark's size (A7 B3, B4) | Same (standard silent; follows Word) |
+| A line of pictures only | Standard silent | Exactly the pictures' height (A7 C1 to C3); a picture in a line of text adds the text's descent (C4) | Same (standard silent; follows Word) |
+| Cell margins when the table, its style and Table Normal state none | 115 twips (5.75 pt) left and right, 0 top and bottom (§17.4.34, §17.4.11) | About 0 pt (A7 D1, in both modes); 5.4 pt when the file has Word's Table Normal | **The standard: 5.75 pt.** A Table Normal style in the file still wins |
+| The empty paragraph that must end a cell after a nested table | Required; its height not stated | No height, in every mode (A7 D4) | Same (standard silent; follows Word) |
+
+## Workbooks (.xlsx)
+
+| Point | The standard | Excel 2021 | Layout |
+|---|---|---|---|
+| Column width (`col/@width`) | Truncate(((256·w + Truncate(128/MDW))/256)·MDW) px (§18.3.1.13) | Its own readings are exactly that (7, 14, 35 … 350 px); printing scales each font a little (Calibri ×1.074) | The standard's formula |
+| Default column without `defaultColWidth` | baseColWidth × MDW + 5 px: 61 px for Calibri 11 (§18.3.1.81) | Shows 63 px, prints 64 px | **The standard: 61 px** |
+| Workbook font missing (Cambria) | MDW of the font the file names | Real Cambria: MDW 8 at 11 pt | Columns sized with real Cambria's digits (554/1000 em, from Word's PDF); the text drawn in Caladea |
+| Number-format fill (`*x`) | x is repeated to fill the cell | Same | Same, for any character |
+| Text overflowing to the right past the last used column | Standard silent (printing) | Printed in full, adding pages across; a filled neighbour stops it (A7 sheet Overflow) | Same (standard silent; follows Excel): the printed range widens to where the text ends, and the text continues on the page it runs onto |
+| Row height | The stored height | Prints about 14.5 pt for a stored 15 pt | The stored height |
+
+## Fonts
+
+| Font the file names | Layout's substitute when it is missing | Metric-compatible? |
+|---|---|---|
+| Calibri, Arial, Times New Roman, Courier New | Carlito, Liberation Sans, Liberation Serif, Liberation Mono | Yes: breaks are kept |
+| Cambria | Caladea | **No:** real Cambria is 6.5% wider and its lines are shorter (measured against Word 2021's embedded Cambria); a `NonMetricFontSubstitution` warning says breaks may move |
+
+Layout uses the real font whenever it is installed and the application turns on `AllowSystemFonts`.
 
 ## Floating tables (`w:tblpPr`, §17.4.57; `w:tblOverlap`, §17.4.56)
 
