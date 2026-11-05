@@ -19,19 +19,30 @@ namespace Chuvadi.Layout.Engine.Grid
         {
             _sheet = sheet;
             FontResolution normal = ctx.Fonts.Resolve(new FontRequest(sheet.NormalFont.FontFamily, sheet.NormalFont.Bold ? 700 : 400, sheet.NormalFont.Italic, sheet.NormalFont.GenericFamily));
-            MaxDigitWidth = normal.Face.MaxDigitWidthPixels(sheet.NormalFont.FontSize);
+            MaxDigitWidth = normal.Kind != FontMatchKind.Exact && SubstitutedDigitWidths.TryGetValue(sheet.NormalFont.FontFamily, out double em)
+                ? Math.Max(1, (int)Math.Floor(em * (int)Math.Round(sheet.NormalFont.FontSize * 96 / 72.0, MidpointRounding.AwayFromZero)))
+                : normal.Face.MaxDigitWidthPixels(sheet.NormalFont.FontSize);
             if (sheet.DefaultColumnWidth is double explicitDefault)
             {
                 _defaultColumnWidthPt = PixelsToPoints(WidthToPixels(explicitDefault, MaxDigitWidth));
             }
             else
             {
-                // From baseColWidth (default 8): Excel rounds the default column up to a multiple of 8 pixels
-                // (Calibri 11: 8 x 7 px + 5 px = 61 px, shown as 64 px = 8.43 characters).
-                int px = WidthToPixels(DefaultWidthFromBase(sheet.BaseColumnWidth, MaxDigitWidth), MaxDigitWidth);
-                _defaultColumnWidthPt = PixelsToPoints((px + 7) / 8 * 8);
+                // From baseColWidth (default 8), as ECMA-376 Part 1 18.3.1.81 gives it: baseColWidth x MDW + 5 px
+                // (Calibri 11: 8 x 7 + 5 = 61 px). Excel rounds this up to a multiple of 8 (64 px); Layout does not (W1).
+                _defaultColumnWidthPt = PixelsToPoints(WidthToPixels(DefaultWidthFromBase(sheet.BaseColumnWidth, MaxDigitWidth), MaxDigitWidth));
             }
         }
+
+        /// <summary>
+        /// F7c: the widest digit of fonts Layout substitutes with different widths, in em, so that a workbook whose Normal font
+        /// is missing still gets the column widths the standard gives with the real font. Cambria: 554/1000 em, from the
+        /// glyph widths Word embeds in its PDF (calib-excel-cambria11, 3 Nov 2026).
+        /// </summary>
+        private static readonly Dictionary<string, double> SubstitutedDigitWidths = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Cambria"] = 0.554,
+        };
 
         /// <summary>Excel max digit width of the Normal font, in pixels at 96 dpi.</summary>
         public int MaxDigitWidth { get; }

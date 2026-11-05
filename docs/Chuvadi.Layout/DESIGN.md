@@ -137,8 +137,7 @@ CFF (.otf) faces are not read: their runs are written as `<text>` in the face's 
   - Times New Roman → Liberation Serif
   - Courier New → Liberation Mono
   - Calibri → Carlito
-  - Cambria → Caladea
-- **Non-metric substitutes** are reported as `Substitute`, so consumers can say "breaks may move".
+- **Non-metric substitutes** (Cambria → Caladea among them: F1, measured against Word 2021) are reported as `Substitute`, so consumers can say "breaks may move".
 - **Line height** for Word/Excel uses OS/2 usWinAscent + usWinDescent (`VerticalMetricsSource.Windows`).
 - **Excel max digit width** (ECMA-376 Part 1, 18.3.1.13): ppem = round(size × dpi / 72). The device
   advance is taken from `hdmx` when present; otherwise the unhinted advance is floored to whole
@@ -238,14 +237,19 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 | Exact / at-least line spacing | text bottom-aligned in the line box | no |
 | Space before at the top of a page | suppressed when the page was reached by flow; kept at document start and after page or section breaks | yes |
 | Paragraph borders | top and bottom borders add width + spacing to the paragraph height; adjacent identical borders are not merged | yes |
-| Tab leaders | leader glyphs on a grid of their own advance | no |
+| Tab leaders | leader glyphs on a grid of their own advance (also number-format repeat fills, any character: X2) | no |
+| Right margin | a line may run past it by floating-point noise only (1e-6 pt; Word wraps a line 0.0008 pt too wide: F5) | yes |
+| Paragraph mark | sizes a line only when the line holds nothing else (an empty paragraph); a line of pictures only is the pictures' height (Word measured: F4, F6) | yes |
+| docx cell margins with nothing stated | 115 twips (5.75 pt) left and right, 0 top and bottom (ECMA-376 17.4.34, 17.4.11; Word 0: F3, docs/DIFFERENCES.md) | yes |
+| docx empty paragraph after a nested table at the end of a cell | no height (Word measured: F2) | yes |
+| Excel max digit width of a substituted Normal font | from the real font's digit width where Layout knows it (Cambria 554/1000 em: F7c, docs/DIFFERENCES.md) | yes |
 | Keep with next | a chain taller than the page body is ignored | yes |
-| Excel default column | baseColWidth-derived default rounded up to a multiple of 8 px | yes |
+| Excel default column | baseColWidth × MDW + 5 px, not rounded (ECMA-376 18.3.1.81: 61 px for Calibri 11; Excel rounds up to 64 px; W1, docs/DIFFERENCES.md) | yes |
 | Excel printed size | 96-dpi pixel geometry converted at 0.75 pt/px; real Excel output varies with the printer driver | yes |
 | Excel cell padding | 2 px left/right; text 1 px from the top/bottom edge | no |
 | Excel indent | 3 × max digit width per level | no |
 | Excel auto row height for wrapped text | lines × line height + 2 px, never below the default row height | yes |
-| Excel text overflow past the used range | not drawn (the page holds only used-range columns); to verify against Excel | no |
+| Excel text overflow past the used range | printed in full: the printed range widens to where the text ends, and text continues on the page it runs onto (Excel measured; F11) | yes (pages) |
 | Excel border widths (print) | hair 0.25 pt; thin, dotted, dashed, dash-dot 0.5 pt; medium styles 1 pt; thick 1.5 pt; double = two 0.5 pt lines | no |
 | Excel pattern fills | foreground over background blended by ink coverage (darkGray 75%, mediumGray 50%, lightGray 25%, gray125 12.5%, gray0625 6.25%, dark lines 50%, light lines 25%); gradients as the average of their stops | no |
 | Data bars | inset 2 px; length = Sheets' LengthPercent of the cell width; negative bars from the right edge; drawn solid | no |
@@ -297,7 +301,6 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
   - Icon sets are drawn as simplified vector icons (IconSetApproximated).
   - Rotated cell text is drawn horizontally.
   - Right-to-left sheets are mirrored as a block; explicit left/right cell alignments mirror with them.
-  - A repeat-fill character other than space, '.', '-', '_' or '·' is drawn as space (FillApproximated).
   - Comments printed "at end" use one wide column at the Normal font's digit width; Excel's own layout of that list
     may break differently.
 - docx (L8, Chuvadi.Docs 1.6.0):

@@ -75,7 +75,7 @@ namespace Chuvadi.Layout.Engine.Grid
                 }
                 int sheetPageIndex = 0;
                 List<CellRange> areas = new List<CellRange>(sheet.PrintAreas);
-                if (areas.Count == 0 && PrintedRange(sheet, geo) is CellRange used)
+                if (areas.Count == 0 && PrintedRange(sheet, geo) is CellRange used0 && WithOverflow(sheet, geo, used0) is CellRange used)
                 {
                     areas.Add(used);
                 }
@@ -116,6 +116,48 @@ namespace Chuvadi.Layout.Engine.Grid
                     : new CellRange(fr, fc, Math.Max(fr, lr), Math.Max(fc, lc));
             }
             return used;
+        }
+
+        /// <summary>
+        /// F11 (standard silent; follows Excel): text that overflows to the right past the last used column, through empty
+        /// cells, is printed in full: the printed range is widened to the column where the text ends.
+        /// </summary>
+        private CellRange WithOverflow(GridSheet sheet, GridGeometry geo, CellRange used)
+        {
+            Dictionary<int, int> lastInRow = new Dictionary<int, int>();
+            foreach ((int r, int c, GridCell cell) in sheet.Cells())
+            {
+                if (cell.DisplayText.Length > 0 || cell.Runs is not null)
+                {
+                    lastInRow[r] = lastInRow.TryGetValue(r, out int lc) ? Math.Max(lc, c) : c;
+                }
+            }
+            int last = used.LastColumn;
+            foreach ((int r, int c) in lastInRow)
+            {
+                GridCell cell = sheet.GetCell(r, c)!;
+                CellHorizontalAlignment h = EffectiveAlignment(cell);
+                if (cell.Kind == CellValueKind.Number || cell.Style.WrapText || cell.Style.ShrinkToFit
+                    || h is not (CellHorizontalAlignment.Left or CellHorizontalAlignment.General or CellHorizontalAlignment.Center))
+                {
+                    continue;
+                }
+                double pad = CellPadding(1);
+                double colW = geo.ColumnWidth(c);
+                FlowParagraph p = CellParagraph(cell, 1, Math.Max(1, colW - (2 * pad)), geo);
+                (_, List<FittedLine> lines) = MeasureCell(p, 1e7);
+                double needed = (lines.Count > 0 ? lines[0].ContentEndX - lines[0].StartX : 0) + (2 * pad);
+                double right = h == CellHorizontalAlignment.Center ? colW + ((needed - colW) / 2) : needed;
+                int col = c;
+                double acc = colW;
+                while (acc < right - 0.01 && col < 16383)
+                {
+                    col++;
+                    acc += geo.ColumnWidth(col);
+                }
+                last = Math.Max(last, col);
+            }
+            return last == used.LastColumn ? used : new CellRange(used.FirstRow, used.FirstColumn, used.LastRow, last);
         }
 
         public LayoutSourceInfo Source { get; }

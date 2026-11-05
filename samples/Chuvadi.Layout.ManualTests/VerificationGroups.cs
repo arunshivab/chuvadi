@@ -51,7 +51,7 @@ namespace Chuvadi.Layout.ManualTests
             FontResolver r = Bundled();
             (string, string)[] pairs =
             {
-                ("Calibri", "Carlito"), ("Cambria", "Caladea"), ("Arial", "Liberation Sans"),
+                ("Calibri", "Carlito"), ("Arial", "Liberation Sans"),
                 ("Times New Roman", "Liberation Serif"), ("Courier New", "Liberation Mono"),
             };
             foreach ((string requested, string expected) in pairs)
@@ -60,7 +60,11 @@ namespace Chuvadi.Layout.ManualTests
                 Check(res.Face.FamilyName == expected && res.Kind == FontMatchKind.MetricCompatibleSubstitute,
                     requested + " resolved to " + res.Face.FamilyName + " (" + res.Kind + ")");
             }
-            Check(r.ReportedSubstitutions.Count == pairs.Length, "every substitution must be reported once");
+            // F1: Cambria → Caladea is the nearest design, not metric-compatible.
+            FontResolution cambria = r.Resolve(new FontRequest("Cambria"));
+            Check(cambria.Face.FamilyName == "Caladea" && cambria.Kind == FontMatchKind.Substitute,
+                "Cambria resolved to " + cambria.Face.FamilyName + " (" + cambria.Kind + ")");
+            Check(r.ReportedSubstitutions.Count == pairs.Length + 1, "every substitution must be reported once");
         }
 
         private static void L1_ExcelMaxDigitWidthReferencePoints()

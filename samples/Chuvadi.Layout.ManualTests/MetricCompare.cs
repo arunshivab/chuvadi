@@ -29,7 +29,9 @@ namespace Chuvadi.Layout.ManualTests
         {
             log.WriteLine();
             log.WriteLine("Metric comparison: installed font (" + folder + ") vs the substitute Layout uses (advance widths per 1/1000 em)");
-            log.WriteLine("installed | substitute | codepoints compared | width differences | largest difference | vertical metrics | verdict");
+            log.WriteLine("The verdict counts the characters documents use (Basic Latin, Latin-1, Latin Extended-A, General Punctuation,");
+            log.WriteLine("currency symbols); differences elsewhere in the BMP are listed but do not decide it (T2).");
+            log.WriteLine("installed | substitute | codepoints compared | width differences | largest difference | vertical metrics | other BMP differences | verdict");
             int compared = 0;
             foreach ((string installed, string substitute) in Pairs)
             {
@@ -41,12 +43,13 @@ namespace Chuvadi.Layout.ManualTests
                 }
                 FontFace a = FontFace.Load(File.ReadAllBytes(path), 0, FontOrigin.System, installed);
                 FontFace b = FontFace.Load(SubstituteBytes(substitute), 0, FontOrigin.Bundled, substitute);
-                (int n, int diffs, double max, int worstCp) = Widths(a, b);
+                (int n, int diffs, double max, int worstCp) = Widths(a, b, DocumentCharacters);
+                (_, int otherDiffs, _, _) = Widths(a, b, cp => !DocumentCharacters(cp));
                 bool vertical = a.HheaMetrics.LineHeight * b.UnitsPerEm == b.HheaMetrics.LineHeight * a.UnitsPerEm
                     && a.WindowsMetrics.Ascender * b.UnitsPerEm == b.WindowsMetrics.Ascender * a.UnitsPerEm
                     && a.WindowsMetrics.Descender * b.UnitsPerEm == b.WindowsMetrics.Descender * a.UnitsPerEm;
                 string verdict = n > 0 && diffs == 0 && vertical ? "metric-compatible" : max <= 1 && vertical ? "metric-compatible (rounding)" : "not metric-compatible";
-                log.WriteLine($"{installed} | {substitute} | {n} | {diffs} | {max:0.#}{(worstCp >= 0 ? $" (U+{worstCp:X4})" : string.Empty)} | {(vertical ? "same" : "differ")} | {verdict}");
+                log.WriteLine($"{installed} | {substitute} | {n} | {diffs} | {max:0.#}{(worstCp >= 0 ? $" (U+{worstCp:X4})" : string.Empty)} | {(vertical ? "same" : "differ")} | {otherDiffs} | {verdict}");
                 compared++;
             }
             log.WriteLine(compared + " pair(s) compared. Nothing was written.");
@@ -56,14 +59,18 @@ namespace Chuvadi.Layout.ManualTests
         private static byte[] SubstituteBytes(string file)
             => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : BundledFontSource.ReadResource(file);
 
-        /// <summary>Codepoints both faces map (BMP), how many advances differ, and the largest difference in 1/1000 em.</summary>
-        private static (int Count, int Diffs, double Max, int WorstCp) Widths(FontFace a, FontFace b)
+        /// <summary>The characters ordinary documents use: Basic Latin, Latin-1, Latin Extended-A, General Punctuation, currency.</summary>
+        private static bool DocumentCharacters(int cp)
+            => cp is (>= 0x20 and <= 0x7E) or (>= 0xA0 and <= 0x17F) or (>= 0x2000 and <= 0x206F) or (>= 0x20A0 and <= 0x20CF);
+
+        /// <summary>Codepoints both faces map (BMP, within <paramref name="include"/>), how many advances differ, and the largest difference in 1/1000 em.</summary>
+        private static (int Count, int Diffs, double Max, int WorstCp) Widths(FontFace a, FontFace b, Func<int, bool> include)
         {
             int count = 0, diffs = 0, worst = -1;
             double max = 0;
             for (int cp = 0x20; cp <= 0xFFFF; cp++)
             {
-                if (cp is >= 0xD800 and <= 0xDFFF)
+                if (cp is >= 0xD800 and <= 0xDFFF || !include(cp))
                 {
                     continue;
                 }

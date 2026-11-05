@@ -2,6 +2,28 @@
 
 ## 0.1.0 (unreleased)
 
+Follow-up rules (D-181; claude/layout-followup-rule5.md). Judged against the file and ECMA-376; where the standard
+is silent, against Word or Excel 2021 as measured (A7 calibration). Differences from Word and Excel are listed in
+docs/DIFFERENCES.md.
+
+- Right margin (F5): a line may run past the text area only by floating-point noise (1e-6 pt; was 0.01 pt). Word
+  wraps a line 0.0008 pt too wide, and so does Layout now (d39).
+- Paragraph mark (F6) and pictures (F4): the mark's size counts only for a line with nothing else on it (an empty
+  paragraph or an empty last line). A line of text keeps the text's own height (an 11 pt mark no longer raises an
+  8 pt line, d41), and a line holding only pictures is exactly their height (it was the picture plus the mark's
+  descent, about 3 pt more, d28, d29). Standard silent; follows Word.
+- Number-format fill (X2): `*x` repeats any character x across the cell (was only `.`, `-`, `_` and `·`, others drawn
+  as space with a `FillApproximated` warning). `TabStop` gets an optional `LeaderCharacter` (additive).
+- Default column width (W1): without `defaultColWidth`, baseColWidth × MDW + 5 px as ECMA-376 18.3.1.81 gives it, not
+  rounded up to a multiple of 8: 61 px for Calibri 11 (was 64 px, Excel's value).
+- Text overflowing past the last used column (F11): printed in full. With no print area, the printed range widens to
+  the column where such text ends, and the text continues on the page it runs onto (it was cut at the last used
+  column). Standard silent; follows Excel (x03 and x22 now print on 2 pages, as Excel does).
+- Substituted workbook fonts (F7c): the maximum digit width of a missing Cambria is real Cambria's (554/1000 em, MDW 8
+  at 11 pt), so its columns are as wide as the standard gives; the text is still drawn in Caladea.
+- Cambria → Caladea (F1) is no longer flagged metric-compatible (Cambria is 6.5% wider and its lines are shorter): a
+  Fidelity `NonMetricFontSubstitution` warning replaces the Info `MetricFontSubstitution` one. The output is unchanged.
+
 Floating tables (d46; plan claude/layout-columns-floating-tables-plan.md, decisions Q1 to Q4 and A, B):
 
 - New `FlowTable.Floating` (`FloatingTablePosition`): a floating table is placed where the file states it (ECMA-376

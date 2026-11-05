@@ -171,7 +171,7 @@ namespace Chuvadi.Layout.Model
     }
 
     /// <summary>A tab stop. Position is measured from the paragraph's left indent origin (the text area's left edge).</summary>
-    public readonly record struct TabStop(double Position, TabAlignment Alignment = TabAlignment.Left, TabLeader Leader = TabLeader.None);
+    public readonly record struct TabStop(double Position, TabAlignment Alignment = TabAlignment.Left, TabLeader Leader = TabLeader.None, char? LeaderCharacter = null);
 
     /// <summary>One side of a border.</summary>
     public readonly record struct BorderLine(double Width, LayoutColor Color, LineDash Dash = LineDash.Solid, double Space = 0, bool Double = false)

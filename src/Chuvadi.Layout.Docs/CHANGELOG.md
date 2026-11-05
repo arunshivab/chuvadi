@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+- Cell margins (F3, D-181): when neither the table, its style nor Table Normal states them, 115 twips (5.75 pt) left
+  and right, as ECMA-376 17.4.34 and 17.4.11 give (was 5.4 pt, Word's Table Normal value). Word uses about 0 pt in
+  such a file (docs/DIFFERENCES.md, L-1).
+- The empty paragraph that ends a cell after a nested table takes no height (F2, D-181; standard silent, follows
+  Word in every mode). A paragraph with content there keeps its line.
+
 - Floating tables in the body: `w:tblpPr` and `w:tblOverlap` are read completely into `FlowTable.Floating` (anchors,
   offsets, relative positions, the four distances from text). Omitted anchors are the page and omitted offsets and
   distances 0, as ECMA-376 17.4.57 says (Word reads omitted anchors as the margin and the column, and offsets 1 twip

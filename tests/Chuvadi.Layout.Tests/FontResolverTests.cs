@@ -27,7 +27,6 @@ public class FontResolverTests
     [InlineData("Arial", "Liberation Sans")]
     [InlineData("Times New Roman", "Liberation Serif")]
     [InlineData("Courier New", "Liberation Mono")]
-    [InlineData("Cambria", "Caladea")]
     public void Office_core_fonts_map_to_metric_compatible_substitutes(string requested, string expected)
     {
         FontResolution res = TestFonts.BundledResolver().Resolve(new FontRequest(requested, 700, true));
@@ -37,6 +36,18 @@ public class FontResolverTests
         Assert.False(res.SyntheticBold);
         Assert.False(res.SyntheticItalic);
         Assert.Equal(FontMatchKind.MetricCompatibleSubstitute, res.Kind);
+    }
+
+    [Fact]
+    public void Cambria_maps_to_Caladea_which_is_not_metric_compatible()
+    {
+        // F1: Cambria is 6.5% wider than Caladea and its lines are shorter (A7), so breaks may move.
+        FontResolution res = TestFonts.BundledResolver().Resolve(new FontRequest("Cambria", 700, true));
+        Assert.Equal("Caladea", res.Face.FamilyName);
+        Assert.True(res.Face.IsBold);
+        Assert.True(res.Face.IsItalic);
+        Assert.Equal(FontMatchKind.Substitute, res.Kind);
+        Assert.False(res.IsMetricFaithful);
     }
 
     [Fact]

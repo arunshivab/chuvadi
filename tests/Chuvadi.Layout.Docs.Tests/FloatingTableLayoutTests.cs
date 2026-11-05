@@ -52,7 +52,7 @@ public sealed class FloatingTableLayoutTests
         LayoutBox t1 = Assert.Single(Tables(p1));
         Assert.Equal(272, t1.Rect.X, 1);
         List<LayoutBox> beside = Body(p1, "1/6");
-        Assert.Equal(beside[0].Rect.Y, t1.Rect.Y, 1);
+        Assert.InRange(beside[0].Rect.Y - t1.Rect.Y, -0.06, 0.06); // tblpY is 1 twip (0.05 pt), used as written
         Assert.Contains(beside, b => Math.Abs(b.Rect.X - 431.75) < 0.1);
         Assert.All(beside.Where(b => b.Rect.X < 100), b => Assert.True(b.Rect.Right <= 272 - 9 + 0.01));
 

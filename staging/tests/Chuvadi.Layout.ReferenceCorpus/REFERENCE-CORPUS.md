@@ -71,21 +71,21 @@ pagination differences (below), not Layout faults found so far.
 | d12-bullets.docx | lists | 1 | 1 | pass | 100% | 5% | pass |
 | d13-numbered.docx | lists | 1 | 1 | pass | 100% | 4.71% | pass |
 | d14-long-text.docx | paragraph spacing | 6 | 6 | pass | 100% | 10.02% | pass |
-| d15-table-simple.docx | tables | 1 | 1 | pass | 100% | 4.99% | pass |
-| d16-table-merges.docx | tables | 1 | 1 | pass | 100% | 5.61% | pass |
-| d17-table-repeat-header.docx | tables | 3 | 3 | pass | 100% | 27.39% | pass |
-| d18-table-widths.docx | tables | 2 | 2 | pass | 100% | 19.57% | pass |
-| d19-table-banded-style.docx | tables | 1 | 1 | pass | 100% | 1.99% | pass |
-| d20-table-nested.docx | tables | 1 | 1 | fail | 100% | 30.54% | libreoffice-differs |
+| d15-table-simple.docx | tables | 1 | 1 | pass | 100% | 0.7% | pass |
+| d16-table-merges.docx | tables | 1 | 1 | pass | 100% | 2.26% | pass |
+| d17-table-repeat-header.docx | tables | 3 | 3 | fail | 97% | 27.01% | libreoffice-differs |
+| d18-table-widths.docx | tables | 2 | 2 | fail | 79.7% | 48.92% | libreoffice-differs |
+| d19-table-banded-style.docx | tables | 1 | 1 | pass | 100% | 0.41% | pass |
+| d20-table-nested.docx | tables | 1 | 1 | pass | 100% | 2.26% | pass |
 | d21-sections-orientation.docx | sections and columns | 3 | 3 | pass | 100% | 10.28% | pass |
 | d22-sections-columns.docx | sections and columns | 1 | 1 | pass | 100% | 4.83% | pass |
 | d23-sections-page-numbering.docx | sections and columns | 3 | 3 | pass | 100% | 8.8% | pass |
 | d24-header-footer.docx | headers and footers | 2 | 2 | pass | 100% | 8.8% | pass |
 | d25-header-first-page.docx | headers and footers | 2 | 2 | pass | 100% | 9% | pass |
 | d26-header-odd-even.docx | headers and footers | 2 | 2 | pass | 100% | 8.41% | pass |
-| d27-header-table.docx | headers and footers | 1 | 1 | pass | 100% | 9.03% | pass |
-| d28-image-inline.docx | images | 1 | 1 | pass | 100% | 8.85% | pass |
-| d29-image-sizes.docx | images | 1 | 1 | fail | 100% | 14.55% | libreoffice-differs |
+| d27-header-table.docx | headers and footers | 1 | 1 | pass | 100% | 8.46% | pass |
+| d28-image-inline.docx | images | 1 | 1 | pass | 100% | 1.18% | pass |
+| d29-image-sizes.docx | images | 1 | 1 | pass | 100% | 0.01% | pass |
 | d30-image-float-square.docx | images | 1 | 1 | pass | 100% | 6.44% | pass |
 | d31-image-float-behind.docx | images | 1 | 1 | pass | 100% | 4.79% | pass |
 | d32-page-a4-narrow.docx | page sizes and margins | 2 | 2 | pass | 100% | 10.97% | pass |
@@ -95,14 +95,14 @@ pagination differences (below), not Layout faults found so far.
 | d36-ptab.docx | tabs and ptab | 1 | 1 | fail | 96.2% | 10.37% | libreoffice-differs |
 | d37-borders-shading.docx | paragraph spacing | 1 | 1 | pass | 100% | 2.46% | pass |
 | d38-hyperlinks.docx | fonts and sizes | 1 | 1 | pass | 100% | 2.14% | pass |
-| d39-watermark.docx | headers and footers | 1 | 1 | fail | 87.1% | 38.11% | open |
-| d40-report.docx | mixed | 1 | 1 | pass | 100% | 5.62% | pass |
-| d41-paragraph-mark-size.docx | fonts and sizes | 1 | 1 | pass | 100% | 50.8% | pass |
+| d39-watermark.docx | headers and footers | 1 | 1 | pass | 100% | 37.56% | pass |
+| d40-report.docx | mixed | 1 | 1 | pass | 100% | 4.97% | pass |
+| d41-paragraph-mark-size.docx | fonts and sizes | 1 | 1 | pass | 100% | 4.03% | pass |
 | d42-footnotes.docx | notes | 2 | 2 | fail | 100% | 55.81% | libreoffice-differs |
 | d43-tracked-comments.docx | notes | 1 | 1 | fail | 64.7% | 20.99% | libreoffice-differs |
 | d44-fields.docx | notes | 1 | 1 | pass | 100% | 5.99% | pass |
 | d45-text-boxes.docx | images | 1 | 1 | fail | 63.2% | 10.74% | libreoffice-differs |
-| d46-floating-table.docx | tables | 1 | 1 | fail | 77.8% | 13.18% | libreoffice-differs |
+| d46-floating-table.docx | tables | 1 | 1 | fail | 77.8% | 13.16% | libreoffice-differs |
 | d47-symbols.docx | fonts and sizes | 1 | 1 | pass | 100% | 6.82% | pass |
 | d48-embedded-font.docx | fonts and sizes | 1 | 1 | pass | 100% | 5.12% | pass |
 
@@ -111,29 +111,29 @@ pagination differences (below), not Layout faults found so far.
 | File | Exercises | LibreOffice pages | Layout pages | Result | Lines matched | Pixels (worst page) | Category |
 |---|---|---|---|---|---|---|---|
 | x01-number-formats.xlsx | number formats | 2 | 2 | fail | 2.4% | 54.42% | calc-vs-excel |
-| x02-accounting.xlsx | number formats | 1 | 1 | fail | 80% | 53.32% | calc-vs-excel |
-| x03-fonts-alignment.xlsx | fonts and alignment | 2 | 1 | fail | 50% | 58.6% | calc-vs-excel |
-| x04-merges.xlsx | merges | 2 | 2 | fail | 76.5% | 61.05% | calc-vs-excel |
-| x05-borders.xlsx | borders | 1 | 1 | fail | 100% | 65.3% | calc-vs-excel |
-| x06-fills.xlsx | fills | 1 | 1 | fail | 100% | 24.71% | calc-vs-excel |
-| x07-conditional.xlsx | conditional formats | 1 | 1 | fail | 100% | 31.5% | calc-vs-excel |
+| x02-accounting.xlsx | number formats | 1 | 1 | fail | 80% | 52.56% | calc-vs-excel |
+| x03-fonts-alignment.xlsx | fonts and alignment | 2 | 2 | fail | 50% | 69.03% | calc-vs-excel |
+| x04-merges.xlsx | merges | 2 | 2 | fail | 76.5% | 63.55% | calc-vs-excel |
+| x05-borders.xlsx | borders | 1 | 1 | fail | 100% | 65.25% | calc-vs-excel |
+| x06-fills.xlsx | fills | 1 | 1 | fail | 100% | 26.17% | calc-vs-excel |
+| x07-conditional.xlsx | conditional formats | 1 | 1 | fail | 100% | 32.51% | calc-vs-excel |
 | x08-print-area.xlsx | print areas and titles | 1 | 1 | fail | 90% | 26.94% | calc-vs-excel |
 | x09-print-titles.xlsx | print areas and titles | 4 | 4 | fail | 72.6% | 30.95% | calc-vs-excel |
 | x10-page-breaks.xlsx | page breaks | 6 | 6 | fail | 93.4% | 31.67% | calc-vs-excel |
-| x11-fit-width.xlsx | fit to page | 2 | 2 | fail | 71.9% | 16.37% | calc-vs-excel |
+| x11-fit-width.xlsx | fit to page | 2 | 2 | fail | 71.1% | 15.7% | calc-vs-excel |
 | x12-fit-one-page.xlsx | fit to page | 1 | 1 | fail | 80.2% | 11.56% | calc-vs-excel |
 | x13-wide-sheet.xlsx | wide sheets | 10 | 10 | fail | 97.1% | 58.95% | calc-vs-excel |
 | x14-wide-over-then-down.xlsx | wide sheets | 10 | 10 | fail | 97.1% | 58.95% | calc-vs-excel |
 | x15-long-sheet.xlsx | page breaks | 7 | 7 | fail | 69.1% | 41.8% | calc-vs-excel |
 | x16-landscape.xlsx | page setup | 2 | 2 | fail | 86.9% | 31.82% | calc-vs-excel |
 | x17-letter.xlsx | page setup | 4 | 2 | fail | 0% | 32.64% | calc-vs-excel |
-| x18-header-footer.xlsx | page setup | 3 | 3 | fail | 76.6% | 43.58% | calc-vs-excel |
-| x19-gridlines-headings.xlsx | page setup | 1 | 1 | fail | 100% | 70.12% | calc-vs-excel |
+| x18-header-footer.xlsx | page setup | 3 | 3 | fail | 76.6% | 43.77% | calc-vs-excel |
+| x19-gridlines-headings.xlsx | page setup | 1 | 1 | fail | 100% | 71.54% | calc-vs-excel |
 | x20-widths-heights.xlsx | fonts and alignment | 2 | 2 | fail | 100% | 60% | calc-vs-excel |
 | x21-hidden.xlsx | fonts and alignment | 1 | 1 | fail | 86.7% | 28.06% | calc-vs-excel |
-| x22-overflow.xlsx | fonts and alignment | 2 | 1 | fail | 56.3% | 49% | calc-vs-excel |
+| x22-overflow.xlsx | fonts and alignment | 2 | 2 | fail | 68.8% | 48.51% | calc-vs-excel |
 | x23-wrap-tall.xlsx | fonts and alignment | 2 | 2 | fail | 17.7% | 59.05% | calc-vs-excel |
-| x24-multi-sheet.xlsx | page setup | 5 | 5 | fail | 85.7% | 56.79% | calc-vs-excel |
+| x24-multi-sheet.xlsx | page setup | 5 | 5 | fail | 85.7% | 49.11% | calc-vs-excel |
 | x25-scale-center.xlsx | fit to page | 1 | 1 | fail | 87.1% | 19.31% | calc-vs-excel |
 
 ### Notes per document
@@ -144,13 +144,15 @@ pagination differences (below), not Layout faults found so far.
 - **d05-paragraph-spacing.docx** (pass): Space between paragraphs is the larger of space after and space before (fixed in Layout by this corpus). To confirm in Word.
 - **d11-page-breaks.docx** (pass): A paragraph holding only a page break keeps its mark on the old page (fixed in Layout by this corpus). To confirm in Word.
 - **d15-table-simple.docx** (pass): Rows make room for their horizontal borders (fixed in Layout by this corpus). To confirm in Word.
-- **d20-table-nested.docx** (libreoffice-differs): After a nested table the cell holds its required empty paragraph; Layout gives it a line, as Word shows it, LibreOffice hides it, so the next outer row starts one line lower in Layout. To confirm in Word.
+- **d17-table-repeat-header.docx** (libreoffice-differs): Cell margins with nothing stated are the standard's 115 twips (5.75 pt; ECMA-376 17.4.34, 17.4.11; F3, docs/DIFFERENCES.md); LibreOffice uses 5.4 pt, so a few words in narrow cells wrap differently. Word uses 0 pt.
+- **d18-table-widths.docx** (libreoffice-differs): As d17: cell margins 5.75 pt (the standard) against LibreOffice's 5.4 pt, so several narrow cells wrap differently (F3, docs/DIFFERENCES.md).
+- **d20-table-nested.docx** (pass): After a nested table the cell's required empty paragraph takes no height, as Word does in every mode (measured, A7 D4; F2).
 - **d22-sections-columns.docx** (pass): Newspaper columns, laid out as the file states them (ECMA-376 17.6.4). Where the standard is silent (balancing, the separator line, the mark after a column break, footnotes) Layout follows Word, measured with calib-columns.docx; d22 matches Word 2021 within 0.1 pt.
-- **d29-image-sizes.docx** (libreoffice-differs): Layout makes a line holding an inline picture as tall as the picture plus the font descent (the picture sits on the baseline, as in Word); LibreOffice uses the picture height alone. About 3 pt per picture. To confirm in Word.
+- **d29-image-sizes.docx** (pass): A line holding only a picture is exactly the picture's height, as Word does (measured, A7 C1 to C3; F4).
 - **d35-tabs.docx** (pass): Each tab draws the leader of its own stop (fixed in Layout by this corpus).
 - **d36-ptab.docx** (libreoffice-differs): LibreOffice does not draw the dot leader of a positional tab; Layout does, as Word does.
-- **d39-watermark.docx** (open): One line breaks one word later in Layout than in LibreOffice (a word that fits within about 1 pt of the right margin). To confirm in Word.
-- **d41-paragraph-mark-size.docx** (pass): Lines pass within tolerance, but the pixel score is high: Layout sizes the last line by the 11 pt paragraph mark as well, as Word does; LibreOffice uses the 8 pt text alone. To confirm in Word.
+- **d39-watermark.docx** (pass): A line may not run past the right margin: "nursing" (0.0008 pt too wide) starts the next line, as Word does (measured, A7 E1; F5).
+- **d41-paragraph-mark-size.docx** (pass): The paragraph mark sizes only an empty line: the 8 pt lines are not raised by the 11 pt mark, as Word does (measured, A7 B1, B3, B4; F6).
 - **d42-footnotes.docx** (libreoffice-differs): Footnotes match LibreOffice on page 1 (positions within 0.6 pt, two-inch separator). Endnotes differ: LibreOffice puts them on a page of their own with its endnote page style; Layout, like Word, continues them after the text. To confirm in Word.
 - **d43-tracked-comments.docx** (libreoffice-differs): LibreOffice exports the markup (deleted text shown); Layout lays out the final view (changes accepted, comment balloons not drawn), as the Docs integration guide says. To confirm what Word prints by default (Print Markup).
 - **d44-fields.docx** (pass): Complex fields (REF, PAGEREF, SEQ) show their cached results; bookmark and field markers take no room.
@@ -208,9 +210,10 @@ outline, insets, vertical alignment, auto-fit), floating tables at their horizon
 | Area | LibreOffice / Calc | Word / Excel (and Layout) | Files |
 |---|---|---|---|
 | Cambria substitute | Caladea lines by typo metrics, 1.15 em | Windows metrics, 1.30 em (Layout); real Cambria in Word to be confirmed | d01 |
-| Paragraph mark size | Last line sized by the text only | Last line also sized by the paragraph mark's font | d41 |
-| Inline picture line | Picture height | Picture height plus the font descent below the baseline | d29 |
-| Empty paragraph after a nested table | Hidden | Takes a line | d20 |
+| Paragraph mark size | Last line sized by the text only | The same: the mark sizes only an empty line (Word measured, A7; F6) | d41 |
+| Inline picture line | Picture height | The same, for a line of pictures only (Word measured, A7; F4) | d29 |
+| Empty paragraph after a nested table | Hidden | The same: no height (Word measured, A7; F2) | d20 |
+| Cell margins with nothing stated | 5.4 pt | 5.75 pt, the standard's 115 twips (Layout); Word 0 pt (docs/DIFFERENCES.md) | d17, d18 |
 | Positional tab leader | Not drawn | Drawn | d36 |
 | Tamil text extraction | Correct with poppler; Chuvadi.Pdf misreads it (see above) | Layout writes ToUnicode and ActualText; extracts as written | d03, d04 |
 | Default sheet margins (no pageMargins) | 0.75 in left/right, about 1 in top/bottom | 0.7 in left/right, 0.75 in top/bottom | all x |
@@ -220,7 +223,7 @@ outline, insets, vertical alignment, auto-fit), floating tables at their horizon
 | Right-aligned floating box | Wrap distance kept inside the margin | Box edge on the margin (Layout) | d45 |
 | Column widths | Wider conversion: the last column moves to the next page | width × 7 px + 5 px padding (ECMA formula) | x01, x03, x17 |
 | Negative serial under a date format | Shown as a date before 1900 | ######## | x01 |
-| Overflowing text past the used range | Printed on further pages | Clipped at the last used column (to confirm) | x22 |
+| Overflowing text past the used range | Printed on further pages | The same: printed in full, onto further pages (Excel measured, A7; F11) | x03, x22 |
 
 Multi-column sections (d22) are laid out since the columns PR and match both LibreOffice and Word.
 
@@ -235,21 +238,15 @@ Please open each in Word or Excel (File > Print preview, A4 or Letter as stated)
 | d05-paragraph-spacing.docx | Gap between paragraphs = larger of space after / space before (Layout now), not the sum. Page 2 starts with which paragraph? |
 | d11-page-breaks.docx | Pages 2, 3 and 4 start at the top with text, no empty line. |
 | d15-table-simple.docx | Row pitch with 0.75 pt borders: 13.43 + 0.75 pt per row. |
-| d20-table-nested.docx | Is there an empty line below the nested table inside the outer cell? |
 | d22-sections-columns.docx | Two-column section with a separator: matches Word 2021 (checked 3 Nov 2026). |
-| d29-image-sizes.docx | Gap below each inline picture: about 3 pt (Layout) or none (LibreOffice). |
 | d04-tamil-long.docx | Tamil at 12 pt: does line 2 end with காலை (Layout and LibreOffice) and are the spaces between Tamil words the Tamil font's? |
 | d36-ptab.docx | Dot leader to the right-aligned "right" on the first body line. |
-| d39-watermark.docx | Line 6 of the first paragraph: does "nursing" end line 6 (Layout) or start line 7 (LibreOffice)? |
-| d41-paragraph-mark-size.docx | First line top: does the 8 pt line sit lower because of the 11 pt paragraph mark? |
 | d42-footnotes.docx | Footnotes 1 to 5 at the foot of page 1 under a short rule; endnotes i and ii after the text (Layout carries them, with their separator, to page 2 because page 1 is full), not on a page with its own margins. |
 | d43-tracked-comments.docx | Print preview with and without "Print Markup": Layout shows the accepted text ("50 Gy in 25 fractions", the deleted sentence gone). |
 | d45-text-boxes.docx | Is the blue box's right edge on the right margin (Layout) or 9 pt inside it (LibreOffice)? |
 | d48-embedded-font.docx | On a PC without DejaVu Serif, Word shows the first paragraph in DejaVu Serif (embedded) like Layout. |
 | x01-number-formats.xlsx | Margins and row height; columns A to E on page 1; negative and zero dates. |
-| x03-fonts-alignment.xlsx | One page (Layout) or two (Calc)? |
 | x17-letter.xlsx | Letter, 1 in margins: all six columns on one page width (Layout, 2 pages) or not (Calc, 4 pages)? |
-| x22-overflow.xlsx | Long text in column A: clipped at the last used column or printed in full? |
 | x05-borders.xlsx | Row height 15 pt with borders. |
 
 ## Regenerating

@@ -369,12 +369,13 @@ namespace Chuvadi.Layout.Engine.Flow
             {
                 double x1 = pos[k - lineStart];
                 double x2 = pos[k + 1 - lineStart];
-                TabLeader leader = m.PositionalTabs is not null && m.PositionalTabs.TryGetValue(k, out PositionalTab? ptab) ? ptab.Leader : LeaderAt(pf, x1 - areaLeft);
+                char? custom = null;
+                TabLeader leader = m.PositionalTabs is not null && m.PositionalTabs.TryGetValue(k, out PositionalTab? ptab) ? ptab.Leader : LeaderAt(pf, x1 - areaLeft, out custom);
                 if (leader == TabLeader.None || x2 - x1 < 1 || seg.Font is null)
                 {
                     continue;
                 }
-                char ch = leader switch
+                char ch = custom ?? leader switch
                 {
                     TabLeader.Dot => '.',
                     TabLeader.Hyphen => '-',
@@ -417,8 +418,9 @@ namespace Chuvadi.Layout.Engine.Flow
         /// The leader of the tab stop a tab starting at <paramref name="rel"/> goes to: the first custom stop after it,
         /// as <see cref="LineFitter.TabWidth"/> chooses it (a hanging indent's implicit stop and default stops have none).
         /// </summary>
-        private static TabLeader LeaderAt(ParagraphFormat pf, double rel)
+        private static TabLeader LeaderAt(ParagraphFormat pf, double rel, out char? character)
         {
+            character = null;
             const double MinStep = 0.01;
             TabStop? stop = null;
             foreach (TabStop ts in pf.TabStops)
@@ -432,6 +434,7 @@ namespace Chuvadi.Layout.Engine.Flow
             {
                 return TabLeader.None;
             }
+            character = stop.Value.LeaderCharacter;
             return stop.Value.Leader;
         }
 

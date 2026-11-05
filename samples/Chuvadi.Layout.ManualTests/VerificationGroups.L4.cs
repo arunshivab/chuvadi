@@ -11,7 +11,7 @@ namespace Chuvadi.Layout.ManualTests
         private static IEnumerable<Action> L4Groups()
         {
             yield return L4_ShowcasePrintsWithTitlesHeadersAndFooters;
-            yield return L4_DefaultColumnIs64PixelsForCalibri11;
+            yield return L4_DefaultColumnIs61PixelsForCalibri11;
             yield return L4_FitToOnePageWide;
             yield return L4_PrintAreaAndManualBreaks;
         }
@@ -27,7 +27,7 @@ namespace Chuvadi.Layout.ManualTests
             Check(doc.GetPage(2).WidthPt > doc.GetPage(2).HeightPt, "Gridlines sheet is landscape");
         }
 
-        private static void L4_DefaultColumnIs64PixelsForCalibri11()
+        private static void L4_DefaultColumnIs61PixelsForCalibri11()
         {
             GridWorkbook b = new GridWorkbook();
             GridSheet s = new GridSheet("S");
@@ -35,7 +35,7 @@ namespace Chuvadi.Layout.ManualTests
             b.Sheets.Add(s);
             using LaidOutDocument doc = DocumentLayout.Open(b, PreviewScenarios.Options());
             LayoutBox a1 = doc.GetPage(0).Boxes.Single(x => x.Kind == LayoutBoxKind.SheetCell);
-            Check(Math.Abs(a1.Rect.Width - 48) < 0.001, "default column must be 64 px = 48 pt, got " + a1.Rect.Width);
+            Check(Math.Abs(a1.Rect.Width - 45.75) < 0.001, "default column must be 61 px = 45.75 pt (ECMA-376 18.3.1.81), got " + a1.Rect.Width);
         }
 
         private static void L4_FitToOnePageWide()
