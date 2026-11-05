@@ -243,8 +243,8 @@ public static class ReviewFixesTests
             AssertTrue(html.Split("<tr>").Length - 1 == 100, "rows capped");
             var o = new HtmlImportOptions();
             o.Policy.Limits.MaxInputChars = 1000;
-            AssertThrows<Chuvadi.Markup.MarkupLimitExceededException>(() => HtmlConversion.Import(new MemoryStream(new byte[100_000]), null, o), "stream capped");
-            AssertThrows<Chuvadi.Markup.MarkupLimitExceededException>(() => HtmlConversion.Import(new StringReader(new string('x', 5000)), o), "reader capped");
+            AssertThrows<DocxLimitExceededException>(() => HtmlConversion.Import(new MemoryStream(new byte[100_000]), null, o), "stream capped");
+            AssertThrows<DocxLimitExceededException>(() => HtmlConversion.Import(new StringReader(new string('x', 5000)), o), "reader capped");
             var a = new Document();
             a.AddParagraph().Field("HYPERLINK \\l \"sec 1\"", "jump");
             var md = MarkdownConversion.Export(a);

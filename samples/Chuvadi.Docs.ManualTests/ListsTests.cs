@@ -526,10 +526,11 @@ public static class ListsTests
             AssertContains(ReadPartXml(path, "word/numbering.xml"), "<w:rStyle w:val=\"Strong\" />", "rStyle written");
             AssertTrue(Document.Load(path).Numbering.Lists[1].Definition.Levels[0].RunStyleId == "Strong", "rStyle read");
         });
-        Check("a malformed numbering.xml throws XmlException (as styles.xml and document.xml do) instead of loading partly", () =>
+        Check("a malformed numbering.xml throws DocxFormatException (inner XmlException, as styles.xml and document.xml do) instead of loading partly", () =>
         {
             var path = WithNumbering(outDir, "lists-malformed.docx", "<w:abstractNum w:abstractNumId=\"0\"><w:lvl></w:abstractNum>", "<w:p/>");
-            AssertThrows<System.Xml.XmlException>(() => Document.Load(path), "malformed");
+            try { Document.Load(path); throw new InvalidOperationException("malformed: nothing was thrown."); }
+            catch (DocxFormatException ex) { AssertTrue(ex.InnerException is System.Xml.XmlException, "malformed: inner XmlException"); }
         });
     }
 

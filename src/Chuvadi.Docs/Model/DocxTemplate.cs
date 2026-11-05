@@ -160,15 +160,22 @@ public static class DocxTemplate
         if (template is null) throw new ArgumentNullException(nameof(template));
         var limits = readOptions ?? new DocxReaderOptions();
         var lim = new FillLimits(limits, cancellationToken);
-        var packageBytes = ReadPackage(template, password, limits, cancellationToken);
-        var result = new List<TemplatePlaceholder>();
-        using var zipIn = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
-        foreach (var entry in OrderedTextParts(zipIn))
+        try
         {
-            var xml = LoadXml(entry, lim);
-            result.AddRange(new TemplateEngine(xml, entry.FullName, new TemplateOptions(), null, cancellationToken: cancellationToken).List());
+            var packageBytes = ReadPackage(template, password, limits, cancellationToken);
+            var result = new List<TemplatePlaceholder>();
+            using var zipIn = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
+            foreach (var entry in OrderedTextParts(zipIn))
+            {
+                var xml = LoadXml(entry, lim);
+                result.AddRange(new TemplateEngine(xml, entry.FullName, new TemplateOptions(), null, cancellationToken: cancellationToken).List());
+            }
+            return result;
         }
-        return result;
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.TemplateReadMessage);
+        }
     }
 
     /// <summary>
@@ -191,15 +198,22 @@ public static class DocxTemplate
         if (template is null) throw new ArgumentNullException(nameof(template));
         var limits = readOptions ?? new DocxReaderOptions();
         var lim = new FillLimits(limits, cancellationToken);
-        var packageBytes = ReadPackage(template, password, limits, cancellationToken);
-        var result = new List<string>();
-        using var zipIn = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
-        foreach (var entry in OrderedTextParts(zipIn))
+        try
         {
-            var xml = LoadXml(entry, lim);
-            result.AddRange(new TemplateEngine(xml, entry.FullName, new TemplateOptions(), null, cancellationToken: cancellationToken).Check());
+            var packageBytes = ReadPackage(template, password, limits, cancellationToken);
+            var result = new List<string>();
+            using var zipIn = new ZipArchive(new MemoryStream(packageBytes, writable: false), ZipArchiveMode.Read);
+            foreach (var entry in OrderedTextParts(zipIn))
+            {
+                var xml = LoadXml(entry, lim);
+                result.AddRange(new TemplateEngine(xml, entry.FullName, new TemplateOptions(), null, cancellationToken: cancellationToken).Check());
+            }
+            return result;
         }
-        return result;
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.TemplateReadMessage);
+        }
     }
 
     private static byte[] ReadPackage(Stream input, string? password, DocxReaderOptions limits, System.Threading.CancellationToken ct)
@@ -217,6 +231,10 @@ public static class DocxTemplate
         }
         using (var scan = new MemoryStream(packageBytes, writable: false))
             PackageGuard.Scan(scan, limits, ct);
+        // The same Word-package check as Document.Load and DocxReader.Open (Docs 2.0): a broken
+        // [Content_Types].xml, a missing main part or a non-Word main part is rejected here
+        // instead of being filled into an output that will not open.
+        DocumentLoader.CheckWordPackage(packageBytes);
         return packageBytes;
     }
 
@@ -228,15 +246,19 @@ public static class DocxTemplate
         // Templates get the same resource limits as DocxReader (zip bomb, nesting depth, spin
         // count, input size) — a template can arrive from an upload or a database too.
         var limits = options.ReadOptions ?? new DocxReaderOptions();
-        var packageBytes = ReadPackage(input, options.Password, limits, ct);
-        var fillLimits = new FillLimits(limits, ct);
-
         byte[] filled;
-        using (var inPkg = new MemoryStream(packageBytes, writable: false))
-        using (var outPkg = new MemoryStream())
+        try
         {
+            var packageBytes = ReadPackage(input, options.Password, limits, ct);
+            var fillLimits = new FillLimits(limits, ct);
+            using var inPkg = new MemoryStream(packageBytes, writable: false);
+            using var outPkg = new MemoryStream();
             FillPackage(inPkg, outPkg, data, options, fillLimits);
             filled = outPkg.ToArray();
+        }
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw DocxErrors.Wrap(ex, DocxErrors.TemplateReadMessage);
         }
 
         if (options.OutputEncryption is not { } enc) return filled;
