@@ -80,6 +80,46 @@ public class RemoteTests
     }
 
     [Fact]
+    public async Task CancellingAsAFinalReportFailsIsReportedAsCancellation()
+    {
+        using var rig = new RemoteRig();
+        Guid id = rig.Submit().JobId;
+        using var cts = new CancellationTokenSource();
+        // The hub's 502 reply carries a token rotation, so the agent reads its credential store after the reply and
+        // before deciding whether to retry. The store cancels there: exactly the gap between reply and decision.
+        var store = new CancellingCredentialStore(rig.Token);
+        var gate = new FailFinalReportsHandler(new PrintHubMessageHandler(rig.Hub, rig.HubUri)) { RotateTokenOnFailure = true };
+        gate.OnFinalFailure = () => store.CancelOnNextRead = cts;
+        PrintAgent agent = rig.NewAgent(o =>
+        {
+            o.HttpHandler = gate;
+            o.Credentials = store;
+        });
+
+        var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => agent.RunOnceAsync(cts.Token));
+        Assert.Equal(cts.Token, ex.CancellationToken);
+        Assert.IsType<RemotePrintException>(ex.InnerException);
+        Assert.Equal(1, gate.FinalAttempts);
+        Assert.Equal(HubJobState.Accepted, rig.Hub.GetJob(id)!.State);
+
+        // The outcome stays journalled and is delivered on the next start; nothing prints twice.
+        await rig.NewAgent().RunOnceAsync();
+        Assert.Equal(HubJobState.Printed, rig.Hub.GetJob(id)!.State);
+        Assert.Equal(2, rig.Target.Pages.Count);
+    }
+
+    [Fact]
+    public async Task AFailureWithoutCancellationKeepsItsOwnType()
+    {
+        using var rig = new RemoteRig();
+        rig.Submit();
+        // Every hello fails: RunOnceAsync throws the transport error itself when nobody cancelled.
+        PrintAgent agent = rig.NewAgent(o => o.HttpHandler = new AlwaysBadGatewayHandler());
+        var ex = await Assert.ThrowsAsync<RemotePrintException>(() => agent.RunOnceAsync(CancellationToken.None));
+        Assert.Equal(502, ex.StatusCode);
+    }
+
+    [Fact]
     public void InMemoryStoreIsIdempotentAndIsolated()
     {
         var store = new InMemoryJobStore();
@@ -177,6 +217,12 @@ public class RemoteTests
         /// <summary>From this final-report attempt on, the request is held open until it is cancelled. 0 = never hold.</summary>
         public int HoldFromAttempt { get; init; }
 
+        /// <summary>The failed replies carry a token rotation header, so the agent reads its credential store after them.</summary>
+        public bool RotateTokenOnFailure { get; init; }
+
+        /// <summary>Called just before a failed final report is returned.</summary>
+        public Action? OnFinalFailure { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/status") && request.Content is not null)
@@ -186,10 +232,37 @@ public class RemoteTests
                 {
                     int attempt = Interlocked.Increment(ref FinalAttempts);
                     if (HoldFromAttempt > 0 && attempt >= HoldFromAttempt) await Task.Delay(Timeout.Infinite, ct);
-                    return new HttpResponseMessage(HttpStatusCode.BadGateway) { RequestMessage = request };
+                    var failed = new HttpResponseMessage(HttpStatusCode.BadGateway) { RequestMessage = request };
+                    if (RotateTokenOnFailure) failed.Headers.TryAddWithoutValidation(RemoteProtocol.NewTokenHeader, "rotated-" + attempt);
+                    OnFinalFailure?.Invoke();
+                    return failed;
                 }
             }
             return await base.SendAsync(request, ct);
         }
+    }
+
+    /// <summary>Holds a fixed token; cancels a token source the first time it is read after being armed.</summary>
+    private sealed class CancellingCredentialStore : IAgentCredentialStore
+    {
+        private readonly string _token;
+        public CancellingCredentialStore(string token) => _token = token;
+        public CancellationTokenSource? CancelOnNextRead { get; set; }
+
+        public string? GetToken()
+        {
+            CancellationTokenSource? cts = CancelOnNextRead;
+            CancelOnNextRead = null;
+            cts?.Cancel();
+            return _token;
+        }
+
+        public void SetToken(string token) { } // keep the real token: the rotation is only a hook
+    }
+
+    private sealed class AlwaysBadGatewayHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadGateway) { RequestMessage = request });
     }
 }

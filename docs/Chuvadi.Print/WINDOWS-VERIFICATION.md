@@ -167,7 +167,8 @@ PowerShell 5.x: run each command line on its own (no `&&`).
     - a purple ring with a hole, an orange-to-purple bar and a shaded blue ball;
     - a colour ramp square, a 2-by-2 checker (smoothing is the viewer's choice), and two overlapping grey squares
       at 50 % with the overlap **the same grey** (group opacity);
-    - a striped disc, text rotated 30 degrees, half-transparent blue text, and a line 72 pt from the bottom.
+    - a striped disc, text rotated 30 degrees, half-transparent blue text, and the text line "Bottom line at 72 pt
+      from the bottom edge", whose baseline is 72 pt (25.4 mm) above the bottom of the page (no line is drawn).
     Page 2 is A5 landscape with a frame on the page edge and centre lines. Select and copy some text: it pastes
     as the same words. Record anything that looks different.
 
