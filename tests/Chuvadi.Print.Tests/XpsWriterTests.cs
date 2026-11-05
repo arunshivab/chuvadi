@@ -549,6 +549,125 @@ namespace Chuvadi.Print.Tests
             Assert.Equal("0.5", (string)path.Attribute("Opacity")!);
         }
 
+        // ---------------------------------------------------------------- soft masks and alpha images
+
+        private static VectorGroup Masked(VectorGroup content)
+        {
+            var g = new VectorGroup { SoftMask = new VectorSoftMask(VectorSoftMaskKind.Alpha, content) };
+            g.Children.Add(new VectorPath(VectorGeometry.FromRectangle(10, 10, 100, 50)) { Fill = Solid(200, 0, 0) });
+            return g;
+        }
+
+        [Fact]
+        public void AlphaSoftMaskIsAVisualBrushOpacityMaskInTheGroupsCoordinates()
+        {
+            var fade = new VectorLinearGradientBrush(new VectorPoint(10, 0), new VectorPoint(110, 0));
+            fade.Stops.Add(new VectorGradientStop(0, new VectorColor(0, 0, 0, 255)));
+            fade.Stops.Add(new VectorGradientStop(1, new VectorColor(0, 0, 0, 0)));
+            var content = new VectorGroup();
+            content.Children.Add(new VectorPath(VectorGeometry.FromRectangle(10, 10, 100, 50)) { Fill = fade });
+            var page = new VectorPage(200, 100);
+            page.Elements.Add(Masked(content));
+
+            XElement canvas = Assert.Single(Write(page).Content(1));
+            var children = canvas.Elements().ToList();
+            Assert.Equal(X + "Canvas.OpacityMask", children[0].Name);          // property element before the children
+            Assert.Equal(X + "Path", children[1].Name);
+            XElement brush = children[0].Element(X + "VisualBrush")!;
+            Assert.Equal("0,0,200,100", (string)brush.Attribute("Viewbox")!);   // the page, seen from the group
+            Assert.Equal("0,0,200,100", (string)brush.Attribute("Viewport")!);
+            Assert.Equal("Absolute", (string)brush.Attribute("ViewboxUnits")!);
+            Assert.Equal("Absolute", (string)brush.Attribute("ViewportUnits")!);
+            Assert.Equal("None", (string)brush.Attribute("TileMode")!);
+            XElement visual = brush.Element(X + "VisualBrush.Visual")!.Element(X + "Canvas")!;
+            XElement maskPath = visual.Element(X + "Canvas")!.Element(X + "Path")!;
+            XElement grad = maskPath.Element(X + "Path.Fill")!.Element(X + "LinearGradientBrush")!;
+            var stops = grad.Element(X + "LinearGradientBrush.GradientStops")!.Elements().ToList();
+            Assert.Equal("#FF000000", (string)stops[0].Attribute("Color")!);
+            Assert.Equal("#00000000", (string)stops[1].Attribute("Color")!);
+        }
+
+        [Fact]
+        public void MaskBoxFollowsTheTransformsAboveIt()
+        {
+            var page = new VectorPage(200, 100);
+            var outer = new VectorGroup { Transform = VectorMatrix.Translation(50, 20) };
+            VectorGroup masked = Masked(new VectorGroup());
+            masked.Transform = VectorMatrix.Scaling(2, 4);
+            masked.SoftMask!.Content.Children.Add(new VectorPath(VectorGeometry.FromRectangle(0, 0, 1, 1)) { Fill = Solid(0, 0, 0) });
+            outer.Children.Add(masked);
+            page.Elements.Add(outer);
+
+            XElement inner = Assert.Single(Write(page).Content(1)).Element(X + "Canvas")!;
+            XElement brush = inner.Element(X + "Canvas.OpacityMask")!.Element(X + "VisualBrush")!;
+            // Page (0,0)-(200,100) inside: minus (50,20), then divided by (2,4).
+            Assert.Equal("-25,-5,100,25", (string)brush.Attribute("Viewbox")!);
+        }
+
+        [Fact]
+        public void MaskContentResourcesAreListedForThePage()
+        {
+            var content = new VectorGroup();
+            var run = new VectorGlyphRun(new VectorFont(MakeFont()), 20, Solid(0, 0, 0));
+            run.Glyphs.Add(new VectorGlyph(1, 10, 40, 10, "A"));
+            content.Children.Add(run);
+            content.Children.Add(new VectorImageElement(VectorImage.FromPixels(1, 1, VectorPixelFormat.GrayAlpha16, new byte[] { 0, 128 }), 0, 0, 5, 5));
+            var page = new VectorPage(200, 100);
+            page.Elements.Add(Masked(content));
+            Package p = Write(page);
+            var targets = p.Xml(XpsWriter.PageRelsPart(1)).Root!.Elements(Rel + "Relationship").Select(r => (string)r.Attribute("Target")!).ToList();
+            Assert.Equal(2, targets.Count);
+            Assert.Contains(targets, t => t.EndsWith(".odttf", StringComparison.Ordinal));
+            Assert.Contains("/Resources/Images/1.png", targets);
+        }
+
+        [Fact]
+        public void MaskedGroupWithASingularTransformIsLeftOut()
+        {
+            var page = new VectorPage(200, 100);
+            VectorGroup g = Masked(new VectorGroup());
+            g.Transform = new VectorMatrix(1, 0, 0, 0, 0, 0);
+            page.Elements.Add(g);
+            Assert.True(XpsWriter.CanWrite(page, out _));
+            Assert.Empty(Write(page).Content(1));
+        }
+
+        [Theory]
+        [InlineData(VectorPixelFormat.GrayAlpha16, 2, 4, 1)]
+        [InlineData(VectorPixelFormat.Rgba32, 4, 6, 3)]
+        public void PixelsWithAlphaBecomeAPngWithAnAlphaChannel(VectorPixelFormat format, int bytesPerPixel, byte colorType, int components)
+        {
+            var pixels = new byte[3 * 2 * bytesPerPixel];
+            VectorImage img = VectorImage.FromPixels(3, 2, format, pixels);
+            Assert.Equal(colorType, img.Data[25]);
+            Assert.True(img.HasAlpha);
+            Assert.Equal(components, img.Components);
+            Assert.False(VectorImage.FromPixels(1, 1, VectorPixelFormat.Rgb24, new byte[3]).HasAlpha);
+            Assert.Throws<ArgumentException>(() => VectorImage.FromPixels(3, 2, format, new byte[3 * 2 * bytesPerPixel - 1]));
+        }
+
+        [Fact]
+        public void PngWithATransparencyChunkHasAlpha()
+        {
+            byte[] png = VectorImage.FromPixels(1, 1, VectorPixelFormat.Rgb24, new byte[3]).Data;
+            // Insert a tRNS chunk (CRC not checked by the parser) before IDAT.
+            int idat = IndexOf(png, "IDAT") - 4;
+            byte[] trns = { 0, 0, 0, 6, (byte)'t', (byte)'R', (byte)'N', (byte)'S', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+            byte[] withTrns = png.Take(idat).Concat(trns).Concat(png.Skip(idat)).ToArray();
+            Assert.True(VectorImage.FromPng(withTrns).HasAlpha);
+        }
+
+        private static int IndexOf(byte[] data, string ascii)
+        {
+            for (int i = 0; i + ascii.Length <= data.Length; i++)
+            {
+                int k = 0;
+                while (k < ascii.Length && data[i + k] == (byte)ascii[k]) k++;
+                if (k == ascii.Length) return i;
+            }
+            return -1;
+        }
+
         // ---------------------------------------------------------------- refusals
 
         public static IEnumerable<object[]> Unwritable()
@@ -569,7 +688,15 @@ namespace Chuvadi.Print.Tests
 
             yield return new object[] { "blend", (Func<VectorElement>)(() => { var p = Rect(); p.BlendMode = VectorBlendMode.Multiply; return p; }), "blend mode Multiply" };
             yield return new object[] { "knockout", (Func<VectorElement>)(() => new VectorGroup { Knockout = true }), "knockout" };
-            yield return new object[] { "softmask", (Func<VectorElement>)(() => new VectorGroup { SoftMask = new VectorSoftMask(VectorSoftMaskKind.Alpha, new VectorGroup()) }), "soft mask" };
+            yield return new object[] { "luminosity", (Func<VectorElement>)(() => new VectorGroup { SoftMask = new VectorSoftMask(VectorSoftMaskKind.Luminosity, new VectorGroup()) }), "luminosity soft mask" };
+            yield return new object[] { "maskcontent", (Func<VectorElement>)(() =>
+            {
+                var content = new VectorGroup();
+                var p = Rect(); p.BlendMode = VectorBlendMode.Darken; content.Children.Add(p);
+                var g = new VectorGroup { SoftMask = new VectorSoftMask(VectorSoftMaskKind.Alpha, content) };
+                g.Children.Add(Rect());
+                return g;
+            }), "blend mode Darken" };
             yield return new object[] { "cff", (Func<VectorElement>)(() => Run(MakeFont(version: 0x4F54544F))), "CFF" };
             yield return new object[] { "collection", (Func<VectorElement>)(() => Run(MakeFont(version: 0x74746366))), "collection" };
             yield return new object[] { "restricted", (Func<VectorElement>)(() => Run(MakeFont(fsType: 0x0002))), "Restricted License" };

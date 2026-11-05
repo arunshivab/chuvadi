@@ -227,10 +227,13 @@ else XpsWriter.Write(new[] { page }, @"C:\out\report.xps");
 - **Fonts** are TrueType files (the bytes of the .ttf, or a subset). Each is stored once, obfuscated as ECMA-388
   requires. Glyph ids are the font's own; put the glyph's characters in `VectorGlyph.Text` so the document can
   be searched and copied. Glyphs on different baselines become separate XPS Glyphs elements.
-- **Images** are PNG or JPEG files, stored once each; `VectorImage.FromPixels` encodes grey or RGB pixels as
-  PNG. An image fills the unit square of its own space; the four-number `VectorImageElement` constructor places
+- **Images** are PNG or JPEG files, stored once each; PNG transparency is kept. `VectorImage.FromPixels`
+  encodes grey, RGB, grey with alpha or RGB with alpha pixels as PNG. An image fills the unit square of its own space; the four-number `VectorImageElement` constructor places
   it as a rectangle. How a viewer smooths a scaled image is its own choice (XPS has no PDF /Interpolate).
 - **Groups** are written as nested Canvas elements; their opacity applies to the group as a whole.
+- **Soft masks**: an alpha `VectorSoftMask` on a group is written as the group's opacity mask, a VisualBrush that
+  draws the mask content in the group's own coordinates. Where the content is transparent, the group is hidden.
+  A luminosity soft mask has no XPS equivalent (an opacity mask uses alpha only), so `CanWrite` refuses it.
 - **Refused content**: `CanWrite` names the first page and item XPS cannot express. Such pages go to raster;
   the writer never approximates them. The list is in the CHANGELOG (Phase 4 part 1).
 - **Colour** is sRGB, 8 bits per channel with alpha. Gradients interpolate in sRGB and always extend (pad).

@@ -131,6 +131,46 @@ namespace Chuvadi.Print.ManualTests
                 Stroke = new VectorStroke(new VectorSolidBrush(new VectorColor(150, 150, 150)), 0.5)
             });
             if (font is not null) page2.Elements.Add(font.Run("Page 2: A5 landscape, frame on the page edge", 72, 72, 14, black));
+
+            // Alpha soft mask: rainbow bands faded out left to right by a mask whose alpha runs 255 -> 0.
+            var fade = new VectorLinearGradientBrush(new VectorPoint(72, 0), new VectorPoint(272, 0));
+            fade.Stops.Add(new VectorGradientStop(0, new VectorColor(0, 0, 0, 255)));
+            fade.Stops.Add(new VectorGradientStop(1, new VectorColor(0, 0, 0, 0)));
+            var maskContent = new VectorGroup();
+            maskContent.Children.Add(new VectorPath(VectorGeometry.FromRectangle(72, 100, 200, 80)) { Fill = fade });
+            var faded = new VectorGroup { SoftMask = new VectorSoftMask(VectorSoftMaskKind.Alpha, maskContent) };
+            VectorColor[] bands = { new(220, 40, 40), new(240, 160, 0), new(40, 160, 60), new(40, 90, 220) };
+            for (int i = 0; i < bands.Length; i++)
+                faded.Children.Add(new VectorPath(VectorGeometry.FromRectangle(72, 100 + i * 20, 200, 20)) { Fill = new VectorSolidBrush(bands[i]) });
+            page2.Elements.Add(faded);
+
+            // Alpha soft mask from text: a blue square seen only through the letters.
+            if (font is not null)
+            {
+                var letters = new VectorGroup();
+                letters.Children.Add(font.Run("MASK", 330, 170, 64, black));
+                var throughText = new VectorGroup { SoftMask = new VectorSoftMask(VectorSoftMaskKind.Alpha, letters) };
+                var stripes2 = new VectorLinearGradientBrush(new VectorPoint(330, 0), new VectorPoint(510, 0));
+                stripes2.Stops.Add(new VectorGradientStop(0, new VectorColor(0, 90, 160)));
+                stripes2.Stops.Add(new VectorGradientStop(1, new VectorColor(200, 0, 80)));
+                throughText.Children.Add(new VectorPath(VectorGeometry.FromRectangle(320, 100, 200, 90)) { Fill = stripes2 });
+                page2.Elements.Add(throughText);
+            }
+
+            // RGBA image: a disc whose alpha falls from opaque at the centre to clear at the edge, over a black bar.
+            page2.Elements.Add(new VectorPath(VectorGeometry.FromRectangle(72, 250, 200, 16)) { Fill = black });
+            var rgba = new byte[64 * 64 * 4];
+            for (int y = 0; y < 64; y++)
+                for (int x = 0; x < 64; x++)
+                {
+                    double d = Math.Sqrt((x - 31.5) * (x - 31.5) + (y - 31.5) * (y - 31.5)) / 32;
+                    int i = (y * 64 + x) * 4;
+                    rgba[i] = 230;
+                    rgba[i + 1] = 120;
+                    rgba[i + 2] = 0;
+                    rgba[i + 3] = (byte)Math.Round(255 * Math.Max(0, 1 - d));
+                }
+            page2.Elements.Add(new VectorImageElement(VectorImage.FromPixels(64, 64, VectorPixelFormat.Rgba32, rgba), 132, 218, 80, 80));
             return new[] { page, page2 };
         }
 

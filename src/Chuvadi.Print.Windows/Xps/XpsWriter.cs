@@ -16,9 +16,10 @@ namespace Chuvadi.Print.Windows
     /// <see cref="System.IO.Compression.ZipArchive"/>.
     /// </summary>
     /// <remarks>
+    /// <para>Alpha soft masks are written as an OpacityMask holding a VisualBrush of the mask content.</para>
     /// <para>Some content has no XPS equivalent and is refused rather than approximated: blend modes other than
-    /// Normal, knockout groups, soft masks, gradients that do not extend, radial gradients whose start circle is not
-    /// a point inside the end circle, CFF fonts, fonts whose licence forbids embedding, CMYK images, strokes of zero
+    /// Normal, knockout groups, luminosity soft masks (an XPS opacity mask uses alpha only), gradients that do not
+    /// extend, radial gradients whose start circle is not a point inside the end circle, CFF fonts, fonts whose licence forbids embedding, CMYK images, strokes of zero
     /// width and values that are not finite. <see cref="CanWrite(VectorPage, out string?)"/> gives the first such
     /// item; route those pages to raster.</para>
     /// <para>Colours are sRGB. Opacity and gradient colours are written as given.</para>
@@ -224,7 +225,7 @@ namespace Chuvadi.Print.Windows
                 w.WriteStartElement("Canvas", Namespace);
                 // Page content is in points; one transform takes it to XPS units (1/96 inch).
                 w.WriteAttributeString("RenderTransform", "1.333333333333,0,0,1.333333333333,0,0");
-                var pageWriter = new PageWriter(package, w, part =>
+                var pageWriter = new PageWriter(package, w, page, part =>
                 {
                     if (seen.Add(part)) resources.Add(part);
                 });
@@ -354,16 +355,35 @@ namespace Chuvadi.Print.Windows
         {
             private readonly PackageState _package;
             private readonly XmlWriter _w;
+            private readonly VectorPage _page;
             private readonly Action<string> _usesResource;
 
-            public PageWriter(PackageState package, XmlWriter w, Action<string> usesResource)
+            /// <summary>Maps the coordinates of the element being written into page points (its parents' transforms).</summary>
+            private VectorMatrix _toPage = VectorMatrix.Identity;
+
+            public PageWriter(PackageState package, XmlWriter w, VectorPage page, Action<string> usesResource)
             {
                 _package = package;
                 _w = w;
+                _page = page;
                 _usesResource = usesResource;
             }
 
             public void WriteElement(VectorElement e)
+            {
+                VectorMatrix saved = _toPage;
+                _toPage = VectorMatrix.Multiply(e.Transform, saved);
+                try
+                {
+                    WriteElementCore(e);
+                }
+                finally
+                {
+                    _toPage = saved;
+                }
+            }
+
+            private void WriteElementCore(VectorElement e)
             {
                 switch (e)
                 {
@@ -384,10 +404,71 @@ namespace Chuvadi.Print.Windows
             private void WriteGroup(VectorGroup g)
             {
                 if (g.Children.Count == 0) return;
+                (double X, double Y, double W, double H)? maskBox = null;
+                if (g.SoftMask is not null)
+                {
+                    maskBox = PageBoxInElementSpace();
+                    if (maskBox is null) return; // the group's transform collapses it: nothing is visible
+                }
                 _w.WriteStartElement("Canvas", Namespace);
                 Common(g);
+                if (g.SoftMask is VectorSoftMask mask) WriteOpacityMask(mask, maskBox!.Value);
                 foreach (VectorElement child in g.Children) WriteElement(child);
                 _w.WriteEndElement();
+            }
+
+            /// <summary>
+            /// An alpha soft mask: a VisualBrush of the mask content, with the viewbox equal to the viewport so the
+            /// content keeps the group's coordinates. Both cover the page as seen from inside the group.
+            /// </summary>
+            private void WriteOpacityMask(VectorSoftMask mask, (double X, double Y, double W, double H) box)
+            {
+                string rect = Num(box.X) + "," + Num(box.Y) + "," + Num(box.W) + "," + Num(box.H);
+                _w.WriteStartElement("Canvas.OpacityMask", Namespace);
+                _w.WriteStartElement("VisualBrush", Namespace);
+                _w.WriteAttributeString("Viewbox", rect);
+                _w.WriteAttributeString("ViewboxUnits", "Absolute");
+                _w.WriteAttributeString("Viewport", rect);
+                _w.WriteAttributeString("ViewportUnits", "Absolute");
+                _w.WriteAttributeString("TileMode", "None");
+                _w.WriteStartElement("VisualBrush.Visual", Namespace);
+                // The content is in the group's coordinates: write it as an untransformed child of the group.
+                _w.WriteStartElement("Canvas", Namespace);
+                WriteElement(mask.Content);
+                _w.WriteEndElement();
+                _w.WriteEndElement();
+                _w.WriteEndElement();
+                _w.WriteEndElement();
+            }
+
+            /// <summary>
+            /// The page rectangle mapped into the current element's coordinates, as an axis-aligned box; null when the
+            /// element's transform is singular (it covers no area).
+            /// </summary>
+            internal (double X, double Y, double W, double H)? PageBoxInElementSpace()
+            {
+                VectorMatrix m = _toPage;
+                double det = m.M11 * m.M22 - m.M12 * m.M21;
+                if (det == 0 || double.IsNaN(det) || double.IsInfinity(det)) return null;
+                var inverse = new VectorMatrix(m.M22 / det, -m.M12 / det, -m.M21 / det, m.M11 / det,
+                                               (m.M21 * m.OffsetY - m.M22 * m.OffsetX) / det,
+                                               (m.M12 * m.OffsetX - m.M11 * m.OffsetY) / det);
+                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                foreach (VectorPoint corner in new[]
+                {
+                    new VectorPoint(0, 0), new VectorPoint(_page.Width, 0),
+                    new VectorPoint(_page.Width, _page.Height), new VectorPoint(0, _page.Height)
+                })
+                {
+                    VectorPoint p = inverse.Transform(corner);
+                    minX = Math.Min(minX, p.X);
+                    minY = Math.Min(minY, p.Y);
+                    maxX = Math.Max(maxX, p.X);
+                    maxY = Math.Max(maxY, p.Y);
+                }
+                double w = maxX - minX, h = maxY - minY;
+                if (!(w > 0) || !(h > 0) || double.IsInfinity(w) || double.IsInfinity(h)) return null;
+                return (minX, minY, w, h);
             }
 
             private void WritePath(VectorPath p)
@@ -677,7 +758,13 @@ namespace Chuvadi.Print.Windows
                 {
                     case VectorGroup g:
                         if (g.Knockout) return No("a knockout group (XPS has no knockout)");
-                        if (g.SoftMask is not null) return No("a group with a soft mask (not written as XPS yet)");
+                        if (g.SoftMask is VectorSoftMask mask)
+                        {
+                            if (mask.Kind != VectorSoftMaskKind.Alpha)
+                                return No("a group with a luminosity soft mask (an XPS opacity mask uses alpha only)");
+                            if (mask.Content is null) return No("a soft mask without content");
+                            if (!Element(mask.Content)) return false;
+                        }
                         foreach (VectorElement c in g.Children)
                         {
                             if (c is null) return No("a group holds a null element");
