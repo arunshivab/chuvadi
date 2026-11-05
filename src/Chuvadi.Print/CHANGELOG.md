@@ -31,6 +31,11 @@ existing behaviour, in Chuvadi.Print.Remote:
   whose OS/2 fsType forbids embedding (Restricted License, bitmap only), glyph ids past the font's glyph count,
   CMYK JPEGs, strokes of zero width, all-zero dash patterns and values that are not finite. `Write` throws
   `NotSupportedException` for such a page.
+- **Windows-only XPS tests** (D-189 item 14, D-202): new test project `tests/Chuvadi.Print.Xps.Tests`
+  (`net10.0-windows`, WPF; never packed). It opens the XPS sample with WPF's own XPS reader, checks the page count
+  and sizes, and checks rendered pixels at known points: shapes, group opacity, the checker image, text drawn
+  with the embedded font, the soft-mask fades and the transparent image. It builds on every OS and runs on
+  Windows. It joins Chuvadi.slnx and the Windows CI job through the shared-files change.
 - **ManualTests**: two new groups (`XpsSampleIsACompletePackage`, `XpsRefusesWhatItCannotExpress`, total 61) and
   `--xps-sample <file.xps>` (with `--xps-font`) to write a two-page sample for viewing. WINDOWS-VERIFICATION.md
   gains section D3.
