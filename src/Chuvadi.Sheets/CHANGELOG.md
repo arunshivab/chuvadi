@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.1 (unreleased)
+## 2.0.1 (2026-11-05)
 
 Bug fixes for saving (D-183, D-185, D-187). The public API is unchanged; `ZipFormatException` is now
 marked obsolete. Unencrypted saved bytes are unchanged; encrypted containers up to about 7 MB are
