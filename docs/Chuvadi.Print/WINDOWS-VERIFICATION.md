@@ -153,6 +153,24 @@ PowerShell 5.x: run each command line on its own (no `&&`).
     advertises). Record each printer's lines. If Windows Firewall asks about "dotnet", choose Cancel (no rule is
     added). If discovery then finds nothing while a printer is on the same network, record that.
 
+## D3. XPS writer (Phase 4)
+
+11f. **XPS sample.** Write the two-page sample with Arial:
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-sample "$env:USERPROFILE\Documents\chuvadi-xps-sample.xps"
+    ```
+    Expected: `PASS  XPS sample: 2 pages written to ... font: C:\Windows\Fonts\arial.ttf`.
+    Open the file in XPS Viewer (if it is missing: Settings, System, Optional features, add "XPS Viewer").
+    Page 1 shows:
+    - the title and a line of text with Omega, Zhe and "fi";
+    - a red rectangle, a blue rectangle with a black border, and a green dashed line with long dashes;
+    - a purple ring with a hole, an orange-to-purple bar and a shaded blue ball;
+    - a colour ramp square, a 2-by-2 checker (smoothing is the viewer's choice), and two overlapping grey squares
+      at 50 % with the overlap **the same grey** (group opacity);
+    - a striped disc, text rotated 30 degrees, half-transparent blue text, and a line 72 pt from the bottom.
+    Page 2 is A5 landscape with a frame on the page edge and centre lines. Select and copy some text: it pastes
+    as the same words. Record anything that looks different.
+
 ## E. Sign-off and tag
 
 12. **Record the result.** All steps that apply are PASS on both PCs. Note the PC names and Windows builds

@@ -18,6 +18,7 @@ namespace Chuvadi.Print.ManualTests
             all.AddRange(A4Groups());
             all.AddRange(A6Groups());
             all.AddRange(P1Groups());
+            all.AddRange(P4Groups());
             return all;
         }
 
