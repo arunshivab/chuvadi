@@ -87,12 +87,58 @@ Next, in order (follow-up delivery on feat/shaping-phase0 after Arun's push):
 - Tests: Chuvadi.OpenType 41/41, Chuvadi.Text.Shaping 15/15; local gate 2,144 (phase target met), parity and font
   check clean; pack harness through the wrapper (sandbox stand-ins) 2,144.
 
+## Oracle finding (2026-11-05): FontFace does not map code points above U+FFFF
+
+First Windows run of tools/Chuvadi.OpenType.Oracle against the real Chuvadi.Pdf.Fonts.Rendering 3.26.0
+(branch tip f9fee7b): every value agrees on all 13 pack fonts (UnitsPerEm, GlyphCount, IsCff, every
+advance and left side bearing, the glyph for every code point up to U+FFFF) except 45 code points
+above U+FFFF, where FontFace returns 0 and Chuvadi.OpenType returns a glyph. Result: ORACLE DIFFERS.
+
+Evidence (cmap subtables, read with Chuvadi.OpenType):
+
+| Font | Subtables | Mappings above U+FFFF |
+|---|---|---|
+| LiPi-Sans-Devanagari.woff2 | (0,3) f4, (0,4) f12, (3,1) f4, (3,10) f12 | 10: U+11B00..U+11B09 |
+| LiPi-Sans-Latin.woff2 | same | 31: U+1F12F..U+1F149, U+1F16A, U+1F16B, U+1F850, U+1F852 |
+| LiPi-Sans-Tamil.woff2 | same | 4: U+11301, U+11303, U+1133B, U+1133C |
+
+The format 4 subtables cannot hold these code points; the format 12 subtables (3,10) and (0,4) map
+them and agree with each other. The OpenType cmap chapter requires a (3,10) format 12 subtable for
+fonts with supplementary-plane characters; Chuvadi.OpenType selects it (R-OT-0016). The other ten pack
+fonts have no mappings above U+FFFF.
+
+Decision (Arun, via coordinator): fix at the root in Chuvadi.Pdf (every cmap lookup, with tests); the
+oracle stays strict with no known-difference rule, and ORACLE AGREES with zero exceptions remains a
+D-158 merge condition, re-run against the fixed Pdf packages. Test vector with glyph ids and font
+SHA-256: docs/Chuvadi.OpenType/oracle/fontface-cmap-above-bmp.tsv.
+
+Re-run (2026-11-05) on f9fee7b against Chuvadi.Pdf 3.31.0 (cmap fix, D-169), oracle strict, no
+known-difference rule: 0 differences on all 13 fonts, ORACLE AGREES. Built with
+-p:ChuvadiVersion=3.31.0 -p:WarningsNotAsErrors=CS0618, because 3.31.0 marks Woff2Unpacker obsolete
+(to be removed at the Pdf move); the lasting oracle change is for Arun to choose. Glyph boxes against
+FontFace.GetGlyphBounds are still not compared (return type needed from the 3.31.0 package).
+
+Rule 5 item (noted, Arun decides with the Pdf fix): when Pdf.Authoring moves to Chuvadi.OpenType
+(plan C1) these characters render with their real glyphs instead of glyph 0.
+
+## Decisions D-179 (2026-11-05)
+
+- The oracle keeps its Woff2Unpacker cross-check, with CS0618 suppressed on that one call only (test tool, D-163).
+- The pack harness and the wrapper move to Chuvadi.Pdf 3.31.0. The wrapper's default ChuvadiVersion is 3.31.0;
+  the pack harness is unchanged and is run with -p:ChuvadiVersion=3.31.0 -p:WarningsNotAsErrors=CS0618, because
+  its own WOFF2 step also calls the now-obsolete Woff2Unpacker.
+- Variation selectors with no matching variant in the font stay as a zero-width glyph in the base's cluster (not
+  dropped). Implemented with the cmap stage (phase 2 of the engine plan).
+- The oracle compares glyph boxes with FontFace.GetGlyphBounds (FontBox, from the 3.31.0 public signatures and
+  XML docs); the D-158 oracle condition counts as met only after that run.
+
 ## Merge conditions for the draft PR (D-158)
 
-1. The Zip chat's shared-files PR (slnx, CI, release prefixes, README, RELEASING) is merged and this branch is updated.
-2. This follow-up commit has landed; CI is green.
+1. The Zip shared-files commit (slnx, README, RELEASING, ci.yml, release.yml) is added on this branch by Arun (D-161).
+2. The WOFF follow-up commit has landed (f9fee7b); CI is green, including both new test suites.
 3. The similarity checker reports phase 0 clean (or remediated), D-74.
-4. Arun approves.
+4. The oracle reports ORACLE AGREES with zero exceptions against Chuvadi.Pdf 3.31.0, including the glyph-box comparison.
+5. Arun approves.
 
 ## Pdf.Authoring swap (plan C1)
 

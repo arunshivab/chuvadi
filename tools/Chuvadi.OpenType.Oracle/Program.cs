@@ -33,7 +33,11 @@ internal static class Program
             string name = Path.GetFileName(path);
             byte[] raw = File.ReadAllBytes(path);
             bool woff2 = name.EndsWith(".woff2", StringComparison.OrdinalIgnoreCase);
+            // Woff2Unpacker is obsolete in Chuvadi.Pdf 3.31.0 (removed at the Pdf move); this test tool keeps the
+            // cross-check of our WOFF2 decoder while the class exists (D-179, D-163). Suppressed on this line only.
+#pragma warning disable CS0618
             byte[] sfnt = woff2 ? Woff2Unpacker.Unpack(raw) : raw;
+#pragma warning restore CS0618
             FontFace face = FontFace.Load(sfnt);
             OpenTypeFont ours = OpenTypeFont.Load(sfnt);
             List<string> diffs = new List<string>();
@@ -47,6 +51,15 @@ internal static class Program
             {
                 Compare(diffs, "advance g" + g, Convert.ToInt64(face.GetAdvanceWidth(g), CultureInfo.InvariantCulture), ours.GetAdvanceWidth(g));
                 Compare(diffs, "lsb g" + g, Convert.ToInt64(face.GetLeftSideBearing(g), CultureInfo.InvariantCulture), ours.GetLeftSideBearing(g));
+
+                // FontFace.GetGlyphBounds returns FontBox (XMin, YMin, XMax, YMax in design units; all zero for an
+                // empty glyph, per its XML docs). Ours: TryGetGlyphBounds, false for a glyph without outline.
+                FontBox fb = face.GetGlyphBounds(g);
+                GlyphBounds ob = ours.TryGetGlyphBounds(g, out GlyphBounds b) ? b : default;
+                if (fb.XMin != ob.XMin || fb.YMin != ob.YMin || fb.XMax != ob.XMax || fb.YMax != ob.YMax)
+                {
+                    diffs.Add(string.Create(CultureInfo.InvariantCulture, $"bounds g{g}: FontFace ({fb.XMin}, {fb.YMin}, {fb.XMax}, {fb.YMax}), ours ({ob.XMin}, {ob.YMin}, {ob.XMax}, {ob.YMax})"));
+                }
             }
 
             int cmapChecked = 0;
@@ -122,7 +135,6 @@ internal static class Program
         }
 
         report.AppendLine();
-        report.AppendLine("Glyph bounds against FontFace.GetGlyphBounds are not compared yet: its return type is not in CONTRACT.md (waiting for the package XML docs).");
         report.AppendLine(totalDifferences == 0 ? "ORACLE AGREES" : "ORACLE DIFFERS");
         Console.Write(report.ToString());
         if (outFile is not null)
