@@ -1,6 +1,6 @@
 # Chuvadi.Zip - Changelog
 
-## 1.0.0
+## 1.0.0 (2026-11-06)
 
 First release. A complete zip engine written for this library (it does not wrap `ZipArchive`), built only from the BCL (`DeflateStream`, `Aes`, `Rfc2898DeriveBytes`, `HMAC`).
 
