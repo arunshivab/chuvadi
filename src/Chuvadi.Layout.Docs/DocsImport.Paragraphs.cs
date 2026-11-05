@@ -282,6 +282,8 @@ namespace Chuvadi.Layout.Docs
                 HighAnsiFontFamily = highAnsi == ascii ? null : highAnsi,
                 EastAsianFontFamily = eastAsia == ascii ? null : eastAsia,
                 ComplexScriptFontFamily = complex == ascii ? null : complex,
+                // R3: the complex-script slot only with w:cs or w:rtl (ECMA-376 17.3.2.26); else by the standard's table.
+                ComplexScriptRun = f.ComplexScript == true || f.RightToLeft == true,
                 FontSize = f.SizePt > 0 ? f.SizePt : 10,
                 ComplexScriptFontSize = f.SizeComplexScriptPt > 0 ? f.SizeComplexScriptPt : null,
                 Bold = f.Bold,

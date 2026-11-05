@@ -59,8 +59,8 @@ pagination differences (below), not Layout faults found so far.
 |---|---|---|---|---|---|---|---|
 | d01-fonts-sizes.docx | fonts and sizes | 2 | 2 | fail | 91.9% | 62.58% | font-substitution |
 | d02-font-styles.docx | fonts and sizes | 1 | 1 | pass | 100% | 7.48% | pass |
-| d03-tamil-latin-mix.docx | Tamil and Latin | 1 | 1 | fail | 9.1% | 5.08% | reference-extraction |
-| d04-tamil-long.docx | Tamil and Latin | 4 | 4 | fail | 0% | 7.46% | reference-extraction |
+| d03-tamil-latin-mix.docx | Tamil and Latin | 1 | 1 | fail | 9.1% | 11.67% | reference-extraction |
+| d04-tamil-long.docx | Tamil and Latin | 4 | 3 | fail | 0% | 57.07% | reference-extraction |
 | d05-paragraph-spacing.docx | paragraph spacing | 2 | 2 | pass | 100% | 6.94% | pass |
 | d06-line-spacing.docx | paragraph spacing | 1 | 1 | pass | 100% | 9% | pass |
 | d07-alignment.docx | paragraph spacing | 1 | 1 | pass | 100% | 8.01% | pass |
@@ -139,8 +139,8 @@ pagination differences (below), not Layout faults found so far.
 ### Notes per document
 
 - **d01-fonts-sizes.docx** (font-substitution): Cambria is drawn with Caladea; LibreOffice spaces Caladea lines by its typo metrics (1.15 em), Layout by the Windows metrics Word uses (1.30 em). Calibri, Arial, Times and Courier lines match.
-- **d03-tamil-latin-mix.docx** (reference-extraction): Glyphs, line breaks and positions match LibreOffice (Chuvadi.Pdf 3.26 shaping; pixel score under 10%). Text differs only because Chuvadi.Pdf extracts LibreOffice's Tamil text wrongly (vowel signs repeated or moved); poppler extracts the same reference exactly as Layout writes it. Reported to the Pdf chat.
-- **d04-tamil-long.docx** (reference-extraction): As d03. Spaces between Tamil words now take the Tamil font and size (fixed in Layout by this corpus). To confirm in Word: line 2 ends with காலை.
+- **d03-tamil-latin-mix.docx** (reference-extraction): Line breaks and positions match LibreOffice. Since R3 (D-191) the Tamil text, which has no w:cs, takes the run's ordinary slot as Word does (font missing: LiPi Sans Tamil); LibreOffice uses the complex-script slot, so the drawing differs slightly (pixels 11.7%). Text differs only because Chuvadi.Pdf extracts LibreOffice's Tamil text wrongly (vowel signs repeated or moved); poppler extracts the same reference exactly as Layout writes it. Reported to the Pdf chat.
+- **d04-tamil-long.docx** (reference-extraction): Since R3 (D-191) the Tamil text, which has no w:cs, takes the ordinary size (10 pt), not szCs (12 pt), as Word does: 3 pages. LibreOffice uses the complex-script slot (12 pt, 4 pages). Word 2021 draws it in Vijaya at 10 pt on 2 pages (docs/DIFFERENCES.md L-4). Text differs also because Chuvadi.Pdf misreads LibreOffice's Tamil text, as d03.
 - **d05-paragraph-spacing.docx** (pass): Space between paragraphs is the larger of space after and space before (fixed in Layout by this corpus). To confirm in Word.
 - **d11-page-breaks.docx** (pass): A paragraph holding only a page break keeps its mark on the old page (fixed in Layout by this corpus). To confirm in Word.
 - **d15-table-simple.docx** (pass): Rows make room for their horizontal borders (fixed in Layout by this corpus). To confirm in Word.
@@ -185,11 +185,18 @@ outline, insets, vertical alignment, auto-fit), floating tables at their horizon
    leader drew the following stop's dots. Each tab now draws the leader of the stop it goes to.
 6. **Spaces between complex-script words** (d04): a space between two Tamil words was set in the Latin font and size
    (here 10 pt Carlito instead of 12 pt LiPi Sans Tamil), so Tamil lines were about 0.6 pt per space too narrow. Such a
-   space now takes the complex-script slot and is shaped in the Tamil run.
+   space now takes the complex-script slot and is shaped in the Tamil run. Since R3 (D-191, item 8) that holds only
+   for a run with `w:cs`; d04 has none, so its spaces take the ordinary font, as Word does.
 7. **Indic shaping on Chuvadi.Pdf 3.26** (d03, d04): `PdfShaper` now shapes the whole run instead of one syllable at a
    time and takes Chuvadi.Pdf's HarfBuzz clusters, so cross-syllable kerning and contextual forms apply. Tamil word
    widths now equal LibreOffice's to 0.01 pt (சீராக 33.40, நோயாளியின் 90.16, உள்ளது 50.67 pt), and the d04 pixel score
    fell from 28.0% (Pdf 3.25) to 7.5%; d03 from 17.6% to 5.1%.
+8. **Which slot Tamil text takes** (d03, d04; R3, D-191): Tamil text takes the complex-script font, size and bold only
+   in a run with `w:cs` or `w:rtl` (ECMA-376 17.3.2.26); otherwise the run's ordinary font, size and bold, as Word 2021
+   does (measured with calib-tamil-slots). d03 and d04 have no `w:cs`: d04's Tamil is now 10 pt (sz), not 12 pt
+   (szCs), and takes 3 pages (Word: 2, in Vijaya; LibreOffice: 4, in the complex-script slot). d03's lines are about
+   0.4 pt shorter. The pixel scores against LibreOffice rose (d03 11.7%, d04 57.1%) because LibreOffice keeps the
+   complex-script slot.
 
 ## Found elsewhere (reported, not fixed here)
 
@@ -215,6 +222,7 @@ outline, insets, vertical alignment, auto-fit), floating tables at their horizon
 | Empty paragraph after a nested table | Hidden | The same: no height (Word measured, A7; F2) | d20 |
 | Cell margins with nothing stated | 5.4 pt | 5.75 pt, the standard's 115 twips (Layout); Word 0 pt (docs/DIFFERENCES.md) | d17, d18 |
 | Positional tab leader | Not drawn | Drawn | d36 |
+| Tamil without `w:cs` | The complex-script font and size (d04: 12 pt, 4 pages) | The ordinary font and size (d04: 10 pt; Layout 3 pages in LiPi Sans Tamil, Word 2 in Vijaya, docs/DIFFERENCES.md L-4) | d03, d04 |
 | Tamil text extraction | Correct with poppler; Chuvadi.Pdf misreads it (see above) | Layout writes ToUnicode and ActualText; extracts as written | d03, d04 |
 | Default sheet margins (no pageMargins) | 0.75 in left/right, about 1 in top/bottom | 0.7 in left/right, 0.75 in top/bottom | all x |
 | Default row height (Calibri 11) | about 13.8 pt (measured in the references) | 15 pt | all x |
@@ -239,7 +247,6 @@ Please open each in Word or Excel (File > Print preview, A4 or Letter as stated)
 | d11-page-breaks.docx | Pages 2, 3 and 4 start at the top with text, no empty line. |
 | d15-table-simple.docx | Row pitch with 0.75 pt borders: 13.43 + 0.75 pt per row. |
 | d22-sections-columns.docx | Two-column section with a separator: matches Word 2021 (checked 3 Nov 2026). |
-| d04-tamil-long.docx | Tamil at 12 pt: does line 2 end with காலை (Layout and LibreOffice) and are the spaces between Tamil words the Tamil font's? |
 | d36-ptab.docx | Dot leader to the right-aligned "right" on the first body line. |
 | d42-footnotes.docx | Footnotes 1 to 5 at the foot of page 1 under a short rule; endnotes i and ii after the text (Layout carries them, with their separator, to page 2 because page 1 is full), not on a page with its own margins. |
 | d43-tracked-comments.docx | Print preview with and without "Print Markup": Layout shows the accepted text ("50 Gy in 25 fractions", the deleted sentence gone). |

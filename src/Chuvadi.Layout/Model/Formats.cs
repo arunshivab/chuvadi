@@ -62,6 +62,19 @@ namespace Chuvadi.Layout.Model
         /// <summary>Font for complex-script characters such as Indic and Arabic (w:cs). Null = <see cref="FontFamily"/>.</summary>
         public string? ComplexScriptFontFamily { get; init; }
 
+        /// <summary>
+        /// Which characters take the complex-script font, size and bold (<see cref="ComplexScriptFontFamily"/>,
+        /// <see cref="ComplexScriptFontSize"/>, <see cref="ComplexScriptBold"/>, <see cref="ComplexScriptItalic"/>).
+        /// <list type="bullet">
+        /// <item>Null (the default): every character of a script that needs complex shaping, such as Tamil or Arabic.</item>
+        /// <item>True: every character of the run (a .docx run with w:cs or w:rtl: ECMA-376 17.3.2.26 step 2a).</item>
+        /// <item>False: as ECMA-376 17.3.2.26's table classifies the character: Hebrew, Arabic, Syriac and Thaana take
+        /// the ASCII font, and scripts the table leaves out (Tamil and the other Indic scripts, Thai…) the High ANSI font,
+        /// as Word does (measured, calib-tamil-slots; R3).</item>
+        /// </list>
+        /// </summary>
+        public bool? ComplexScriptRun { get; init; }
+
         /// <summary>Generic class used when no font of the family or its substitutes exists.</summary>
         public GenericFontFamily GenericFamily { get; init; } = GenericFontFamily.Unknown;
 

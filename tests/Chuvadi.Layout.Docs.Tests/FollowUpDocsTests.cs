@@ -1,4 +1,5 @@
 using Chuvadi.Docs.Model;
+using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Model;
 using Chuvadi.Layout.Tests;
 using Xunit;
@@ -65,5 +66,48 @@ public class FollowUpDocsTests
         FlowTableCell cell = FirstTable(doc).Rows[0].Cells[0];
         FlowParagraph last = Assert.IsType<FlowParagraph>(cell.Blocks[^1]);
         Assert.NotEmpty(last.Inlines);
+    }
+}
+
+/// <summary>
+/// R3 (D-191): Tamil text takes the complex-script font, size and bold only with w:cs (ECMA-376 17.3.2.26 step 2a);
+/// otherwise the ordinary (High ANSI) slot, as Word 2021 does (measured, calib-tamil-slots and d04).
+/// </summary>
+public class TamilFontSlotTests
+{
+    private const string Tamil = "தமிழ் மருத்துவ அறிக்கை";
+
+    private static List<GlyphRunOp> TamilRuns(TextFormat format)
+    {
+        Document doc = new Document();
+        doc.AddParagraph().Text(Tamil, format);
+        using LaidOutDocument laid = DocsLayout.Open(DocsImportTests.Save(doc), null, DocsImportTests.Options());
+        return Flow.Runs(laid.GetPage(0)).Where(r => r.Text.Any(c => c >= '஀' && c <= '௿')).ToList();
+    }
+
+    [Fact]
+    public void Without_w_cs_Tamil_takes_the_ordinary_size()
+    {
+        List<GlyphRunOp> runs = TamilRuns(new TextFormat { Font = "Calibri", ComplexScriptFont = "LiPi Sans Tamil", SizePt = 10, SizeComplexScriptPt = 16, MirrorToComplexScript = false });
+        Assert.NotEmpty(runs);
+        Assert.All(runs, r => Assert.Equal(10, r.FontSize, 3));
+    }
+
+    [Fact]
+    public void With_w_cs_Tamil_takes_the_complex_script_font_and_size()
+    {
+        List<GlyphRunOp> runs = TamilRuns(new TextFormat { Font = "Calibri", ComplexScriptFont = "LiPi Sans Tamil", SizePt = 10, SizeComplexScriptPt = 16, MirrorToComplexScript = false, ComplexScript = true });
+        Assert.NotEmpty(runs);
+        Assert.All(runs, r => Assert.Equal(16, r.FontSize, 3));
+        Assert.All(runs, r => Assert.StartsWith("LiPi Sans Tamil", r.Font.FamilyName, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Without_w_cs_the_spaces_between_Tamil_words_are_in_the_ordinary_font()
+    {
+        Document doc = new Document();
+        doc.AddParagraph().Text(Tamil, new TextFormat { Font = "Calibri", ComplexScriptFont = "LiPi Sans Tamil", SizePt = 10, SizeComplexScriptPt = 16, MirrorToComplexScript = false });
+        using LaidOutDocument laid = DocsLayout.Open(DocsImportTests.Save(doc), null, DocsImportTests.Options());
+        Assert.Contains(Flow.Runs(laid.GetPage(0)), r => r.Text.Trim().Length == 0 && r.Font.FamilyName == "Carlito");
     }
 }

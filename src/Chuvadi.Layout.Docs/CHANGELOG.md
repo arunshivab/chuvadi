@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+- Tamil and other complex-script text (R3, D-191): a run takes the complex-script font, size and bold only with
+  `w:cs` or `w:rtl` (ECMA-376 17.3.2.26 step 2a). Otherwise Hebrew, Arabic, Syriac and Thaana take the ASCII font, as
+  the standard's table says, and Tamil and the other Indic scripts the High ANSI font, size and bold (standard silent;
+  follows Word 2021, measured with calib-tamil-slots). The language tag and `w:hint="cs"` do not change this. Where the
+  font has no Tamil letters Layout draws LiPi Sans Tamil; Word draws Vijaya (docs/DIFFERENCES.md, L-4).
+
 - Cell margins (F3, D-181): when neither the table, its style nor Table Normal states them, 115 twips (5.75 pt) left
   and right, as ECMA-376 17.4.34 and 17.4.11 give (was 5.4 pt, Word's Table Normal value). Word uses about 0 pt in
   such a file (docs/DIFFERENCES.md, L-1).

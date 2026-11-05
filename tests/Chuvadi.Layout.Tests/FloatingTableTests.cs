@@ -175,6 +175,17 @@ public sealed class FloatingTableTests
     }
 
     [Fact]
+    public void A_table_that_may_not_overlap_moves_down_to_the_stated_distance_below()
+    {
+        // N5: Word, calib-overlap O2: the later table moves down and keeps the upper table's bottomFromText (9 pt).
+        FloatingTablePosition at = new FloatingTablePosition { HorizontalAnchor = TableHorizontalAnchor.Margin, VerticalAnchor = TableVerticalAnchor.Margin, DistanceBottom = 9 };
+        using LaidOutDocument doc = Open(Table(2, 100, at), Table(2, 100, at with { AllowOverlap = false }), Flow.P("text"));
+        List<LayoutBox> t = Tables(doc.GetPage(0));
+        Assert.Equal(2, t.Count);
+        Assert.Equal(t[0].Rect.Bottom + 9, t[1].Rect.Y, 2);
+    }
+
+    [Fact]
     public void A_table_anchored_to_the_column_follows_its_column()
     {
         FlowDocument d = new FlowDocument();

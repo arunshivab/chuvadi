@@ -2,6 +2,17 @@
 
 ## 0.1.0 (unreleased)
 
+Tamil font slots and table overlap (D-191; claude/layout-tamil-overlap-rule5.md):
+
+- New `CharacterFormat.ComplexScriptRun` (bool?, additive): which characters take the complex-script font, size and
+  bold. Null keeps the earlier rule (every character of a script that needs complex shaping). True: every character
+  of the run (ECMA-376 17.3.2.26 step 2a). False: as the standard's table classifies the character; Hebrew, Arabic,
+  Syriac and Thaana take the ASCII font, and Tamil and the other scripts the table leaves out the High ANSI font, as
+  Word does (measured). The space between two complex-script words follows the same choice.
+- `w:tblOverlap="never"` (N5): the table placed later still moves down below the earlier one (decision B), now leaving
+  the upper table's distance from text (`bottomFromText`) between them, as Word does where it moves a table down
+  (calib-overlap O2). Word sometimes overlaps the tables or moves one sideways (docs/DIFFERENCES.md, L-5).
+
 Follow-up rules (D-181; claude/layout-followup-rule5.md). Judged against the file and ECMA-376; where the standard
 is silent, against Word or Excel 2021 as measured (A7 calibration). Differences from Word and Excel are listed in
 docs/DIFFERENCES.md.
