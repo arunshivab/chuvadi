@@ -169,7 +169,12 @@ PowerShell 5.x: run each command line on its own (no `&&`).
       at 50 % with the overlap **the same grey** (group opacity);
     - a striped disc, text rotated 30 degrees, half-transparent blue text, and the text line "Bottom line at 72 pt
       from the bottom edge", whose baseline is 72 pt (25.4 mm) above the bottom of the page (no line is drawn).
-    Page 2 is A5 landscape with a frame on the page edge and centre lines. Select and copy some text: it pastes
+    Page 2 is A5 landscape with a frame on the page edge and centre lines. It also shows (soft masks and alpha):
+    - four colour bands (red, orange, green, blue) that fade smoothly to white from left to right;
+    - the word "MASK" in large letters filled with a blue-to-crimson gradient, and no box around it;
+    - a black bar with an orange glow over its middle: solid orange at the centre, fading to clear at the edge,
+      with the bar visible through the faded part.
+    Select and copy some text: it pastes
     as the same words. Record anything that looks different.
 
 ## E. Sign-off and tag

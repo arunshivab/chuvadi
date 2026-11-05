@@ -17,7 +17,13 @@ namespace Chuvadi.Print
         Gray8 = 0,
 
         /// <summary>Three bytes per pixel: red, green, blue (sRGB).</summary>
-        Rgb24 = 1
+        Rgb24 = 1,
+
+        /// <summary>Two bytes per pixel: grey, then alpha (0 transparent, 255 opaque; not premultiplied).</summary>
+        GrayAlpha16 = 2,
+
+        /// <summary>Four bytes per pixel: red, green, blue (sRGB), then alpha (not premultiplied).</summary>
+        Rgba32 = 3
     }
 
     /// <summary>
@@ -26,8 +32,9 @@ namespace Chuvadi.Print
     /// </summary>
     public sealed class VectorImage
     {
-        private VectorImage(VectorImageFormat format, byte[] data, int pixelWidth, int pixelHeight, double dpiX, double dpiY, int components)
+        private VectorImage(VectorImageFormat format, byte[] data, int pixelWidth, int pixelHeight, double dpiX, double dpiY, int components, bool hasAlpha)
         {
+            HasAlpha = hasAlpha;
             Format = format;
             Data = data;
             PixelWidth = pixelWidth;
@@ -53,6 +60,9 @@ namespace Chuvadi.Print
         /// <summary>Colour components: 1 grey, 3 colour, 4 CMYK (JPEG only). For PNG, alpha is not counted.</summary>
         public int Components { get; }
 
+        /// <summary>Whether the image has transparency: a PNG with an alpha channel or a tRNS chunk. JPEG never has.</summary>
+        public bool HasAlpha { get; }
+
         /// <summary>A PNG image.</summary>
         /// <exception cref="InvalidDataException">The data is not a PNG.</exception>
         public static VectorImage FromPng(byte[] data)
@@ -67,6 +77,7 @@ namespace Chuvadi.Print
             if (width <= 0 || height <= 0) throw new InvalidDataException("PNG image with no pixels.");
             byte colorType = data[25];
             int components = colorType is 0 or 4 ? 1 : 3;
+            bool hasAlpha = colorType is 4 or 6;
             double dpiX = 96, dpiY = 96;
             int pos = 8;
             while (pos + 12 <= data.Length)
@@ -84,10 +95,11 @@ namespace Chuvadi.Print
                         dpiY = py * 0.0254;
                     }
                 }
-                if (type == "IDAT" || type == "IEND") break;
+                if (type == "tRNS") hasAlpha = true;
+                if (type == "IEND") break;
                 pos += 12 + length;
             }
-            return new VectorImage(VectorImageFormat.Png, data, width, height, dpiX, dpiY, components);
+            return new VectorImage(VectorImageFormat.Png, data, width, height, dpiX, dpiY, components, hasAlpha);
         }
 
         /// <summary>A baseline or progressive JPEG image.</summary>
@@ -139,7 +151,7 @@ namespace Chuvadi.Print
                     int width = BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(seg + 3));
                     int components = data[seg + 5];
                     if (width <= 0 || height <= 0) throw new InvalidDataException("JPEG image with no pixels.");
-                    return new VectorImage(VectorImageFormat.Jpeg, data, width, height, dpiX, dpiY, components);
+                    return new VectorImage(VectorImageFormat.Jpeg, data, width, height, dpiX, dpiY, components, hasAlpha: false);
                 }
                 pos += 2 + length;
             }
@@ -148,7 +160,7 @@ namespace Chuvadi.Print
 
         /// <summary>
         /// Encodes pixels as a PNG. <paramref name="pixels"/> holds the rows top to bottom with no padding
-        /// (width × 1 or 3 bytes each).
+        /// (width × 1, 2, 3 or 4 bytes each, as <paramref name="format"/> says).
         /// </summary>
         public static VectorImage FromPixels(int width, int height, VectorPixelFormat format, byte[] pixels, double dpi = 96)
         {
@@ -160,6 +172,8 @@ namespace Chuvadi.Print
             {
                 VectorPixelFormat.Gray8 => PngEncoder.ColorTypeGray,
                 VectorPixelFormat.Rgb24 => PngEncoder.ColorTypeRgb,
+                VectorPixelFormat.GrayAlpha16 => PngEncoder.ColorTypeGrayAlpha,
+                VectorPixelFormat.Rgba32 => PngEncoder.ColorTypeRgba,
                 _ => throw new ArgumentOutOfRangeException(nameof(format))
             };
             var encoder = new PngEncoder(width, height, colorType, dpi, dpi);

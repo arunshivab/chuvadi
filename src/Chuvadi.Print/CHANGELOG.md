@@ -16,15 +16,17 @@ existing behaviour, in Chuvadi.Print.Remote:
   `Opacity` and `BlendMode`. Brushes `VectorSolidBrush` (sRGB with alpha), `VectorLinearGradientBrush` and
   `VectorRadialGradientBrush` (PDF type 2 and 3 geometry, with `ExtendStart`/`ExtendEnd` and a `Transform`).
   `VectorStroke` (width, caps, joins, miter limit, dashes), `VectorGeometry` (move, line, cubic, close, fill rule),
-  `VectorFont` (the font file), `VectorImage` (PNG or JPEG, size and resolution read from the file; `FromPixels`
-  encodes grey or RGB pixels as PNG), groups with `Isolated`, `Knockout` and `SoftMask`, and `VectorMatrix`.
+  `VectorFont` (the font file), `VectorImage` (PNG or JPEG, size, resolution and `HasAlpha` read from the file;
+  `FromPixels` encodes grey, RGB, grey with alpha or RGB with alpha as PNG), groups with `Isolated`, `Knockout` and `SoftMask`, and `VectorMatrix`.
 - **XPS writer** (Chuvadi.Print.Windows, runs on any OS): `XpsWriter.Write(pages, stream)` and
   `Write(pages, path)` write an ECMA-388 package with System.IO.Compression's ZipArchive: TrueType fonts embedded
-  once each, obfuscated (ECMA-388 9.1.7.3); images once each; groups as nested Canvas elements; text as Glyphs
+  once each, obfuscated (ECMA-388 9.1.7.3); images once each, PNG transparency kept; groups as nested Canvas
+  elements; alpha soft masks as an OpacityMask holding a VisualBrush of the mask content; text as Glyphs
   with Unicode where every glyph's text is known. Pages are written one at a time. The same pages give the same
   bytes.
 - **What XPS cannot express is refused, not approximated**: `XpsWriter.CanWrite` names the first page and item.
-  Refused: blend modes other than Normal, knockout groups, soft masks (for now), gradients that do not extend,
+  Refused: blend modes other than Normal, knockout groups, luminosity soft masks (an XPS opacity mask uses alpha
+  only), gradients that do not extend,
   radial gradients whose start circle is not a point inside the end circle, CFF fonts and font collections, fonts
   whose OS/2 fsType forbids embedding (Restricted License, bitmap only), glyph ids past the font's glyph count,
   CMYK JPEGs, strokes of zero width, all-zero dash patterns and values that are not finite. `Write` throws
