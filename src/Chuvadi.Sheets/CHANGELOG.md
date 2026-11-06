@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.2 (unreleased)
+## 2.0.2 (2026-11-07)
 
 Bug fixes in how the readers follow references inside the package (D-211, D-219). The public API is
 unchanged, and every well-formed file reads exactly as in 2.0.1.
