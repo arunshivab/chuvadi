@@ -41,6 +41,13 @@ existing behaviour, in Chuvadi.Print.Remote:
   generated at build time, which is trimming- and NativeAOT-safe. The calls, the UTF-16 strings, the Win32 BOOL
   results and the last-error handling are the same, so behaviour, errors and output are unchanged. The project
   sets `AllowUnsafeBlocks` (Chuvadi.Print.Windows only), because the generated code uses pointers.
+- **Trimming and NativeAOT** (D-217 item 1, D-223 step 3): the JSON in `PrinterRegistry` and in Chuvadi.Print.Remote
+  (hub and agent messages, the agent journal, the token file, the file job store) uses System.Text.Json source
+  generation instead of reflection, with enums written as names as before. The output is byte for byte the same
+  as 1.0.0-rc.2 (golden tests), and files and messages written by rc.2 read back unchanged, including numeric enums
+  and any letter case in property names. All four packages now set `IsTrimmable` and `IsAotCompatible`, so the
+  trimming and AOT analyzers run on every build. A trimmed app (TrimMode full) and a NativeAOT app using all four
+  packages publish with no warnings and work. No public API, behaviour or error changes.
 - **ManualTests**: two new groups (`XpsSampleIsACompletePackage`, `XpsRefusesWhatItCannotExpress`, total 61) and
   `--xps-sample <file.xps>` (with `--xps-font`) to write a two-page sample for viewing. WINDOWS-VERIFICATION.md
   gains section D3.

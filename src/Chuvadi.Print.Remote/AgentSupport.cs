@@ -137,14 +137,14 @@ namespace Chuvadi.Print.Remote
             {
                 string path = EntryPath(jobId);
                 if (!File.Exists(path)) return null;
-                try { return JsonSerializer.Deserialize<AgentJournalEntry>(File.ReadAllBytes(path), RemoteProtocol.Json); }
+                try { return JsonSerializer.Deserialize(File.ReadAllBytes(path), RemoteProtocol.Json.AgentJournalEntry); }
                 catch (JsonException) { return new AgentJournalEntry { JobId = jobId, StartedAt = File.GetLastWriteTimeUtc(path) }; }
             }
         }
 
         public void Save(AgentJournalEntry entry)
         {
-            lock (_gate) AtomicFile.Write(EntryPath(entry.JobId), JsonSerializer.SerializeToUtf8Bytes(entry, RemoteProtocol.Json));
+            lock (_gate) AtomicFile.Write(EntryPath(entry.JobId), JsonSerializer.SerializeToUtf8Bytes(entry, RemoteProtocol.Json.AgentJournalEntry));
         }
 
         public IReadOnlyList<AgentJournalEntry> List()

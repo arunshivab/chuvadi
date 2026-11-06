@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -235,7 +236,7 @@ namespace Chuvadi.Print.Remote
                 AgentVersion = _options.AgentVersion ?? typeof(PrintAgent).Assembly.GetName().Version?.ToString(),
                 Printers = (_options.PrinterListProvider?.Invoke() ?? Array.Empty<string>()).ToList()
             };
-            using HttpResponseMessage response = await SendJsonAsync(HttpMethod.Post, "agents/hello", hello, _options.RequestTimeout, ct).ConfigureAwait(false);
+            using HttpResponseMessage response = await SendJsonAsync(HttpMethod.Post, "agents/hello", hello, RemoteProtocol.Json.HelloRequest, _options.RequestTimeout, ct).ConfigureAwait(false);
             await EnsureAsync(response, ct, HttpStatusCode.OK).ConfigureAwait(false);
         }
 
@@ -243,18 +244,18 @@ namespace Chuvadi.Print.Remote
         {
             var poll = new PollRequest { WaitSeconds = _options.PollWaitSeconds };
             TimeSpan timeout = TimeSpan.FromSeconds(_options.PollWaitSeconds + 30);
-            using HttpResponseMessage response = await SendJsonAsync(HttpMethod.Post, "agents/poll", poll, timeout, ct).ConfigureAwait(false);
+            using HttpResponseMessage response = await SendJsonAsync(HttpMethod.Post, "agents/poll", poll, RemoteProtocol.Json.PollRequest, timeout, ct).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.NoContent) return null;
             await EnsureAsync(response, ct, HttpStatusCode.OK).ConfigureAwait(false);
-            return await ReadJsonAsync<JobLease>(response, ct).ConfigureAwait(false);
+            return await ReadJsonAsync(response, RemoteProtocol.Json.JobLease, ct).ConfigureAwait(false);
         }
 
         private async Task<StatusResponse> ReportAsync(Guid jobId, StatusReport report, CancellationToken ct)
         {
-            using HttpResponseMessage response = await SendJsonAsync(HttpMethod.Post, "jobs/" + jobId.ToString("D") + "/status", report,
+            using HttpResponseMessage response = await SendJsonAsync(HttpMethod.Post, "jobs/" + jobId.ToString("D") + "/status", report, RemoteProtocol.Json.StatusReport,
                                                                       _options.RequestTimeout, ct).ConfigureAwait(false);
             await EnsureAsync(response, ct, HttpStatusCode.OK).ConfigureAwait(false);
-            return await ReadJsonAsync<StatusResponse>(response, ct).ConfigureAwait(false);
+            return await ReadJsonAsync(response, RemoteProtocol.Json.StatusResponse, ct).ConfigureAwait(false);
         }
 
         // ================================================================== a job
@@ -634,10 +635,10 @@ namespace Chuvadi.Print.Remote
             return request;
         }
 
-        private async Task<HttpResponseMessage> SendJsonAsync<T>(HttpMethod method, string relative, T body, TimeSpan timeout, CancellationToken ct)
+        private async Task<HttpResponseMessage> SendJsonAsync<T>(HttpMethod method, string relative, T body, JsonTypeInfo<T> typeInfo, TimeSpan timeout, CancellationToken ct)
         {
             using HttpRequestMessage request = NewRequest(method, relative);
-            request.Content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(body, RemoteProtocol.Json));
+            request.Content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(body, typeInfo));
             request.Content.Headers.ContentType = new MediaTypeHeaderValue(RemoteProtocol.JsonContentType);
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(timeout);
@@ -667,17 +668,17 @@ namespace Chuvadi.Print.Remote
             try
             {
                 byte[] body = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-                ErrorResponse? error = body.Length == 0 ? null : JsonSerializer.Deserialize<ErrorResponse>(body, RemoteProtocol.Json);
+                ErrorResponse? error = body.Length == 0 ? null : JsonSerializer.Deserialize(body, RemoteProtocol.Json.ErrorResponse);
                 if (!string.IsNullOrEmpty(error?.Error)) message += ": " + error.Error;
             }
             catch (JsonException) { }
             throw new RemotePrintException((int)response.StatusCode, message);
         }
 
-        private static async Task<T> ReadJsonAsync<T>(HttpResponseMessage response, CancellationToken ct) where T : class
+        private static async Task<T> ReadJsonAsync<T>(HttpResponseMessage response, JsonTypeInfo<T> typeInfo, CancellationToken ct) where T : class
         {
             byte[] body = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<T>(body, RemoteProtocol.Json)
+            return JsonSerializer.Deserialize(body, typeInfo)
                 ?? throw new RemotePrintException((int)response.StatusCode, "The hub sent an empty " + typeof(T).Name + ".");
         }
 
