@@ -93,6 +93,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void SaveSafety() => SaveSafetyTest.Run(_dir);
+
+    [Fact]
+    public void PartReferences() => PartReferenceTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

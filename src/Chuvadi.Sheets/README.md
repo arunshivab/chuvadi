@@ -183,6 +183,10 @@ foreach (var run in book.Sheets[0].FindCell(1, 1)?.RichText?.Runs ?? Array.Empty
   7 MB was saved without an error but could not be opened by any reader. Save such files again.
 - An encrypted save to a stream writes from the stream's current position (bytes already in it
   are kept), works on a non-seekable stream, and leaves the stream open (2.0.1).
+- Reading an encrypted file decrypts the whole package into memory before it is read, so memory
+  grows with the file size, and on a server with the number of encrypted files open at once.
+  `XlsxReaderOptions.MaxTotalUncompressedBytes` caps the encrypted file's size before it is
+  decrypted (`ForUntrustedInput()` sets 1 GiB); use it for untrusted input.
 - Wrong password and missing password both throw `XlsxPasswordRequiredException`. A damaged
   container or a failed integrity check throws `XlsxFormatException` (see Errors below).
 - Encryption is available on both the `Workbook` model and the streaming `XlsxWriter`
@@ -227,13 +231,13 @@ readers throw is one of these:
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part, a damaged relationship (`.rels`) entry, a truncated part, or (with a password given) a damaged encrypted container or a failed integrity check. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, ...). |
+| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, whether or not `[Content_Types].xml` declares it; since 2.0.2 also when it does not), a damaged relationship (`.rels`) entry, a truncated part, a text cell whose shared-string reference does not exist (2.0.2), or (with a password given) a damaged encrypted container or a failed integrity check. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, `FileNotFoundException`, ...), when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. Without a password the encrypted container is not read, so damage to it is found only once a password is supplied. |
 | `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. |
 | `InvalidDataException` | `MaxPartBytes` was exceeded (a limit, as in 1.x; not a malformed file). |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 | `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |
-| I/O exceptions (`FileNotFoundException`, `UnauthorizedAccessException`, ...) | Opening a path failed. |
+| I/O exceptions (`FileNotFoundException`, `UnauthorizedAccessException`, ...) | Opening a path failed (the file itself is missing or cannot be read). A part missing inside the package is `XlsxFormatException`. |
 
 This applies to `XlsxReader.Open`, `Workbook.Load`, row enumeration, `ReadLayout`,
 `ReadDrawings`, `ReadComments`, `ReadHeaderFooterPictures`, `ReadChartSheet`,

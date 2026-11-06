@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.0.2 (unreleased)
+
+Bug fixes in how the readers follow references inside the package (D-211, D-219). The public API is
+unchanged, and every well-formed file reads exactly as in 2.0.1.
+
+### Bug fixes
+
+- **Relationship targets with dot segments did not resolve** (G1). A target such as
+  `./worksheets/sheet1.xml`, `/xl/../xl/worksheets/sheet1.xml` or `./xl/workbook.xml` was looked
+  up literally, so the file did not open, although Excel opens it. Targets are now resolved as
+  OPC Part 2 §9.3 and RFC 3986 §5.2.4 say, at the root, workbook and sheet level: a leading "/"
+  is relative to the package root, any other target to the source part's folder, then "." and
+  ".." segments are removed (a ".." above the root stops at the root). A target without dot
+  segments resolves to the same part as before.
+- **A missing workbook or worksheet part was reported as a missing file** (G2). When the
+  workbook part or a worksheet part was neither in the zip nor declared in
+  `[Content_Types].xml`, `Workbook.Load`, `XlsxReader.Open`, the `SheetReader` reads
+  (`Rows`, `ReadLayout`, `ReadDrawings`, `ReadComments`, `ReadHeaderFooterPictures`) and the
+  `ReadXlsx` extensions threw a bare `FileNotFoundException`, against the 2.0.0 error contract.
+  They now throw `XlsxFormatException` with the `FileNotFoundException` as `InnerException`.
+  Opening a path that does not exist is still `FileNotFoundException`; a declared but missing
+  part is still `XlsxFormatException` with an `InvalidDataException` inside; missing optional
+  parts are still skipped.
+- **A text cell whose shared string did not exist showed its index as text** (F3). For a
+  shared-string cell (`t="s"`) with an index past the end of the table, a negative index, a
+  value that is not a number, or no shared-string table at all, the readers returned the raw
+  value ("99") as the cell's text, and load → save wrote it back. Such a file is now a damaged
+  file: `XlsxFormatException` "… cell A3 on sheet 'Data' refers to shared string 99, but the
+  workbook has 1." (the message never repeats cell content). `Workbook.Load` and `ReadXlsx`
+  throw while loading; `SheetReader.Rows` throws at the row that holds the cell, after the rows
+  before it. A text cell with no value or an empty value still reads as an empty cell.
+
+### Documentation
+
+- README and guide: the errors table names the two missing-part cases and unresolvable
+  shared-string references; encrypted reads hold the decrypted package in memory (D-217, PR-4).
+- The guide has a section 4.6 for 2.0.2.
+
 ## 2.0.1 (2026-11-05)
 
 Bug fixes for saving (D-183, D-185, D-187). The public API is unchanged; `ZipFormatException` is now
