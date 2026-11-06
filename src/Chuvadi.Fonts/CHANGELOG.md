@@ -1,6 +1,6 @@
 # Changelog — Chuvadi.Fonts
 
-## 1.1.0 (unreleased)
+## 1.1.0 (6 Nov 2026, tag fonts-v1.1.0)
 
 Additive only (D-195, D-197); nothing in 1.0.0 changes.
 
