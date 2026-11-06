@@ -187,10 +187,27 @@ with pyzipper.AESZipFile(sys.argv[1], 'w', compression=pyzipper.ZIP_DEFLATED, en
                     Assert.Equal(string.Concat(Enumerable.Repeat("hello aes ", 20000)), r.ReadAllText(r.FindEntry("a.txt")!));
                     Assert.Equal(Enumerable.Range(0, 2560).Select(i => (byte)(i % 256)).ToArray(), r.ReadAllBytes(r.FindEntry("b.bin")!));
                     r.Verify();
-                    Assert.Throws<ZipPasswordRequiredException>(() => r.ReadAllBytes(r.Entries[0], "wrong"));
+                    AssertWrongPasswordRejected(r, r.Entries[0]);
                 }
             }
             finally { try { Directory.Delete(dir, true); } catch { } }
+        }
+
+        // P8: AES checks a password with a 2-byte verifier derived from a random salt (pyzipper picks the salt), so a given wrong
+        // password passes that check about 1 time in 65,536 and then fails the MAC with ZipIntegrityException. One fixed wrong
+        // password could therefore fail this test now and then. Try several: a candidate that fails the verifier must give
+        // ZipPasswordRequiredException with WrongPassword true; a candidate that passes it must give ZipIntegrityException
+        // (never wrong data); at least one of eight must fail the verifier (all eight pass: 1 in 2^128).
+        private static void AssertWrongPasswordRejected(ZipReader r, ZipEntryInfo entry)
+        {
+            var rejected = 0;
+            for (var i = 0; i < 8; i++)
+            {
+                try { r.ReadAllBytes(entry, "wrong-password-" + i); Assert.Fail("a wrong password must never read the entry"); }
+                catch (ZipPasswordRequiredException ex) { Assert.True(ex.WrongPassword); rejected++; }
+                catch (ZipIntegrityException) { /* passed the 2-byte verifier by chance, failed the MAC */ }
+            }
+            Assert.True(rejected >= 1);
         }
 
         [Fact]
