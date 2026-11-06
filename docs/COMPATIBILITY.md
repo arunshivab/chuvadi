@@ -1,6 +1,6 @@
 # Compatibility: what is released, and what depends on what
 
-For consumers of the Chuvadi packages (the Chuvadi Reader, other apps). **Updated at every release**, in a docs-only PR after the release is checked. Every row below comes from the GitHub release page and the asset digest GitHub shows for it, or from the release record of that tag. Last updated 2026-11-06, main `59a67bb`.
+For consumers of the Chuvadi packages (the Chuvadi Reader, other apps). **Updated at every release**, in a docs-only PR after the release is checked. Every row below comes from the GitHub release page and the asset digest GitHub shows for it, or from the release record of that tag. Last updated 2026-11-06, main `3b54293`.
 
 - **How packages are delivered:** a `.nupkg` attached to the GitHub release of its tag. Nothing is on nuget.org (D-46). Use the package from a local feed. Recent release tags are signed; the packages themselves are not signed (no certificate).
 - **Tags:** one tag per package, `<name>-vX.Y.Z`. The `docs-v*` tag releases Chuvadi.Docs and Chuvadi.Docs.Conversion together.
@@ -30,8 +30,8 @@ Versions are what `main` carries. A package listed here has no release page and 
 
 | Package | Version on main | Waiting for | Depends on |
 |---|---|---|---|
-| Chuvadi.Docs | 1.6.0 | `docs-v2.0.0` (`docs-v1.6.0` was skipped and never tagged; its content ships in 2.0.0) | nothing |
-| Chuvadi.Docs.Conversion | 1.6.0 | `docs-v2.0.0` (first release; same tag as Docs) | Chuvadi.Docs, Chuvadi.Markup 1.1.0 |
+| Chuvadi.Docs | 2.0.0 | `docs-v2.0.0`, after `markup-v1.1.0` (`docs-v1.6.0` was skipped and never tagged; its content ships in 2.0.0) | nothing |
+| Chuvadi.Docs.Conversion | 2.0.0 | `docs-v2.0.0` (first release; same tag as Docs) | Chuvadi.Docs 2.0.0, Chuvadi.Markup 1.1.0 |
 | Chuvadi.Markup | 1.1.0 | `markup-v1.1.0` (the clean-room swap, D-192); must come before `docs-v2.0.0` | nothing |
 | Chuvadi.Layout | 0.1.0 | `layout-v0.1.0` | Chuvadi.Fonts |
 | Chuvadi.Layout.Fonts | 0.1.0 | `layout-fonts-v0.1.0` | Chuvadi.Fonts 1.1.0 or later (it implements `IFontFilePack`) |
@@ -46,7 +46,7 @@ Versions are what `main` carries. A package listed here has no release page and 
 
 Chuvadi.Pdf is a separate repository and has its own releases. Nothing in the packages above depends on it, except Layout.Pdf (staging).
 
-Exact minimum versions for the Layout packages are fixed when they are released; until then they build against what is on `main` (Fonts 1.1.0, Docs 1.6.0, Sheets 2.0.1, Markup 1.1.0).
+Exact minimum versions for the Layout packages are fixed when they are released; until then they build against what is on `main` (Fonts 1.1.0, Docs 2.0.0, Sheets 2.0.1, Markup 1.1.0).
 
 ## Older releases
 
@@ -80,7 +80,7 @@ Notes:
 ## Platforms
 
 - **Windows and Linux:** built and tested in CI on every change (`ubuntu-latest`, `windows-latest`). Windows-only code (Chuvadi.Print.Windows, the Xps tests) runs on Windows only.
-- **Trimming and NativeAOT:** Chuvadi.Zip and Chuvadi.Fonts carry `IsTrimmable` and `IsAotCompatible` on `main`; the metadata is in the package from their next release, not in 1.0.0 and 1.1.0. CI publishes a small app using both with `TrimMode=full` and as NativeAOT (linux-x64), with warnings as errors, and runs it. The other packages are not yet checked this way.
+- **Trimming and NativeAOT:** Chuvadi.Zip, Chuvadi.Fonts, Chuvadi.Docs and Chuvadi.Docs.Conversion carry `IsTrimmable` and `IsAotCompatible` on `main`; the metadata is in the package from the next release of each, not in the released Zip 1.0.0, Fonts 1.1.0 and Docs 1.5.1. CI publishes a small app using Zip and Fonts with `TrimMode=full` and as NativeAOT (linux-x64), with warnings as errors, and runs it. The other packages are not yet checked that way in CI.
 - **macOS, Android, browser WebAssembly:** not tested. macOS and an Android build check are planned (D-217); browser WebAssembly is out of scope.
 - See `docs/Chuvadi.Zip/PLATFORMS.md` and `docs/Chuvadi.Fonts/PLATFORMS.md` (when present) for what is verified for those two packages.
 
