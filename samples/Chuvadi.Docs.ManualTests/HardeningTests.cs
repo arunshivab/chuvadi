@@ -176,14 +176,25 @@ public static class HardeningTests
             var img = Path.Combine(outDir, "hard-partbytes.docx");
             var d = new Document();
             d.AddParagraph("small");
-            d.AddImage(ImageSpec.FromBytes(ImageTests.SampleJpeg100x50()));
+            d.AddImage(ImageSpec.FromBytes(NoisePng(64, 64)));   // incompressible, larger than the main part
             d.SaveTo(img);
-            var opts = new DocxReaderOptions { MaxPartBytes = 600 };
+            // The limit sits just above the main part, so the picture is the part over it. (Since 2.0,
+            // D-206, Open reads the whole main part once: a main part over the limit fails at Open.)
+            long mainBytes, imageBytes;
+            using (var zip = System.IO.Compression.ZipFile.OpenRead(img))
+            {
+                mainBytes = zip.GetEntry("word/document.xml")!.Length;
+                imageBytes = zip.Entries.First(e => e.FullName.StartsWith("word/media/", StringComparison.Ordinal)).Length;
+            }
+            AssertTrue(imageBytes > mainBytes + 1, $"fixture: picture {imageBytes} bytes, main part {mainBytes}");
+            var opts = new DocxReaderOptions { MaxPartBytes = mainBytes + 1 };
             using (var r = DocxReader.Open(img, null, opts))
             {
                 var ex = Catch<DocxSecurityLimitException>(() => r.Images());
                 AssertTrue(ex.Limit == DocxLimit.PartBytes, $"Images: {ex.Limit}");
             }
+            var oex = Catch<DocxSecurityLimitException>(() => DocxReader.Open(img, null, new DocxReaderOptions { MaxPartBytes = 600 }).Dispose());
+            AssertTrue(oex.Limit == DocxLimit.PartBytes, $"Open (main part over the limit): {oex.Limit}");
             var lex = Catch<DocxSecurityLimitException>(() => Document.Load(img, null, opts));
             AssertTrue(lex.Limit == DocxLimit.PartBytes, $"Load: {lex.Limit}");
         });
@@ -521,6 +532,44 @@ public static class HardeningTests
             return ex;
         }
         throw new InvalidOperationException($"expected {typeof(T).Name}, nothing was thrown.");
+    }
+
+    /// <summary>A valid RGB PNG of random pixels (does not compress), for size-limit tests.</summary>
+    internal static byte[] NoisePng(int width, int height)
+    {
+        var raw = new byte[height * (1 + width * 3)];
+        new Random(width * 31 + height).NextBytes(raw);
+        for (int y = 0; y < height; y++) raw[y * (1 + width * 3)] = 0;   // filter byte: none
+        var idat = new MemoryStream();
+        using (var z = new ZLibStream(idat, CompressionLevel.Optimal, leaveOpen: true)) z.Write(raw);
+        var png = new MemoryStream();
+        png.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+        var ihdr = new byte[13];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(ihdr, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(ihdr.AsSpan(4), height);
+        ihdr[8] = 8; ihdr[9] = 2;   // 8-bit, RGB
+        Chunk(png, "IHDR", ihdr);
+        Chunk(png, "IDAT", idat.ToArray());
+        Chunk(png, "IEND", Array.Empty<byte>());
+        return png.ToArray();
+    }
+
+    private static void Chunk(Stream png, string type, byte[] data)
+    {
+        var head = new byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(head, data.Length);
+        Encoding.ASCII.GetBytes(type, 0, 4, head, 4);
+        png.Write(head);
+        png.Write(data);
+        uint crc = 0xFFFFFFFF;
+        foreach (var b in head.AsSpan(4).ToArray().Concat(data))
+        {
+            crc ^= b;
+            for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+        }
+        var tail = new byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(tail, ~crc);
+        png.Write(tail);
     }
 }
 

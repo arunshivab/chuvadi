@@ -494,24 +494,16 @@ public sealed partial class Document
 
     // ---- Saving ---------------------------------------------------------------------
 
-    /// <summary>Saves to a .docx file path (created or overwritten).</summary>
+    /// <summary>
+    /// Saves to a .docx file path (created or overwritten). The file is written beside the target and
+    /// replaces it only when the save succeeded; an existing target keeps its permissions (Unix) or
+    /// attributes and security settings (Windows), and a symbolic link is kept (the file it points to
+    /// is written). A target that cannot be written and a missing folder fail before anything is written.
+    /// </summary>
     public void SaveTo(string path)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
-        // Write beside the target and replace it only when the save succeeded: a failing save
-        // never leaves a truncated file (or destroys the file being overwritten).
-        var full = Path.GetFullPath(path);
-        var temp = Path.Combine(Path.GetDirectoryName(full) ?? ".", "." + Path.GetFileName(full) + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp");
-        try
-        {
-            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                SaveTo(stream);
-            File.Move(temp, full, overwrite: true);
-        }
-        finally
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        PathSave.Write(path, SaveTo);
     }
 
     /// <summary>Saves the docx package to a stream, which is flushed and left OPEN (the caller disposes it).</summary>
@@ -534,19 +526,7 @@ public sealed partial class Document
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
         ValidateEncryption(encryption);
-
-        var full = Path.GetFullPath(path);
-        var temp = Path.Combine(Path.GetDirectoryName(full) ?? ".", "." + Path.GetFileName(full) + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp");
-        try
-        {
-            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                SaveEncrypted(stream, encryption);
-            File.Move(temp, full, overwrite: true);
-        }
-        finally
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        PathSave.Write(path, stream => SaveEncrypted(stream, encryption));
     }
 
     /// <summary>
@@ -571,24 +551,15 @@ public sealed partial class Document
 
     private void SaveEncrypted(Stream output, EncryptionOptions encryption)
     {
-        using var spool = new EncryptedSpool();
+        // The shared spool (D-47, D-155; shared since Chuvadi.Sheets 2.0.1): AES-256-CTR under a
+        // one-time key held only in memory, owner-only, deleted on close. The shared writer writes
+        // the encrypted file sequentially from the stream's current position, so any writable
+        // stream works, seekable or not.
+        using var spool = new Chuvadi.Internal.Crypto.EncryptedSpool(directory: null, fileNamePrefix: "chuvadi_docs_");
         SaveTo(spool);
         spool.Position = 0;
-        // The compound-file writer seeks back to its start: a seekable output gets a view that
-        // starts at the caller's position; a non-seekable one is written once from memory.
-        if (output.CanSeek)
-        {
-            Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                new OffsetStream(output), spool, spool.Length, encryption.Password, encryption.SpinCount);
-        }
-        else
-        {
-            using var buffer = new MemoryStream();
-            Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
-                buffer, spool, spool.Length, encryption.Password, encryption.SpinCount);
-            buffer.Position = 0;
-            buffer.CopyTo(output);
-        }
+        Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(
+            output, spool, spool.Length, encryption.Password, encryption.SpinCount);
         output.Flush();
     }
 

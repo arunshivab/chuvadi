@@ -43,6 +43,9 @@ public class VerificationSuiteTests
     [Fact] public void Suite_CommentsRevisions() => CommentsRevisionsTests.Run(FreshOutDir());
     [Fact] public void Suite_ErrorContract() => ErrorContractTests.Run(FreshOutDir());
     [Fact] public void Suite_EncryptedSave() => EncryptedSaveTests.Run(FreshOutDir());
+    [Fact] public void Suite_EncryptedLarge() => EncryptedLargeTests.RunCi(FreshOutDir());   // 50 MB: manual tests only (D-204)
+    [Fact] public void Suite_SkippedParts() => SkippedPartsTests.Run(FreshOutDir());
+    [Fact] public void Suite_PathSave() => PathSaveTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 
@@ -135,8 +138,12 @@ public class VerificationSuiteTests
         doc.SaveTo(path);
 
         var options = new DocxReaderOptions { MaxPartBytes = 10_000 };
-        using var r = DocxReader.Open(path, options: options);
-        Assert.ThrowsAny<System.Exception>(() => r.ExtractText());
+        // Since 2.0 (D-206) Open reads the whole main part once, so the limit is reported at Open.
+        Assert.Throws<DocxSecurityLimitException>(() =>
+        {
+            using var r = DocxReader.Open(path, options: options);
+            r.ExtractText();
+        });
     }
 
     [Fact]

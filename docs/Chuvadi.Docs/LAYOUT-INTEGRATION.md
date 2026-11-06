@@ -8,7 +8,7 @@ This page lists exactly which public APIs a layout engine should call to lay out
 var doc = Document.Load(path);                    // or Load(stream, password, DocxReaderOptions, CancellationToken)
 ```
 
-Untrusted input goes through `DocxReaderOptions`, which holds the limits; a breach throws `DocxSecurityLimitException`. Any malformed part throws `DocxFormatException` (since 2.0; the original `XmlException` / `InvalidDataException` is its `InnerException`), except a malformed header, footer or settings part, which loads blank. A package whose main part is not a Word document (document, template, or their macro-enabled forms; e.g. a workbook renamed .docx) throws `DocxFormatException`, from `Document.Load` and `DocxReader.Open` alike.
+Untrusted input goes through `DocxReaderOptions`, which holds the limits; a breach throws `DocxSecurityLimitException`. Any malformed part throws `DocxFormatException` (since 2.0; the original `XmlException` / `InvalidDataException` is its `InnerException`), except a malformed header, footer or settings part, which loads blank. A main part that is missing from the package or whose zip entry is corrupt throws `DocxFormatException` (2.0). A package whose main part is not a Word document (document, template, or their macro-enabled forms; e.g. a workbook renamed .docx) throws `DocxFormatException`, from `Document.Load` and `DocxReader.Open` alike.
 
 ## 2. Document structure — walk in this order
 

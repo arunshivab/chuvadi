@@ -48,6 +48,8 @@ doc.Page.Orientation = PageOrientation.Portrait;
 doc.SaveTo("report.docx");
 ```
 
+Every save to a path (`SaveTo(path)`, `SaveTo(path, EncryptionOptions)`, `DocxTemplate.Fill(inputPath, outputPath, …)`) writes beside the target and replaces it only when the save succeeded, so a failing save never leaves a truncated file or destroys the one being overwritten. An existing file keeps its permissions (Unix) or attributes and security settings (Windows), and a symbolic link stays a link (the file it points to is written). A missing folder, a read-only target and a folder at the path fail before anything is written, with the target's name in the error.
+
 Paragraph styles: `Title`, `Heading1`–`Heading9`, `Quote`, `Normal`, plus lists, hyperlinks (`p.Hyperlink(text, url)`), page breaks (`doc.AddPageBreak()`), different first-page headers/footers (`doc.FirstPageHeader`), and landscape/Letter/Legal page setups.
 
 ## Character formatting, scripts and breaks
@@ -55,7 +57,9 @@ Paragraph styles: `Title`, `Heading1`–`Heading9`, `Quote`, `Normal`, plus list
 `TextFormat` covers the full run-property set: fonts per script slot, complex-script bold/italic/size, language, every underline style, caps/small caps, hidden, outline/shadow/emboss/engrave, superscript/subscript, baseline shift, character spacing and scaling, kerning, theme colors and arbitrary shading.
 
 ```csharp
-// Indic text: set the complex-script slot — Word's Font box (and TextFormat.Font) only sets Latin.
+// Indic text: FontForAllScripts sets every slot, so Word uses the font whether or not the run is
+// marked complex script. (Word uses ComplexScriptFont alone only when ComplexScript = true, w:cs;
+// Word's Font box and TextFormat.Font set the Latin slots only.)
 var tamil = new TextFormat { FontForAllScripts = "Nirmala UI", SizePt = 12, Bold = true, ComplexScriptLanguage = "ta-IN" };
 doc.AddParagraph().Text("நோயாளி அறிக்கை — Patient report", tamil);
 
@@ -324,7 +328,12 @@ foreach (string[][] table in r.Tables())
     Console.WriteLine($"table: {table.Length} rows");
 
 string everything = r.ExtractText();
+
+foreach (var skipped in r.SkippedParts)                    // parts the reader could not use
+    Console.WriteLine($"{skipped.PartName}: {skipped.Reason}");
 ```
+
+A header or footer that is missing, cannot be opened or is not well-formed XML reads as blank, as in `Document.Load`; a picture whose part is missing or cannot be opened is left out of `Images()`. Nothing is dropped silently: each such part is listed once in `SkippedParts` (`PartName`, `Reason`: `Missing`, `Unreadable` or `NotWellFormed`, and the `Error`). The list grows as the lazy readers reach the parts. The main document part is never skipped: a problem there is a `DocxFormatException`. `GetActiveContent` and the template methods stay strict: a part they cannot read is an error.
 
 ## Untrusted input (mail attachments, uploads)
 
@@ -363,7 +372,7 @@ Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers
 
 | Exception | When |
 |---|---|
-| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document. The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
+| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document, missing from the package or corrupt. A broken header or footer is the exception for the readers and `Document.Load`: it reads as blank and `DocxReader` lists it in `SkippedParts` (see **Read documents**). The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
 | `DocxSecurityLimitException` (a `DocxFormatException`) | A resource limit was exceeded (see **Untrusted input**). Thrown as itself, never wrapped. |
 | `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. |
 | `DocxTemplateException` | A fill problem: a strict fill with missing values, or a template limit (`MaxGeneratedItems`, …). Lists every problem. |
@@ -446,7 +455,7 @@ var loaded = Document.Load("secret.docx", "S3cret!");
 
 Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` reference implementation. Integrity (HMAC-SHA512) is verified on every decrypt.
 
-The plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path writes beside the target and replaces it only when the save succeeded, so a failing save leaves an existing file untouched.
+The plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path replaces the target only when the save succeeded (see **Write a report**).
 
 On Windows, real-time antivirus (Microsoft Defender) scans an encrypted Office file when it is opened, by trying the default Office password, which runs the full key derivation at the file's declared spin count. That happens inside the operating system's file-open call, before the library reads a byte, so neither `MaxSpinCount` nor the `CancellationToken` can shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine, then milliseconds once the scan result was cached. Both limits apply in full to the library's own work, and to streams that are already open or held in memory.
 

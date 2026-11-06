@@ -24,6 +24,7 @@ public static class ErrorContractTests
         Directory.CreateDirectory(dir);
         Matrix(dir);
         TemplatePackageCheck(dir);
+        MainPartMissing(dir);
         PassThrough(dir);
         CallerMistakes(dir);
     }
@@ -36,17 +37,18 @@ public static class ErrorContractTests
     private static Dictionary<string, string[]> BuildSucceeds()
     {
         var load = new[] { "header not well-formed" };
-        var open = new[] { "document.xml not well-formed", "styles.xml not well-formed", "numbering.xml not well-formed", "header not well-formed", "main part missing" };
-        var text = new[] { "styles.xml not well-formed", "numbering.xml not well-formed", "main part missing" };
-        var images = new[] { "styles.xml not well-formed", "numbering.xml not well-formed", "header not well-formed", "main part missing" };
-        var active = new[] { "main part missing" };
+        var open = new[] { "document.xml not well-formed", "styles.xml not well-formed", "numbering.xml not well-formed", "header not well-formed" };
+        var text = new[] { "styles.xml not well-formed", "numbering.xml not well-formed", "header not well-formed" };   // D-194: a broken header reads as blank
+        var templates = new[] { "styles.xml not well-formed", "numbering.xml not well-formed" };                         // D-194: templates stay strict
+        var images = new[] { "styles.xml not well-formed", "numbering.xml not well-formed", "header not well-formed" };
+        var active = Array.Empty<string>();
         var d = new Dictionary<string, string[]>();
         foreach (var e in new[] { "Document.Load(stream)", "Document.Load(stream, password, options, ct)", "Document.Load(path)", "Document.Load(path, password)", "Document.Load(path, password, options, ct)" }) d[e] = load;
         foreach (var e in new[] { "DocxReader.Open(stream)", "DocxReader.Open(path)", "DocxReader.HasMacros" }) d[e] = open;
-        foreach (var e in new[] { "DocxReader.Paragraphs()", "DocxReader.Tables()", "DocxReader.ExtractText()",
-                                  "DocxTemplate.Fill(stream, stream, data)", "DocxTemplate.Fill(path, path, data)", "DocxTemplate.Fill(path, path, values)",
+        foreach (var e in new[] { "DocxReader.Paragraphs()", "DocxReader.Tables()", "DocxReader.ExtractText()" }) d[e] = text;
+        foreach (var e in new[] { "DocxTemplate.Fill(stream, stream, data)", "DocxTemplate.Fill(path, path, data)", "DocxTemplate.Fill(path, path, values)",
                                   "DocxTemplate.Fill(path, path, text, images, ..., ct)", "DocxTemplate.GetPlaceholders(stream)", "DocxTemplate.GetPlaceholders(path)",
-                                  "DocxTemplate.CheckTemplate(stream)", "DocxTemplate.CheckTemplate(path)" }) d[e] = text;
+                                  "DocxTemplate.CheckTemplate(stream)", "DocxTemplate.CheckTemplate(path)" }) d[e] = templates;
         foreach (var e in new[] { "DocxReader.Images()", "DocxReader.SaveImages(folder)" }) d[e] = images;
         d["DocxReader.GetActiveContent()"] = active;
         return d;
@@ -106,6 +108,54 @@ public static class ErrorContractTests
     }
 
     // ---- the Fill bug fix ----------------------------------------------------------------
+
+    // ---- D-184: the main part must exist ------------------------------------------------
+
+    private const string MainPartMissingMessage = "The main document part '/word/document.xml' is missing from the package.";
+
+    private static void MainPartMissing(string dir)
+    {
+        var clean = ErrorContractMatrix.BaseDocument();
+        var noMain = ErrorContractMatrix.Remove(clean, "word/document.xml");
+        Check("D-184: a package without word/document.xml (still declared) is rejected by every entry point with the one message, and Fill writes nothing", () =>
+        {
+            foreach (var (entry, run) in ErrorContractMatrix.EntryPoints(dir))
+            {
+                var ex = Outcome(run, noMain);
+                AssertTrue(ex is not null && ex.GetType() == typeof(DocxFormatException) && ex.Message == MainPartMissingMessage && ex.InnerException is null,
+                    $"{entry}: {Describe(ex)}");
+            }
+            var output = new MemoryStream();
+            AssertThrows<DocxFormatException>(() => DocxTemplate.Fill(new MemoryStream(noMain), output, new TemplateData().Set("Name", "N")), "Fill(stream)");
+            AssertTrue(output.Length == 0, "Fill wrote " + output.Length + " bytes");
+            var input = Path.Combine(dir, "no-main.docx");
+            var outPath = Path.Combine(dir, "no-main-filled.docx");
+            File.WriteAllBytes(input, noMain);
+            if (File.Exists(outPath)) File.Delete(outPath);
+            AssertThrows<DocxFormatException>(() => DocxTemplate.Fill(input, outPath, new System.Collections.Generic.Dictionary<string, string> { ["Name"] = "N" }), "Fill(path)");
+            AssertTrue(!File.Exists(outPath), "Fill created the output");
+        });
+        Check("D-184: missing optional parts are still skipped: a declared header, footer, numbering or styles part with no zip entry still opens and reads the body", () =>
+        {
+            foreach (var part in new[] { ErrorContractMatrix.HeaderPart(clean), FooterPart(clean), "word/numbering.xml", "word/styles.xml" })
+            {
+                var missing = ErrorContractMatrix.Remove(clean, part);
+                AssertTrue(Document.Load(new MemoryStream(missing)).GetText().Contains("Body {{Name}}"), part + ": Load");
+                using var r = DocxReader.Open(new MemoryStream(missing));
+                AssertTrue(r.ExtractText().Contains("Body {{Name}}"), part + ": ExtractText");
+                AssertTrue(DocxTemplate.GetPlaceholders(new MemoryStream(missing)).Count >= 1, part + ": GetPlaceholders");
+                var output = new MemoryStream();
+                DocxTemplate.Fill(new MemoryStream(missing), output, new TemplateData().Set("Name", "N"));
+                AssertTrue(output.Length > 0, part + ": Fill");
+            }
+        });
+    }
+
+    private static string FooterPart(byte[] package)
+    {
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(package), System.IO.Compression.ZipArchiveMode.Read);
+        return zip.Entries.Select(e => e.FullName).First(n => n.StartsWith("word/footer", StringComparison.Ordinal));
+    }
 
     private static void TemplatePackageCheck(string dir)
     {
@@ -170,9 +220,14 @@ public static class ErrorContractTests
             ExactlyLimit(() => DocxTemplate.Fill(new MemoryStream(clean), new MemoryStream(), new TemplateData(), new TemplateOptions { ReadOptions = tiny }), "Fill");
             ExactlyLimit(() => DocxTemplate.GetPlaceholders(new MemoryStream(clean), null, tiny), "GetPlaceholders");
             ExactlyLimit(() => DocxTemplate.CheckTemplate(new MemoryStream(clean), null, tiny), "CheckTemplate");
-            using var r = DocxReader.Open(new MemoryStream(clean), null, new DocxReaderOptions { MaxPartBytes = 64 });
-            ExactlyLimit(() => r.Paragraphs().ToList(), "Paragraphs (part size)");
-            ExactlyLimit(() => r.ExtractText(), "ExtractText (part size)");
+            // D-206: Open reads the whole main part once, so a main part over MaxPartBytes is reported at Open.
+            ExactlyLimit(() => DocxReader.Open(new MemoryStream(clean), null, new DocxReaderOptions { MaxPartBytes = 64 }), "Open (main part size)");
+            // A header over the limit is still reported when it is read (the main part is within it).
+            var bigHeader = ErrorContractMatrix.Replace(clean, ErrorContractMatrix.HeaderPart(clean),
+                "<w:hdr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:p><w:r><w:t>" + new string('h', 200_000) + "</w:t></w:r></w:p></w:hdr>");
+            using var r = DocxReader.Open(new MemoryStream(bigHeader), null, new DocxReaderOptions { MaxPartBytes = 100_000, IncludeHeadersAndFooters = true });
+            ExactlyLimit(() => r.Paragraphs().ToList(), "Paragraphs (header part size)");
+            ExactlyLimit(() => r.ExtractText(), "ExtractText (header part size)");
         });
         Check("DocxPasswordRequiredException passes through unchanged (no or wrong password) from Load, Open and every template entry point", () =>
         {

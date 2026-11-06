@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using Chuvadi.Docs.Internal;
+using EncryptedSpool = Chuvadi.Internal.Crypto.EncryptedSpool;
 using Chuvadi.Docs.Model;
 using static Chuvadi.Docs.ManualTests.Program;
 
@@ -53,8 +54,9 @@ public static class EncryptedSaveTests
             d.SaveTo(output, new EncryptionOptions { Password = Pw, SpinCount = 1000 });
             var bytes = output.ToArray();
             AssertTrue(bytes.Length > 8 && bytes[0] == 0xD0 && bytes[1] == 0xCF, "a compound file (encrypted), not a zip");
-            AssertTrue(Decrypt(bytes, Pw).SequenceEqual(Plain(d)), "decrypted package is byte-identical to SaveTo(Stream)");
+            AssertTrue(SamePackageExceptTimes(Decrypt(bytes, Pw), Plain(d)), "decrypted package is byte-identical to SaveTo(Stream) (zip entry times aside)");
             AssertTrue(Document.Load(new MemoryStream(bytes), Pw).GetText() == d.GetText(), "text round-trips");
+            OutsideTools.CheckWithMsoffcrypto(bytes, Pw, Plain(d), "stream save");
             AssertThrows<DocxPasswordRequiredException>(() => Document.Load(new MemoryStream(bytes)), "needs the password");
         });
         Check("SaveTo(Stream, EncryptionOptions) leaves the stream open, writes from its current position, and matches the path overload", () =>
@@ -69,7 +71,22 @@ public static class EncryptedSaveTests
             var viaStream = Decrypt(all[3..^1], Pw);
             var path = Path.Combine(dir, "enc-path.docx");
             d.SaveTo(path, new EncryptionOptions { Password = Pw, SpinCount = 1000 });
-            AssertTrue(Decrypt(File.ReadAllBytes(path), Pw).SequenceEqual(viaStream), "same package as the path overload");
+            AssertTrue(SamePackageExceptTimes(Decrypt(File.ReadAllBytes(path), Pw), viaStream), "same package as the path overload");
+        });
+        Check("the package comparison ignores only the zip entry times: a changed byte or data descriptors are a difference", () =>
+        {
+            var a = Plain(Sample());
+            var b = Plain(Sample());
+            AssertTrue(SamePackageExceptTimes(a, b), "two saves of one document");
+            var flipped = (byte[])a.Clone();
+            flipped[flipped.Length / 2] ^= 0x01;
+            AssertTrue(!SamePackageExceptTimes(a, flipped), "one changed byte");
+            var timeOnly = (byte[])a.Clone();
+            timeOnly[10] ^= 0x01;   // the first entry's local-header time field
+            AssertTrue(SamePackageExceptTimes(a, timeOnly), "a time field only");
+            var described = new MemoryStream();
+            Sample().SaveTo(new WriteOnlyStream(described));   // a non-seekable stream makes the zip writer use data descriptors
+            AssertTrue(!SamePackageExceptTimes(a, described.ToArray()), "data descriptors");
         });
         Check("SaveTo(Stream, EncryptionOptions) argument checks: null stream, null options, empty password", () =>
         {
@@ -86,7 +103,7 @@ public static class EncryptedSaveTests
             var d = Sample();
             var sink = new MemoryStream();
             d.SaveTo(new WriteOnlyStream(sink), new EncryptionOptions { Password = Pw, SpinCount = 1000 });
-            AssertTrue(Decrypt(sink.ToArray(), Pw).SequenceEqual(Plain(d)), "same package");
+            AssertTrue(SamePackageExceptTimes(Decrypt(sink.ToArray(), Pw), Plain(d)), "same package");
         });
     }
 
@@ -189,6 +206,42 @@ public static class EncryptedSaveTests
     }
 
     // ---- helpers ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Two zip packages are byte-identical apart from the entries' last-modified times. The zip
+    /// writer stamps each entry with the time of the save (2-second resolution), so two saves of
+    /// one document differ only there; every other byte (entry order, names, flags such as the
+    /// data-descriptor bit, sizes, CRCs and data) must match. The time fields are found through the
+    /// central directory, not by searching.
+    /// </summary>
+    internal static bool SamePackageExceptTimes(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) return false;
+        var x = (byte[])a.Clone();
+        var y = (byte[])b.Clone();
+        if (!MaskZipTimes(x) || !MaskZipTimes(y)) return false;
+        return x.AsSpan().SequenceEqual(y);
+    }
+
+    private static bool MaskZipTimes(byte[] zip)
+    {
+        int eocd = -1;
+        for (int i = zip.Length - 22; i >= Math.Max(0, zip.Length - 22 - 65535); i--)
+            if (BitConverter.ToUInt32(zip, i) == 0x06054b50) { eocd = i; break; }
+        if (eocd < 0) return false;
+        int count = BitConverter.ToUInt16(zip, eocd + 10);
+        int cd = (int)BitConverter.ToUInt32(zip, eocd + 16);
+        for (int n = 0; n < count; n++)
+        {
+            if (BitConverter.ToUInt32(zip, cd) != 0x02014b50) return false;
+            int local = (int)BitConverter.ToUInt32(zip, cd + 42);
+            if (BitConverter.ToUInt32(zip, local) != 0x04034b50) return false;
+            Array.Clear(zip, cd + 12, 4);      // central directory: last-mod time and date
+            Array.Clear(zip, local + 10, 4);   // local header: last-mod time and date
+            cd += 46 + BitConverter.ToUInt16(zip, cd + 28) + BitConverter.ToUInt16(zip, cd + 30) + BitConverter.ToUInt16(zip, cd + 32);
+        }
+        return true;
+    }
 
     /// <summary>The spool's backing file stream, found by reflection (test only).</summary>
     private static FileStream SpoolFile(EncryptedSpool spool)

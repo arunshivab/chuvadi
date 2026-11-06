@@ -127,7 +127,7 @@ public static class DocxTemplate
         byte[] filled;
         using (var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             filled = FillToBytes(input, data, options, cancellationToken);
-        File.WriteAllBytes(outputPath, filled);
+        PathSave.Write(outputPath, stream => stream.Write(filled, 0, filled.Length));   // D-206: replace only on success
     }
 
     /// <summary>

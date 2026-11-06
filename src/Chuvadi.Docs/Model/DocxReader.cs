@@ -46,6 +46,7 @@ public sealed partial class DocxReader : IDisposable
     private readonly MemoryStream? _ownedBuffer;
     private readonly PackageScanResult _scan;
     private readonly string _mainContentType;
+    private readonly List<DocxSkippedPart> _skipped = new();
     private bool _disposed;
 
     private DocxReader(OoxmlPackage package, string documentUri,
@@ -90,6 +91,26 @@ public sealed partial class DocxReader : IDisposable
     public static DocxReader Open(Stream input, string? password, DocxReaderOptions? options, CancellationToken cancellationToken)
         => OpenCore(input, password, options, cancellationToken);
 
+    /// <summary>
+    /// Decompresses the whole main document part once, so a main part whose compressed data is
+    /// damaged is a <see cref="DocxFormatException"/> at Open, like every other entry point (Docs 2.0,
+    /// D-194 and D-206). Nothing is parsed and nothing is kept: the bytes stream through a small
+    /// buffer, about 50 ms for a text-heavy 10 MB docx. The part-size limit
+    /// (<see cref="DocxReaderOptions.MaxPartBytes"/>) and cancellation apply as in every read.
+    /// </summary>
+    private static void VerifyMainPart(OoxmlPackage pkg, string documentUri, DocxReaderOptions options, CancellationToken ct)
+    {
+        try
+        {
+            using var part = GuardedPartStream.Wrap(pkg.OpenPart(documentUri), options.MaxPartBytes, ct, documentUri);
+            part.CopyTo(Stream.Null, 81920);
+        }
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw new DocxFormatException($"The main document part '{documentUri}' is corrupt and cannot be read.", ex);
+        }
+    }
+
     private static DocxReader OpenCore(Stream input, string? password, DocxReaderOptions? options, CancellationToken ct)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -131,6 +152,7 @@ public sealed partial class DocxReader : IDisposable
                 throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
 
             DocumentLoader.CheckMainPart(pkg, documentUri);
+            VerifyMainPart(pkg, documentUri, options, ct);
             string mainContentType = pkg.GetPart(documentUri)!.ContentType;
 
             // Header/footer/footnote/endnote part URIs from the document's own relationships.
@@ -390,9 +412,15 @@ public sealed partial class DocxReader : IDisposable
     private IEnumerable<ParagraphInfo> ParagraphsIterator(CancellationToken ct)
     {
         foreach (var uri in ReadOrder())
-            foreach (var info in ReadParagraphsFromPart(uri, ct))
+        {
+            var items = IsMainPart(uri) ? ReadParagraphsFromPart(uri, ct)
+                : ReadOptionalPart(uri, u => ReadParagraphsFromPart(u, ct));
+            foreach (var info in items)
                 yield return info;
+        }
     }
+
+    private bool IsMainPart(string uri) => string.Equals(uri, _documentUri, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Streams tables in document order: body first, then headers, then footers
@@ -410,8 +438,12 @@ public sealed partial class DocxReader : IDisposable
     private IEnumerable<string[][]> TablesIterator(CancellationToken ct)
     {
         foreach (var uri in ReadOrder())
-            foreach (var grid in ReadTablesFromPart(uri, ct))
+        {
+            var items = IsMainPart(uri) ? ReadTablesFromPart(uri, ct)
+                : ReadOptionalPart(uri, u => ReadTablesFromPart(u, ct));
+            foreach (var grid in items)
                 yield return grid;
+        }
     }
 
     /// <summary>
@@ -428,7 +460,18 @@ public sealed partial class DocxReader : IDisposable
         try
         {
             var sb = new StringBuilder();
-            foreach (var uri in ReadOrder()) AppendTextFromPart(uri, sb, cancellationToken);
+            foreach (var uri in ReadOrder())
+            {
+                if (IsMainPart(uri)) { AppendTextFromPart(uri, sb, cancellationToken); continue; }
+                // A header or footer goes in whole or not at all (all-or-nothing, as in Load).
+                var part = ReadOptionalPart(uri, u =>
+                {
+                    var one = new StringBuilder();
+                    AppendTextFromPart(u, one, cancellationToken);
+                    return new[] { one.ToString() };
+                });
+                foreach (var text in part) sb.Append(text);
+            }
             return sb.ToString();
         }
         catch (Exception ex) when (!DocxErrors.IsContract(ex))
@@ -668,22 +711,69 @@ public sealed partial class DocxReader : IDisposable
            && (r.LocalName == "moveFrom" || r.LocalName == "del");
 
     /// <summary>
-    /// Opens a part with the per-part size cap and the cancellation check applied. Returns
-    /// null when the part is referenced but missing (skipped gracefully).
+    /// Every optional part this reader has skipped so far, in the order it skipped them, each part
+    /// once (Docs 2.0, D-194). A header or footer that is missing, cannot be opened or is not
+    /// well-formed XML reads as blank, as in <see cref="Document.Load(Stream, string?)"/>; a picture
+    /// that is missing or cannot be opened is left out of <see cref="Images()"/>. Each such skip is
+    /// listed here, so nothing is dropped silently. The list grows as parts are read (the readers
+    /// are lazy); read it after the calls whose result you need to judge. The main document part
+    /// is never skipped: a problem there is a <see cref="DocxFormatException"/>.
+    /// </summary>
+    public IReadOnlyList<DocxSkippedPart> SkippedParts => _skipped;
+
+    private void RecordSkip(string uri, DocxSkippedPartReason reason, Exception? error)
+    {
+        foreach (var s in _skipped)
+            if (string.Equals(s.PartName, uri, StringComparison.OrdinalIgnoreCase)) return;
+        _skipped.Add(new DocxSkippedPart(uri, reason, error));
+    }
+
+    /// <summary>
+    /// Opens a part with the per-part size cap and the cancellation check applied. Returns null
+    /// when an optional part is missing or its entry cannot be opened, and records the skip in
+    /// <see cref="SkippedParts"/>. The main document part is never skipped: a failure there throws.
     /// </summary>
     private Stream? TryOpenPart(string uri, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        bool isMain = string.Equals(uri, _documentUri, StringComparison.OrdinalIgnoreCase);
+        if (!isMain && (!_package.HasPart(uri) || !_package.HasEntry(uri)))
+        {
+            RecordSkip(uri, DocxSkippedPartReason.Missing, null);
+            return null;
+        }
         Stream raw;
         try
         {
             raw = _package.OpenPart(uri);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (isMain)
+                throw new DocxFormatException($"The main document part '{uri}' is corrupt and cannot be read.", ex);
+            RecordSkip(uri, DocxSkippedPartReason.Unreadable, ex);
             return null;
         }
         return GuardedPartStream.Wrap(raw, _options.MaxPartBytes, ct, uri);
+    }
+
+    /// <summary>
+    /// Reads an optional header or footer part completely with <paramref name="read"/>. When the
+    /// part is not well-formed XML it reads as blank (as Document.Load treats it) and the skip is
+    /// recorded; the result is all or nothing, never a partial part. Every other failure, limits
+    /// and cancellation included, propagates as before.
+    /// </summary>
+    private List<T> ReadOptionalPart<T>(string uri, Func<string, IEnumerable<T>> read)
+    {
+        try
+        {
+            return new List<T>(read(uri));
+        }
+        catch (XmlException ex)
+        {
+            RecordSkip(uri, DocxSkippedPartReason.NotWellFormed, ex);
+            return new List<T>();
+        }
     }
 
     private XmlReader CreateXml(Stream s, string partUri, CancellationToken ct)
