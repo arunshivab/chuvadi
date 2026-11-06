@@ -20,7 +20,7 @@ namespace Chuvadi.Docs.Conversion;
 /// network access happens (pictures come from <c>data:</c> URIs or the host's
 /// <see cref="ImportOptions.ImageResolver"/>).</para>
 /// <para><b>Export</b> writes a complete page or a fragment; <see cref="ExportPreview(Document, CancellationToken)"/>
-/// gives a self-contained preview (no script, no external reference) for mail clients such as Anjal.</para>
+/// gives a self-contained preview (no script, no external reference) for mail clients.</para>
 /// <code>
 /// var doc = HtmlConversion.Import(html);
 /// string page = HtmlConversion.Export(Document.Load("report.docx"));

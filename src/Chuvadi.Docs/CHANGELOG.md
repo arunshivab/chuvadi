@@ -1,6 +1,50 @@
 # Chuvadi.Docs — Changelog
 
-## 1.6.0 (2026-10-28)
+## 2.0.0 (unreleased)
+
+A major version: the public namespace is renamed, and malformed files are reported one way. 2.0.0 also carries everything listed under 1.6.0 below, which was never released on its own (D-135). It is versioned together with Chuvadi.Docs.Conversion 2.0.0.
+
+### Migration from 1.5.1
+
+- **Namespace:** every public type moves from `Chuvadi.Docs.Word` to `Chuvadi.Docs.Model`. Change `using Chuvadi.Docs.Word;` to `using Chuvadi.Docs.Model;` and recompile; no type or member is renamed. This is a source and binary break (D-91).
+- **One error contract:** every failure to read a package is a `DocxFormatException`, with the original error (`XmlException`, `InvalidDataException`, or the `IOException` of the caller's own stream) as `InnerException`. This covers `Document.Load`, the `DocxReader` readers (`Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent`, `ContainsVbaProject` / `HasMacros`) and `DocxTemplate.Fill`, `GetPlaceholders` and `CheckTemplate`. The message starts "Not a valid docx package: " ("The template is not a valid docx package: " for the template methods).
+  - Catch `DocxFormatException` instead of `XmlException` or `InvalidDataException`. This replaces the 1.4.0 note "Load throws XmlException".
+  - Unchanged and never wrapped: `DocxSecurityLimitException` (still a `DocxFormatException`), `DocxPasswordRequiredException`, `DocxTemplateException`, `DocxLimitExceededException`, `OperationCanceledException`, `ObjectDisposedException`, argument errors, and file-system errors when opening or writing by path.
+- **Behaviour you may notice:**
+  - A missing or corrupt main part (`word/document.xml`) is a `DocxFormatException` everywhere: "The main document part '…' is missing from the package." or "… is corrupt and cannot be read.". Before, `DocxReader.Open`, the readers and the template methods accepted a missing one and returned nothing; `Fill` even wrote a file that `Load` rejected.
+  - `DocxReader.Open` now reads the main part once to check it: about 50 ms per 66 MB of XML, and no extra memory. A main part over `DocxReaderOptions.MaxPartBytes` is now reported at `Open` instead of at the first read.
+  - A header or footer that is not well-formed XML reads as blank in `ExtractText`, `Paragraphs`, `Tables`, `Images` and `SaveImages`, as `Document.Load` already did, and is listed in the new `DocxReader.SkippedParts`. Before, these readers threw, and the body text was lost with it. `GetActiveContent` and the template methods stay strict.
+  - `Fill`, `GetPlaceholders` and `CheckTemplate` check the package as `Load` and `Open` do: a missing or broken `[Content_Types].xml` or `_rels/.rels`, or a main part that is not a Word document, is a `DocxFormatException`, and nothing is written.
+  - Saving to a path where a folder exists now throws `UnauthorizedAccessException` (it was an `IOException`), as in Chuvadi.Sheets.
+
+### New
+
+- **`Document.SaveTo(Stream, EncryptionOptions)`:** an encrypted save to any writable stream, from its current position, seekable or not. The stream is flushed and left open, as with `SaveTo(Stream)` (D-47).
+- **`EncryptionOptions.TempDirectory`:** the folder for an encrypted save's temporary file. Null (the default) is the system temp folder, as before. The same setting as Chuvadi.Sheets' `XlsxWriterOptions.TempDirectory` (D-217).
+- **`DocxReader.SkippedParts`** (`DocxSkippedPart` with `PartName`, `Reason` and `Error`; `DocxSkippedPartReason`: `Missing`, `Unreadable`, `NotWellFormed`). Every part a reader skipped, once each, in the order met. That includes the skips that were already silent: a missing header or footer, a picture whose part is missing or can't be opened, and parts `GetActiveContent` couldn't open (D-194).
+- **`DocxLimitExceededException`** (an `IOException`, with `LimitName`, `Limit` and `Actual`, as Chuvadi.Sheets' `XlsxLimitExceededException`). Thrown by the Chuvadi.Docs.Conversion importers when an input is over a limit.
+- **Trim and NativeAOT:** the package is marked `IsTrimmable` and `IsAotCompatible`, and the analyzers run on every build. Nothing else in the package changes (D-217).
+
+### Bug fixes
+
+- **Encrypted files above about 7 MB could not be opened by anyone**, our reader included (every release since 1.0.0). The compound-file writer, shared with Chuvadi.Sheets, never wrote the extra sector-map (DIFAT) sectors that larger files need. Fixed in the shared writer (Chuvadi.Sheets 2.0.1); round trips at 6, 8, 12 and 50 MB are now tested.
+- **An encrypted save to a path no longer destroys the existing file when it fails:** it writes beside the target and replaces it only on success, as `SaveTo(path)` does.
+- **The encrypted save's temporary file is no longer the plaintext package.** It used to be readable by other users on Linux (mode 644) and survived a crash. It is now encrypted with a one-time key held only in memory, owner-only, opened exclusively and deleted on close.
+- **Saves to a path keep the target's identity** (parity with Chuvadi.Sheets 2.0.1, D-206): `SaveTo(path)`, `SaveTo(path, EncryptionOptions)` and `DocxTemplate.Fill(path, path)`.
+  - A replaced file keeps its permissions (Unix mode; attributes and security settings on Windows).
+  - A symbolic link stays a link, and the file it points to is written.
+  - A missing folder is reported with the target's name, not the temporary file's.
+  - A read-only target is refused and left unchanged.
+  - `Fill(path, path)` no longer leaves a truncated file when a write fails part-way.
+- `DocxTemplate.Fill` no longer writes an output that can't be opened when the template's package is broken (see the migration notes).
+
+### Documentation
+
+- `TextFormat.ComplexScriptFont`: Word uses it only for runs marked complex script (`ComplexScript = true`, `w:cs`). For Tamil and other Indic text, set `ComplexScript` or use `FontForAllScripts`. Before, the comment said it applied to Indic text by itself.
+- The README describes what survives a load-save round trip (fields, notes, comments and tracked changes do since 1.6.0) and what doesn't. It also has new sections on platforms and threads, path saves, `SkippedParts` and the error contract.
+- Fictional names and addresses in the README, comments and test data (D-60).
+
+## 1.6.0 (never released; ships in 2.0.0)
 
 Fields, notes, bookmarks, text boxes, embedded fonts, floating tables and document properties (Phase 8); comments and tracked changes with accept/reject (Phase 9); the Chuvadi.Docs.Conversion companion package (D-15).
 

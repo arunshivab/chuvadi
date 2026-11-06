@@ -533,7 +533,10 @@ public sealed partial class Document
     /// Saves an ENCRYPTED .docx package (OOXML Agile Encryption) to a stream, which is flushed and
     /// left OPEN (the caller disposes it). The plaintext package is never held fully in memory:
     /// it is spooled to a temporary file that is encrypted with a one-time AES key held only in
-    /// memory, created readable by the current user only, and deleted when the save ends.
+    /// memory, created readable by the current user only, and deleted when the save ends. The
+    /// temporary file goes to <see cref="EncryptionOptions.TempDirectory"/>, or to
+    /// <see cref="Path.GetTempPath"/> when that is null. If it cannot be created, the save throws
+    /// before anything is written to <paramref name="output"/>.
     /// </summary>
     public void SaveTo(Stream output, EncryptionOptions encryption)
     {
@@ -555,7 +558,8 @@ public sealed partial class Document
         // one-time key held only in memory, owner-only, deleted on close. The shared writer writes
         // the encrypted file sequentially from the stream's current position, so any writable
         // stream works, seekable or not.
-        using var spool = new Chuvadi.Internal.Crypto.EncryptedSpool(directory: null, fileNamePrefix: "chuvadi_docs_");
+        // The spool goes to EncryptionOptions.TempDirectory, or the system temp folder when null (D-217).
+        using var spool = new Chuvadi.Internal.Crypto.EncryptedSpool(directory: encryption.TempDirectory, fileNamePrefix: "chuvadi_docs_");
         SaveTo(spool);
         spool.Position = 0;
         Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(

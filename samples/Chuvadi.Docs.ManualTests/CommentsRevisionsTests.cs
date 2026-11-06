@@ -58,14 +58,14 @@ public static class CommentsRevisionsTests
         Check("comments: range, anchor, content, replies and done flags are written and loaded", () =>
         {
             var d = new Document();
-            var c = d.Comments.Add("Dr. Arun Shiva", "Please confirm the dose.", date: When);
+            var c = d.Comments.Add("Dr. Jane Example", "Please confirm the dose.", date: When);
             d.AddParagraph("The dose is ").Commented("2 Gy per fraction", c).Text(".");
             var reply = d.Comments.Reply(c, "Physicist", "Confirmed against the plan.", date: When);
             reply.Done = true;
             var path = Save(outDir, "p9-comments", d);
             var cx = XElement.Parse(ReadPartXml(path, "word/comments.xml"));
             var comments = cx.Elements(Wn + "comment").ToList();
-            AssertTrue(comments.Count == 2 && (string)comments[0].Attribute(Wn + "author")! == "Dr. Arun Shiva" && (string)comments[0].Attribute(Wn + "initials")! == "DAS", "comments part");
+            AssertTrue(comments.Count == 2 && (string)comments[0].Attribute(Wn + "author")! == "Dr. Jane Example" && (string)comments[0].Attribute(Wn + "initials")! == "DJE", "comments part");
             AssertTrue(comments[0].Descendants(Wn + "annotationRef").Any(), "annotation mark");
             var ex = XElement.Parse(ReadPartXml(path, "word/commentsExtended.xml"));
             var exs = ex.Elements(W15 + "commentEx").ToList();

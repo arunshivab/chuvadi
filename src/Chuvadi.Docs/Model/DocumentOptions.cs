@@ -226,6 +226,21 @@ public sealed class EncryptionOptions
     /// Higher = slower brute force; lower = faster save/open. Don't go below 50,000.
     /// </summary>
     public int SpinCount { get; init; } = 100_000;
+
+    /// <summary>
+    /// Folder for the temporary file that <see cref="Document.SaveTo(string, EncryptionOptions)"/>
+    /// and <see cref="Document.SaveTo(System.IO.Stream, EncryptionOptions)"/> write while they build
+    /// the package (D-217). Null, the default, uses <see cref="System.IO.Path.GetTempPath"/>.
+    /// <para>The file is named <c>chuvadi_docs_*.tmp</c>. It holds the package encrypted with a
+    /// one-time key kept only in memory, is opened exclusively, is owner-only on Unix (mode 600), and
+    /// is deleted on close. A relative path is resolved against the current directory at save time,
+    /// and an empty string means the current directory. If the folder is missing or cannot be written
+    /// to, the save throws the system's exception (it names the temporary file) and the output is not
+    /// changed. The same setting as Chuvadi.Sheets' <c>XlsxWriterOptions.TempDirectory</c>.</para>
+    /// <para>Not used by <see cref="DocxTemplate"/> with <see cref="TemplateOptions.OutputEncryption"/>,
+    /// which encrypts in memory. A path save's own temporary file always goes beside the target.</para>
+    /// </summary>
+    public string? TempDirectory { get; init; }
 }
 
 /// <summary>Thrown when reading an encrypted docx without a password, or with the wrong one.</summary>

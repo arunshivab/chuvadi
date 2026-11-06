@@ -11,7 +11,7 @@ using static Chuvadi.Docs.ManualTests.Program;
 namespace Chuvadi.Docs.ManualTests;
 
 /// <summary>
-/// Untrusted-input hardening (Anjal Mail asks B1–B3):
+/// Untrusted-input hardening: B1–B3:
 /// B1 — macro / active-content detection (detect only, never execute);
 /// B2 — zip-bomb, entry-count, nesting-depth and spin-count guards with
 ///      <see cref="DocxSecurityLimitException"/>;

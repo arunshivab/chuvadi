@@ -397,7 +397,7 @@ public static class TextModelTests
         var output = Path.Combine(outDir, "text-tpl-out.docx");
         DocxTemplate.Fill(template, output, new Dictionary<string, string>
         {
-            ["Address"] = "Apulki Medical Center\nBaner, Pune\tMH 411045",
+            ["Address"] = "Example Clinic\n12 Sample Road\tTestville 000000",
         });
 
         Check("template: newlines / tabs in a filled value become w:br / w:tab inside the bold run", () =>
@@ -406,7 +406,7 @@ public static class TextModelTests
             var seq = string.Join(",", run.Elements().Where(e => e.Name != Wn + "rPr").Select(e => e.Name.LocalName));
             AssertTrue(seq == "t,br,t,tab,t", $"sequence was {seq}");
             using var r = DocxReader.Open(output);
-            AssertContains(r.ExtractText(), "Address: Apulki Medical Center\nBaner, Pune\tMH 411045", "reader text");
+            AssertContains(r.ExtractText(), "Address: Example Clinic\n12 Sample Road\tTestville 000000", "reader text");
             AssertContains(r.ExtractText(), "Untouched line", "untouched paragraph");
         });
     }

@@ -351,11 +351,11 @@ public sealed class HtmlExportOptions : ExportOptions
     public string NewLine { get; set; } = "\n";
 
     /// <summary>
-    /// Settings for a quick, safe preview (for example a mail attachment in Anjal): a fragment
+    /// Settings for a quick, safe preview (for example a mail attachment): a fragment
     /// wrapped in <c>div.chuvadi-docx</c>, inline formatting only (no style sheet), pictures as
     /// <c>data:</c> URIs up to 2 MiB, at most 2000 blocks, no headers or footers. The output contains
     /// no script, no event handler and no external reference: Chuvadi.Markup's
-    /// <c>SanitizerPolicy.Anjal()</c> removes nothing from it (it only makes links inert and
+    /// default <c>SanitizerPolicy</c> removes nothing from it (it only makes links inert and
     /// prefixes ids, as it does for every mail).
     /// </summary>
     public static HtmlExportOptions Preview() => new()
@@ -397,7 +397,7 @@ public sealed class HtmlImportOptions : ImportOptions
         p.ScopeClass = null;
         p.IdPrefix = null;
         p.TransferBodyStyle = false;
-        // Anjal's Strict() limits stay: HTML input is untrusted (8 Mi characters, 500 000 nodes, depth 256).
+        // The policy's Strict() limits stay: HTML input is untrusted (8 Mi characters, 500 000 nodes, depth 256).
         return p;
     }
 }
