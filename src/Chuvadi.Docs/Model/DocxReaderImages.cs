@@ -33,8 +33,12 @@ public sealed partial class DocxReader
             CollectImagesFromPart(_documentUri, ImageHost.Body, result, cancellationToken);
             if (_options.IncludeHeadersAndFooters)
             {
-                foreach (var uri in _headerUris) CollectImagesFromPart(uri, ImageHost.Header, result, cancellationToken);
-                foreach (var uri in _footerUris) CollectImagesFromPart(uri, ImageHost.Footer, result, cancellationToken);
+                // A header or footer that is not well-formed XML contributes no pictures (as in
+                // Load) and is listed in SkippedParts; all or nothing per part.
+                foreach (var uri in _headerUris)
+                    result.AddRange(ReadOptionalPart(uri, u => { var one = new List<ImageInfo>(); CollectImagesFromPart(u, ImageHost.Header, one, cancellationToken); return one; }));
+                foreach (var uri in _footerUris)
+                    result.AddRange(ReadOptionalPart(uri, u => { var one = new List<ImageInfo>(); CollectImagesFromPart(u, ImageHost.Footer, one, cancellationToken); return one; }));
             }
         }
         catch (Exception ex) when (!DocxErrors.IsContract(ex))

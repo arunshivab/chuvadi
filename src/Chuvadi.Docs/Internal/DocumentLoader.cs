@@ -1145,8 +1145,37 @@ internal static class DocumentLoader
         if (semi >= 0) type = type[..semi];
         type = type.Trim();
         foreach (var accepted in WordMainContentTypes)
-            if (string.Equals(type, accepted, StringComparison.OrdinalIgnoreCase)) return;
+        {
+            if (!string.Equals(type, accepted, StringComparison.OrdinalIgnoreCase)) continue;
+            CheckMainPartPresent(pkg, documentUri);
+            return;
+        }
         throw new DocxFormatException($"The main part '{documentUri}' has content type '{part.ContentType}', not a Word document.");
+    }
+
+    /// <summary>
+    /// The main part must exist in the zip and its entry must open, not only be declared in
+    /// [Content_Types].xml (Docs 2.0, D-184 and D-194). Every entry point runs this through
+    /// <see cref="CheckMainPart"/>, so a package whose main part is missing or whose entry is corrupt
+    /// is rejected by Load, DocxReader.Open and the template methods alike. Only the entry is opened
+    /// (nothing is decompressed here); corrupt compressed data in the main part is reported as
+    /// <see cref="DocxFormatException"/> when the part is read. Optional parts (headers, footers,
+    /// pictures) are handled where they are read; see <see cref="DocxReader.SkippedParts"/>.
+    /// </summary>
+    private static void CheckMainPartPresent(OoxmlPackage pkg, string documentUri)
+    {
+        if (!pkg.HasEntry(documentUri))
+            throw new DocxFormatException($"The main document part '{documentUri}' is missing from the package.");
+        try
+        {
+            pkg.OpenPart(documentUri).Dispose();   // opens the entry only; nothing is decompressed
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not DocxFormatException)
+        {
+            // Any other failure to open the entry (for example a corrupt entry header) means the
+            // body cannot be read at all (D-194, 5e).
+            throw new DocxFormatException($"The main document part '{documentUri}' is corrupt and cannot be read.", ex);
+        }
     }
 
     private static void ReadFallbackOffsets(XmlReader fb, FloatingPosition target)
