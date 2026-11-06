@@ -9,6 +9,10 @@
     <AssemblyName>Chuvadi.Zip</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-227: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Zip</Product>
     <Description>Pure-BCL zip library for .NET: streaming read/write with bounded memory, Zip64, WinZip AES-256 (AE-1/AE-2) encryption, legacy ZipCrypto read, zip-slip protection, decompression-bomb limits, cancellation everywhere and in-memory operation. No NuGet dependencies.</Description>
