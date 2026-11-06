@@ -23,6 +23,14 @@ namespace Chuvadi.Print.ManualTests
         ///   --windows-raw-file &lt;path&gt;     with --windows-raw-printer: the queue's port file; check it holds exactly the bytes sent
         ///   --xps-sample &lt;file.xps&gt;      write the two-page XPS sample for viewing in an XPS viewer
         ///   --xps-font &lt;file.ttf&gt;        with --xps-sample: the TrueType font for its text (default Arial on Windows)
+        ///   --xps-ticket "&lt;queue&gt;"         write the job PrintTicket the queue gets (with --xps-ticket-file &lt;file.xml&gt;); prints nothing
+        ///   --xps-queue "&lt;queue&gt;"          print the XPS sample to a Windows queue through the Print Document Package API
+        ///   --xps-queue-file &lt;path&gt;        with --xps-queue: the queue's port file; wait for it and say what it holds
+        ///   --xps-route "&lt;queue&gt;"          route the sample and a knockout page through WindowsQueue with a recording raster fallback
+        ///   --xps-orientation &lt;name&gt;      with the --xps-ticket/-queue/-route options: Portrait (default), Landscape, ReversePortrait, ReverseLandscape
+        ///   --xps-copies &lt;n&gt;              copies (default 1); --xps-software-copies repeats the sheets in the XPS instead
+        ///   --xps-duplex &lt;name&gt;           Simplex (default), Vertical (long edge) or Horizontal (short edge)
+        ///   --xps-status-seconds &lt;n&gt;      how long to wait for the job status (default 120; -1 = do not wait)
         /// </summary>
         public static int Main(string[] args)
         {
@@ -114,6 +122,20 @@ namespace Chuvadi.Print.ManualTests
                     ? Phase1Scenarios.WindowsRaw(queue, Option(args, "--windows-raw-file", null))
                     : throw new PlatformNotSupportedException("--windows-raw-printer needs Windows"));
             failed += Scenario(args, "--xps-sample", "XPS sample", file => Phase4Scenarios.WriteSample(file, Option(args, "--xps-font", null)));
+            failed += Scenario(args, "--xps-ticket", "XPS PrintTicket", queue =>
+                OperatingSystem.IsWindows()
+                    ? Phase4QueueScenarios.WriteTicket(queue, Option(args, "--xps-ticket-file", null) ?? "chuvadi-ticket.xml",
+                                                       Phase4QueueScenarios.ParseOptions((name, missing) => Option(args, name, missing)))
+                    : throw new PlatformNotSupportedException("--xps-ticket needs Windows"));
+            failed += Scenario(args, "--xps-queue", "XPS queue", queue =>
+                OperatingSystem.IsWindows()
+                    ? Phase4QueueScenarios.PrintSample(queue, Option(args, "--xps-queue-file", null),
+                                                       Phase4QueueScenarios.ParseOptions((name, missing) => Option(args, name, missing)))
+                    : throw new PlatformNotSupportedException("--xps-queue needs Windows"));
+            failed += Scenario(args, "--xps-route", "XPS route", queue =>
+                OperatingSystem.IsWindows()
+                    ? Phase4QueueScenarios.Route(queue, Phase4QueueScenarios.ParseOptions((name, missing) => Option(args, name, missing)))
+                    : throw new PlatformNotSupportedException("--xps-route needs Windows"));
 
             return failed == 0 ? 0 : 1;
         }

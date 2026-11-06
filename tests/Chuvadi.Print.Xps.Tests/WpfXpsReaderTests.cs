@@ -204,5 +204,30 @@ namespace Chuvadi.Print.Xps.Tests
                 Assert.True(page.At(134, 258).R < 80, "the bar shows through the clear edge of the disc");
             });
         }
+
+        [Fact]
+        public void A_page_turned_onto_its_sheet_by_vector_layout_renders_where_the_layout_says()
+        {
+            // Phase 4 part 3: a landscape page auto-rotated clockwise onto a portrait A4 sheet (fit to page, no margins).
+            var page = new VectorPage(400, 200);
+            page.Elements.Add(new VectorPath(VectorGeometry.FromRectangle(0, 0, 40, 40)) { Fill = new VectorSolidBrush(new VectorColor(220, 40, 40)) });
+            var settings = new PrintSettings { Margins = Margins.None, AutoRotate = true };
+            PagePlacement placement = PageLayout.Compute(new PageDimensions(400, 200), settings, PrintTargetCapabilities.Default);
+            Assert.Equal(PageRotation.Clockwise90, placement.Rotation);
+            VectorPage sheet = VectorLayout.Place(page, placement);
+
+            string path = Path.Combine(_folder, "turned.xps");
+            XpsWriter.Write(new[] { sheet }, path);
+            RectanglePoints b = placement.ContentBounds;
+            double s = placement.ScaleFactor;
+            RunSta(() =>
+            {
+                Rendered rendered = Render(path)[0];
+                // Clockwise: the page's top-left corner (the red square) lands at the top-right of the content bounds.
+                Near(rendered.At(b.X + b.Width - 20 * s, b.Y + 20 * s), 220, 40, 40, 12, "red square at the top right");
+                Near(rendered.At(b.X + 20 * s, b.Y + 20 * s), 255, 255, 255, 12, "top left stays white");
+                Near(rendered.At(b.X + b.Width - 20 * s, b.Y + b.Height - 20 * s), 255, 255, 255, 12, "bottom right stays white");
+            });
+        }
     }
 }

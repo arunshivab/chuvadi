@@ -13,14 +13,14 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 ## A. Preparation
 
 1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, the D-48 removal,
-   the package split, and Phase 1 part 1 (rc.2). Update your clone:
+   the package split, Phase 1 part 1 (rc.2), and Phase 4 parts 1 to 3 (rc.3). Update your clone:
    ```powershell
    cd C:\src\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
    ```
-   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.2</Version>`.
+   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.3</Version>`.
 2. **Local feed.** The Chuvadi.Pdf packages of the pinned version (3.22.1, the `ChuvadiPdfVersion` in
    `staging\Chuvadi.Print.Pdf.Raster\Chuvadi.Print.Pdf.Raster.csproj`) are in the local feed:
    ```powershell
@@ -177,6 +177,84 @@ PowerShell 5.x: run each command line on its own (no `&&`).
     Select and copy some text: it pastes
     as the same words. Record anything that looks different.
 
+## D4. Windows queue, vector (Phase 4 part 3)
+
+These steps print through the Print Document Package API (`WindowsXpsPrinterTarget`). Two test queues write their
+output to a file, so no save dialog appears and the output can be opened afterwards.
+
+11g. **Test queues.** One-time setup in an **elevated** PowerShell. First list the inbox drivers:
+    ```powershell
+    Get-PrinterDriver | Select-Object Name
+    ```
+    Expected: "Microsoft XPS Document Writer v4" and "Microsoft Print To PDF" are listed (write down the exact names
+    if they differ, and use them below). Then:
+    ```powershell
+    Add-PrinterPort -Name "C:\Users\Public\chuvadi-queue.xps"
+    ```
+    ```powershell
+    Add-Printer -Name "Chuvadi XPS Test" -DriverName "Microsoft XPS Document Writer v4" -PortName "C:\Users\Public\chuvadi-queue.xps"
+    ```
+    ```powershell
+    Add-PrinterPort -Name "C:\Users\Public\chuvadi-queue.pdf"
+    ```
+    ```powershell
+    Add-Printer -Name "Chuvadi PDF Test" -DriverName "Microsoft Print To PDF" -PortName "C:\Users\Public\chuvadi-queue.pdf"
+    ```
+    To remove them afterwards (elevated): `Remove-Printer -Name "Chuvadi XPS Test"`, then
+    `Remove-Printer -Name "Chuvadi PDF Test"`.
+11h. **Job PrintTicket** (prints nothing):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-ticket "Chuvadi PDF Test" --xps-ticket-file "C:\Users\Public\chuvadi-ticket.xml"
+    ```
+    Expected: `PASS  XPS PrintTicket: <n> bytes written to C:\Users\Public\chuvadi-ticket.xml for Portrait, 1 copy, Simplex; mentions: PageMediaSize yes, ...`.
+    Open the XML in Notepad: the `psk:PageMediaSize` option names A4 (for example `psk:ISOA4`). Run it again with
+    `--xps-orientation Landscape --xps-copies 2` added: `psk:Landscape` appears, and the line says
+    `2 copies (repeated in the XPS)`. Microsoft Print to PDF cannot make copies itself, so the copies are not in its
+    ticket (`JobCopiesAllDocuments` stays 1); the sheets are repeated instead.
+    To see copies in a ticket, use a queue whose driver makes them (the HP Ink Tank, its queue name from step 4):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-ticket "<HP Ink Tank queue name>" --xps-ticket-file "C:\Users\Public\chuvadi-ticket-hp.xml" --xps-copies 2
+    ```
+    Expected: the line says `2 copies (in the PrintTicket)`, and the XML has `psk:JobCopiesAllDocuments` with the
+    value 2 and `psk:DocumentCollate` Collated. Record the mentions line of each run.
+11i. **XPS sample through the XPS queue:**
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi XPS Test" --xps-queue-file "C:\Users\Public\chuvadi-queue.xps"
+    ```
+    Expected: `PASS  XPS queue: 2 sheets, Portrait, 1 copy, Simplex, status: job <n>: Completed, 2 pages processed, status 0x00000000 (<k> updates), <s> s; port file C:\Users\Public\chuvadi-queue.xps holds an XPS (zip) package of <m> bytes`.
+    **Record the status part exactly**: "status events not connected", "none received" or a `Completed` status.
+    It tells whether the print system calls our status sink. Open the file in XPS Viewer. Page 1 is the 11f page 1
+    on an A4 sheet, at the same size and place. Page 2 is the A5 landscape page, scaled up to the A4 width and centred
+    on the A4 sheet (fit to page), with its frame and centre lines. Everything listed under 11f is there, and text
+    copies as text.
+11j. **XPS sample through the PDF queue:**
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-queue.pdf"
+    ```
+    Expected: as in 11i, with `holds a PDF`. Open the PDF in a browser: the same two pages. Zoom to 400 %: edges and
+    text stay sharp (vector output, not pixels), and text can be selected.
+11k. **Settings through the PDF queue.** Run 11j three more times, each with one option set added, and open the PDF
+    after each run:
+    - `--xps-orientation Landscape`: two landscape pages; page 1 (portrait A4 content) is scaled down and centred.
+    - `--xps-orientation ReversePortrait`: as 11j, with both pages upside down.
+    - `--xps-copies 2 --xps-software-copies`: four pages: 1, 2, 1, 2 (the sheets repeated in the XPS).
+    Record what each run shows. Also run `--xps-copies 2` without `--xps-software-copies`: the line says
+    `2 copies (repeated in the XPS)` and the PDF has four pages, because Microsoft Print to PDF cannot make copies
+    and `CopyHandling.Auto` then repeats the sheets.
+11l. **Route decision.**
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-route "Chuvadi XPS Test"
+    ```
+    Expected: `PASS  XPS route: sample: Printed via WindowsQueue | knockout page: Printed via Raster (fallback: WindowsQueue: page 1: ...knockout...) (1 pages recorded, not printed)`.
+    The XPS port file then holds the sample again.
+11m. **Real printer.** With the HP Ink Tank switched on (its queue name is in step 4):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "<HP Ink Tank queue name>"
+    ```
+    Expected: a PASS line with a status, and two printed A4 sheets matching 11i. Text and thin lines are crisp. Record
+    the status part. If the spooler hangs (the job stays in the queue), cancel it in the queue window; if that does
+    not clear it, in an elevated PowerShell run `Restart-Service Spooler`, then record what happened.
+
 ## E. Sign-off and tag
 
 12. **Record the result.** All steps that apply are PASS on both PCs. Note the PC names and Windows builds
@@ -202,4 +280,6 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 | 1–8 | | | |
 | 9–10 | | | |
 | 11 | | | |
+| 11a–11f | | | |
+| 11g–11m | | | |
 | 12–14 | | | |

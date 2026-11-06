@@ -4,6 +4,7 @@ Part of [Chuvadi.Print](../Chuvadi.Print/README.md): pure-BCL printing for .NET,
 
 - **Windows printing** (`Chuvadi.Print.Windows`): list printers, read every driver paper, tray, media type and resolution, and print through the GDI spooler with full control of the driver settings. Plain P/Invoke — no native binaries, and the rest of the library still runs everywhere.
 - **XPS documents**: `XpsWriter` writes vector pages (`VectorPage` from Chuvadi.Print) as an XPS package (ECMA-388), with TrueType fonts embedded. Pure managed code; it runs on any OS.
+- **Vector printing to Windows queues**: `WindowsXpsPrinterTarget` prints vector pages as XPS through the Print Document Package API, with the job PrintTicket made from the same driver settings as GDI printing, and job status reported back. `WindowsQueueRoute` puts it in a `PrintRouter`.
 
 ```csharp
 using Chuvadi.Print.Windows;
@@ -28,6 +29,9 @@ new WindowsRawPrinterTarget("Label Printer").Send(File.ReadAllBytes("labels.zpl"
 var page = new VectorPage(595.28, 841.89);
 page.Elements.Add(new VectorPath(VectorGeometry.FromRectangle(72, 72, 200, 100)) { Fill = new VectorSolidBrush(new VectorColor(40, 120, 220)) });
 if (XpsWriter.CanWrite(page, out string? why)) XpsWriter.Write(new[] { page }, @"C:\out\page.xps");
+
+// The same pages printed as vectors through the queue's driver.
+new WindowsXpsPrinterTarget("Ward-3 Laser").PrintPages(new[] { page }, new PrintSettings());
 ```
 
 Full guide: [docs/Chuvadi.Print/GUIDE.md](https://github.com/arunshivab/chuvadi/blob/main/docs/Chuvadi.Print/GUIDE.md).

@@ -17,7 +17,7 @@
     <Description>Remote printing for Chuvadi.Print: an embeddable print hub (host-agnostic HTTP handler, durable job store, leases, idempotent job ids) and dial-out print agents (long poll, resumable SHA-256-checked downloads, never-print-twice journal), with per-agent token authentication and rotation. No inbound port on the agent. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0-rc.2</Version>
+    <Version>1.0.0-rc.3</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
