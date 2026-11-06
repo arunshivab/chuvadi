@@ -150,7 +150,7 @@ namespace Chuvadi.Print.Remote
             {
                 if (_jobs.TryGetValue(job.JobId, out StoredJob? existing)) return existing.Clone();
                 WriteAtomic(PayloadPath(job.JobId), payload.Span);
-                WriteAtomic(JobPath(job.JobId), JsonSerializer.SerializeToUtf8Bytes(job, RemoteProtocol.Json));
+                WriteAtomic(JobPath(job.JobId), JsonSerializer.SerializeToUtf8Bytes(job, RemoteProtocol.Json.StoredJob));
                 _jobs[job.JobId] = job.Clone();
                 return null;
             }
@@ -173,7 +173,7 @@ namespace Chuvadi.Print.Remote
             lock (_gate)
             {
                 if (!_jobs.ContainsKey(job.JobId)) throw new KeyNotFoundException("Job " + job.JobId + " is not in the store.");
-                WriteAtomic(JobPath(job.JobId), JsonSerializer.SerializeToUtf8Bytes(job, RemoteProtocol.Json));
+                WriteAtomic(JobPath(job.JobId), JsonSerializer.SerializeToUtf8Bytes(job, RemoteProtocol.Json.StoredJob));
                 _jobs[job.JobId] = job.Clone();
             }
         }
@@ -219,7 +219,7 @@ namespace Chuvadi.Print.Remote
             foreach (string path in Directory.EnumerateFiles(_jobsDir, "*" + JobExtension))
             {
                 StoredJob? job = null;
-                try { job = JsonSerializer.Deserialize<StoredJob>(File.ReadAllBytes(path), RemoteProtocol.Json); }
+                try { job = JsonSerializer.Deserialize(File.ReadAllBytes(path), RemoteProtocol.Json.StoredJob); }
                 catch (JsonException) { }
                 if (job is null || job.JobId == Guid.Empty ||
                     !string.Equals(Path.GetFileNameWithoutExtension(path), job.JobId.ToString("N"), StringComparison.OrdinalIgnoreCase))

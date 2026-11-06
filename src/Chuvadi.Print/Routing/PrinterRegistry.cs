@@ -95,14 +95,6 @@ namespace Chuvadi.Print
         private readonly object _gate = new();
         private readonly Dictionary<string, SavedPrinter> _printers = new(StringComparer.OrdinalIgnoreCase);
 
-        private static readonly JsonSerializerOptions Json = new()
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() }
-        };
-
         /// <summary>Copies of every saved printer, by name.</summary>
         public IReadOnlyList<SavedPrinter> Printers
         {
@@ -155,8 +147,8 @@ namespace Chuvadi.Print
         public void WriteTo(Stream output)
         {
             if (output is null) throw new ArgumentNullException(nameof(output));
-            var file = new RegistryFile { Version = FormatVersion, Printers = new List<SavedPrinter>(Printers) };
-            JsonSerializer.Serialize(output, file, Json);
+            var file = new PrinterRegistryFile { Version = FormatVersion, Printers = new List<SavedPrinter>(Printers) };
+            JsonSerializer.Serialize(output, file, PrinterRegistryJson.Default.PrinterRegistryFile);
         }
 
         /// <summary>Saves to a file: written to a temporary file next to it, then moved over it, so a crash never leaves half a file.</summary>
@@ -187,10 +179,10 @@ namespace Chuvadi.Print
         public static PrinterRegistry Read(Stream input)
         {
             if (input is null) throw new ArgumentNullException(nameof(input));
-            RegistryFile? file;
+            PrinterRegistryFile? file;
             try
             {
-                file = JsonSerializer.Deserialize<RegistryFile>(input, Json);
+                file = JsonSerializer.Deserialize(input, PrinterRegistryJson.Default.PrinterRegistryFile);
             }
             catch (JsonException ex)
             {
@@ -217,11 +209,23 @@ namespace Chuvadi.Print
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             return Read(stream);
         }
+    }
 
-        private sealed class RegistryFile
-        {
-            public int Version { get; set; }
-            public List<SavedPrinter>? Printers { get; set; }
-        }
+    /// <summary>The registry file's top level (format <see cref="Version"/>).</summary>
+    internal sealed class PrinterRegistryFile
+    {
+        public int Version { get; set; }
+        public List<SavedPrinter>? Printers { get; set; }
+    }
+
+    /// <summary>
+    /// Source-generated serializer for the registry file (D-217): indented, camelCase, nulls left out, enums as names
+    /// (numbers also read). Trimming- and NativeAOT-safe; writes the same bytes as the reflection serializer it replaced.
+    /// </summary>
+    [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+                                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, UseStringEnumConverter = true)]
+    [JsonSerializable(typeof(PrinterRegistryFile))]
+    internal sealed partial class PrinterRegistryJson : JsonSerializerContext
+    {
     }
 }

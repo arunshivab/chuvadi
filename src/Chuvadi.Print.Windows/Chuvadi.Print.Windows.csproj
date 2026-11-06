@@ -8,6 +8,9 @@
     <RootNamespace>Chuvadi.Print.Windows</RootNamespace>
     <AssemblyName>Chuvadi.Print.Windows</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- D-217: trimming- and NativeAOT-safe; the analyzers run on every build (warnings are errors). -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
     <!-- D-217: the source-generated P/Invoke marshalling (LibraryImport) uses pointers. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 

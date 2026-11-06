@@ -20,13 +20,29 @@ namespace Chuvadi.Print.Remote
         public const string JsonContentType = "application/json";
         public const string PayloadContentType = "application/vnd.chuvadi.spool";
 
-        internal static readonly JsonSerializerOptions Json = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            PropertyNameCaseInsensitive = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() }
-        };
+        /// <summary>The source-generated serializer for every hub and agent message and file (D-217).</summary>
+        internal static RemoteJson Json => RemoteJson.Default;
+    }
+
+    /// <summary>
+    /// Source-generated serializer for the hub/agent protocol, the agent journal, the token file and the file job store
+    /// (D-217): camelCase, case-insensitive reading, nulls left out, enums as names (numbers also read). Trimming- and
+    /// NativeAOT-safe; writes the same bytes as the reflection serializer it replaced.
+    /// </summary>
+    [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true,
+                                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, UseStringEnumConverter = true)]
+    [JsonSerializable(typeof(HelloRequest))]
+    [JsonSerializable(typeof(HelloResponse))]
+    [JsonSerializable(typeof(PollRequest))]
+    [JsonSerializable(typeof(JobLease))]
+    [JsonSerializable(typeof(StatusReport))]
+    [JsonSerializable(typeof(StatusResponse))]
+    [JsonSerializable(typeof(ErrorResponse))]
+    [JsonSerializable(typeof(StoredJob))]
+    [JsonSerializable(typeof(AgentJournalEntry))]
+    [JsonSerializable(typeof(List<AgentTokenRecord>))]
+    internal sealed partial class RemoteJson : JsonSerializerContext
+    {
     }
 
     /// <summary>Lifecycle of a job on the hub.</summary>
