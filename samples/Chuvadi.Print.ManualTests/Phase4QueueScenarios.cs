@@ -36,8 +36,16 @@ namespace Chuvadi.Print.ManualTests
             };
 
             public override string ToString()
-                => Orientation + ", " + Copies + (Copies == 1 ? " copy" : " copies") + (SoftwareCopies ? " (repeated in the XPS)" : "")
-                   + ", " + Duplex;
+                => Orientation + ", " + Copies + (Copies == 1 ? " copy" : " copies") + ", " + Duplex;
+
+            /// <summary>Like <see cref="ToString"/>, saying who makes the copies on this queue when there is more than one.</summary>
+            public string Describe(WindowsXpsPrinterTarget target)
+            {
+                if (Copies == 1) return ToString();
+                PrintSettings settings = ToSettings();
+                bool driver = PrintJob.TargetMakesCopies(settings, target.ReadCapabilities(settings).ToTargetCapabilities(null), target.CopyHandling);
+                return Orientation + ", " + Copies + " copies" + (driver ? " (in the PrintTicket)" : " (repeated in the XPS)") + ", " + Duplex;
+            }
         }
 
         /// <summary>Writes the job PrintTicket the queue gets for these options; prints nothing.</summary>
@@ -51,7 +59,7 @@ namespace Chuvadi.Print.ManualTests
             string text = Encoding.UTF8.GetString(ticket);
             if (!text.Contains("PrintTicket", StringComparison.Ordinal))
                 throw new InvalidOperationException("the ticket written to " + path + " has no PrintTicket element");
-            return ticket.Length + " bytes written to " + Path.GetFullPath(path) + " for " + options
+            return ticket.Length + " bytes written to " + Path.GetFullPath(path) + " for " + options.Describe(target)
                    + "; mentions: " + Mentions(text, "PageMediaSize", "PageOrientation", "JobCopiesAllDocuments", "JobDuplexAllDocumentsContiguously", "PageOutputColor");
         }
 
@@ -71,7 +79,7 @@ namespace Chuvadi.Print.ManualTests
             if (!target.CanPrint(pages, options.ToSettings(), out string? reason)) throw new InvalidOperationException(reason);
             DateTime started = DateTime.UtcNow;
             target.PrintPages(pages, options.ToSettings(), "Chuvadi.Print XPS check", CancellationToken.None);
-            string sent = target.LastSheetCount + " sheets, " + options + ", "
+            string sent = target.LastSheetCount + " sheets, " + options.Describe(target) + ", "
                           + (target.LastStatusEventsConnected ? "status: " + (target.LastJobStatus?.ToString() ?? "none received") : "status events not connected")
                           + ", " + Math.Round((DateTime.UtcNow - started).TotalSeconds, 1) + " s";
             if (portFile is null) return sent;

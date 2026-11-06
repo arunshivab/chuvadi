@@ -56,13 +56,15 @@ Values taken from the headers and confirmed:
 - Status arrives through the job object's connection point for `IPrintDocumentPackageStatusEvent`. The sink
   answers the vtable call. It does not implement IDispatch late binding (`Invoke` returns E_NOTIMPL).
 
-## Open points, settled by the Windows run (WINDOWS-VERIFICATION D4)
+## Open points, settled by the Windows run (WINDOWS-VERIFICATION D4, 2026-11-07)
 
-1. **Status events.** Microsoft's pages do not say how the status sink is registered. We use the connection
-   point on the job object. Step 11i records whether status arrives:
-   - **Connected, with a `Completed` status:** this works as built.
-   - **"Status events not connected":** the job still counts as printed once the queue takes every page.
-   - **"None received":** the print system may call through IDispatch. A follow-up then decides what to do.
-2. **`jobOutputStream` = NULL** sends the job to the queue's port. The documentation does not state this. Steps
-   11i and 11j show it: the output lands in the port file.
-3. **`discardControlPartName` = NULL** for `GetXpsOMPackageWriter`. Also not documented; steps 11i and 11j show it.
+Arun ran D4 on Windows 11. The queues were Microsoft XPS Document Writer v4 and Microsoft Print To PDF, each on a
+file port, and an HP Ink Tank Wireless 410 (PCL-3, WSD). All three points are settled:
+
+1. **Status events: they work.** The sink is advised on the job object's connection point for
+   `IPrintDocumentPackageStatusEvent`, and the print system calls `PackageStatusUpdated` through the vtable (not
+   IDispatch). Every job reported `Completed`, status 0x00000000, with 3 updates for 2 pages and 5 for 4 pages, in
+   0.4 to 1.2 seconds.
+2. **`jobOutputStream` = NULL sends the job to the queue's port.** The XPS queue's port file held an XPS package
+   and the PDF queue's held a PDF; the HP printed.
+3. **`discardControlPartName` = NULL is accepted** by `GetXpsOMPackageWriter`. Steps 11i to 11m all printed.

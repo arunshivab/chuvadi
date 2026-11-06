@@ -208,8 +208,15 @@ output to a file, so no save dialog appears and the output can be opened afterwa
     ```
     Expected: `PASS  XPS PrintTicket: <n> bytes written to C:\Users\Public\chuvadi-ticket.xml for Portrait, 1 copy, Simplex; mentions: PageMediaSize yes, ...`.
     Open the XML in Notepad: the `psk:PageMediaSize` option names A4 (for example `psk:ISOA4`). Run it again with
-    `--xps-orientation Landscape --xps-copies 2` added: `psk:Landscape` and a copy count of 2 appear. Record the
-    mentions line of both runs.
+    `--xps-orientation Landscape --xps-copies 2` added: `psk:Landscape` appears, and the line says
+    `2 copies (repeated in the XPS)`. Microsoft Print to PDF cannot make copies itself, so the copies are not in its
+    ticket (`JobCopiesAllDocuments` stays 1); the sheets are repeated instead.
+    To see copies in a ticket, use a queue whose driver makes them (the HP Ink Tank, its queue name from step 4):
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-ticket "<HP Ink Tank queue name>" --xps-ticket-file "C:\Users\Public\chuvadi-ticket-hp.xml" --xps-copies 2
+    ```
+    Expected: the line says `2 copies (in the PrintTicket)`, and the XML has `psk:JobCopiesAllDocuments` with the
+    value 2 and `psk:DocumentCollate` Collated. Record the mentions line of each run.
 11i. **XPS sample through the XPS queue:**
     ```powershell
     dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi XPS Test" --xps-queue-file "C:\Users\Public\chuvadi-queue.xps"
@@ -231,8 +238,9 @@ output to a file, so no save dialog appears and the output can be opened afterwa
     - `--xps-orientation Landscape`: two landscape pages; page 1 (portrait A4 content) is scaled down and centred.
     - `--xps-orientation ReversePortrait`: as 11j, with both pages upside down.
     - `--xps-copies 2 --xps-software-copies`: four pages: 1, 2, 1, 2 (the sheets repeated in the XPS).
-    Record what each run shows. Also run `--xps-copies 2` without `--xps-software-copies` and record the page count
-    (the copies are then in the PrintTicket; Microsoft Print to PDF may write them once).
+    Record what each run shows. Also run `--xps-copies 2` without `--xps-software-copies`: the line says
+    `2 copies (repeated in the XPS)` and the PDF has four pages, because Microsoft Print to PDF cannot make copies
+    and `CopyHandling.Auto` then repeats the sheets.
 11l. **Route decision.**
     ```powershell
     dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-route "Chuvadi XPS Test"
