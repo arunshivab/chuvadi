@@ -27,8 +27,10 @@ To build: pack chuvadi-pdf into the feed first. In the chuvadi-pdf clone, run
 dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
 ```
 
-Layout's staged projects pin Chuvadi.Pdf 3.30.2 in `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props` and carry their own
-per-project `nuget.config` (same local feed). Build them from the repository root:
+Layout's staged projects take Chuvadi.Pdf 3.31.1 from `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`: the package
+Chuvadi.Layout.Pdf references the range `[3.31.1, 4.0.0)`, and its tests and the acceptance harness use exactly 3.31.1.
+All 21 Chuvadi.Pdf 3.31.1 packages (Svg included) must be in the local feed. They carry their own per-project
+`nuget.config` (same local feed). Build them from the repository root:
 
 ```powershell
 dotnet build staging/tests/Chuvadi.Layout.Pdf.Tests -c Release --no-incremental
