@@ -1,9 +1,10 @@
 # Chuvadi.Print — Changelog
 
-## Unreleased
+## 1.0.0-rc.3 (unreleased)
 
-Phase 4 part 1 (D-189): the vector page model and the XPS writer. New API only. One approved change to
-existing behaviour, in Chuvadi.Print.Remote:
+All four packages move to 1.0.0-rc.3 (D-201 P-02). Phase 4 parts 1 to 3 (D-189, D-223, D-238): the vector page
+model, the XPS writer, and vector printing to Windows queues. New API only. One approved change to existing
+behaviour, in Chuvadi.Print.Remote:
 
 - **`PrintAgent.RunOnceAsync` cancellation** (D-189, error-type change): when the caller cancels while an exchange
   with the hub is failing, `RunOnceAsync` now throws `OperationCanceledException` (the failure as its
@@ -51,6 +52,42 @@ existing behaviour, in Chuvadi.Print.Remote:
 - **ManualTests**: two new groups (`XpsSampleIsACompletePackage`, `XpsRefusesWhatItCannotExpress`, total 61) and
   `--xps-sample <file.xps>` (with `--xps-font`) to write a two-page sample for viewing. WINDOWS-VERIFICATION.md
   gains section D3.
+- **Vector printing to Windows queues** (Phase 4 part 3, D-223 step 4, D-238; Chuvadi.Print.Windows, Windows 8
+  and later). New API:
+  - `WindowsXpsPrinterTarget` (an `IDocumentTarget`) prints vector pages as XPS through the Print Document
+    Package API. The job PrintTicket is made from the same driver-merged DEVMODE as `WindowsPrinterTarget`
+    (`PTConvertDevModeToPrintTicket`, job scope), so paper, orientation, duplex, colour, copies, collation, tray,
+    media and resolution behave alike. Pages are placed with `PageLayout` and planned with `PrintPlan`, as on the
+    raster routes.
+  - Its members:
+    - `Submit` (pages from `Source`) and `PrintPages` (the application's own pages);
+    - `CanPrint` (says which page and item XPS cannot express);
+    - `SaveXps` (the exact package, without printing) and `CreatePrintTicket`;
+    - the GDI target's `Bin`, `MediaType`, `Resolution`, `Quality`, `PaperMatching` and `StrictCapabilities`;
+    - `MarginReference`, `CopyHandling` and `StatusTimeout`;
+    - `LastSpoolJobId`, `LastJobStatus` (`XpsJobStatus`, `XpsJobCompletion`), `LastStatusEventsConnected`,
+      `LastPrintTicket` and `LastSheetCount`.
+  - New defaults: `StatusTimeout` two minutes (`DefaultStatusTimeout`; null = do not wait), `CopyHandling.Auto`,
+    `MarginReference.SheetEdge`, `PaperMatching.ExactOrCustom`, `StrictCapabilities` false.
+  - Errors (D-189 item 11): a job the print system reports failed or cancelled, or that reports nothing within the
+    timeout, raises `WindowsPrintException`. Through `PrintJob.SubmitTo` it becomes a Failed result; the router
+    never retries on another route.
+  - `WindowsQueueRoute` (`PrintRouteKind.WindowsQueue`, D-96 position 4) is used only where the application adds it
+    (D-189 item 5): existing code keeps printing through GDI raster. Its check skips to the next route, with the
+    reason in the audit, when there is no vector source, the queue cannot be opened, or a selected page holds
+    content XPS cannot express. The check converts the selected pages, and printing converts them again.
+  - Core: `IVectorPageSource` and `IVectorDocument`, the vector counterpart of `IPageRasterizer`. The PDF
+    converter of part d will implement them. `VectorLayout.Place` and `VectorLayout.PageToSheet` place a vector
+    page on its sheet with a `PagePlacement`.
+  - Output change (D-189 item 12, accepted): a job sent through this route is drawn by the driver as vectors.
+    Grey and black-and-white come from the driver; `PrintJobOptions.Monochrome` applies to rendered pages only.
+  - COM and PrintTicket interop is our own source-generated code (`GeneratedComInterface`, `LibraryImport`;
+    trimming- and AOT-safe). Method order and signatures were read from the public-domain mingw-w64 headers and
+    checked against Microsoft's documentation (D-238). The record is `docs/Chuvadi.Print/PROVENANCE-XPS-COM.md`.
+  - ManualTests: `--xps-ticket`, `--xps-queue` (with `--xps-queue-file`) and `--xps-route`, with
+    `--xps-orientation`, `--xps-copies`, `--xps-software-copies`, `--xps-duplex` and `--xps-status-seconds`.
+    WINDOWS-VERIFICATION.md gains section D4: two test queues whose port is a file, the PrintTicket, the sample
+    through the XPS and PDF drivers, settings, the route decision, and a real printer.
 
 ## 1.0.0-rc.2 (2026-11-04)
 

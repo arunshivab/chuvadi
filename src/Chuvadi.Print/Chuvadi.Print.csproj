@@ -17,7 +17,7 @@
     <Description>Pure-BCL printing core for .NET: device-independent print settings (all paper sizes, orientations, duplex, colour, scale and alignment choices), page selection, page layout, print planning (copies, collation, duplex sheets), PrintJob orchestration with bounded-memory page rendering through a pluggable IPageRasterizer, the print route chooser (PrintRouter), the vector page model (VectorPage), the portable spool envelope, a PNG preview target and a one-event-per-job audit trail. Device and transport packages: Chuvadi.Print.Windows, Chuvadi.Print.Ipp, Chuvadi.Print.Remote. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0-rc.2</Version>
+    <Version>1.0.0-rc.3</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

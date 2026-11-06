@@ -238,6 +238,49 @@ else XpsWriter.Write(new[] { page }, @"C:\out\report.xps");
   the writer never approximates them. The list is in the CHANGELOG (Phase 4 part 1).
 - **Colour** is sRGB, 8 bits per channel with alpha. Gradients interpolate in sRGB and always extend (pad).
 
+### Printing vector pages to a Windows queue (Phase 4 part 3)
+
+`WindowsXpsPrinterTarget` sends vector pages to an installed Windows printer as XPS, through the Print Document
+Package API (Windows 8 and later). The driver draws vectors: text and lines stay sharp at any resolution, and the
+spool file is small. Pages come from an `IVectorPageSource` (core), the vector counterpart of `IPageRasterizer`.
+The PDF converter (Phase 4 part d) will be one; an application can also print pages it drew itself.
+
+```csharp
+var target = new WindowsXpsPrinterTarget("Ward-3 Laser");
+var settings = new PrintSettings { Paper = PaperSize.A4, Duplex = Duplex.Vertical, Copies = 2 };
+if (target.CanPrint(pages, settings, out string? why))
+    target.PrintPages(pages, settings, "Discharge summary");      // waits for the job status (StatusTimeout)
+Console.WriteLine(target.LastJobStatus);                          // job 42: Completed, 4 pages processed, ...
+
+// In a router, after the IPP routes and before raster (D-96 position 4):
+using var router = new PrintRouter(
+    new WindowsQueueRoute(new WindowsXpsPrinterTarget("Ward-3 Laser", pdfVectorSource)),
+    new RasterRoute(new WindowsPrinterTarget("Ward-3 Laser")));
+PrintRouteResult result = router.Print(job);   // a page XPS cannot express falls back to raster, with the reason in the audit
+```
+
+- **Same layout as raster.** Pages are placed with `PageLayout`, the same as the raster routes: page selection,
+  scale mode, alignment, margins, orientation and auto-rotate. `VectorLayout.Place` does the placement and is
+  public for other vector writers. Software copies and duplex blank backs come from the same `PrintPlan`.
+- **Same settings as GDI.** The settings become the DEVMODE that `WindowsPrinterTarget` builds: paper,
+  orientation, duplex, colour, copies, collation, tray, media and resolution. Windows turns it into the job's
+  PrintTicket. `CreatePrintTicket(settings)` returns that ticket without printing.
+- **Grey and black-and-white** output is made by the driver; `PrintJobOptions.Monochrome` applies to rendered pages only.
+- **Copies** (`CopyHandling`):
+  - `Auto` (the default) puts the copies in the PrintTicket when the driver can make them, and repeats the sheets otherwise.
+  - `Software` always repeats the sheets.
+- **Status**: after the last page, the target waits for the print system to report the job finished.
+  - The wait is `StatusTimeout`: two minutes by default; null means do not wait.
+  - Failed or cancelled jobs fail.
+  - No report in time fails too; the message says the job may still be printing.
+  - `LastJobStatus`, `LastSpoolJobId` and `LastPrintTicket` describe the latest job.
+- **Errors**: printing failures are `WindowsPrintException`; pages XPS cannot express are
+  `NotSupportedException`. In a router these give a Failed result, and no other route is tried.
+- **Threads**: the submission runs on a thread of its own in COM's multithreaded apartment, so calling from a
+  UI thread is safe (it blocks that thread until the job is submitted; call it from a worker for a responsive UI).
+- **Saving instead of printing**: `SaveXps(document, settings, stream)` writes the exact package the target would
+  send.
+
 ## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
 - **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
