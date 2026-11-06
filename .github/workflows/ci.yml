@@ -167,3 +167,35 @@ jobs:
             artifacts/bin/Chuvadi.Layout.Markup/Release/*.nupkg
             artifacts/bin/Chuvadi.OpenType/Release/*.nupkg
             artifacts/bin/Chuvadi.Text.Shaping/Release/*.nupkg
+
+  # D-217 item 2: the shipped libraries must survive trimming and NativeAOT. tests/Chuvadi.TrimSmoke uses Chuvadi.Zip and
+  # Chuvadi.Fonts (add the other packages here as they get the same flags). Both publishes treat warnings as errors, and the
+  # published executable is run: it exits non-zero on the first wrong result. The app is not in Chuvadi.slnx, never packed.
+  trim-aot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install NativeAOT build tools (Ubuntu) - clang and zlib, used to link the test app only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+
+      - name: Publish trimmed (TrimMode=full, warnings are errors)
+        run: dotnet publish tests/Chuvadi.TrimSmoke -c Release -r linux-x64 -p:PublishTrimmed=true -p:TrimMode=full -p:TreatWarningsAsErrors=true -o artifacts/trim-smoke
+
+      - name: Run the trimmed app
+        run: ./artifacts/trim-smoke/Chuvadi.TrimSmoke
+
+      - name: Publish NativeAOT (warnings are errors)
+        run: dotnet publish tests/Chuvadi.TrimSmoke -c Release -r linux-x64 -p:PublishAot=true -p:TreatWarningsAsErrors=true -o artifacts/aot-smoke
+
+      - name: Run the NativeAOT app
+        run: ./artifacts/aot-smoke/Chuvadi.TrimSmoke
