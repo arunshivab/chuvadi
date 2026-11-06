@@ -2,6 +2,17 @@
 
 ## 0.1.0 (unreleased)
 
+Chuvadi.Pdf 3.31.1 in staging (D-213, D-225; claude/layout-D213-results.md):
+
+- Chuvadi.Layout.Pdf references chuvadi-pdf as the range `[3.31.1, 4.0.0)` (was exactly `[3.30.2]`), set in
+  `ChuvadiPdf.props` (`ChuvadiPdfVersion` 3.31.1, `ChuvadiPdfRange`). The staged tests and the acceptance harness keep
+  the exact version. NuGet picks the lowest allowed version, so an application that wants a newer chuvadi-pdf
+  references it directly.
+- No source change. Measured on the 88 corpus and fixture documents: PDF and PNG byte-identical to 3.30.2; staged
+  tests and the acceptance report unchanged. `ToSvgViaPdf` gives its clip-path IDs other names (120 of 212 pages);
+  what it draws is identical.
+- chuvadi-pdf 3.31.1 depends on Chuvadi.Fonts (≥ 1.0.0) instead of its own LiPi copies; 1.1.0 satisfies it.
+
 Font packs (D-195, D-197; claude/layout-fonts-pack-rule5.md):
 
 - New `FontPackSource : IFontSource`: a font source over any Chuvadi.Fonts `IFontFilePack`. `FontPackSource.For(pack)`

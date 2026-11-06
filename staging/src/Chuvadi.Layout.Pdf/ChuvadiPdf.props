@@ -5,10 +5,16 @@
     (%USERPROFILE%\Documents\local-nuget, see the nuget.config next to each project), never from a source clone.
     Imported by Chuvadi.Layout.Pdf, Chuvadi.Layout.Pdf.Tests, Chuvadi.Layout.Acceptance and
     Chuvadi.Layout.Acceptance.Tests; none of them is in Chuvadi.slnx or CI.
-    To move to a newer Chuvadi.Pdf: pack it into the feed, then change this one number.
+    To move to a newer Chuvadi.Pdf: pack it into the feed, then change ChuvadiPdfVersion.
+
+    D-213, D-225: the package Chuvadi.Layout.Pdf references the range ChuvadiPdfRange, [3.31.1, 4.0.0): any 3.x from the
+    tested version on, since chuvadi-pdf keeps its API compatible within 3.x (D-216). NuGet picks the lowest version the
+    range allows, so an application that wants a newer chuvadi-pdf references it directly. The tests and the acceptance
+    harness keep the exact version, so they run on the one that was measured.
   -->
   <PropertyGroup>
-    <ChuvadiPdfVersion>3.30.2</ChuvadiPdfVersion>
+    <ChuvadiPdfVersion>3.31.1</ChuvadiPdfVersion>
+    <ChuvadiPdfRange>[$(ChuvadiPdfVersion), 4.0.0)</ChuvadiPdfRange>
   </PropertyGroup>
 
 </Project>

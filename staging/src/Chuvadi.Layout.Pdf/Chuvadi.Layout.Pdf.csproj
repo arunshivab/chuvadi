@@ -32,12 +32,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
-    <PackageReference Include="Chuvadi.Pdf.Authoring" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Documents" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Graphics" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Svg" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Text.Shaping" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Authoring" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Documents" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Graphics" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Svg" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Text.Shaping" Version="$(ChuvadiPdfRange)" />
   </ItemGroup>
 
   <ItemGroup>

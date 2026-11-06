@@ -23,7 +23,7 @@ image crops, clips and translucency. Settings: `LayoutPdfOptions.LayoutSvg`. It 
 `ToSvgViaPdf` renders through chuvadi-pdf's SVG renderer instead (settings: `LayoutPdfOptions.Svg`). It is kept for
 comparison.
 
-## How the display list maps to PDF (Chuvadi.Pdf 3.30.2)
+## How the display list maps to PDF (Chuvadi.Pdf 3.31.1)
 
 | Display list | PDF |
 |---|---|
@@ -38,7 +38,7 @@ comparison.
 `FontFace` (collection faces included), whose shaping tables and feature lookups are cached, so line fitting does no
 font parsing. Its metrics are checked against Chuvadi.Layout's own font core in the tests.
 
-Indic shaping is HarfBuzz-conformant: Chuvadi.Pdf's `TextShaper` (since 3.26; Layout now uses 3.30.2) is a port of HarfBuzz's OpenType and Indic
+Indic shaping is HarfBuzz-conformant: Chuvadi.Pdf's `TextShaper` (since 3.26; Layout now uses 3.31.1) is a port of HarfBuzz's OpenType and Indic
 shapers and matches HarfBuzz 15.0.0 glyph for glyph (ids, clusters, advances and offsets) on all 19,641 test syllables
 of the nine LiPi Indic scripts, Tamil included.
 
@@ -59,10 +59,21 @@ whose shaper is a port of parts of HarfBuzz: the HarfBuzz notice ships in that p
 
 This project is not in Chuvadi.slnx or CI. It takes chuvadi-pdf as **version-pinned packages** from the
 local NuGet feed (`%USERPROFILE%/Documents/local-nuget`), never from a source clone:
-- the version is pinned once, in `ChuvadiPdf.props` (`ChuvadiPdfVersion`, currently 3.30.2);
+- the version is set once, in `ChuvadiPdf.props` (`ChuvadiPdfVersion`, currently 3.31.1). The package references the
+  range `[3.31.1, 4.0.0)` (`ChuvadiPdfRange`); the tests and the acceptance harness use exactly 3.31.1;
 - the feed is set by the `nuget.config` next to each project that uses it (this one, `staging/tests/Chuvadi.Layout.Pdf.Tests`,
   `staging/samples/Chuvadi.Layout.Acceptance`, `staging/tests/Chuvadi.Layout.Acceptance.Tests`). `Chuvadi.*` packages come only from
   the local feed; everything else from nuget.org.
+
+**Which chuvadi-pdf an application gets (D-213, D-216).** Chuvadi.Layout.Pdf accepts any chuvadi-pdf 3.x from 3.31.1
+on. NuGet picks the **lowest** version the range allows, so an application that uses a newer chuvadi-pdf (for example
+for its own PDF work) should reference that version of the chuvadi-pdf packages directly; Layout.Pdf then runs on it.
+**Reference chuvadi-pdf 3.31.2 directly** (or later): it fixes signing, named-destination links, the PDF name table,
+a race in `FontRenderer`, and the MediaBox origin in raster and SVG output. A plain reference to Chuvadi.Layout.Pdf
+alone resolves to 3.31.1, without those fixes. Layout's measurements and tests below are on 3.31.1.
+Measured from 3.30.2 to 3.31.1 on the 88 corpus and fixture documents: PDF and PNG output byte-identical; `ToSvgViaPdf`
+names its clip-path IDs differently (what it draws is identical). chuvadi-pdf's output may change within 3.x, so
+nothing in Layout depends on its exact bytes.
 
 ```
 dotnet build staging\src\Chuvadi.Layout.Pdf -c Release
