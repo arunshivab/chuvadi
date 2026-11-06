@@ -6,7 +6,7 @@
 
 | Package | Formats | Status |
 |---|---|---|
-| **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v2.0.0 |
+| **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v2.0.1 |
 | **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v1.6.0 |
 | **[Chuvadi.Docs.Conversion](src/Chuvadi.Docs.Conversion/README.md)** | Docs to and from plain text, Markdown (CommonMark + GFM) and HTML, plus a self-contained HTML preview (over Chuvadi.Markup; released with Docs) | v1.6.0 |
 | **[Chuvadi.Fonts](src/Chuvadi.Fonts/README.md)** | the LiPi Sans fonts (Latin and nine Indic scripts) as static TrueType files | v1.0.0 |
@@ -62,7 +62,7 @@ Every package ships with an xUnit suite plus an end-to-end manual verification s
 
 ## Releases
 
-Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): `sheets-v2.0.0`, `docs-v*` (version pending), `zip-v1.0.0`, `markup-v1.0.0`, `fonts-v1.0.0`, `layout-v0.1.0`, `layout-docs-v0.1.0`, `layout-sheets-v0.1.0`, `layout-documents-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`, `opentype-v0.1.0`, `text-shaping-v0.1.0`. See [RELEASING.md](RELEASING.md).
+Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): `sheets-v2.0.1`, `docs-v*` (version pending), `zip-v1.0.0`, `markup-v1.0.0`, `fonts-v1.0.0`, `layout-v0.1.0`, `layout-docs-v0.1.0`, `layout-sheets-v0.1.0`, `layout-documents-v0.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`, `opentype-v0.1.0`, `text-shaping-v0.1.0`. See [RELEASING.md](RELEASING.md).
 
 ## License
 

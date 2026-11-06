@@ -15,7 +15,9 @@ env:
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 30 || 15 }}
+    env:
+      CHUVADI_TEST_TOOLS: ${{ matrix.os == 'ubuntu-latest' && 'ghostscript' || 'wpf' }}
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +30,13 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+
+      - name: Install test tools (Ubuntu) - Ghostscript, run by tests only, never redistributed
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ghostscript
+          gs --version
 
       - name: Build solution (warnings as errors)
         run: dotnet build -c Release
@@ -53,6 +62,10 @@ jobs:
 
       - name: Unit tests — Chuvadi.Print (xUnit)
         run: dotnet test tests/Chuvadi.Print.Tests -c Release --no-build --logger "trx;LogFileName=print.trx"
+
+      - name: Unit tests — Chuvadi.Print.Xps (xUnit, Windows only, WPF)
+        if: matrix.os == 'windows-latest'
+        run: dotnet test tests/Chuvadi.Print.Xps.Tests -c Release --no-build --logger "trx;LogFileName=print-xps.trx"
 
       - name: Unit tests — Chuvadi.Zip (xUnit)
         run: dotnet test tests/Chuvadi.Zip.Tests -c Release --no-build --logger "trx;LogFileName=zip.trx"

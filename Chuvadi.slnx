@@ -41,6 +41,7 @@
     <Project Path="tests/Chuvadi.Markup.Tests/Chuvadi.Markup.Tests.csproj" />
     <Project Path="tests/Chuvadi.OpenType.Tests/Chuvadi.OpenType.Tests.csproj" />
     <Project Path="tests/Chuvadi.Print.Tests/Chuvadi.Print.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Print.Xps.Tests/Chuvadi.Print.Xps.Tests.csproj" />
     <Project Path="tests/Chuvadi.Sheets.Tests/Chuvadi.Sheets.Tests.csproj" />
     <Project Path="tests/Chuvadi.Text.Shaping.Tests/Chuvadi.Text.Shaping.Tests.csproj" />
     <Project Path="tests/Chuvadi.Zip.Tests/Chuvadi.Zip.Tests.csproj" />

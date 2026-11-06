@@ -55,7 +55,7 @@ dependencies; Chuvadi.Text.Shaping references Chuvadi.OpenType only:
 7. `layout-documents-v*`
 8. `opentype-v*`, then `text-shaping-v*` (OpenType first; both after `fonts-v*`, and independent of the Layout packages)
 
-(`sheets-v2.0.0` is already released. `print-v*` is not scheduled: the Print packages are in progress.
+(`zip-v1.0.0` and `sheets-v2.0.1` are already released. `print-v*` is not scheduled: the Print packages are in progress.
 Chuvadi.Print.Windows, .Ipp and .Remote depend on Chuvadi.Print, and they release with it.)
 Push one tag, wait for its Release workflow to finish green, then push the next. Create each tag
 on a commit whose `release.yml` already knows the prefix: a tag runs the workflow file that exists
