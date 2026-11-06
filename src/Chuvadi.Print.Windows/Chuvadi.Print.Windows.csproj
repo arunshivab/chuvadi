@@ -8,6 +8,8 @@
     <RootNamespace>Chuvadi.Print.Windows</RootNamespace>
     <AssemblyName>Chuvadi.Print.Windows</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- D-217: the source-generated P/Invoke marshalling (LibraryImport) uses pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- Package metadata -->
     <Product>Chuvadi.Print.Windows</Product>
