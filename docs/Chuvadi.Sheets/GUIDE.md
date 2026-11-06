@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.0.1 (released 2026-11-05) |
+| Library version | Chuvadi.Sheets 2.0.2 (unreleased; 2.0.1 released 2026-11-05) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -89,13 +89,13 @@ it a sound base for viewers and converters (Chuvadi.Layout.Sheets lays out and r
 ## 2.2 Getting the package
 
 Chuvadi.Sheets is published as a NuGet package attached to its GitHub release, not on nuget.org. Download
-`Chuvadi.Sheets.2.0.1.nupkg` from the release page (tag `sheets-v2.0.1`), put it in a folder, and use that folder
+`Chuvadi.Sheets.2.0.2.nupkg` from the release page (tag `sheets-v2.0.2`), put it in a folder, and use that folder
 as a package source.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\local-nuget | Out-Null
-Copy-Item .\Chuvadi.Sheets.2.0.1.nupkg C:\local-nuget\
-Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.1.nupkg -Algorithm SHA256
+Copy-Item .\Chuvadi.Sheets.2.0.2.nupkg C:\local-nuget\
+Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.2.nupkg -Algorithm SHA256
 ```
 
 The release page shows the package's SHA-256 digest; the hash printed here should be the same.
@@ -114,7 +114,7 @@ Add a `nuget.config` next to your solution so the folder is a source:
 Then reference the package:
 
 ```powershell
-dotnet add package Chuvadi.Sheets --version 2.0.1
+dotnet add package Chuvadi.Sheets --version 2.0.2
 ```
 
 ## 2.3 Building from source
@@ -245,8 +245,8 @@ header text.
 
 # 4 Upgrading from 1.x
 
-Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 is a bug-fix release on top of it
-(section 4.5). Values, styles, display text and saved
+Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 and 2.0.2 are bug-fix releases on top
+of it (sections 4.5 and 4.6). Values, styles, display text and saved
 output are the same as in 1.8.0; the public API is the same apart from the namespace and the obsolete zip types.
 
 ## 4.1 The namespace is now `Chuvadi.Sheets.Model`
@@ -312,6 +312,20 @@ With the safe replace, a path save creates or replaces the file only at `Save`: 
 locked file, or a folder of that name fails at `XlsxWriter.Create` (or `SaveTo`) with the same exception; a
 replaced file keeps its permissions (and on Windows its attributes and security settings); and a symbolic link is
 kept, with the file it points to replaced.
+
+## 4.6 Changes in 2.0.2
+
+2.0.2 fixes how the readers follow references inside the package. The public API is the same, and every well-formed
+file reads exactly as in 2.0.1.
+
+| What | 2.0.1 | 2.0.2 |
+|---|---|---|
+| A relationship target with `./` or `..` segments, such as `./worksheets/sheet1.xml` or `/xl/../xl/workbook.xml` (Excel opens these) | Not found: the file did not open | Resolved as the standard says (RFC 3986 dot segments), so the file opens (bug fix) |
+| The workbook part or a worksheet part is missing from the package and not declared | A bare `FileNotFoundException`, as if the file itself were missing | `XlsxFormatException` with the `FileNotFoundException` inside, like every other damaged file (bug fix) |
+| A text cell refers to a shared string that does not exist (index past the end, negative, not a number, or no shared-string table) | The index itself was shown as the cell's text, for example "99" | `XlsxFormatException` naming the cell and sheet: the file is damaged, as Excel also reports (bug fix) |
+
+A text cell with no value, or an empty value, still reads as an empty cell. Opening a path that does not exist is
+still `FileNotFoundException`.
 
 # 5 Choosing a write API
 
@@ -1580,7 +1594,9 @@ catch (XlsxPasswordRequiredException ex)
 
 - A missing password and a wrong password both throw `XlsxPasswordRequiredException`.
 - For an unencrypted file the password is ignored, so one code path opens both.
-- Decryption happens in memory.
+- Decryption happens in memory: the whole decrypted package is held while the workbook is read, so memory grows with
+  the file size, and on a server with the number of files open at once. `XlsxReaderOptions.MaxTotalUncompressedBytes`
+  caps the encrypted file's size before it is decrypted (`ForUntrustedInput()` sets 1 GiB); use it for untrusted input.
 - With a password given, a damaged container or a failed integrity check throws `XlsxFormatException`. Without a
   password the container is not read, so damage is found only once a password is given.
 
@@ -1674,7 +1690,7 @@ saving a loaded workbook writes a macro-free `.xlsx`.
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | The file is malformed: not a zip or a damaged zip, malformed XML in any part, a missing required part, a damaged relationship entry, a truncated part, or, with a password given, a damaged encrypted container or a failed integrity check. `InnerException` holds the original error. |
+| `XlsxFormatException` | The file is malformed: not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, declared or not), a damaged relationship entry, a truncated part, a text cell whose shared-string reference does not exist, or, with a password given, a damaged encrypted container or a failed integrity check. `InnerException` holds the original error, when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. |
 | `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. |
 | `InvalidDataException` with `Data["Chuvadi.Sheets.ReadLimit"]` | `MaxPartBytes` was exceeded (a limit, not a malformed file). |
@@ -1933,6 +1949,8 @@ a local function, such as an upload handler, are compiled but not run.
 
 ## 34.3 History
 
+- **2.0.2** (November 2026): updated for Chuvadi.Sheets 2.0.2 (section 4.6): dot segments in relationship targets,
+  missing workbook and worksheet parts, unresolvable shared-string references; encrypted-read memory (25.2).
 - **2.0.1** (November 2026): updated for Chuvadi.Sheets 2.0.1 (section 4.5): streams left open, safe replace and
   encrypted temporary files, large encrypted files, header-name rules, overlapping column spans.
 - **2.0** (November 2026): rebuilt from the library's README and its 2.0.0 API, replacing the 1.0 guide, whose
