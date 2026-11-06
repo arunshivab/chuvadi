@@ -16,12 +16,16 @@ jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.os == 'windows-latest' && 30 || 15 }}
+    # D-217 item 3: macOS has never run these tests. Until it has passed once it does not block a merge
+    # (a macOS failure shows red in the job list, but the workflow result stays green).
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     env:
-      CHUVADI_TEST_TOOLS: ${{ matrix.os == 'ubuntu-latest' && 'ghostscript' || 'wpf' }}
+      # Outside tools the tests may require: Ghostscript on Ubuntu, WPF's XPS reader on Windows, none on macOS.
+      CHUVADI_TEST_TOOLS: ${{ matrix.os == 'ubuntu-latest' && 'ghostscript' || matrix.os == 'windows-latest' && 'wpf' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -199,3 +203,26 @@ jobs:
 
       - name: Run the NativeAOT app
         run: ./artifacts/aot-smoke/Chuvadi.TrimSmoke
+
+  # D-217 item 3: the shipped libraries must compile for the Android target framework. tests/Chuvadi.AndroidSmoke is a
+  # net10.0-android class library that references Chuvadi.Zip and Chuvadi.Fonts and calls their public API (add the other
+  # packages as they are checked). Nothing is run on a device or emulator. Not in Chuvadi.slnx, never packed. Until it has
+  # passed on the runner once it does not block a merge.
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install the Android workload (build tooling only, never shipped)
+        run: dotnet workload install android
+
+      - name: Build the Android smoke library (warnings are errors)
+        run: dotnet build tests/Chuvadi.AndroidSmoke -c Release -p:TreatWarningsAsErrors=true
