@@ -6,10 +6,11 @@ namespace Chuvadi.Print.Windows
 {
     /// <summary>
     /// Win32 spooler and GDI entry points. Interop with operating-system DLLs only; no native code ships
-    /// with the library.
+    /// with the library. The marshalling code is generated at build time (<see cref="LibraryImportAttribute"/>,
+    /// D-217), so it is trimming- and NativeAOT-safe; strings are UTF-16 and BOOL returns are mapped explicitly.
     /// </summary>
     [SupportedOSPlatform("windows")]
-    internal static class NativeMethods
+    internal static partial class NativeMethods
     {
         private const string Winspool = "winspool.drv";
         private const string Gdi32 = "gdi32.dll";
@@ -101,86 +102,99 @@ namespace Chuvadi.Print.Windows
             public IntPtr pDatatype;
         }
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern int StartDocPrinterW(IntPtr hPrinter, uint level, ref DOC_INFO_1 pDocInfo);
+        [LibraryImport(Winspool, SetLastError = true)]
+        internal static partial int StartDocPrinterW(IntPtr hPrinter, uint level, ref DOC_INFO_1 pDocInfo);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool StartPagePrinter(IntPtr hPrinter);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool StartPagePrinter(IntPtr hPrinter);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBuf, uint cbBuf, out uint pcWritten);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool WritePrinter(IntPtr hPrinter, IntPtr pBuf, uint cbBuf, out uint pcWritten);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool EndPagePrinter(IntPtr hPrinter);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool EndPagePrinter(IntPtr hPrinter);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool EndDocPrinter(IntPtr hPrinter);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool EndDocPrinter(IntPtr hPrinter);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool AbortPrinter(IntPtr hPrinter);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool AbortPrinter(IntPtr hPrinter);
 
-        [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool EnumPrintersW(uint flags, string? name, uint level, IntPtr pPrinterEnum,
+        [LibraryImport(Winspool, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool EnumPrintersW(uint flags, string? name, uint level, IntPtr pPrinterEnum,
                                                   uint cbBuf, out uint pcbNeeded, out uint pcReturned);
 
-        [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool OpenPrinterW(string pPrinterName, out IntPtr phPrinter, IntPtr pDefault);
+        [LibraryImport(Winspool, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool OpenPrinterW(string pPrinterName, out IntPtr phPrinter, IntPtr pDefault);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool ClosePrinter(IntPtr hPrinter);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool ClosePrinter(IntPtr hPrinter);
 
-        [DllImport(Winspool, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool GetPrinterW(IntPtr hPrinter, uint level, IntPtr pPrinter, uint cbBuf, out uint pcbNeeded);
+        [LibraryImport(Winspool, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool GetPrinterW(IntPtr hPrinter, uint level, IntPtr pPrinter, uint cbBuf, out uint pcbNeeded);
 
-        [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern int DocumentPropertiesW(IntPtr hWnd, IntPtr hPrinter, string pDeviceName,
+        [LibraryImport(Winspool, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial int DocumentPropertiesW(IntPtr hWnd, IntPtr hPrinter, string pDeviceName,
                                                        IntPtr pDevModeOutput, IntPtr pDevModeInput, int fMode);
 
-        [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern int DeviceCapabilitiesW(string pDevice, string? pPort, ushort fwCapability,
+        [LibraryImport(Winspool, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial int DeviceCapabilitiesW(string pDevice, string? pPort, ushort fwCapability,
                                                        IntPtr pOutput, IntPtr pDevMode);
 
-        [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool GetDefaultPrinterW(char[]? pszBuffer, ref int pcchBuffer);
+        [LibraryImport(Winspool, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool GetDefaultPrinterW([In, Out] char[]? pszBuffer, ref int pcchBuffer);
 
-        [DllImport(Winspool, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool SetDefaultPrinterW(string pszPrinter);
+        [LibraryImport(Winspool, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool SetDefaultPrinterW(string pszPrinter);
 
-        [DllImport(Gdi32, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern IntPtr CreateDCW(string? pwszDriver, string pwszDevice, string? pszPort, IntPtr pdm);
+        [LibraryImport(Gdi32, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial IntPtr CreateDCW(string? pwszDriver, string pwszDevice, string? pszPort, IntPtr pdm);
 
-        [DllImport(Gdi32, CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-        internal static extern IntPtr CreateICW(string? pszDriver, string pszDevice, string? pszPort, IntPtr pdm);
+        [LibraryImport(Gdi32, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial IntPtr CreateICW(string? pszDriver, string pszDevice, string? pszPort, IntPtr pdm);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool DeleteDC(IntPtr hdc);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool DeleteDC(IntPtr hdc);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int StartDocW(IntPtr hdc, ref DOCINFO lpdi);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int StartDocW(IntPtr hdc, ref DOCINFO lpdi);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int EndDoc(IntPtr hdc);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int EndDoc(IntPtr hdc);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int AbortDoc(IntPtr hdc);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int AbortDoc(IntPtr hdc);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int StartPage(IntPtr hdc);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int StartPage(IntPtr hdc);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int EndPage(IntPtr hdc);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int EndPage(IntPtr hdc);
 
-        [DllImport(Gdi32, ExactSpelling = true)]
-        internal static extern int GetDeviceCaps(IntPtr hdc, int index);
+        [LibraryImport(Gdi32)]
+        internal static partial int GetDeviceCaps(IntPtr hdc, int index);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int SetStretchBltMode(IntPtr hdc, int mode);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int SetStretchBltMode(IntPtr hdc, int mode);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern bool SetBrushOrgEx(IntPtr hdc, int x, int y, IntPtr lppt);
+        [LibraryImport(Gdi32, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool SetBrushOrgEx(IntPtr hdc, int x, int y, IntPtr lppt);
 
-        [DllImport(Gdi32, ExactSpelling = true, SetLastError = true)]
-        internal static extern int StretchDIBits(IntPtr hdc, int xDest, int yDest, int destWidth, int destHeight,
+        [LibraryImport(Gdi32, SetLastError = true)]
+        internal static partial int StretchDIBits(IntPtr hdc, int xDest, int yDest, int destWidth, int destHeight,
                                                  int xSrc, int ySrc, int srcWidth, int srcHeight,
                                                  IntPtr lpBits, IntPtr lpbmi, uint iUsage, uint rop);
     }

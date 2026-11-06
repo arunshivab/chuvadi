@@ -36,6 +36,11 @@ existing behaviour, in Chuvadi.Print.Remote:
   and sizes, and checks rendered pixels at known points: shapes, group opacity, the checker image, text drawn
   with the embedded font, the soft-mask fades and the transparent image. It builds on every OS and runs on
   Windows. It joins Chuvadi.slnx and the Windows CI job through the shared-files change.
+- **Windows interop is source-generated** (D-217 item 2, D-223): the 26 winspool.drv and gdi32.dll entry points of
+  Chuvadi.Print.Windows are `LibraryImport` methods instead of classic `DllImport`. The marshalling code is now
+  generated at build time, which is trimming- and NativeAOT-safe. The calls, the UTF-16 strings, the Win32 BOOL
+  results and the last-error handling are the same, so behaviour, errors and output are unchanged. The project
+  sets `AllowUnsafeBlocks` (Chuvadi.Print.Windows only), because the generated code uses pointers.
 - **ManualTests**: two new groups (`XpsSampleIsACompletePackage`, `XpsRefusesWhatItCannotExpress`, total 61) and
   `--xps-sample <file.xps>` (with `--xps-font`) to write a two-page sample for viewing. WINDOWS-VERIFICATION.md
   gains section D3.
