@@ -14,7 +14,7 @@ namespace Chuvadi.Docs.ManualTests;
 /// Docs 2.0 encrypted saving (D-47 option A, D-155): the new SaveTo(Stream, EncryptionOptions);
 /// both encrypted overloads spool through a temporary file encrypted with a one-time AES key held
 /// only in memory, created owner-only and deleted on close; the path overload replaces the target
-/// only when the save succeeded.
+/// only when the save succeeded. EncryptionOptions.TempDirectory chooses the spool's folder (D-217).
 /// </summary>
 public static class EncryptedSaveTests
 {
@@ -27,6 +27,7 @@ public static class EncryptedSaveTests
         StreamOverload(dir);
         PathOverload(dir);
         Spool(dir);
+        TempFolder(dir);
     }
 
     private static Document Sample()
@@ -221,6 +222,121 @@ public static class EncryptedSaveTests
         var y = (byte[])b.Clone();
         if (!MaskZipTimes(x) || !MaskZipTimes(y)) return false;
         return x.AsSpan().SequenceEqual(y);
+    }
+
+    /// <summary>
+    /// EncryptionOptions.TempDirectory (D-217, P1): where the encrypted saves spool. The output stream
+    /// below lists the folders while the encrypted file is written, which is when the spool exists,
+    /// so the checks don't depend on timing.
+    /// </summary>
+    private static void TempFolder(string dir)
+    {
+        Check("EncryptionOptions.TempDirectory: the stream save spools in that folder, which is empty again afterwards; the file opens with the password", () =>
+        {
+            var folder = FreshFolder(dir, "tempdir-used");
+            var d = Sample();
+            var output = new ObservingStream(folder, "chuvadi_docs_*.tmp");
+            d.SaveTo(output, new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = folder });
+            AssertTrue(output.Seen.Count == 1 && output.Seen[0].StartsWith("chuvadi_docs_") && output.Seen[0].EndsWith(".tmp"),
+                "one spool file in the folder while writing: " + string.Join(", ", output.Seen));
+            AssertTrue(Directory.GetFileSystemEntries(folder).Length == 0, "the folder is empty after the save");
+            AssertTrue(SamePackageExceptTimes(Decrypt(output.ToArray(), Pw), Plain(d)), "decrypted package is the plain package");
+        });
+
+        Check("EncryptionOptions.TempDirectory null (the default): the spool goes to the system temp folder, as before", () =>
+        {
+            var unused = FreshFolder(dir, "tempdir-default");
+            var output = new ObservingStream(Path.GetTempPath(), "chuvadi_docs_*.tmp", unused);
+            Sample().SaveTo(output, new EncryptionOptions { Password = Pw, SpinCount = 1000 });
+            AssertTrue(output.Seen.Count >= 1, "a spool file in " + Path.GetTempPath() + " while writing");
+            AssertTrue(output.SeenOther.Count == 0, "nothing in any other folder");
+            AssertTrue(Document.Load(new MemoryStream(output.ToArray()), Pw).GetText() == Sample().GetText(), "opens");
+        });
+
+        Check("EncryptionOptions.TempDirectory missing: both encrypted saves throw DirectoryNotFoundException and write nothing (stream untouched; path target unchanged, no temporary file beside it)", () =>
+        {
+            var missing = Path.Combine(dir, "tempdir-missing-" + Guid.NewGuid().ToString("N"));
+            var enc = new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = missing };
+            var output = new MemoryStream();
+            output.Write(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 });
+            Exception? ex = null;
+            try { Sample().SaveTo(output, enc); } catch (Exception e) { ex = e; }
+            AssertTrue(ex is DirectoryNotFoundException && ex.Message.Contains(missing), "stream save: " + ex?.GetType().Name + ": " + ex?.Message);
+            AssertTrue(output.Length == 8 && output.Position == 8, "the stream is untouched");
+
+            var target = Path.Combine(dir, "tempdir-missing.docx");
+            File.WriteAllText(target, "old");
+            ex = null;
+            try { Sample().SaveTo(target, enc); } catch (Exception e) { ex = e; }
+            AssertTrue(ex is DirectoryNotFoundException && ex.Message.Contains(missing), "path save: " + ex?.GetType().Name + ": " + ex?.Message);
+            AssertTrue(File.ReadAllText(target) == "old", "the existing file is unchanged");
+            AssertTrue(Directory.GetFiles(dir, ".tempdir-missing.docx.*.tmp").Length == 0, "no temporary file beside the target");
+            AssertTrue(!Directory.Exists(missing), "the folder is not created");
+        });
+
+        Check("EncryptionOptions.TempDirectory naming a file, not a folder: the save throws an IOException and writes nothing", () =>
+        {
+            var file = Path.Combine(dir, "tempdir-is-a-file.txt");
+            File.WriteAllText(file, "not a folder");
+            var output = new MemoryStream();
+            Exception? ex = null;
+            try { Sample().SaveTo(output, new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = file }); }
+            catch (Exception e) { ex = e; }
+            AssertTrue(ex is IOException, ex?.GetType().Name + ": " + ex?.Message);
+            AssertTrue(output.Length == 0, "nothing written");
+            AssertTrue(File.ReadAllText(file) == "not a folder", "the file is unchanged");
+        });
+
+        Check("DocxTemplate.Fill with OutputEncryption encrypts in memory: TempDirectory is not used (a missing folder is fine)", () =>
+        {
+            var missing = Path.Combine(dir, "tempdir-fill-" + Guid.NewGuid().ToString("N"));
+            var template = new Document();
+            template.AddParagraph("Hello {{Name}}");
+            var output = new MemoryStream();
+            DocxTemplate.Fill(new MemoryStream(Plain(template)), output, new TemplateData().Set("Name", "Ada"),
+                new TemplateOptions { OutputEncryption = new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = missing } });
+            AssertTrue(Document.Load(new MemoryStream(output.ToArray()), Pw).GetText().Contains("Hello Ada"), "filled and encrypted");
+            AssertTrue(!Directory.Exists(missing), "no folder created");
+        });
+    }
+
+    private static string FreshFolder(string dir, string name)
+    {
+        var folder = Path.Combine(dir, name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        Directory.CreateDirectory(folder);
+        return folder;
+    }
+
+    /// <summary>A write-only output that, on each write, lists the spool files in one folder (and any file in the others).</summary>
+    private sealed class ObservingStream : Stream
+    {
+        private readonly MemoryStream _inner = new();
+        private readonly string _folder, _pattern;
+        private readonly string[] _others;
+        public readonly System.Collections.Generic.List<string> Seen = new();
+        public readonly System.Collections.Generic.List<string> SeenOther = new();
+
+        public ObservingStream(string folder, string pattern, params string[] others) { _folder = folder; _pattern = pattern; _others = others; }
+
+        public byte[] ToArray() => _inner.ToArray();
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            foreach (var f in Directory.GetFiles(_folder, _pattern))
+                if (!Seen.Contains(Path.GetFileName(f))) Seen.Add(Path.GetFileName(f));
+            foreach (var o in _others)
+                foreach (var f in Directory.GetFileSystemEntries(o))
+                    if (!SeenOther.Contains(f)) SeenOther.Add(f);
+            _inner.Write(buffer, offset, count);
+        }
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 
     private static bool MaskZipTimes(byte[] zip)

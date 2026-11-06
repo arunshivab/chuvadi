@@ -249,12 +249,12 @@ public static class ProtectionEncryptionTest
             doc.SaveTo(tpl, new EncryptionOptions { Password = "tpl-pass" });
 
             DocxTemplate.Fill(tpl, filled,
-                new Dictionary<string, string> { ["Owner"] = "Arun" },
+                new Dictionary<string, string> { ["Owner"] = "Jane" },
                 password: "tpl-pass",
                 outputEncryption: new EncryptionOptions { Password = "out-pass" });
 
             var result = Document.Load(filled, "out-pass");
-            Program.AssertContains(result.GetText(), "Owner: Arun", "secure fill result");
+            Program.AssertContains(result.GetText(), "Owner: Jane", "secure fill result");
         });
     }
 }

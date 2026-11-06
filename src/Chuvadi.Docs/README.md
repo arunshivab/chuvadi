@@ -66,7 +66,7 @@ doc.AddParagraph().Text("நோயாளி அறிக்கை — Patient re
 doc.AddParagraph().Text("H").Text("2", TextFormat.SubscriptText).Text("O, E = mc").Text("2", TextFormat.SuperscriptText);
 doc.AddParagraph().Text("Ref:").Tab().Text("APL/2026/0042");
 doc.Footer.Add(new Paragraph("Confidential").PositionalTab(PositionalTabAlignment.Right).PageNumber());   // right edge, whatever the tab stops
-doc.AddParagraph("Apulki Medical Center\nBaner, Pune");        // \n → line break
+doc.AddParagraph("Example Clinic\n12 Sample Road, Testville");        // \n → line break
 doc.AddParagraph().Text("Part 1").Break(BreakType.Page).Text("Part 2");
 ```
 
@@ -249,7 +249,7 @@ Loaded documents keep their footnotes, endnotes, bookmarks, fields, text boxes, 
 ### Comments and tracked changes
 
 ```csharp
-var note = doc.Comments.Add("Dr. Arun Shiva", "Please confirm the dose.");
+var note = doc.Comments.Add("Dr. Jane Example", "Please confirm the dose.");
 doc.AddParagraph("The dose is ").Commented("2 Gy per fraction", note);
 doc.Comments.Reply(note, "Physicist", "Confirmed against the plan.").Done = true;
 
@@ -364,7 +364,7 @@ var a = r.GetActiveContent();
 **Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
 
 
-`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent yet (charts and shapes, most fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
+`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Fields, footnotes and endnotes, bookmarks, text boxes, comments, tracked changes and document properties survive a load-save round-trip (since 1.6.0). Content the model can't represent yet is not preserved: charts are dropped, shapes other than text boxes and old-style VML pictures keep only their text, and content controls keep their content but lose the control itself. Use `DocxTemplate` when everything else in the file must stay as it is.
 
 ## Errors
 
@@ -457,9 +457,28 @@ Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` r
 
 The plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path replaces the target only when the save succeeded (see **Write a report**).
 
+The temporary file goes to the system temp folder (`Path.GetTempPath()`), or to a folder you choose:
+
+```csharp
+doc.SaveTo(outputStream, new EncryptionOptions { Password = "S3cret!", TempDirectory = "/var/app/tmp" });
+```
+
+If that folder is missing or can't be written to, the save throws (the system's `DirectoryNotFoundException` or `IOException`, naming the temporary file) before anything is written. `DocxTemplate.Fill` with `OutputEncryption` encrypts in memory and writes no temporary file.
+
 On Windows, real-time antivirus (Microsoft Defender) scans an encrypted Office file when it is opened, by trying the default Office password, which runs the full key derivation at the file's declared spin count. That happens inside the operating system's file-open call, before the library reads a byte, so neither `MaxSpinCount` nor the `CancellationToken` can shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine, then milliseconds once the scan result was cached. Both limits apply in full to the library's own work, and to streams that are already open or held in memory.
 
 There is also cooperative "restrict editing" protection — `doc.Protect("pass", DocumentProtectionMode.ReadOnly)` — which, like Excel's sheet protection, signals intent but does not encrypt; anyone can still read the content.
+
+## Platforms and threads
+
+- **Platforms:** pure managed code for plain `net10.0`, with no native code and no Windows-only API. It runs the same on Windows, macOS, Linux and Android, and in server processes. The package is marked trim- and NativeAOT-compatible, and the analyzers run on every build.
+- **Streams everywhere:** every method that takes a path has a stream or byte-array version. Use those for Android content URIs, uploads and cloud storage.
+- **The disk:** only two things write temporary files, and nothing is read from fixed locations:
+  - an encrypted `SaveTo` spools to the temp folder or `EncryptionOptions.TempDirectory` (see **Password protection**);
+  - a save to a path writes beside the target, then replaces it.
+- **Threads:** the library has no mutable static state, so any number of threads can work at once, each on its own documents. A single `Document` or `DocxReader` is not safe for concurrent use: give each request or thread its own.
+- **Untrusted files:** keep the default `DocxReaderOptions` limits, set `MaxPartBytes` (off by default), and pass a `CancellationToken` (see **Untrusted input**).
+- **Fonts:** none are shipped or loaded. Only font names are written into documents; showing them is the job of the program that renders the document.
 
 ## Scope
 

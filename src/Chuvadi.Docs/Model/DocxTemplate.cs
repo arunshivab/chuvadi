@@ -27,7 +27,7 @@ namespace Chuvadi.Docs.Model;
 ///
 /// // Text + images:
 /// DocxTemplate.Fill("template.docx", "out.docx",
-///     textValues:  new Dictionary&lt;string,string&gt; { ["Name"] = "Arun" },
+///     textValues:  new Dictionary&lt;string,string&gt; { ["Name"] = "Jane" },
 ///     imageValues: new Dictionary&lt;string,ImageSpec&gt;
 ///     {
 ///         ["Logo"] = ImageSpec.FromFile("logo.png", widthPt: 80, heightPt: 40),

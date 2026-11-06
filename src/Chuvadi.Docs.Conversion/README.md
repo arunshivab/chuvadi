@@ -2,7 +2,7 @@
 
 Conversions for [Chuvadi.Docs](../Chuvadi.Docs/README.md) documents: **plain text**, **Markdown** and **HTML**, both ways, plus a self-contained **HTML preview**.
 
-- **Markdown** (CommonMark with GFM tables, task lists, strikethrough and autolinks) is parsed and written with Chuvadi.Markup. It is read exactly as cmark-gfm reads it, and what is written parses back to the same structure.
+- **Markdown** (CommonMark with GFM tables, task lists, strikethrough and autolinks) is parsed and written with Chuvadi.Markup. It is read as the CommonMark 0.31.2 and GFM 0.29 specifications describe, and what is written parses back to the same structure.
 - **HTML input** is parsed the way a browser parses it, then passed through Chuvadi.Markup's allowlist sanitizer before anything reaches the document model.
 - **Pure BCL:** the only dependencies are Chuvadi.Docs and Chuvadi.Markup from the same monorepo.
 
@@ -25,7 +25,7 @@ var result = HtmlConversion.ImportDetailed(html);
 result.Document.SaveTo("mail.docx");
 foreach (var url in result.BlockedResources) Console.WriteLine("blocked: " + url);
 
-// A safe preview of an attachment (for example in Anjal)
+// A safe preview of an attachment (for example in a mail client)
 string preview = HtmlConversion.ExportPreview(Document.Load(attachmentStream));
 ```
 
@@ -62,7 +62,7 @@ The importers never read files and never touch the network.
 
 Remote resources are listed in `ConversionResult.BlockedResources`, for a "show remote content" prompt.
 
-**What happens to HTML input.** It always passes through `HtmlImportOptions.Policy`. The default is `HtmlImportOptions.DefaultPolicy()`, built on Markup's `Anjal()` rules:
+**What happens to HTML input.** It always passes through `HtmlImportOptions.Policy`. The default is `HtmlImportOptions.DefaultPolicy()`, built on Markup's default `SanitizerPolicy`:
 - **Links:** kept for http, https, mailto and `#fragment` targets.
 - **Ids:** become bookmarks.
 - **Removed:**
@@ -91,7 +91,7 @@ Inline tags arrive one at a time, so the content of an inline `<script>` or `<st
     - At most 2000 blocks.
   - **Safety:** it contains no script, no event handler and no external reference.
     - Any link that could run something (`javascript:`, `data:` and the like) is written as plain text.
-    - Markup's `SanitizerPolicy.Anjal()` removes nothing from the preview. It only makes links inert and prefixes ids, as it does for any mail.
+    - Markup's default `SanitizerPolicy` removes nothing from the preview. It only makes links inert and prefixes ids, as it does for any mail.
 - **Emphasis CommonMark cannot express.** When delimiters cannot open or close at a spot (for example `**Note:**text`, or an emphasised part of a word with `_`), the Markdown exporter writes raw `<strong>`, `<em>` or `<del>` tags, or drops the formatting (`MarkdownExportOptions.EmphasisFallback`). Renderers that escape raw HTML show such tags literally.
 - **Unsafe links in every export.** Links with schemes other than http, https, mailto, tel and ftp are never written as links, in any export.
 - **Markdown AST.** `MarkdownConversion.ToAst` returns the Chuvadi.Markup AST, so you can edit it, render it or write it with your own `MarkdownWriterOptions`.
@@ -110,3 +110,7 @@ The importers share `ImportOptions`:
 - task markers, bookmarks
 
 On top of those, each format has its own full option set: `TextImportOptions`, `TextExportOptions`, `MarkdownImportOptions`, `MarkdownExportOptions`, `HtmlImportOptions`, `HtmlExportOptions`.
+
+## Platforms and threads
+
+The same as Chuvadi.Docs (see its README, **Platforms and threads**): pure managed `net10.0`, trim- and NativeAOT-compatible, no native code. The converters work on strings, bytes and streams only and never touch the disk. They have no mutable static state: run any number at once, each on its own `Document`. `HtmlImportOptions.DefaultPolicy()` returns a new policy on every call.

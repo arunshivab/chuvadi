@@ -172,7 +172,7 @@ public static class FieldsNotesTests
                     + R("<w:fldChar w:fldCharType=\"begin\"/>") + R("<w:instrText> MERGEFIELD Sex </w:instrText>") + R("<w:fldChar w:fldCharType=\"separate\"/>")
                     + R("<w:t>F</w:t>") + R("<w:fldChar w:fldCharType=\"end\"/>") + R("<w:instrText xml:space=\"preserve\"> = \"F\" \"Ms\" \"Mr\" </w:instrText>")
                     + R("<w:fldChar w:fldCharType=\"separate\"/>") + R("<w:t>Ms</w:t>") + R("<w:fldChar w:fldCharType=\"end\"/>") + "</w:p>"
-                    + "<w:p><w:fldSimple w:instr=\" AUTHOR \">" + R("<w:t>Arun</w:t>") + "</w:fldSimple>"
+                    + "<w:p><w:fldSimple w:instr=\" AUTHOR \">" + R("<w:t>Jane</w:t>") + "</w:fldSimple>"
                     + "<w:fldSimple w:instr=\" PAGE \">" + R("<w:t>7</w:t>") + "</w:fldSimple></w:p>";
                 return xml.Replace("<w:body>", "<w:body>" + body);
             });
@@ -182,7 +182,7 @@ public static class FieldsNotesTests
             AssertTrue(paras[1].Runs.Last().FieldMark is { Type: FieldMarkType.End } en && ReferenceEquals(en.Field, b!.Field), "ends in the next paragraph");
             var iff = paras[2].Runs[0].FieldMark!.Field;
             AssertTrue(iff.FieldType == "IF" && iff.Instruction.Contains("F = \"F\"") && paras[2].GetText() == "Ms", iff.Instruction);
-            AssertTrue(paras[3].Runs[0].FieldMark!.Field.FieldType == "AUTHOR" && paras[3].GetText().StartsWith("Arun"), "simple field");
+            AssertTrue(paras[3].Runs[0].FieldMark!.Field.FieldType == "AUTHOR" && paras[3].GetText().StartsWith("Jane"), "simple field");
             AssertTrue(paras[3].Runs.Any(r => r.FieldInstruction == " PAGE " && r.TextContent == "7"), "PAGE stays a field run");
             var again = Path.Combine(outDir, "p8-fieldshapes-again.docx");
             Document.Load(path).SaveTo(again);
@@ -265,16 +265,16 @@ public static class FieldsNotesTests
             var d = new Document();
             d.AddParagraph("x");
             d.Properties.Title = "Discharge summary";
-            d.Properties.Author = "Dr. Arun";
+            d.Properties.Author = "Dr. Jane Example";
             d.Properties.Keywords = "oncology; summary";
-            d.Properties.Company = "Apulki";
+            d.Properties.Company = "Example Health Ltd";
             d.Properties.Created = new DateTime(2026, 10, 1, 9, 30, 0, DateTimeKind.Utc);
             d.Properties.SetCustom("PatientId", "P-0042").SetCustom("Pages", 3).SetCustom("Urgent", true).SetCustom("Dose", 1.5);
             var path = Save(outDir, "p8-props", d);
             AssertContains(ReadPartXml(path, "docProps/core.xml"), "<dc:title>Discharge summary</dc:title>", "title");
             AssertContains(ReadPartXml(path, "docProps/custom.xml"), "<vt:lpwstr>P-0042</vt:lpwstr>", "custom");
             var p = Document.Load(path).Properties;
-            AssertTrue(p.Title == "Discharge summary" && p.Author == "Dr. Arun" && p.Company == "Apulki" && p.Keywords == "oncology; summary", "core/app");
+            AssertTrue(p.Title == "Discharge summary" && p.Author == "Dr. Jane Example" && p.Company == "Example Health Ltd" && p.Keywords == "oncology; summary", "core/app");
             AssertTrue(p.Created == new DateTime(2026, 10, 1, 9, 30, 0, DateTimeKind.Utc), $"{p.Created:o}");
             AssertTrue((string)p.GetCustom("PatientId")! == "P-0042" && (int)p.GetCustom("Pages")! == 3 && (bool)p.GetCustom("Urgent")! && (double)p.GetCustom("Dose")! == 1.5, "custom values");
             AssertThrows<ArgumentException>(() => p.SetCustom("Bad", new object()), "type check");
@@ -579,7 +579,7 @@ public static class FieldsNotesTests
             var d = new Document();
             var a = new Field(" AUTHOR ");
             var p = d.AddParagraph();
-            p.FieldMarker(a, FieldMarkType.Begin).Text("Arun").FieldMarker(a, FieldMarkType.End);
+            p.FieldMarker(a, FieldMarkType.Begin).Text("Jane").FieldMarker(a, FieldMarkType.End);
             typeof(Field).GetProperty("Simple", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(a, true);
             var b = new Field(" TITLE ");
             typeof(Field).GetProperty("Simple", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(b, true);
