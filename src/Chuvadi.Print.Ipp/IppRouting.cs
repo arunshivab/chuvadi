@@ -171,6 +171,8 @@ namespace Chuvadi.Print.Ipp
         {
             if (context is null) throw new ArgumentNullException(nameof(context));
             if (context.Fonts == FontEmbedding.NotAllEmbedded) return PrintRouteCheck.Skip("not every font is embedded");
+            if (context.Fonts == FontEmbedding.NeedsGeneratedAppearances)
+                return PrintRouteCheck.Skip("form fields or comments need appearances generated");
             if (context.Fonts != FontEmbedding.AllEmbedded) return PrintRouteCheck.Skip("fonts not known to be embedded");
             IppPrinterCapabilities caps = Cache.Get(Target.Client, cancellationToken);
             if (!caps.IsAcceptingJobs) return PrintRouteCheck.Skip("the printer is not accepting jobs");

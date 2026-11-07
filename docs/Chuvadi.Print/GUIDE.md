@@ -137,6 +137,15 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
   operation, plus raw `Send`), `IppPrinterCapabilities`, and a PWG Raster writer and reader.
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
+- **Spool**: `IppPrinterTarget` holds the PWG Raster job until it is sent as one Print-Job.
+  - The default, `IppSpoolMode.TemporaryFile`, is a file in `TemporaryFolder` (or the system temp folder),
+    deleted when the job ends.
+  - `IppSpoolMode.Memory` keeps it in memory, for machines without a writable temp folder:
+    `target.WithSpool(IppSpoolMode.Memory)`.
+  - `MemorySpoolLimit` caps it (default 256 MB; `WithSpool(IppSpoolMode.Memory, limit)` sets both). A job that grows
+    past the limit fails before anything is sent, with an `IppException`; it does not switch to a file.
+  - The memory is released as soon as the job is sent or fails. A colour A4 page at 300 dpi is about 25 MB before
+    PWG Raster's run-length coding, which usually shrinks it a great deal.
 
 ## 4a. Choosing a route, and raw delivery (Phase 1)
 
@@ -147,7 +156,7 @@ print the job, and uses the first that can:
    accepting jobs, and it lists `application/pdf` itself (`application/octet-stream` does not count).
 2. `PageDescription`: PostScript or PCL XL made here (later phases).
 3. `Cups`: the PDF to a CUPS queue (Linux, macOS), under the same font rule.
-4. `WindowsQueue`: a Windows queue with vector output (a later phase).
+4. `WindowsQueue`: a Windows queue with vector output, through XPS (`WindowsQueueRoute`, section 4b).
 5. `Raster`: pages rendered here (PWG Raster, the GDI spooler, PNG).
 
 ```csharp
@@ -159,7 +168,10 @@ PrintRouteResult r = router.Print(job.WithFontsEmbedded());   // the app made th
 
 - **Fonts**: `PrintJobOptions.DocumentFonts` (or `WithFontsEmbedded`) says what the application knows. When it is
   `Unknown`, the router asks its `FontInspector`; with none, the PDF is not sent as-is. A Chuvadi.Pdf inspector
-  comes with the Pdf chat's font access (0.3b).
+  comes with Chuvadi.Print.Pdf.Raster. `NeedsGeneratedAppearances` means every font is embedded but some form
+  fields or comments have no stored appearance; such a PDF is not sent as-is either (the audit says
+  "form fields or comments need appearances generated"), because our own rendering draws those appearances
+  and the printer would not.
 - **Overrides**: `router.ForcedRoute` and `router.DisabledRoutes` for a site, `router.Print(job, PrintRouteKind.Raster)`
   for one job (wins over both). `router.Choose(job)` tells you the decision without printing.
 - **Audit**: every job records its route as the last column of the audit line: `Raster` for `PrintTo`,
@@ -362,3 +374,52 @@ await agent.RunAsync(stoppingToken);
   - `--windows-raw-printer "<queue>" [--windows-raw-file <port file>]`: a RAW job to a Windows queue.
 - **Chuvadi.Print.Pdf.Raster**: `dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests` (needs the Chuvadi.Pdf packages in the local feed).
 - **Windows**: everything only Windows can prove is in [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md).
+
+## 8. Thread safety
+
+Checked against the code for rc.3. "Shareable" means one instance can be used from several threads at once;
+everything else is meant for one caller at a time.
+
+**Shareable** (internal locks, or no state):
+- `PrinterRegistry`: every read and change takes a lock; reads return copies. `SaveTo` writes a snapshot to a
+  temporary file and then replaces the target file. Two processes saving the same file are not coordinated.
+- `IppCapabilityCache`: share one between routers for the same printers.
+- `IppClient`: an `HttpClient` underneath and an atomic request id, no other state. Concurrent requests are fine.
+- `PrintHub`, `InMemoryJobStore` and `FileJobStore` (within one process).
+- `FileAuditSink` (writes one line at a time under a lock), `NullAuditSink`.
+- `XpsWriter` and the other static helpers (`PageLayout`, `VectorLayout`, `WindowsPrinters`, `CupsQueues`,
+  `NetworkPrinterDiscovery`): no shared state.
+
+**One per job, or one per caller**:
+- `PrintJob`, `PrintSettings` and `PrintJobOptions` are mutable: build one per job.
+- Every target holds the state of the job in progress and its `Last...` results:
+  - `WindowsPrinterTarget`, `WindowsXpsPrinterTarget`, `WindowsRawPrinterTarget`;
+  - `IppPrinterTarget`, `IppDocumentTarget`, `RawSocketTarget`;
+  - the image file targets.
+
+  Use one per thread, or serialise jobs on it. Several targets for the same printer are fine.
+- Routes and `PrintRouter` hold targets, so they follow the same rule.
+- `PrintAgent`: one per agent process.
+
+**No static mutable state** anywhere in the Print packages. Two jobs on two threads, each with its own job and
+target, never touch each other. `WindowsXpsPrinterTarget` does its submission on a thread of its own in COM's
+multithreaded apartment, so the caller's apartment does not matter.
+
+## 9. Android
+
+Chuvadi.Print targets `net10.0` and is pure managed code, so an Android app can reference it. It is not yet in
+CI's Android smoke build (`tests/Chuvadi.AndroidSmoke`, which checks Zip and Fonts today). Its network routes need
+only what any networked Android app needs. Print does not wrap Android's own print dialog; that stays with the app.
+
+- **IPP, IPPS, raw TCP 9100 and the remote agent** need the `android.permission.INTERNET` permission in the
+  app's manifest.
+- **Plain `ipp://` is cleartext HTTP.** Apps targeting Android 9 (API level 28) or later have cleartext traffic
+  disabled by default. Either use `ipps://`, or allow cleartext for the printers' addresses in the app's network
+  security configuration (`cleartextTrafficPermitted="true"` on a `domain-config` for those hosts).
+- **`NetworkPrinterDiscovery.Browse`** uses multicast DNS. Android's Wi-Fi stack filters out multicast packets
+  unless the app holds a `WifiManager.MulticastLock`, which needs the `android.permission.CHANGE_WIFI_MULTICAST_STATE`
+  permission. Acquire the lock just before browsing and release it right after: Android notes that the extra packets
+  cost battery.
+- **Windows-only parts** (`Chuvadi.Print.Windows`) are not used on Android: guard calls with
+  `OperatingSystem.IsWindows()`, as the platform analyzer asks.
+- **Spooling**: if the app has no convenient writable folder, use `IppSpoolMode.Memory` (section 4).

@@ -465,6 +465,81 @@ public class IppPrintingTests
         }
     }
 
+    // ------------------------------------------------------------------ spool mode (D-217 item 4)
+
+    [Fact]
+    public void Spool_defaults_are_a_temporary_file_and_256_mb()
+    {
+        using var target = new IppPrinterTarget("ipp://127.0.0.1:1/ipp/print");
+        Assert.Equal(IppSpoolMode.TemporaryFile, target.Spool);
+        Assert.Equal(256L * 1024 * 1024, target.MemorySpoolLimit);
+        Assert.Equal(IppPrinterTarget.DefaultMemorySpoolLimit, target.MemorySpoolLimit);
+        Assert.Throws<ArgumentOutOfRangeException>(() => target.MemorySpoolLimit = 0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => target.MemorySpoolLimit = (long)Array.MaxLength + 1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => target.Spool = (IppSpoolMode)7);
+        Assert.Same(target, target.WithSpool(IppSpoolMode.Memory, 1024));
+        Assert.Equal((IppSpoolMode.Memory, 1024L), (target.Spool, target.MemorySpoolLimit));
+    }
+
+    [Fact]
+    public void A_memory_spool_sends_the_same_bytes_as_a_file_spool()
+    {
+        byte[] Send(IppSpoolMode mode)
+        {
+            using var printer = new FakeIppPrinter();
+            using var target = new IppPrinterTarget(printer.Uri).WithMaxRasterDpi(72).WithSpool(mode);
+            PrintResult result = new PrintJob(FakeDocument.Uniform(2, A4)).WithRasterizer(new FakeRasterizer())
+                .WithDuplex(Duplex.Vertical).WithColor(ColorMode.Grayscale).PrintTo(target);
+            Assert.True(result.Status == PrintJobStatus.Printed, result.Error);
+            return Assert.Single(printer.PrintJobs).Document;
+        }
+
+        byte[] file = Send(IppSpoolMode.TemporaryFile);
+        byte[] memory = Send(IppSpoolMode.Memory);
+        Assert.Equal(file, memory);
+        Assert.Equal(2, Pages(memory).Count);
+    }
+
+    [Fact]
+    public void A_memory_spool_job_over_the_limit_fails_and_sends_nothing()
+    {
+        using var printer = new FakeIppPrinter();
+        using var target = new IppPrinterTarget(printer.Uri).WithMaxRasterDpi(72).WithSpool(IppSpoolMode.Memory, 4096);
+        var sink = new MemoryAuditSink();
+        PrintResult result = new PrintJob(FakeDocument.Uniform(3, A4)).WithRasterizer(new FakeRasterizer())
+            .WithColor(ColorMode.Color).WithAuditSink(sink).PrintTo(target);
+
+        Assert.Equal(PrintJobStatus.Failed, result.Status);
+        Assert.Contains("memory spool limit of 4096 bytes", result.Error);
+        Assert.Empty(printer.PrintJobs);
+        Assert.Single(sink.Events);
+        var thrown = Assert.Throws<IppException>(() => new PrintJob(FakeDocument.Uniform(3, A4)).WithRasterizer(new FakeRasterizer())
+            .WithColor(ColorMode.Color).WithThrowOnFailure().PrintTo(target));
+        Assert.Contains("Nothing was sent to the printer", thrown.Message);
+        Assert.Empty(printer.PrintJobs);
+
+        // The target is reusable after the failure: a job that fits goes through.
+        target.MemorySpoolLimit = IppPrinterTarget.DefaultMemorySpoolLimit;
+        PrintResult second = new PrintJob(FakeDocument.Uniform(1, A4)).WithRasterizer(new FakeRasterizer()).PrintTo(target);
+        Assert.True(second.Status == PrintJobStatus.Printed, second.Error);
+        Assert.Single(printer.PrintJobs);
+    }
+
+    [Fact]
+    public void A_memory_spool_never_touches_the_temporary_folder()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "chuvadi-spool-" + Guid.NewGuid().ToString("N"));
+        using var printer = new FakeIppPrinter();
+        using var target = new IppPrinterTarget(printer.Uri).WithMaxRasterDpi(72).WithSpool(IppSpoolMode.Memory);
+        target.TemporaryFolder = folder; // does not exist: a file spool would fail here
+        PrintResult result = new PrintJob(FakeDocument.Uniform(1, A4)).WithRasterizer(new FakeRasterizer()).PrintTo(target);
+        Assert.True(result.Status == PrintJobStatus.Printed, result.Error);
+        Assert.False(Directory.Exists(folder));
+
+        target.Spool = IppSpoolMode.TemporaryFile;
+        Assert.Equal(PrintJobStatus.Failed, new PrintJob(FakeDocument.Uniform(1, A4)).WithRasterizer(new FakeRasterizer()).PrintTo(target).Status);
+    }
+
     [Fact]
     public void Landscape_sheets_are_turned_to_portrait_feed()
     {

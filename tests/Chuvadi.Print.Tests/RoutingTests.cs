@@ -127,6 +127,32 @@ public class PrintRouterTests
     }
 
     [Fact]
+    public void Missing_appearances_keep_the_pdf_from_going_as_is()
+    {
+        using var printer = new FakeIppPrinter();
+        using PrintRouter router = IppRoutes.CreateRouter(printer.Uri);
+        var sink = new MemoryAuditSink();
+        PrintJob job = Job(sink);
+        job.Options.DocumentFonts = FontEmbedding.NeedsGeneratedAppearances;
+        PrintRouteResult result = router.Print(job);
+        Assert.Equal(PrintRouteKind.Raster, result.Route);
+        Assert.Equal(FontEmbedding.NeedsGeneratedAppearances, result.Decision.Fonts);
+        Assert.Equal("Raster (fallback: PdfAsIs: form fields or comments need appearances generated)", sink.Events[0].Route);
+    }
+
+    [Fact]
+    public void An_inspector_reporting_missing_appearances_keeps_the_pdf_from_going_as_is()
+    {
+        using var printer = new FakeIppPrinter();
+        using PrintRouter router = IppRoutes.CreateRouter(printer.Uri);
+        router.FontInspector = new FixedInspector(FontEmbedding.NeedsGeneratedAppearances);
+        PrintRouteResult result = router.Print(Job(new MemoryAuditSink()));
+        Assert.Equal(PrintRouteKind.Raster, result.Route);
+        Assert.Equal(3, (int)FontEmbedding.NeedsGeneratedAppearances); // a new value; the existing three keep theirs
+        Assert.Equal((0, 1, 2), ((int)FontEmbedding.Unknown, (int)FontEmbedding.AllEmbedded, (int)FontEmbedding.NotAllEmbedded));
+    }
+
+    [Fact]
     public void Only_an_explicit_application_pdf_counts()
     {
         using var printer = new FakeIppPrinter(a => a.Set("document-format-supported",
