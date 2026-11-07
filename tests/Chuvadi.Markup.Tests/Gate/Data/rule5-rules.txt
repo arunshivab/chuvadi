@@ -1,0 +1,38 @@
+# Rule-5 rules of the gate: where an approved decision says the gate does not compare an output byte for byte.
+# Decided by Arun: R5-01 B and R5-02 A (D-130), R5-03 B (D-134), R5-0001 and R5-0002 B (D-141), R5-0003 B (D-143),
+#   R5-0004 B, R5-0025 C and R5-0027 as is (D-157), label normalization per the spec (D-174), R5-0030 as built
+#   (D-193), and the author's spec-silent cases R5-0003 to R5-0024, R5-0026, R5-0028, R5-0029 and R5-0031 accepted as
+#   built (D-199), and the patch-7 rulings (D-232, D-237: groups G1 to G6, N1 to N12, C1 to C4 and the heading-id
+#   rules), and D-242 (the domain start of extended links). None of these needs a rule below: the expected outputs were frozen under them and are compared exactly.
+#
+# R5-0001 / R5-0002 B (follow the spec: U+000B, U+000C, U+00A0 and U+2028 are not blank; a paragraph made only of
+#   them is kept, and an ATX heading does not drop a leading or trailing U+000B or U+000C) need no rule here: 15 cases
+#   were refrozen with the expected output the spec gives (case list in the coordinator's record), and they are
+#   compared exactly.
+# R5-0003 B (follow the spec: paragraph and setext heading content is stripped of spaces and tabs only, so a
+#   leading or trailing U+000C stays) needs no rule here: 46 more cases were refrozen with the output the spec
+#   gives, and they are compared exactly.
+# R5-0025 C (GFM 0.29 literally: U+000B and U+000C are whitespace before an extended www. autolink, so a link
+#   starts after either) needs no rule here: 10 cases were refrozen with that output and are compared exactly.
+# R5-0004 B (a link label made only of U+00A0, or of any characters other than spaces, tabs and line endings, is
+#   valid) and R5-0027 as is (U+000B and U+000C at the end of a table delimiter row are ignored, and kept at the
+#   end of header and body rows) change no frozen output.
+# D-174 (LinkReferenceDefinition.NormalizeLabel follows the spec: only U+0020, U+0009, U+000A and U+000D are
+#   trimmed and collapsed; U+000B, U+000C and U+00A0 stay) is a change to the given library (Markdown/Blocks.cs).
+#   41 label cases (lab-0001 to lab-0041) and the probe normalize-label were added; compared exactly.
+#
+# R5-01 B (MaxNodes counts the nodes of the resulting AST, not the document node, not link reference
+#   definitions; throws as soon as the count would pass the limit, Actual = limit + 1) needs no rule here:
+#   the expected outputs were frozen under that rule and are compared exactly.
+# R5-02 A (the Markdown work budget is MaxParserWorkPerChar x (input length + 1024) + 1,000,000 steps; what
+#   counts as a step is the implementation's): an output that is the same MaxParserWorkPerChar exception in
+#   every part except "actual" passes. Every input that completes in the frozen data must still complete
+#   with identical output, and the probe that throws must still throw (both compared exactly).
+# R5-03 B (MaxOutputChars is exact: output stops at exactly the limit, a TextWriter has received exactly that
+#   many chars, Actual = limit + 1) needs no rule here: the library enforces it in its output sink, the
+#   expected outputs were frozen from a build that does so, and they are compared exactly.
+#
+# id | check prefix | text | mode | status | note
+# mode ignore-actual: same exception, differing only in its "actual" value.
+# status decided: counted as pass. pending: reported separately; P4 needs it settled.
+R5-02 | | limit=MaxParserWorkPerChar | ignore-actual | decided | work budget: steps are implementation-defined, Limit is exact

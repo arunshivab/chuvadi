@@ -6,9 +6,12 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   `<ProjectReference>`, and does not use `shared/Chuvadi.Internal`. Only the BCL (including
   `CodePagesEncodingProvider` for legacy mail charsets). The CI grep over `src/` and `shared/` enforces
   the no-third-party rule.
-  Code provenance (D-53, D-106): the Markdown parser and part of the HTML renderer follow the cmark and
-  cmark-gfm C sources; their licence ships in `THIRD-PARTY-NOTICES.txt` until a clean-room rewrite from
-  the CommonMark and GFM specifications replaces that code and the notice is removed.
+  Code provenance (D-53, D-106): since 1.1.0 the Markdown parser and HTML renderer are a clean-room
+  implementation written from the CommonMark and GFM specifications, with its trace record in
+  `docs/Chuvadi.Markup/cleanroom/` and the independent similarity reports in
+  `docs/Chuvadi.Markup/similarity/`. The package contains no third-party code and no third-party notice.
+  A change to the parser or renderer keeps its `TRACE` tags and trace entries current (the trace test
+  fails otherwise).
 - **M02 — Untrusted input is the normal case.** Every public entry point takes a `CancellationToken`
   and honours `MarkupLimits`. No input can cause a stack overflow (all tree walks are iterative; nesting
   past `MaxNestingDepth` is flattened, not rejected), super-linear time (parser work budget, linear
@@ -16,8 +19,10 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
   attribute, data-URI, table and definition caps). Malformed input never throws; only
   `ArgumentNullException`, `ArgumentOutOfRangeException` (invalid limits), `MarkupLimitExceededException`
   and `OperationCanceledException` are documented.
-- **M03 — Parse like the reference.** Markdown parses and renders exactly like cmark / cmark-gfm
-  (CommonMark spec 0.31.2: 652/652; GFM extensions). HTML parses into the DOM a browser builds
+- **M03 — Follow the specifications.** Markdown follows the CommonMark 0.31.2 and GFM 0.29 specs
+  (CommonMark 652/652; GFM 651/672; GFM extension tests 26/26), and where they are silent keeps the
+  frozen behaviour pinned by the gate test (`tests/Chuvadi.Markup.Tests/Gate`); any change to that output
+  is a rule-5 decision and refreezes the gate in the same PR. HTML parses into the DOM a browser builds
   (WHATWG HTML; html5lib tests). Deviations are listed in `DESIGN.md`, each with a reason.
 - **M04 — Sanitizer is allowlist-only and network-free.** Nothing that can fetch, navigate or run is
   emitted unless the host's `IResourceResolver` supplies it, and even resolver output is never a
@@ -36,10 +41,12 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 
 ## Layer status
 
-- **1.0.0 (this layer; previews 1 and 2 before it)** — Markdown parser + AST + HTML renderer + Markdown writer; WHATWG HTML
+- **1.1.0 (this layer)** — the clean-room Markdown parser and renderer (D-106), the frozen gate as a test,
+  `IsAotCompatible`; everything else as 1.0.0.
+- **1.0.0 (previews 1 and 2 before it)** — Markdown parser + AST + HTML renderer + Markdown writer; WHATWG HTML
   tokenizer, tree builder, DOM, serializer, charset sniffing; CSS syntax parser and serializer;
   allowlist sanitizer with a strict default and capability switches; plain text to HTML.
-- **1.1 (planned)** — CSS cascade / computed style for Chuvadi.Layout (selector matching, specificity,
+- **Later (planned)** — CSS cascade / computed style for Chuvadi.Layout (selector matching, specificity,
   inheritance) over the existing CSS parser; Markdown footnotes if a consumer asks.
 
 ## Build & test conventions (inherited from the monorepo)
@@ -48,8 +55,9 @@ Invariants the package must always satisfy. Changes to these are deliberate, doc
 - Tests: xUnit (`coverlet.collector`, `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`),
   plain `Assert`. The shipped library never references these.
 - Conformance data is vendored under `tests/Chuvadi.Markup.Tests/Conformance` with its licences:
-  CommonMark spec 0.31.2 (CC BY-SA 4.0), GFM spec and extension tests (cmark-gfm, BSD-2 / CC BY-SA 4.0),
-  html5lib-tests (MIT). It is test data only and never ships in the package.
+  CommonMark spec 0.31.2 (CC BY-SA 4.0), GFM spec and extension tests (from the GFM repository, BSD-2 /
+  CC BY-SA 4.0), html5lib-tests (MIT). The gate's frozen data and its provenance notice
+  (`Gate/Data/NOTICE.txt`) are test data too. None of it ships in the package.
 - The `samples/Chuvadi.Markup.ManualTests` console exposes verification groups (consumer scenarios: a
   mail client and a document viewer) that `tests/Chuvadi.Markup.Tests` drives as `[Fact]`s, and which also run end-to-end
   in CI.

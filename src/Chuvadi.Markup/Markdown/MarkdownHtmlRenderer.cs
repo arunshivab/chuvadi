@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -8,9 +9,8 @@ using Chuvadi.Markup.Internal;
 namespace Chuvadi.Markup.Markdown
 {
     /// <summary>
-    /// Renders a <see cref="MarkdownDocument"/> (or any subtree) to HTML. Output matches the reference
-    /// implementations (cmark / cmark-gfm) byte for byte for the CommonMark and GFM spec examples.
-    /// The renderer is iterative, so tree depth never threatens the stack.
+    /// Renders a <see cref="MarkdownDocument"/> (or any subtree) to HTML. Output matches the CommonMark and
+    /// GFM spec examples byte for byte. The renderer is iterative, so tree depth never threatens the stack.
     /// </summary>
     public static class MarkdownHtmlRenderer
     {
@@ -19,8 +19,8 @@ namespace Chuvadi.Markup.Markdown
         {
             ArgumentNullException.ThrowIfNull(node);
             options ??= new MarkdownHtmlOptions();
-            var sink = new OutputSink(options.Limits.MaxOutputChars, 256);
-            new Writer(sink, options, node, cancellationToken).Run();
+            var sink = new OutputSink(options.Limits.MaxOutputChars);
+            new HtmlWriter(sink, options, node, cancellationToken).Run();
             return sink.ToString();
         }
 
@@ -31,483 +31,707 @@ namespace Chuvadi.Markup.Markdown
             ArgumentNullException.ThrowIfNull(writer);
             options ??= new MarkdownHtmlOptions();
             var sink = new OutputSink(writer, options.Limits.MaxOutputChars);
-            new Writer(sink, options, node, cancellationToken).Run();
+            new HtmlWriter(sink, options, node, cancellationToken).Run();
         }
 
-        private sealed class Writer
+        /// <summary>One rendering pass: a depth-first walk with an explicit stack of enter and leave steps.</summary>
+        private sealed class HtmlWriter
         {
-            private readonly OutputSink _o;
-            private readonly MarkdownHtmlOptions _opt;
+            private readonly OutputSink _out;
+            private readonly MarkdownHtmlOptions _o;
             private readonly MarkdownNode _root;
+            private readonly MarkdownDocument? _document;
             private CancellationPoll _poll;
-            private readonly MarkdownDocument? _doc;
-            private readonly Dictionary<string, int> _slugs = new(StringComparer.Ordinal);
-            private bool _inTableHeader;
-            private bool _needClosingTbody;
+            private readonly Stack<(MarkdownNode Node, bool Leaving)> _stack = new();
+            private Slugs? _slugs;
 
-            public Writer(OutputSink o, MarkdownHtmlOptions opt, MarkdownNode root, CancellationToken ct)
+            public HtmlWriter(OutputSink sink, MarkdownHtmlOptions options, MarkdownNode root, CancellationToken token)
             {
-                _o = o;
-                _opt = opt;
+                _out = sink;
+                _o = options;
                 _root = root;
-                _poll = new CancellationPoll(ct);
-                for (MarkdownNode? p = root; p is not null; p = p.Parent)
-                    if (p is MarkdownDocument d) _doc = d;
+                _poll = new CancellationPoll(token);
+                MarkdownNode top = root;
+                while (top.Parent is not null) top = top.Parent;
+                _document = top as MarkdownDocument;
             }
 
-            private string Void => _opt.XhtmlVoidElements ? " />" : ">";
-
-            private void Cr()
-            {
-                if (_o.Written > 0 && _o.LastChar != '\n') _o.Write('\n');
-            }
-
-            private void Esc(string s) => CharUtil.EscapeHtml(_o, s, true);
-
+            // TRACE R-MD-0167
             public void Run()
             {
-                var stack = new Stack<(MarkdownNode node, bool entering)>();
-                stack.Push((_root, true));
-                while (stack.Count > 0)
+                _stack.Push((_root, false));
+                while (_stack.Count > 0)
                 {
                     _poll.Tick();
-                    var (node, entering) = stack.Pop();
-                    if (entering)
-                    {
-                        bool descend = Enter(node);
-                        if (descend)
-                        {
-                            stack.Push((node, false));
-                            var kids = node.Children;
-                            for (int i = kids.Count - 1; i >= 0; i--) stack.Push((kids[i], true));
-                        }
-                    }
-                    else
-                    {
-                        Exit(node);
-                    }
+                    var (node, leaving) = _stack.Pop();
+                    if (leaving) Leave(node);
+                    else Enter(node);
                 }
             }
 
-            private void SourcePos(MarkdownNode node)
+            private void PushChildren(MarkdownNode node)
             {
-                if (!_opt.SourcePositions || _doc is null || node.Span.Length == 0 && node.Span.Start == 0 && _doc.Source.Length == 0) return;
-                var s = _doc.GetPosition(Math.Min(node.Span.Start, _doc.Source.Length));
-                var e = _doc.GetPosition(Math.Min(Math.Max(node.Span.Start, node.Span.End - 1), _doc.Source.Length));
-                _o.Write(" data-sourcepos=\"");
-                _o.Write(s.Line + ":" + s.Column + "-" + e.Line + ":" + e.Column);
-                _o.Write('"');
+                _stack.Push((node, true));
+                var kids = node.Children;
+                for (int i = kids.Count - 1; i >= 0; i--) _stack.Push((kids[i], false));
             }
 
-            private static bool InTightList(MarkdownNode node)
-                => node.Parent is ListItem item && item.Parent is ListBlock list && list.IsTight;
+            // ------------------------------------------------------------ output helpers
 
-            /// <summary>Returns true if children should be visited (and Exit called).</summary>
-            private bool Enter(MarkdownNode node)
+            private void Write(string s) => _out.Write(s);
+
+            private void Write(char c) => _out.Write(c);
+
+            // TRACE R-MD-0168
+            private void Text(string s) => CharUtil.EscapeHtml(_out, s.AsSpan(), escapeQuotes: true);
+
+            /// <summary>Starts a new line unless the output is already at the start of one.</summary>
+            private void NewLine()
+            {
+                if (_out.LastChar != '\n') Write('\n');
+            }
+
+            private string Void => _o.XhtmlVoidElements ? " />" : ">";
+
+            // TRACE R-MD-0169
+            /// <summary>The data-sourcepos attribute of a block: one-based start and end line:column, end inclusive.</summary>
+            private void SourcePos(MarkdownNode node)
+            {
+                if (!_o.SourcePositions || _document is null) return;
+                var span = node.Span;
+                if (span.Length == 0 && span.Start == 0 && node is not MarkdownDocument && _document.Source.Length == 0) return;
+                // TRACE R-MD-0272
+                // a span that runs past the input (R-MD-0266) is placed at the input's end: "- >o\n\t[" gives 1:1-2:3
+                int limit = _document.Source.Length;
+                int startOffset = span.Start < limit ? span.Start : limit;
+                int endOffset = span.Length > 0 ? span.End - 1 : span.Start;
+                if (endOffset > limit) endOffset = limit;
+                var start = _document.GetPosition(startOffset);
+                var end = _document.GetPosition(endOffset);
+                Write(" data-sourcepos=\"");
+                Write(start.Line.ToString(CultureInfo.InvariantCulture));
+                Write(':');
+                Write(start.Column.ToString(CultureInfo.InvariantCulture));
+                Write('-');
+                Write(end.Line.ToString(CultureInfo.InvariantCulture));
+                Write(':');
+                Write(end.Column.ToString(CultureInfo.InvariantCulture));
+                Write('"');
+            }
+
+            private static bool InTightList(MarkdownNode paragraph)
+                => paragraph.Parent is ListItem item && item.Parent is ListBlock list && list.IsTight;
+
+            // ------------------------------------------------------------ nodes
+
+            private void Enter(MarkdownNode node)
             {
                 switch (node)
                 {
                     case MarkdownDocument:
-                        return true;
-                    case BlockQuote bq:
-                        Cr();
-                        _o.Write("<blockquote");
-                        SourcePos(bq);
-                        _o.Write(">\n");
-                        return true;
-                    case ListBlock list:
-                        Cr();
-                        if (list.ListKind == ListKind.Bullet)
+                        PushChildren(node);
+                        break;
+
+                    case Paragraph p:
+                        // TRACE R-MD-0170
+                        if (InTightList(p))
                         {
-                            _o.Write("<ul");
+                            TaskMarker(p);
+                            PushChildren(node);
+                            break;
                         }
+                        NewLine();
+                        Write("<p");
+                        SourcePos(node);
+                        Write('>');
+                        PushChildren(node);
+                        break;
+
+                    case Heading h:
+                        NewLine();
+                        Write("<h");
+                        Write((char)('0' + h.Level));
+                        HeadingId(h);
+                        SourcePos(node);
+                        Write('>');
+                        PushChildren(node);
+                        break;
+
+                    case ThematicBreak:
+                        NewLine();
+                        Write("<hr");
+                        SourcePos(node);
+                        Write(Void);
+                        Write('\n');
+                        break;
+
+                    case BlockQuote:
+                        NewLine();
+                        Write("<blockquote");
+                        SourcePos(node);
+                        Write(">\n");
+                        PushChildren(node);
+                        break;
+
+                    case ListBlock list:
+                        // TRACE R-MD-0171
+                        NewLine();
+                        if (list.ListKind == ListKind.Bullet) Write("<ul");
                         else
                         {
-                            _o.Write("<ol");
-                            if (list.Start != 1) _o.Write(" start=\"" + list.Start.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\"");
+                            Write("<ol");
+                            if (list.Start != 1)
+                            {
+                                Write(" start=\"");
+                                Write(list.Start.ToString(CultureInfo.InvariantCulture));
+                                Write('"');
+                            }
                         }
-                        SourcePos(list);
-                        _o.Write(">\n");
-                        return true;
+                        SourcePos(node);
+                        Write(">\n");
+                        PushChildren(node);
+                        break;
+
                     case ListItem item:
-                        Cr();
-                        _o.Write("<li");
-                        SourcePos(item);
-                        _o.Write('>');
-                        if (item.TaskState != TaskState.None) WriteTaskMarker(item.TaskState == TaskState.Checked);
-                        return true;
-                    case Heading h:
-                        Cr();
-                        _o.Write("<h" + h.Level);
-                        if (_opt.HeadingIds)
-                        {
-                            _o.Write(" id=\"");
-                            Esc(_opt.HeadingIdPrefix + Slug(h.ToPlainText()));
-                            _o.Write('"');
-                        }
-                        SourcePos(h);
-                        _o.Write('>');
-                        return true;
+                        // TRACE R-MD-0172
+                        NewLine();
+                        Write("<li");
+                        SourcePos(node);
+                        Write('>');
+                        // TRACE R-MD-0257
+                        // the marker of a task item with no content, or of one in a loose list, comes right after
+                        // <li>, before the line ending and the <p> (D-232, G6)
+                        bool tightFirst = item.Children.Count > 0 && item.Children[0] is Paragraph && InTightList(item.Children[0]);
+                        if (item.TaskState != TaskState.None && !tightFirst && (item.Children.Count == 0 || item.Children[0] is Paragraph))
+                            TaskMarkerFor(item);
+                        if (item.Children.Count > 0 && !tightFirst)
+                            Write('\n');
+                        PushChildren(node);
+                        break;
+
                     case CodeBlock code:
-                        Cr();
-                        _o.Write("<pre");
-                        SourcePos(code);
-                        _o.Write("><code");
-                        string lang = code.Language;
-                        if (lang.Length > 0 && !string.IsNullOrEmpty(_opt.CodeLanguageClassPrefix))
-                        {
-                            _o.Write(" class=\"");
-                            Esc(_opt.CodeLanguageClassPrefix + lang);
-                            _o.Write('"');
-                        }
-                        _o.Write('>');
-                        Esc(code.Code);
-                        _o.Write("</code></pre>\n");
-                        return false;
+                        CodeBlock(code);
+                        break;
+
                     case HtmlBlock html:
-                        Cr();
-                        WriteRawHtml(html.Html, true);
-                        Cr();
-                        return false;
-                    case ThematicBreak tb:
-                        Cr();
-                        _o.Write("<hr");
-                        SourcePos(tb);
-                        _o.Write(Void);
-                        _o.Write('\n');
-                        return false;
-                    case Paragraph p:
-                        if (!InTightList(p))
+                        // TRACE R-MD-0173
+                        NewLine();
+                        if (_o.RawHtml == RawHtmlMode.Escape)
                         {
-                            Cr();
-                            _o.Write("<p");
-                            SourcePos(p);
-                            _o.Write('>');
+                            // TRACE R-MD-0235
+                            Write("<p");
+                            SourcePos(node);
+                            Write('>');
+                            Text(html.Html.TrimEnd('\n'));
+                            Write("</p>\n");
+                            break;
                         }
-                        return true;
-                    case Table table:
-                        Cr();
-                        _o.Write("<table");
-                        SourcePos(table);
-                        _o.Write('>');
-                        _needClosingTbody = false;
-                        return true;
-                    case TableRow row:
-                        Cr();
-                        if (row.IsHeader)
-                        {
-                            _inTableHeader = true;
-                            _o.Write("<thead>");
-                            Cr();
-                        }
-                        else if (!_needClosingTbody)
-                        {
-                            _o.Write("<tbody>");
-                            Cr();
-                            _needClosingTbody = true;
-                        }
-                        _o.Write("<tr");
-                        SourcePos(row);
-                        _o.Write('>');
-                        return true;
-                    case TableCell cell:
-                        Cr();
-                        _o.Write(_inTableHeader ? "<th" : "<td");
-                        if (cell.Alignment != TableAlignment.None)
-                        {
-                            string a = cell.Alignment == TableAlignment.Left ? "left" : cell.Alignment == TableAlignment.Center ? "center" : "right";
-                            _o.Write(_opt.TableAlignment == TableAlignmentStyle.AlignAttribute ? " align=\"" + a + "\"" : " style=\"text-align: " + a + "\"");
-                        }
-                        SourcePos(cell);
-                        _o.Write('>');
-                        return true;
+                        RawHtml(html.Html, block: true);
+                        break;
+
+                    case Table:
+                    case TableRow:
+                    case TableCell:
+                        TableEnter(node);
+                        break;
+
                     case TextInline t:
-                        Esc(t.Text);
-                        return false;
-                    case CodeSpan cs:
-                        _o.Write("<code>");
-                        Esc(cs.Code);
-                        _o.Write("</code>");
-                        return false;
+                        Text(t.Text);
+                        break;
+
                     case SoftBreak:
-                        switch (_opt.SoftBreak)
+                        // TRACE R-MD-0174
+                        switch (_o.SoftBreak)
                         {
-                            case SoftBreakStyle.Space: _o.Write(' '); break;
-                            case SoftBreakStyle.LineBreak: _o.Write("<br" + Void + "\n"); break;
-                            default: _o.Write('\n'); break;
+                            case SoftBreakStyle.Space: Write(' '); break;
+                            case SoftBreakStyle.LineBreak: Write("<br"); Write(Void); Write('\n'); break;
+                            default: Write('\n'); break;
                         }
-                        return false;
+                        break;
+
                     case HardBreak:
-                        _o.Write("<br" + Void + "\n");
-                        return false;
-                    case HtmlInline hi:
-                        WriteRawHtml(hi.Html, false);
-                        return false;
+                        // TRACE R-MD-0175
+                        Write("<br");
+                        Write(Void);
+                        Write('\n');
+                        break;
+
+                    case CodeSpan cs:
+                        // TRACE R-MD-0176
+                        Write("<code>");
+                        Text(cs.Code);
+                        Write("</code>");
+                        break;
+
                     case Emphasis:
-                        _o.Write("<em>");
-                        return true;
+                        // TRACE R-MD-0177
+                        Write("<em>");
+                        PushChildren(node);
+                        break;
+
                     case Strong:
-                        _o.Write("<strong>");
-                        return true;
+                        Write("<strong>");
+                        PushChildren(node);
+                        break;
+
                     case Strikethrough:
-                        _o.Write("<del>");
-                        return true;
+                        Write("<del>");
+                        PushChildren(node);
+                        break;
+
                     case Link link:
-                        _o.Write("<a href=\"");
-                        WriteUrl(link.Destination);
-                        _o.Write('"');
-                        if (!string.IsNullOrEmpty(link.Title))
+                        // TRACE R-MD-0178
+                        Write("<a href=\"");
+                        Url(link.Destination);
+                        Write('"');
+                        if (link.Title is not null)
                         {
-                            _o.Write(" title=\"");
-                            Esc(link.Title);
-                            _o.Write('"');
+                            Write(" title=\"");
+                            Text(link.Title);
+                            Write('"');
                         }
-                        _o.Write('>');
-                        return true;
-                    case Image img:
-                        _o.Write("<img src=\"");
-                        WriteUrl(img.Destination);
-                        _o.Write("\" alt=\"");
-                        WriteAltText(img);
-                        _o.Write('"');
-                        if (!string.IsNullOrEmpty(img.Title))
-                        {
-                            _o.Write(" title=\"");
-                            Esc(img.Title);
-                            _o.Write('"');
-                        }
-                        _o.Write(Void);
-                        return false;
+                        Write('>');
+                        PushChildren(node);
+                        break;
+
+                    case Image image:
+                        ImageTag(image);
+                        break;
+
+                    case HtmlInline hi:
+                        RawHtml(hi.Html, block: false);
+                        break;
+
                     default:
-                        return true;
+                        PushChildren(node);
+                        break;
                 }
             }
 
-            private void Exit(MarkdownNode node)
+            private void Leave(MarkdownNode node)
             {
                 switch (node)
                 {
-                    case BlockQuote:
-                        Cr();
-                        _o.Write("</blockquote>\n");
-                        break;
-                    case ListBlock list:
-                        Cr();
-                        _o.Write(list.ListKind == ListKind.Bullet ? "</ul>\n" : "</ol>\n");
-                        break;
-                    case ListItem:
-                        _o.Write("</li>\n");
+                    case Paragraph p:
+                        if (!InTightList(p)) Write("</p>\n");
                         break;
                     case Heading h:
-                        _o.Write("</h" + h.Level + ">\n");
+                        Write("</h");
+                        Write((char)('0' + h.Level));
+                        Write(">\n");
                         break;
-                    case Paragraph p:
-                        if (!InTightList(p)) _o.Write("</p>\n");
+                    case BlockQuote:
+                        NewLine();
+                        Write("</blockquote>\n");
+                        break;
+                    case ListBlock list:
+                        NewLine();
+                        Write(list.ListKind == ListKind.Bullet ? "</ul>\n" : "</ol>\n");
+                        break;
+                    case ListItem:
+                        Write("</li>\n");
                         break;
                     case Table:
-                        if (_needClosingTbody)
-                        {
-                            Cr();
-                            _o.Write("</tbody>");
-                            Cr();
-                        }
-                        _needClosingTbody = false;
-                        Cr();
-                        _o.Write("</table>");
-                        Cr();
-                        break;
-                    case TableRow row:
-                        Cr();
-                        _o.Write("</tr>");
-                        if (row.IsHeader)
-                        {
-                            Cr();
-                            _o.Write("</thead>");
-                            _inTableHeader = false;
-                        }
-                        break;
+                    case TableRow:
                     case TableCell:
-                        _o.Write(_inTableHeader ? "</th>" : "</td>");
+                        TableLeave(node);
                         break;
                     case Emphasis:
-                        _o.Write("</em>");
+                        Write("</em>");
                         break;
                     case Strong:
-                        _o.Write("</strong>");
+                        Write("</strong>");
                         break;
                     case Strikethrough:
-                        _o.Write("</del>");
+                        Write("</del>");
                         break;
                     case Link:
-                        _o.Write("</a>");
+                        Write("</a>");
                         break;
                 }
             }
 
-            private void WriteTaskMarker(bool isChecked)
+            // TRACE R-MD-0179
+            private void CodeBlock(CodeBlock code)
             {
-                switch (_opt.TaskLists)
+                NewLine();
+                Write("<pre");
+                SourcePos(code);
+                Write("><code");
+                string language = code.IsFenced ? code.Language : string.Empty;
+                if (language.Length > 0 && !string.IsNullOrEmpty(_o.CodeLanguageClassPrefix))
                 {
-                    case TaskListStyle.DisabledCheckbox:
-                        _o.Write(isChecked ? "<input type=\"checkbox\" checked=\"\" disabled=\"\"" : "<input type=\"checkbox\" disabled=\"\"");
-                        _o.Write(Void);
-                        _o.Write(' ');
-                        break;
-                    case TaskListStyle.Glyph:
-                        _o.Write(isChecked ? "<span class=\"task-checked\">☑</span> " : "<span class=\"task-unchecked\">☐</span> ");
-                        break;
-                    default:
-                        _o.Write(isChecked ? "[x] " : "[ ] ");
-                        break;
+                    Write(" class=\"");
+                    Text(_o.CodeLanguageClassPrefix);
+                    Text(language);
+                    Write('"');
+                }
+                Write('>');
+                Text(code.Code);
+                Write("</code></pre>\n");
+            }
+
+            // TRACE R-MD-0180
+            private void ImageTag(Image image)
+            {
+                Write("<img src=\"");
+                Url(image.Destination);
+                Write("\" alt=\"");
+                Text(PlainText(image));
+                Write('"');
+                if (image.Title is not null)
+                {
+                    Write(" title=\"");
+                    Text(image.Title);
+                    Write('"');
+                }
+                Write(Void);
+            }
+
+            /// <summary>The text of an image description, without markup, for the alt attribute.</summary>
+            // for slugs: no raw inline HTML, and a hard line break gives nothing (D-237: "a  \nd" gives "ad"); a soft
+            // break still counts as a space ("baz\na" gives "baz-a")
+            internal static string PlainTextOf(MarkdownNode node) => PlainText(node, withHtml: false, breaks: false);
+
+            private static string PlainText(MarkdownNode node, bool withHtml = true, bool breaks = true)
+            {
+                var sb = new StringBuilder();
+                var stack = new Stack<MarkdownNode>();
+                for (int i = node.Children.Count - 1; i >= 0; i--) stack.Push(node.Children[i]);
+                while (stack.Count > 0)
+                {
+                    var n = stack.Pop();
+                    switch (n)
+                    {
+                        case TextInline t: sb.Append(t.Text); break;
+                        case CodeSpan c: sb.Append(c.Code); break;
+                        // TRACE R-MD-0183
+                        case SoftBreak: sb.Append(' '); break;
+                        case HardBreak: if (breaks) sb.Append(' '); break;
+                        case HtmlInline h:
+                            if (withHtml) sb.Append(h.Html);
+                            break;
+                        default:
+                            for (int i = n.Children.Count - 1; i >= 0; i--) stack.Push(n.Children[i]);
+                            break;
+                    }
+                }
+                return sb.ToString();
+            }
+
+            // TRACE R-MD-0181
+            /// <summary>
+            /// Writes a URL: chars outside the set kept by URLs (ASCII letters and digits, the reserved and
+            /// unreserved marks, and well-formed %XX escapes) are percent-encoded as UTF-8, then the result is
+            /// escaped for an attribute.
+            /// </summary>
+            private void Url(string url)
+            {
+                if (_o.UnsafeUrls == UnsafeUrlPolicy.Remove && UrlSafety.IsDangerous(url)) url = string.Empty;
+                var sb = new StringBuilder(url.Length + 8);
+                Span<byte> bytes = stackalloc byte[4];
+                for (int i = 0; i < url.Length; i++)
+                {
+                    char c = url[i];
+                    if (c < 128 && KeptInUrl(c))
+                    {
+                        sb.Append(c);
+                        continue;
+                    }
+                    // TRACE R-MD-0255
+                    // '%' is always kept, followed by two hex digits or not (D-232, N5: "%" stays "%", not "%25")
+                    if (c == '%')
+                    {
+                        sb.Append('%');
+                        continue;
+                    }
+                    int cp = c;
+                    if (char.IsHighSurrogate(c) && i + 1 < url.Length && char.IsLowSurrogate(url[i + 1]))
+                    {
+                        cp = char.ConvertToUtf32(c, url[i + 1]);
+                        i++;
+                    }
+                    else if (char.IsSurrogate(c)) cp = 0xFFFD;
+                    int n = new Rune(cp).EncodeToUtf8(bytes);
+                    for (int k = 0; k < n; k++)
+                    {
+                        sb.Append('%');
+                        sb.Append("0123456789ABCDEF"[bytes[k] >> 4]);
+                        sb.Append("0123456789ABCDEF"[bytes[k] & 15]);
+                    }
+                }
+                // TRACE R-MD-0228
+                // in the attribute, & is &amp; and an apostrophe is &#x27; (the other specials are already encoded)
+                foreach (char ch in sb.ToString())
+                {
+                    if (ch == '&') Write("&amp;");
+                    else if (ch == '\'') Write("&#x27;");
+                    else Write(ch);
                 }
             }
 
-            private void WriteRawHtml(string html, bool block)
+            private static bool KeptInUrl(char c)
+                => CharUtil.IsAsciiAlnum(c) || "-_.!~*'();/?:@&=+$,#".IndexOf(c) >= 0;
+
+            // TRACE R-MD-0182
+            private void RawHtml(string html, bool block)
             {
-                switch (_opt.RawHtml)
+                switch (_o.RawHtml)
                 {
-                    case RawHtmlMode.Passthrough:
-                        if (_opt.TagFilter) WriteTagFiltered(html);
-                        else _o.Write(html);
-                        break;
+                    case RawHtmlMode.Strip:
+                        return;
                     case RawHtmlMode.Escape:
-                        if (block)
-                        {
-                            _o.Write("<p>");
-                            Esc(html.TrimEnd('\n'));
-                            _o.Write("</p>");
-                        }
-                        else
-                        {
-                            Esc(html);
-                        }
+                        Text(html);
+                        return;
+                    default:
+                        if (_o.TagFilter) TagFilter.Write(_out, html);
+                        else Write(html);
+                        return;
+                }
+            }
+
+            private void HeadingId(Heading h)
+            {
+                if (!_o.HeadingIds) return;
+                Write(" id=\"");
+                _slugs ??= new Slugs();
+                Text(_o.HeadingIdPrefix + _slugs.Make(h));
+                Write('"');
+            }
+
+            // TRACE R-MD-0257
+            /// <summary>The task list marker, written at the start of a task item's first paragraph.</summary>
+            private void TaskMarker(Paragraph p)
+            {
+                if (p.Parent is not ListItem item || item.TaskState == TaskState.None || item.Children[0] != p) return;
+                // TRACE R-MD-0240
+                // the marker belongs to the item: a paragraph rendered on its own gets none
+                if (ReferenceEquals(p, _root)) return;
+                TaskMarkerFor(item);
+            }
+
+            private void TaskMarkerFor(ListItem item)
+            {
+                bool done = item.TaskState == TaskState.Checked;
+                switch (_o.TaskLists)
+                {
+                    case TaskListStyle.Glyph:
+                        Write(done ? "<span class=\"task-checked\">\u2611</span> " : "<span class=\"task-unchecked\">\u2610</span> ");
+                        break;
+                    case TaskListStyle.Text:
+                        Write(done ? "[x] " : "[ ] ");
                         break;
                     default:
+                        Write(done ? "<input type=\"checkbox\" checked=\"\" disabled=\"\"" : "<input type=\"checkbox\" disabled=\"\"");
+                        Write(Void);
+                        Write(' ');
                         break;
                 }
             }
 
-            private static readonly string[] s_filtered = { "title", "textarea", "style", "xmp", "iframe", "noembed", "noframes", "script", "plaintext" };
-
-            private void WriteTagFiltered(string html)
+            // TRACE R-MD-0226
+            /// <summary>
+            /// Tables: &lt;table&gt;, the header row in &lt;thead&gt; with &lt;th&gt; cells, the other rows in
+            /// &lt;tbody&gt; (left out when there are none) with &lt;td&gt; cells, alignment as an attribute or a style.
+            /// </summary>
+            private void TableEnter(MarkdownNode node)
             {
-                int start = 0;
-                for (int i = 0; i < html.Length; i++)
+                switch (node)
                 {
-                    if (html[i] != '<') continue;
-                    if (!IsFilteredTag(html, i)) continue;
-                    _o.Write(html.AsSpan(start, i - start));
-                    _o.Write("&lt;");
-                    start = i + 1;
+                    case Table:
+                        NewLine();
+                        Write("<table");
+                        SourcePos(node);
+                        Write(">\n");
+                        break;
+                    case TableRow row:
+                        if (row.IsHeader) Write("<thead>\n");
+                        else if (IsFirstBodyRow(row)) Write("<tbody>\n");
+                        Write("<tr");
+                        SourcePos(node);
+                        Write(">\n");
+                        break;
+                    case TableCell cell:
+                        Write(IsHeaderCell(cell) ? "<th" : "<td");
+                        if (cell.Alignment != TableAlignment.None)
+                        {
+                            string a = cell.Alignment switch
+                            {
+                                TableAlignment.Left => "left",
+                                TableAlignment.Center => "center",
+                                _ => "right",
+                            };
+                            if (_o.TableAlignment == TableAlignmentStyle.StyleAttribute)
+                            {
+                                Write(" style=\"text-align: ");
+                                Write(a);
+                                Write('"');
+                            }
+                            else
+                            {
+                                Write(" align=\"");
+                                Write(a);
+                                Write('"');
+                            }
+                        }
+                        SourcePos(node);
+                        Write('>');
+                        break;
                 }
-                _o.Write(html.AsSpan(start));
+                PushChildren(node);
             }
 
-            private static bool IsFilteredTag(string s, int i)
+            private void TableLeave(MarkdownNode node)
             {
-                int j = i + 1;
-                if (j < s.Length && s[j] == '/') j++;
-                foreach (var name in s_filtered)
+                switch (node)
                 {
-                    if (j + name.Length > s.Length) continue;
-                    if (string.Compare(s, j, name, 0, name.Length, StringComparison.OrdinalIgnoreCase) != 0) continue;
-                    int k = j + name.Length;
-                    if (k >= s.Length) return false;
-                    char c = s[k];
-                    if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v' || c == '>') return true;
-                    if (c == '/' && k + 1 < s.Length && s[k + 1] == '>') return true;
+                    case Table table:
+                        if (HasBody(table)) Write("</tbody>\n");
+                        Write("</table>\n");
+                        break;
+                    case TableRow row:
+                        // TRACE R-MD-0241
+                        // the line ending after a row or a cell is written by its parent, so a row or a cell
+                        // rendered on its own ends at its closing tag
+                        Write("</tr>");
+                        if (row.IsHeader) Write("\n</thead>");
+                        if (!ReferenceEquals(row, _root)) Write('\n');
+                        break;
+                    case TableCell cell:
+                        Write(IsHeaderCell(cell) ? "</th>" : "</td>");
+                        if (!ReferenceEquals(cell, _root)) Write('\n');
+                        break;
+                }
+            }
+
+            // a cell is a header cell only when written as part of its header row
+            private bool IsHeaderCell(TableCell cell) => !ReferenceEquals(cell, _root) && cell.Parent is TableRow row && row.IsHeader;
+
+            private static bool IsFirstBodyRow(TableRow row)
+            {
+                if (row.Parent is null) return true;
+                foreach (var r in row.Parent.Children)
+                {
+                    if (r is TableRow tr && !tr.IsHeader) return ReferenceEquals(tr, row);
                 }
                 return false;
             }
 
-            private void WriteUrl(string url)
+            private static bool HasBody(Table table)
             {
-                if (_opt.UnsafeUrls == UnsafeUrlPolicy.Remove && IsDangerousUrl(url)) return;
-                EscapeHref(_o, url);
+                foreach (var r in table.Children)
+                    if (r is TableRow tr && !tr.IsHeader) return true;
+                return false;
+            }
+        }
+
+        /// <summary>Dangerous URL schemes (MarkdownHtmlOptions.UnsafeUrls).</summary>
+        private static class UrlSafety
+        {
+            // TRACE R-MD-0234
+            /// <summary>
+            /// javascript:, vbscript:, file: and data: URLs (scheme in any case) are dangerous, except data: URLs
+            /// of the image types png, gif, jpeg and webp.
+            /// </summary>
+            public static bool IsDangerous(string url)
+            {
+                if (HasScheme(url, "javascript:") || HasScheme(url, "vbscript:") || HasScheme(url, "file:")) return true;
+                if (!HasScheme(url, "data:")) return false;
+                return !(HasScheme(url, "data:image/png") || HasScheme(url, "data:image/gif")
+                    || HasScheme(url, "data:image/jpeg") || HasScheme(url, "data:image/webp"));
             }
 
-            private void WriteAltText(MarkdownNode img)
+            private static bool HasScheme(string url, string prefix)
             {
-                foreach (var d in img.Descendants())
+                if (url.Length < prefix.Length) return false;
+                for (int i = 0; i < prefix.Length; i++)
+                    if (CharUtil.AsciiLower(url[i]) != prefix[i]) return false;
+                return true;
+            }
+        }
+
+        // TRACE R-MD-0227
+        /// <summary>
+        /// GFM tag filter: the '&lt;' of a title, textarea, style, xmp, iframe, noembed, noframes, script or
+        /// plaintext open or closing tag (any case) is written as &amp;lt;.
+        /// </summary>
+        private static class TagFilter
+        {
+            private static readonly string[] s_names = { "title", "textarea", "style", "xmp", "iframe", "noembed", "noframes", "script", "plaintext" };
+
+            public static void Write(OutputSink sink, string html)
+            {
+                int from = 0;
+                for (int i = 0; i < html.Length; i++)
                 {
-                    switch (d)
-                    {
-                        case TextInline t: Esc(t.Text); break;
-                        case CodeSpan c: Esc(c.Code); break;
-                        case HtmlInline h: Esc(h.Html); break;
-                        case SoftBreak:
-                        case HardBreak: _o.Write(' '); break;
-                    }
+                    if (html[i] != '<' || !Filtered(html, i)) continue;
+                    if (i > from) sink.Write(html.AsSpan(from, i - from));
+                    sink.Write("&lt;");
+                    from = i + 1;
                 }
+                if (from < html.Length) sink.Write(html.AsSpan(from));
             }
 
-            private string Slug(string text)
+            private static bool Filtered(string s, int i)
             {
-                var sb = new StringBuilder(text.Length);
-                foreach (char ch in text.Trim().ToLowerInvariant())
+                int k = i + 1;
+                if (k < s.Length && s[k] == '/') k++;
+                foreach (var name in s_names)
                 {
-                    if (char.IsLetterOrDigit(ch) || ch == '-' || ch == '_') sb.Append(ch);
-                    else if (ch == ' ') sb.Append('-');
+                    if (s.Length - k < name.Length) continue;
+                    bool same = true;
+                    for (int j = 0; j < name.Length; j++)
+                    {
+                        if (CharUtil.AsciiLower(s[k + j]) != name[j])
+                        {
+                            same = false;
+                            break;
+                        }
+                    }
+                    if (!same) continue;
+                    int e = k + name.Length;
+                    if (e == s.Length) return true;
+                    char c = s[e];
+                    return c == '>' || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || (c == '/' && e + 1 < s.Length && s[e + 1] == '>');
+                }
+                return false;
+            }
+        }
+
+        // TRACE R-MD-0271
+        /// <summary>
+        /// Heading id slugs: the heading's plain text (raw inline HTML left out), trimmed of whitespace, in lower case, letters, digits, '-' and '_' kept, each space
+        /// written as '-', everything else dropped. A slug already used in this rendering gets "-1", "-2", ...
+        /// </summary>
+        private sealed class Slugs
+        {
+            private readonly Dictionary<string, int> _used = new(StringComparer.Ordinal);
+
+            public string Make(Heading h)
+            {
+                string text = HtmlWriter.PlainTextOf(h);
+                var sb = new StringBuilder(text.Length);
+                foreach (char c in text.Trim().ToLowerInvariant())
+                {
+                    // TRACE R-MD-0271
+                    // letters, digits, combining marks (vowel signs, viramas and other marks), '-' and '_' stay; a
+                    // space becomes '-'; everything else goes, tabs, U+00A0 and line breaks included (D-237)
+                    var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+                    if (char.IsLetterOrDigit(c) || c == '-' || c == '_'
+                        || cat == System.Globalization.UnicodeCategory.NonSpacingMark
+                        || cat == System.Globalization.UnicodeCategory.SpacingCombiningMark
+                        || cat == System.Globalization.UnicodeCategory.EnclosingMark) sb.Append(c);
+                    else if (c == ' ') sb.Append('-');
                 }
                 string slug = sb.ToString();
-                if (_slugs.TryGetValue(slug, out int n))
+                // TRACE R-MD-0237
+                if (_used.TryGetValue(slug, out int n))
                 {
-                    _slugs[slug] = n + 1;
-                    slug = slug + "-" + (n + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    _used[slug] = n + 1;
+                    return slug + "-" + n.ToString(CultureInfo.InvariantCulture);
                 }
-                else
-                {
-                    _slugs[slug] = 0;
-                }
+                _used[slug] = 1;
                 return slug;
-            }
-        }
-
-        /// <summary>The cmark "safe" URL rule: true for javascript:, vbscript:, file: and non-image data: URLs.</summary>
-        internal static bool IsDangerousUrl(string url)
-        {
-            string u = url.TrimStart();
-            static bool Starts(string s, string p) => s.StartsWith(p, StringComparison.OrdinalIgnoreCase);
-            if (Starts(u, "data:"))
-            {
-                return !(Starts(u, "data:image/png") || Starts(u, "data:image/gif") || Starts(u, "data:image/jpeg") || Starts(u, "data:image/webp"));
-            }
-            return Starts(u, "javascript:") || Starts(u, "vbscript:") || Starts(u, "file:");
-        }
-
-        private const string HrefSafe = "-_.+!*'(),%#@?=;:/,+&$~";
-
-        /// <summary>cmark's href escaping: percent-encode unsafe chars (UTF-8), keep existing %XX, entity-escape &amp; and '.</summary>
-        internal static void EscapeHref(OutputSink o, string url)
-        {
-            Span<byte> buf = stackalloc byte[4];
-            for (int i = 0; i < url.Length; i++)
-            {
-                char c = url[i];
-                if (c < 128 && (CharUtil.IsAsciiAlnum(c) || HrefSafe.IndexOf(c) >= 0))
-                {
-                    if (c == '&') o.Write("&amp;");
-                    else if (c == '\'') o.Write("&#x27;");
-                    else o.Write(c);
-                    continue;
-                }
-                int cp = c;
-                if (char.IsHighSurrogate(c) && i + 1 < url.Length && char.IsLowSurrogate(url[i + 1]))
-                {
-                    cp = char.ConvertToUtf32(c, url[i + 1]);
-                    i++;
-                }
-                else if (char.IsSurrogate(c))
-                {
-                    cp = 0xFFFD;
-                }
-                int n = new Rune(cp).EncodeToUtf8(buf);
-                for (int k = 0; k < n; k++)
-                {
-                    o.Write('%');
-                    o.Write("0123456789ABCDEF"[buf[k] >> 4]);
-                    o.Write("0123456789ABCDEF"[buf[k] & 15]);
-                }
             }
         }
     }

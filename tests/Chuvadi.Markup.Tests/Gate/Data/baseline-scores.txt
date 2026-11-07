@@ -1,0 +1,4 @@
+commonmark: 652 / 652 match the spec HTML (html/P-CM/H-Spec)
+gfm-spec: 651 / 672 match the spec HTML (html/P-GFM/H-GfmSpec); differing examples: 140,141,142,145,147,279,280,398,426,434,435,436,473,474,475,477,610,614,616,619,620
+gfm-spec (untagged + table/strikethrough/autolink/tagfilter): 651 / 670 match the spec HTML (html/P-GFM/H-GfmSpec); differing examples: 140,141,142,145,147,398,426,434,435,436,473,474,475,477,610,614,616,619,620
+gfm-extensions (footnotes excluded): 26 / 26 match the spec HTML (html/P-GFM/H-GfmSpec)

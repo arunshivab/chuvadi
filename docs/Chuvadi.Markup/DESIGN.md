@@ -13,17 +13,33 @@
 
 ## Markdown
 
-A port of cmark's two-phase algorithm: a line-oriented block parser (container matching with
-column/tab arithmetic, lazy continuation, link reference definitions) followed by the inline parser
-(delimiter stack with `openers_bottom` per delimiter class, bracket stack, backtick and HTML-end
-memoisation). GFM tables, task lists, strikethrough and extended autolinks follow cmark-gfm. The internal
-block/inline tree is converted to the public AST, which is plain mutable .NET objects: consumers
-(viewers, Chuvadi.Layout, Chuvadi.Docs) can walk, edit and build documents, then render HTML or write
-Markdown. The writer is verified by round-tripping every spec example: parse, write, parse again, and
-the HTML must be identical.
+Since 1.1.0 the parser and the HTML renderer are a clean-room implementation written from the CommonMark 0.31.2
+and GFM 0.29 specifications only (D-106). Its author never saw a reference implementation or the code it
+replaced; an independent checker compared it phase by phase (`docs/Chuvadi.Markup/similarity/`). Every behaviour
+rule in the code carries a `TRACE R-MD-nnnn` tag whose entry in `docs/Chuvadi.Markup/cleanroom/trace/rules.md`
+cites the spec section, an experiment or a decision; a test fails the build when a tag has no entry or the code
+names a forbidden source.
 
-Conformance: CommonMark 0.31.2 652/652; cmark-gfm `extensions.txt` and the extension-tagged GFM spec
-examples (footnotes excluded); cmark's pathological-input suite (each case far under its 3 s budget).
+Parsing follows the two phases of the CommonMark appendix "A parsing strategy": a line-by-line block phase
+(`BlockParser`, `BlockStarts`, `BlockTables`; container matching with visual columns for tabs, lazy continuation
+lines, link reference definitions read from the start of paragraphs), then an inline phase per paragraph and
+heading (`InlineParser`; the delimiter stack and the "process emphasis" procedure, brackets for links and images,
+code spans, autolinks, raw HTML, entity and numeric character references). Forward searches whose answers are
+remembered keep repeated failing searches linear. GFM tables, task lists, strikethrough, extended autolinks and the
+tag filter follow the GFM 0.29 extension sections. The result is the public AST: plain mutable .NET objects that
+consumers (viewers, Chuvadi.Layout, Chuvadi.Docs) can walk, edit and build, then render to HTML or write back as
+Markdown. The renderer is an iterative walk with an explicit stack. The writer is verified by round-tripping every
+spec example: parse, write, parse again, and the HTML must be identical.
+
+Where the specifications are silent (source spans, limits, some whitespace edge cases), the behaviour is the one
+1.0.0 had, or the one Arun decided under rule 5. The author's notes on these cases are in
+`cleanroom/trace/rule5-cases.md`, and every change from 1.0.0 is in the CHANGELOG. A frozen gate (`tests/Chuvadi.Markup.Tests/Gate`, 10,388 cases, 352,479 expected outputs) pins the
+output byte for byte, together with the public API listing and the spec scores. A later change to the output is a
+rule-5 change: it refreezes the gate data in the same PR (`CHUVADI_MARKUP_REFREEZE=1`), with the change report.
+
+Conformance: CommonMark 0.31.2 652/652; GFM 0.29 651/672 (the differing examples are listed in the gate's
+`baseline-scores.txt`); the GFM extension tests 26/26 (footnotes excluded); the pathological-input set (each
+case far under its time budget).
 
 ## HTML
 
@@ -87,7 +103,10 @@ in well under a second; see `HtmlPathologicalTests` and `PathologicalTests`.
 - **Processing instructions** (`<?x ...?>`, added to the HTML spec in 2026) are tokenized as bogus
   comments, as html5lib-tests and shipping browsers still do.
 - **Nesting depth**: past `MaxNestingDepth`, new elements are inserted as siblings at the cap (as
-  Chromium does at 512) instead of being nested; Markdown containers past the cap degrade to paragraphs.
+  Chromium does at 512) instead of being nested. Markdown container blocks are opened only below the cap: a
+  list item may also sit at the cap, unless it would interrupt a paragraph at that depth, and block quotes stay
+  below it; the markers of a container that is not opened are read as text (D-193). Markdown emphasis nested
+  deeper keeps its text and loses the formatting.
   The active formatting list is capped at the same depth.
 - **Parser work budget**: input that would need more than `MaxParserWorkPerChar` units of HTML
   tree-builder or Markdown inline (delimiter and bracket) work per character throws
@@ -97,5 +116,4 @@ in well under a second; see `HtmlPathologicalTests` and `PathologicalTests`.
 - **Encodings** ISO-8859-10, -14 and -16 and other labels .NET has no code page for are reported as
   unsupported (`HtmlEncoding.GetEncoding` returns null) and decoding falls back to the next sniffing step.
 - **Markdown footnotes** are out of scope for 1.0 (consumer requirements §10).
-- **Markdown `RawHtmlMode.Escape`** renders HTML blocks as escaped paragraphs (cmark's `--safe` emits
-  a comment placeholder instead); `Strip` removes them.
+- **Markdown `RawHtmlMode.Escape`** renders HTML blocks as escaped paragraphs; `Strip` removes them.
