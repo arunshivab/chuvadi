@@ -1,6 +1,6 @@
 # Chuvadi.Print — Changelog
 
-## 1.0.0-rc.3 (unreleased)
+## 1.0.0-rc.3 (2026-11-07)
 
 All four packages move to 1.0.0-rc.3 (D-201 P-02). Phase 4 parts 1 to 3 (D-189, D-223, D-238): the vector page
 model, the XPS writer, and vector printing to Windows queues. New API only. One approved change to existing
