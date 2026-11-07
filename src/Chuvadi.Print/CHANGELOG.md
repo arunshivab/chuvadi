@@ -89,6 +89,20 @@ behaviour, in Chuvadi.Print.Remote:
     WINDOWS-VERIFICATION.md gains section D4: two test queues whose port is a file, the PrintTicket, the sample
     through the XPS and PDF drivers, settings, the route decision, and a real printer.
 
+- **In-memory PWG Raster spool** (D-217 item 4, D-223 step 5; Chuvadi.Print.Ipp). New API:
+  `IppPrinterTarget.Spool` (`IppSpoolMode.TemporaryFile`, the default and today's behaviour, or `Memory`), with
+  `MemorySpoolLimit` (default `DefaultMemorySpoolLimit`, 256 MB) and `WithSpool(mode, limit)`. A memory-spooled job
+  that grows past the limit fails before anything is sent, with an `IppException`; it never falls back to a file.
+  The memory is released when the job is sent or fails. Both spools send byte-identical jobs.
+- **`FontEmbedding.NeedsGeneratedAppearances`** (D-235 L2.3, core). This new value means every font is embedded
+  but some form fields or comments need appearances generated. The routes already require exactly
+  `AllEmbedded`, so such a PDF is never sent as-is. `IppPdfRoute` gives the specific reason "form fields or comments
+  need appearances generated". The existing values keep their numbers (0, 1, 2); the new one is 3. The Pdf font
+  inspector in Chuvadi.Print.Pdf.Raster (L2) will report it.
+- **GUIDE**: new sections on thread safety (D-217 item 3, audited against the code) and Android (D-217 item 5:
+  permissions, cleartext `ipp://` on Android 9 and later, the multicast lock for discovery). The IPP section
+  describes the spool, and the route list now names the WindowsQueue route.
+
 ## 1.0.0-rc.2 (2026-11-04)
 
 Phase 1 of the vector and delivery plan (D-96, D-132, D-134). For all four packages.

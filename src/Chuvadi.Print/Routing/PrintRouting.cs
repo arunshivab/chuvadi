@@ -36,7 +36,14 @@ namespace Chuvadi.Print
         AllEmbedded = 1,
 
         /// <summary>At least one font is not embedded: the printer would substitute it, which breaks Tamil and other complex scripts.</summary>
-        NotAllEmbedded = 2
+        NotAllEmbedded = 2,
+
+        /// <summary>
+        /// Every font is embedded, but some form fields or comments have no stored appearance (or the form asks for
+        /// appearances to be generated). A printer given the PDF as-is would draw them its own way, or not at all, so
+        /// a router does not send the PDF as-is; our own rendering generates the appearances.
+        /// </summary>
+        NeedsGeneratedAppearances = 3
     }
 
     /// <summary>
