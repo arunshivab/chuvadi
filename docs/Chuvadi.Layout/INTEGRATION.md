@@ -42,7 +42,7 @@ using LaidOutDocument doc = AutoDetectLayout.Open(stream, LayoutSourceFormat.Aut
 LaidOutPage page = doc.GetPage(0, ct);
 ```
 
-Indic text: `PdfShaper` runs on Chuvadi.Pdf 3.31.1 or any later 3.x (the shaping of 3.26), whose shaping matches HarfBuzz 15.0.0 glyph for glyph on all nine
+Indic text: `PdfShaper` runs on Chuvadi.Pdf 3.31.2 or any later 3.x (the shaping of 3.26), whose shaping matches HarfBuzz 15.0.0 glyph for glyph on all nine
 LiPi Indic scripts (19,641 syllables in the Pdf library's conformance corpus). Indic pages are no longer provisional.
 
 The format is detected from the content, not from the file name:
