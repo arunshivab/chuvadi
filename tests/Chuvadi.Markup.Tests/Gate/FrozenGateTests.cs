@@ -82,7 +82,8 @@ namespace Chuvadi.Markup.Tests.Gate
         [Fact]
         public void PublicApiIsUnchanged()
         {
-            string expected = File.ReadAllText(DataFile("public-api.txt"), Encoding.UTF8);
+            // A checkout with core.autocrlf gives the text file CRLF line endings; the listing is built with "\n".
+            string expected = File.ReadAllText(DataFile("public-api.txt"), Encoding.UTF8).Replace("\r\n", "\n");
             Assert.Equal(expected, GateCore.ApiListing(typeof(MarkdownParser).Assembly));
         }
 
