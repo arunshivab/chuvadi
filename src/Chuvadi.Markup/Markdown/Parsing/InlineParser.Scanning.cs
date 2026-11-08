@@ -185,14 +185,19 @@ namespace Chuvadi.Markup.Markdown.Parsing
     {
         private readonly long _limit;
         private long _used;
+        private Chuvadi.Markup.Internal.CancellationPoll _poll;
 
-        public WorkBudget(MarkupLimits limits, int inputLength)
+        public WorkBudget(MarkupLimits limits, int inputLength, System.Threading.CancellationToken cancel = default)
         {
             _limit = (long)limits.MaxParserWorkPerChar * (inputLength + 1024L) + 1_000_000L;
+            _poll = new Chuvadi.Markup.Internal.CancellationPoll(cancel);
         }
 
+        // TRACE R-MD-0273
+        // every step also polls the cancellation token, so inline parsing of one long block stops promptly
         public void Step(int count = 1)
         {
+            _poll.Tick();
             _used += count;
             if (_used > _limit)
                 throw new MarkupLimitExceededException(nameof(MarkupLimits.MaxParserWorkPerChar), _limit, _used);

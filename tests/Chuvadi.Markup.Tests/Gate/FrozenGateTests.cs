@@ -241,6 +241,22 @@ namespace Chuvadi.Markup.Tests.Gate
             });
             Assert.True(slow.Count == 0, "over budget:\n" + string.Join("\n", slow));
         }
+
+        /// <summary>A cancelled token stops parsing and rendering promptly on every shape (GateCancel).</summary>
+        [Fact]
+        public void CancellationIsResponsive()
+        {
+            var late = new List<string>();
+            FrozenGateTests.OnBigStack(() =>
+            {
+                foreach (var (name, input, render) in GateCancel.Shapes())
+                {
+                    string? why = GateCancel.Check(input, render);
+                    if (why != null) late.Add(name + ": " + why);
+                }
+            });
+            Assert.True(late.Count == 0, "cancellation not responsive:\n" + string.Join("\n", late));
+        }
     }
 
     /// <summary>The gate's rule-5 rules (Gate/Data/rule5-rules.txt), read and applied exactly as the gate does.</summary>

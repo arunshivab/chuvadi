@@ -77,6 +77,10 @@
   opened only below the limit; a list item may also sit at the limit, unless it would interrupt a paragraph at that
   depth; block quotes stay below it. The markers of a container that is not opened are read as text. Output is the
   same as 1.0.0 on every frozen case.
+- **Behaviour change (D-252): a block quote one level below `MaxNestingDepth` can interrupt a paragraph.** With a
+  limit L, a block quote that would interrupt a paragraph at depth L - 1 is opened, as the documented rule and the
+  spec say (with limit 3, `> p` followed by `> > q` gives a nested block quote). 1.0.0 read its marker as text. With
+  the default limit of 512 this needs more than 500 levels of nesting.
 - **Documentation (D-199):** `MaxNestingDepth` notes the cost of very deep block quotes (possible only with a limit
   far above the default): under a microsecond per `>` marker to parse.
 

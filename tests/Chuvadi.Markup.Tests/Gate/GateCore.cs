@@ -202,7 +202,8 @@ namespace Chuvadi.Markdown.Gate
             if (ex is MarkupLimitExceededException m)
                 sb.Append(" limit=").Append(m.LimitName).Append(" max=").Append(m.Limit.ToString(CultureInfo.InvariantCulture))
                   .Append(" actual=").Append(m.Actual.ToString(CultureInfo.InvariantCulture));
-            sb.Append(" message=").Append(Quote(ex.Message));
+            // Messages built by the runtime use Environment.NewLine; the frozen text uses "\n" on every OS.
+            sb.Append(" message=").Append(Quote(ex.Message.Replace("\r\n", "\n")));
             return sb.ToString();
         }
 
@@ -467,6 +468,66 @@ namespace Chuvadi.Markdown.Gate
             if (t.IsGenericType)
                 return (t.Namespace + "." + t.Name.Split('`')[0]) + "<" + string.Join(",", t.GetGenericArguments().Select(Name)) + ">";
             return t.FullName ?? t.Name;
+        }
+    }
+
+    /// <summary>
+    /// Cancellation responsiveness (the contract: a cancelled token stops parsing and rendering promptly, on any
+    /// input). Each shape is parsed (or rendered) with a token that is cancelled after each of
+    /// <see cref="CancelAfterMs"/>; every run must end within <see cref="MaxSeconds"/> of the cancel, normally with
+    /// <see cref="OperationCanceledException"/>. A run that finishes in that time without seeing the cancel also
+    /// passes (the input was too fast on this machine to tell). The limit leaves room for slow machines: 1.0.0 ends
+    /// within about 0.3 s of the cancel on every shape.
+    /// </summary>
+    public static class GateCancel
+    {
+        public static readonly int[] CancelAfterMs = { 20, 120, 300 };
+        public const double MaxSeconds = 0.75;
+
+        private static string Rep(string s, int n) => new StringBuilder(s.Length * n).Insert(0, s, n).ToString();
+
+        /// <summary>Name, input, and whether the cancel is given to the renderer (the parse runs first, uncancelled).</summary>
+        public static IEnumerable<(string Name, string Input, bool Render)> Shapes()
+        {
+            const string Section = "# h\n\npara *em* [l](u) `c`\n\n- a\n- b\n\n";
+            yield return ("emphasis: 3M '*', 'a', 3M '*'", new string('*', 3_000_000) + "a" + new string('*', 3_000_000), false);
+            yield return ("emphasis: '*a_ ' x 500k", Rep("*a_ ", 500_000), false);
+            yield return ("brackets: '[' x 3M", new string('[', 3_000_000), false);
+            yield return ("brackets: 'a]' x 1.5M", Rep("a]", 1_500_000), false);
+            yield return ("code spans: '`a' x 3M", Rep("`a", 3_000_000), false);
+            yield return ("raw HTML: '<a ' x 6M", Rep("<a ", 6_000_000), false);
+            yield return ("autolinks: 'www.a ' x 1M", Rep("www.a ", 1_000_000), false);
+            yield return ("lines: 'a\\n' x 1M", Rep("a\n", 1_000_000), false);
+            yield return ("list items: '- a\\n' x 300k", Rep("- a\n", 300_000), false);
+            yield return ("table: 200k rows", "a|b\n-|-\n" + Rep("c|d\n", 200_000), false);
+            yield return ("document: 100k sections", Rep(Section, 100_000), false);
+            yield return ("render: 100k sections", Rep(Section, 100_000), true);
+        }
+
+        /// <summary>Null when the shape passes at every cancel time, otherwise the reasons.</summary>
+        public static string? Check(string input, bool render)
+        {
+            var o = MarkdownOptions.Gfm();
+            MarkdownDocument? doc = render ? MarkdownParser.Parse(input, o) : null;
+            var why = new List<string>();
+            foreach (int ms in CancelAfterMs)
+            {
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(ms));
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                bool cancelled = false;
+                try
+                {
+                    if (doc is not null) MarkdownHtmlRenderer.Render(doc, null, cts.Token);
+                    else MarkdownParser.Parse(input, o, cts.Token);
+                }
+                catch (OperationCanceledException) { cancelled = true; }
+                double late = sw.Elapsed.TotalSeconds - ms / 1000.0;
+                if (cancelled && late >= MaxSeconds)
+                    why.Add(string.Format(CultureInfo.InvariantCulture, "cancel at {0} ms: seen {1:F3} s later (limit {2} s)", ms, late, MaxSeconds));
+                else if (!cancelled && late >= MaxSeconds)
+                    why.Add(string.Format(CultureInfo.InvariantCulture, "cancel at {0} ms: not seen, finished {1:F3} s later (limit {2} s)", ms, late, MaxSeconds));
+            }
+            return why.Count == 0 ? null : string.Join("; ", why);
         }
     }
 }

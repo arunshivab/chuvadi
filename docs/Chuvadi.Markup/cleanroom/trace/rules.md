@@ -1732,3 +1732,9 @@ The log is append-only: a changed rule gets a new entry, and the old one gets `-
 - Rule: A span that runs past the input (R-MD-0266) is placed at the input's end in data-sourcepos ("- >o\n\t[" gives 1:1-2:3).
 - Experiment: E-0029
 - Rule5: R5-0033
+
+### R-MD-0273
+- Location: Markdown/Parsing/InlineParser.Scanning.cs, WorkBudget.Step
+- Source: general
+- Citation: cancellation contract (BRIEF section 1, "cancellation honoured in long loops"; checked by gate time from patch 9)
+- Rule: Every inline work step also polls the cancellation token (once per 4,096 steps), so the inline parsing of one long block, and the email pass that uses the same budget, stop promptly when the token is cancelled.

@@ -1,4 +1,32 @@
-# Similarity report: Chuvadi.Markup clean room, phase P4 (revision 6)
+# Similarity report: Chuvadi.Markup clean room, phase P4 (revision 7)
+
+## Revision 7 update (2026-11-08)
+- Zip: markup-cleanroom-P4_5.zip (revision 7), SHA-256 599f5f2df11d7d41924047f76c7a8a28cc885fab3c9d123f487c49433d54c1ac,
+  109,135 bytes.
+- Gate patch 9: chuvadi-markdown-cleanroom-p0-patch9.zip, SHA-256
+  4f9d696e4205d04b93c2d055a344de295dfde6bf926c7952da4981d11075dc82, 25,205 bytes. **Confirmed.** It changes only
+  BRIEF.md, README.md and the gate program (GateCore.cs adds GateCancel, 12 shapes cancelled at 20, 120 and 300 ms with
+  a 0.75 s limit, plus a line-ending fix for exception messages; Program.cs runs it under `gate time`). No frozen data
+  and no library code changed.
+- Code change against revision 6: two files, a few lines. WorkBudget (InlineParser.Scanning.cs:184-207) now holds the
+  given library's CancellationPoll and ticks it in Step; MarkdownEngine.Parse passes the token in. WorkBudget is a
+  class, so the mutable poll in its field works. One new trace entry, R-MD-0273 (general, cites the BRIEF's
+  cancellation contract), and one new experiment, E-0031. Every other source and trace file is byte-identical.
+- Similarity: simcheck 0.3.0 rerun on all 18 files gives exactly the revision-6 results (9 regions, 389
+  identifiers with the same 25 candidates, 6 control-flow functions, 4 constant lists, 7 comment shingles). The only
+  difference is where the given-library name CancellationPoll is used. No new item.
+- Gate rerun, bundle with patches 2 to 9:
+  - Revision 7: 352,479 / 352,479, API unchanged, TRACE PASSED (263 tagged rules, 270 entries), TIME PASSED with all 12
+    cancellation shapes ok, GATE P4 PASSED. All 439 per-check lines are identical to the author's report. Two more
+    `gate time` runs also passed.
+  - Revision 6 as a control: TIME NOT PASSED, LATE on emphasis `*a_ `, brackets `[`, code spans, www autolinks and
+    `a\n` lines, the shapes BRIEF.md names. So the gate check is real and revision 7 fixes it.
+- My own probe (cancel at 20, 120, 300 ms on brackets, code spans, www links and emails): revision 6 ran on for 1 to 2 s
+  after the token fired; revision 7 stopped within 0 to 45 ms of it. Where the cancel timer itself fired late, it was
+  the timer, as E-0031 says.
+- Verdict: **CLEAN** (0 must-fix, no new review item). P1 to P4 have no open must-fix or review item.
+
+## Revision 6 report (unchanged below)
 - Zip: markup-cleanroom-P4_4.zip (the author's revision 6), SHA-256
   1d402a9d39560257635ec69be786f16bd5718ca94905f8c943024fe8e04237c7, 107,334 bytes.
 - Earlier revisions: revision 2 (b1b97334…) was reported CLEAN. Revisions 3 (6a580200…) and 5 (88536b2d…) left every

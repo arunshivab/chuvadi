@@ -16,7 +16,7 @@ namespace Chuvadi.Markup.Markdown.Parsing
             blocks.Run();
 
             var poll = new CancellationPoll(cancellationToken);
-            var work = new WorkBudget(options.Limits, markdown.Length);
+            var work = new WorkBudget(options.Limits, markdown.Length, cancellationToken);
             foreach (var (block, content) in blocks.InlineBlocks)
             {
                 poll.Check();

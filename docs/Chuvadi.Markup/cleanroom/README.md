@@ -16,7 +16,7 @@ so none of this is in the NuGet package.
 | `BRIEF-author.md` | the brief the author worked to (firewall, gate, rule 5, phases), final state after patch 8 | the Markup chat |
 | `BRIEF-checker.md` | the brief the similarity checker worked to | the Markup chat |
 | `P0-bundle-files.md` | every file of the bundle the author received, with sizes, hashes and origin | the Markup chat |
-| `../similarity/markup-P1.md` to `markup-P4.md` | the checker's phase reports (P4: revision 6, CLEAN) | the checker |
+| `../similarity/markup-P1.md` to `markup-P4.md` | the checker's phase reports (P4: revision 7, CLEAN) | the checker |
 
 The checker's annexes are for the coordinator only and are not in the repository.
 
