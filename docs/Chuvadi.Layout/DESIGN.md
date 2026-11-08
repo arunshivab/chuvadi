@@ -250,6 +250,7 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 | Excel cell padding | 2 px left/right; text 1 px from the top/bottom edge | no |
 | Excel indent | 3 × max digit width per level | no |
 | Excel auto row height for wrapped text | lines × line height + 2 px, never below the default row height | yes |
+| Row without a stored height, text not wrapped | the default row height while the text's line (in the font it is drawn with, fallbacks included) fits it; otherwise the line height + 2 px, to the nearest whole pixel. Merges within one row count; merges over several rows do not (X3; claude/layout-X3-rule5.md) | yes |
 | Excel text overflow past the used range | printed in full: the printed range widens to where the text ends, and text continues on the page it runs onto (Excel measured; F11) | yes (pages) |
 | Excel border widths (print) | hair 0.25 pt; thin, dotted, dashed, dash-dot 0.5 pt; medium styles 1 pt; thick 1.5 pt; double = two 0.5 pt lines | no |
 | Excel pattern fills | foreground over background blended by ink coverage (darkGray 75%, mediumGray 50%, lightGray 25%, gray125 12.5%, gray0625 6.25%, dark lines 50%, light lines 25%); gradients as the average of their stops | no |

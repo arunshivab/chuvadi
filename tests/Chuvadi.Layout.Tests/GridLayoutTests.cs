@@ -250,6 +250,57 @@ public class GridCellRenderingTests
         Assert.True(Flow.Runs(p).Count(r => r.Font.FamilyName == "Carlito") >= 4);
     }
 
+    private static GridCellStyle Sized(double size, string family = "Calibri") =>
+        new GridCellStyle { Font = new CharacterFormat { FontFamily = family, FontSize = size } };
+
+    private static double RowOf(LaidOutPage p, string path) => Grid.Cells(p).Single(c => c.Path == path).Rect.Height;
+
+    [Fact]
+    public void A_large_font_grows_a_row_without_stored_height()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Title", style: Sized(16));
+        s.Set(1, 0, "below");
+        LaidOutPage p = One(s);
+        // Carlito 16 pt: line 1.2207 em = 26.04 px, + 2 px = 28 px = 21 pt.
+        Assert.Equal(21, RowOf(p, "S!A1"), 6);
+        Assert.Equal(15, RowOf(p, "S!A2"), 6);
+    }
+
+    [Fact]
+    public void A_font_whose_line_fits_the_default_row_leaves_the_row_alone()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Twelve", style: Sized(12)); // 19.53 px line in a 20 px row
+        GridSheet t = new GridSheet("T") { DefaultRowHeight = 12.75 };
+        t.Set(0, 0, "Ten", style: Sized(10)); // 16.28 px line in a 17 px row
+        Assert.Equal(15, RowOf(One(s), "S!A1"), 6);
+        Assert.Equal(12.75, RowOf(One(t), "T!A1"), 6);
+    }
+
+    [Fact]
+    public void A_stored_row_height_is_kept_whatever_the_font()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Big", style: Sized(24));
+        s.Rows[0] = new GridRow(15);
+        Assert.Equal(15, RowOf(One(s), "S!A1"), 6);
+    }
+
+    [Fact]
+    public void A_merge_within_one_row_grows_the_row_and_a_taller_merge_does_not()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Title", style: Sized(16));
+        s.MergedRanges.Add(CellRange.Parse("A1:C1"));
+        s.Set(2, 0, "Tall", style: Sized(16));
+        s.Set(2, 1, "b");
+        s.MergedRanges.Add(CellRange.Parse("A3:A4"));
+        LaidOutPage p = One(s);
+        Assert.Equal(21, RowOf(p, "S!A1"), 6);
+        Assert.Equal(15, RowOf(p, "S!B3"), 6);
+    }
+
     [Fact]
     public void Merged_cell_centres_across_its_range_and_suppresses_inner_gridlines()
     {

@@ -63,6 +63,10 @@ Fixed-layout formats (PDF, scans) do not go through Layout.
 
 Warnings never stop layout. Their codes are stable, and DESIGN.md lists them.
 
+A damaged workbook whose workbook or worksheet part is missing, or whose cells point at shared strings that do not
+exist, raises `LayoutFormatException` ("The workbook could not be read: ..."). Chuvadi.Sheets 2.0.2 rejects these files;
+earlier versions opened them with blank cells or the index shown as text. Treat it like any unreadable file.
+
 ---
 
 ## Desktop viewer: a web view, one SVG per page, lazy

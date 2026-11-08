@@ -67,7 +67,7 @@ namespace Chuvadi.Layout.Engine.Grid
                     cols.Sort();
                 }
                 _rowIndex[s] = rows;
-                AutoFitWrappedRows(s, sheet, geo, rows, ct);
+                AutoFitRows(s, sheet, geo, rows, ct);
 
                 if (sheet.PageSetup.FirstPageNumber is int first)
                 {
@@ -335,9 +335,16 @@ namespace Chuvadi.Layout.Engine.Grid
             return GridGeometry.PixelsToPoints((digits * geo.MaxDigitWidth) + 8);
         }
 
-        /// <summary>Rows without a stored height that contain wrapped text grow to fit it (as Excel auto-fits on entry).</summary>
-        private void AutoFitWrappedRows(int s, GridSheet sheet, GridGeometry geo, Dictionary<int, List<int>> rows, CancellationToken ct)
+        /// <summary>
+        /// Rows without a stored height grow to fit their text (as Excel fits such rows when it opens a file):
+        /// wrapped text by its lines, other text by the height of its line in the font it is drawn with. A line that
+        /// fits within the default row height leaves the row at the default; otherwise the row is the line height
+        /// plus 2 px, to the nearest whole pixel at 96 dpi. Cells in a merge that spans more than one row are skipped;
+        /// a merge within one row counts as one line. Rows never go below the default height.
+        /// </summary>
+        private void AutoFitRows(int s, GridSheet sheet, GridGeometry geo, Dictionary<int, List<int>> rows, CancellationToken ct)
         {
+            double padding = GridGeometry.PixelsToPoints(2);
             foreach (KeyValuePair<int, List<int>> row in rows)
             {
                 if (geo.HasStoredHeight(row.Key))
@@ -348,26 +355,63 @@ namespace Chuvadi.Layout.Engine.Grid
                 foreach (int c in row.Value)
                 {
                     GridCell cell = sheet.GetCell(row.Key, c)!;
-                    if (!cell.Style.WrapText || cell.DisplayText.Length == 0 || InMerge(sheet, row.Key, c))
+                    if (cell.DisplayText.Length == 0)
+                    {
+                        continue;
+                    }
+                    bool merged = InMerge(sheet, row.Key, c);
+                    if (merged && !InSingleRowMerge(sheet, row.Key, c))
                     {
                         continue;
                     }
                     ct.ThrowIfCancellationRequested();
-                    double width = geo.ColumnWidth(c) - (2 * CellPadding(1));
+                    bool wrapped = cell.Style.WrapText && !merged;
+                    double width = wrapped ? geo.ColumnWidth(c) - (2 * CellPadding(1)) : OneLineWidth;
                     FlowParagraph p = CellParagraph(cell, 1, width, geo);
                     (MeasuredParagraph m, List<FittedLine> lines) = MeasureCell(p, Math.Max(1, width));
-                    double h = 0;
+                    if (wrapped)
+                    {
+                        double h = 0;
+                        foreach (FittedLine l in lines)
+                        {
+                            h += l.Height;
+                        }
+                        needed = Math.Max(needed, h + padding);
+                        continue;
+                    }
+                    double line = 0;
                     foreach (FittedLine l in lines)
                     {
-                        h += l.Height;
+                        line = Math.Max(line, l.Height);
                     }
-                    needed = Math.Max(needed, h + GridGeometry.PixelsToPoints(2));
+                    if (line <= sheet.DefaultRowHeight)
+                    {
+                        continue; // the line fits the default row: the row stays at the default
+                    }
+                    int px = (int)Math.Round((line + padding) / 0.75, MidpointRounding.AwayFromZero);
+                    needed = Math.Max(needed, GridGeometry.PixelsToPoints(px));
                 }
                 if (needed > 0)
                 {
                     geo.SetAutoRowHeight(row.Key, needed);
                 }
             }
+        }
+
+        /// <summary>The width a cell that does not wrap is measured at: wide enough that its text stays on one line.</summary>
+        private const double OneLineWidth = 1e6;
+
+        /// <summary>True when the cell is in a merged range that spans only its own row.</summary>
+        internal static bool InSingleRowMerge(GridSheet sheet, int r, int c)
+        {
+            foreach (CellRange m in sheet.MergedRanges)
+            {
+                if (m.Contains(r, c))
+                {
+                    return m.FirstRow == m.LastRow;
+                }
+            }
+            return false;
         }
 
         internal static bool InMerge(GridSheet sheet, int r, int c)

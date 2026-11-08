@@ -2,6 +2,20 @@
 
 ## 0.1.0 (unreleased)
 
+Rows with no stored height grow to fit their font (X3; claude/layout-X3-rule5.md):
+
+- A row with no stored height used to stay at the default height unless it had wrapped text, so large text was cut
+  off (the x04 title). Now each cell's text is measured as one line in the font Layout draws it with, fallback fonts
+  included. If the line fits within the default row height the row stays at the default; otherwise the row is the line
+  height + 2 px, to the nearest whole pixel at 96 dpi. A merge within one row counts; a merge over several rows does
+  not. Wrapped cells keep their fit, and the row takes the larger. Stored heights and hidden rows are unchanged.
+- The rule uses only the font being drawn, so it works for any font. Measured on the 88 corpus and fixture documents:
+  page counts and warnings unchanged; only x03 (rows 4 and 5: 18.75 and 21 pt) and x04 (title row: 22.5 pt) change.
+
+INTEGRATION.md: a damaged workbook (missing workbook or worksheet part, or a shared-string reference that does not
+exist) raises `LayoutFormatException`, as Chuvadi.Sheets 2.0.2 rejects these files (G2, F3). No code change: Layout.Sheets
+already turns the Sheets error into `LayoutFormatException` (B13).
+
 Chuvadi.Pdf 3.31.1 in staging (D-213, D-225; claude/layout-D213-results.md):
 
 - Chuvadi.Layout.Pdf references chuvadi-pdf as the range `[3.31.1, 4.0.0)` (was exactly `[3.30.2]`), set in
