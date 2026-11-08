@@ -110,7 +110,8 @@ namespace Chuvadi.Layout.Fonts
     /// <summary>
     /// Faces read from font files (*.ttf, *.otf, *.ttc, *.otc) in one or more directories. Scanning reads
     /// only the table directory and the name/OS/2/head tables of each file; a face's file is read in full
-    /// only when it is loaded. Unreadable or malformed files are skipped. The scan happens once, lazily.
+    /// only when it is loaded, and each face is parsed once and kept. Unreadable or malformed files are skipped. The
+    /// scan happens once, lazily; <see cref="Refresh"/> forgets it. Safe to share between threads and documents.
     /// </summary>
     public class DirectoryFontSource : IFontSource
     {
@@ -122,7 +123,7 @@ namespace Chuvadi.Layout.Fonts
         private readonly FontOrigin _origin;
         private readonly long _maxFileBytes;
         private List<FontFaceDescriptor>? _faces;
-        private readonly Dictionary<string, ReadOnlyMemory<byte>> _fileCache = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
+        private readonly Dictionary<(string File, int Index), FontFace> _loaded = new Dictionary<(string File, int Index), FontFace>();
 
         public DirectoryFontSource(IEnumerable<string> directories, bool recursive = true, FontOrigin origin = FontOrigin.Supplied,
             long maxFileBytes = 128L * 1024 * 1024, string? name = null)
@@ -151,19 +152,34 @@ namespace Chuvadi.Layout.Fonts
             }
         }
 
+        /// <summary>Loads a face, reading and parsing its file on first use; later calls return the same instance.</summary>
         public FontFace LoadFace(FontFaceDescriptor descriptor)
         {
             ArgumentNullException.ThrowIfNull(descriptor);
-            ReadOnlyMemory<byte> bytes;
             lock (_gate)
             {
-                if (!_fileCache.TryGetValue(descriptor.Key, out bytes))
+                (string, int) key = (descriptor.Key, descriptor.FaceIndex);
+                if (!_loaded.TryGetValue(key, out FontFace? face))
                 {
-                    bytes = File.ReadAllBytes(descriptor.Key);
-                    _fileCache[descriptor.Key] = bytes;
+                    byte[] bytes = File.ReadAllBytes(descriptor.Key);
+                    face = FontFace.Load(bytes, descriptor.FaceIndex, _origin, Path.GetFileName(descriptor.Key));
+                    _loaded[key] = face;
                 }
+                return face;
             }
-            return FontFace.Load(bytes, descriptor.FaceIndex, _origin, Path.GetFileName(descriptor.Key));
+        }
+
+        /// <summary>
+        /// Forgets the scan and the loaded faces, so the next use scans the directories again (for example after a font
+        /// is installed). Documents already laid out keep the faces they hold.
+        /// </summary>
+        public void Refresh()
+        {
+            lock (_gate)
+            {
+                _faces = null;
+                _loaded.Clear();
+            }
         }
 
         private List<FontFaceDescriptor> Scan()
@@ -219,22 +235,40 @@ namespace Chuvadi.Layout.Fonts
     /// <summary>
     /// The operating system's font directories: Windows (%WINDIR%\Fonts and the per-user
     /// %LOCALAPPDATA%\Microsoft\Windows\Fonts), macOS (/System/Library/Fonts, /Library/Fonts, ~/Library/Fonts)
-    /// and Linux (/usr/share/fonts, /usr/local/share/fonts, ~/.local/share/fonts, ~/.fonts).
-    /// Used only when <see cref="LayoutOptions.AllowSystemFonts"/> is true; results then depend on the machine.
+    /// Android (/system/fonts, /product/fonts) and Linux (/usr/share/fonts, /usr/local/share/fonts, ~/.local/share/fonts,
+    /// ~/.fonts). Used only when <see cref="LayoutOptions.AllowSystemFonts"/> is true; results then depend on the machine.
+    /// <see cref="LayoutOptions"/> uses the one <see cref="Shared"/> instance, so the folders are scanned once per process.
     /// </summary>
     public sealed class SystemFontSource : DirectoryFontSource
     {
+        private static readonly Lazy<SystemFontSource> s_shared = new Lazy<SystemFontSource>(() => new SystemFontSource());
+
+        /// <summary>A new source with its own scan and its own loaded faces.</summary>
         public SystemFontSource()
             : base(DefaultDirectories(), recursive: true, origin: FontOrigin.System, name: "System fonts")
         {
         }
 
+        /// <summary>
+        /// The process-wide source used by <see cref="LayoutOptions.CreateFontResolver"/>: the folders are scanned once
+        /// and each font is loaded once, then kept for the life of the process. Call <see cref="DirectoryFontSource.Refresh"/>
+        /// on it to see fonts installed since, and to release the loaded fonts.
+        /// </summary>
+        public static SystemFontSource Shared => s_shared.Value;
+
         /// <summary>The directories scanned on the current OS.</summary>
-        public static IReadOnlyList<string> DefaultDirectories()
+        public static IReadOnlyList<string> DefaultDirectories() =>
+            DirectoriesFor(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "windows"
+                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "macos"
+                : OperatingSystem.IsAndroid() ? "android"
+                : "other");
+
+        /// <summary>The directories for an OS ("windows", "macos", "android" or "other"); separate for tests.</summary>
+        internal static IReadOnlyList<string> DirectoriesFor(string os)
         {
             List<string> dirs = new List<string>();
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (os == "windows")
             {
                 string windir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
                 if (windir.Length > 0)
@@ -247,7 +281,7 @@ namespace Chuvadi.Layout.Fonts
                     dirs.Add(Path.Combine(local, "Microsoft", "Windows", "Fonts"));
                 }
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            else if (os == "macos")
             {
                 dirs.Add("/System/Library/Fonts");
                 dirs.Add("/Library/Fonts");
@@ -255,6 +289,11 @@ namespace Chuvadi.Layout.Fonts
                 {
                     dirs.Add(Path.Combine(home, "Library", "Fonts"));
                 }
+            }
+            else if (os == "android")
+            {
+                dirs.Add("/system/fonts");
+                dirs.Add("/product/fonts");
             }
             else
             {

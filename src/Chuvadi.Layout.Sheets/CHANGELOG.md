@@ -2,6 +2,8 @@
 
 ## 0.1.0 (unreleased)
 
+- Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,
+  D-254).
 - On Chuvadi.Sheets 2.0.2 (B12, B13): a damaged workbook with a missing workbook or worksheet part (G2), or with a
   shared-string reference that does not exist (F3), now raises `LayoutFormatException` ("The workbook could not be read:
   …", `XlsxFormatException` inside). Before, it opened with blank cells or the index shown as text. No code change in

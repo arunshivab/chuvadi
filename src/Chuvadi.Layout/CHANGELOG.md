@@ -2,6 +2,23 @@
 
 ## 0.1.0 (unreleased)
 
+Platform readiness (D-217, D-254; claude/layout-D217-rule5.md):
+
+- System fonts are scanned once per process. `SystemFontSource.Shared` is the one instance `LayoutOptions` uses with
+  `AllowSystemFonts`; before, every open document made its own source and scanned every font folder again (23–48 ms
+  with 304 files). `new SystemFontSource()` still gives an app its own.
+- `DirectoryFontSource.Refresh()` (and so `SystemFontSource.Shared.Refresh()`) forgets the scan and the loaded fonts, so
+  the next use scans again, for example after a font is installed. Documents already open keep their fonts.
+- `DirectoryFontSource` keeps each parsed font instead of the file bytes, so a font is parsed once per source and one
+  copy is shared by every document. A font installed while the app runs is seen only after `Refresh()`.
+- Android: the system font folders are `/system/fonts` and `/product/fonts` (before, none were found there).
+- `IsTrimmable` and `IsAotCompatible` in Layout, Layout.Fonts, Layout.Docs, Layout.Sheets, Layout.Markup,
+  Layout.Documents and the staged Layout.Pdf: the trim and NativeAOT analyzers run on every build (0 warnings).
+- Manual tests, `--compare-metrics` (D-255): the verdict skips invisible formatting characters (Unicode category Cf,
+  such as U+200C and U+202A), as it already skipped characters only one font has.
+
+No layout output changes.
+
 Rows with no stored height grow to fit their font (X3; claude/layout-X3-rule5.md):
 
 - A row with no stored height used to stay at the default height unless it had wrapped text, so large text was cut

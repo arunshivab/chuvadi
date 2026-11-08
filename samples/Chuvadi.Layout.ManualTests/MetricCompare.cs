@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using Chuvadi.Layout.Fonts;
 
@@ -30,7 +31,8 @@ namespace Chuvadi.Layout.ManualTests
             log.WriteLine();
             log.WriteLine("Metric comparison: installed font (" + folder + ") vs the substitute Layout uses (advance widths per 1/1000 em)");
             log.WriteLine("The verdict counts the characters documents use (Basic Latin, Latin-1, Latin Extended-A, General Punctuation,");
-            log.WriteLine("currency symbols); differences elsewhere in the BMP are listed but do not decide it (T2).");
+            log.WriteLine("currency symbols); differences elsewhere in the BMP are listed but do not decide it (T2). Only characters both fonts");
+            log.WriteLine("have are compared, and invisible formatting characters (Unicode category Cf, such as U+200C or U+202A) are skipped (D-255).");
             log.WriteLine("installed | substitute | codepoints compared | width differences | largest difference | vertical metrics | other BMP differences | verdict");
             int compared = 0;
             foreach ((string installed, string substitute) in Pairs)
@@ -63,14 +65,18 @@ namespace Chuvadi.Layout.ManualTests
         private static bool DocumentCharacters(int cp)
             => cp is (>= 0x20 and <= 0x7E) or (>= 0xA0 and <= 0x17F) or (>= 0x2000 and <= 0x206F) or (>= 0x20A0 and <= 0x20CF);
 
-        /// <summary>Codepoints both faces map (BMP, within <paramref name="include"/>), how many advances differ, and the largest difference in 1/1000 em.</summary>
+        /// <summary>
+        /// Codepoints both faces map (BMP, within <paramref name="include"/>), how many advances differ, and the largest
+        /// difference in 1/1000 em. A character only one face maps is not compared, and nor is an invisible formatting
+        /// character (category Cf: joiners, direction marks), whose width a font may set to anything (D-255).
+        /// </summary>
         private static (int Count, int Diffs, double Max, int WorstCp) Widths(FontFace a, FontFace b, Func<int, bool> include)
         {
             int count = 0, diffs = 0, worst = -1;
             double max = 0;
             for (int cp = 0x20; cp <= 0xFFFF; cp++)
             {
-                if (cp is >= 0xD800 and <= 0xDFFF || !include(cp))
+                if (cp is >= 0xD800 and <= 0xDFFF || !include(cp) || CharUnicodeInfo.GetUnicodeCategory(cp) == UnicodeCategory.Format)
                 {
                     continue;
                 }

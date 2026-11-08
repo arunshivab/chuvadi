@@ -2,6 +2,8 @@
 
 ## 0.1.0 (unreleased)
 
+- Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,
+  D-254).
 - Tamil and other complex-script text (R3, D-191): a run takes the complex-script font, size and bold only with
   `w:cs` or `w:rtl` (ECMA-376 17.3.2.26 step 2a). Otherwise Hebrew, Arabic, Syriac and Thaana take the ASCII font, as
   the standard's table says, and Tamil and the other Indic scripts the High ANSI font, size and bold (standard silent;

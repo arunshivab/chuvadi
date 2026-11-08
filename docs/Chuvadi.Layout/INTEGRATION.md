@@ -91,6 +91,8 @@ the page is laid out.
 1. **Open on a background thread.** `AutoDetectLayout.Open(stream, Auto, options, ct)` (Chuvadi.Layout.Documents):
    - give it the document's file stream, or bytes the app already holds;
    - set `AllowSystemFonts = true` so the user's installed fonts are used, and keep the substitute pack (`FontPackSource.For(SubstituteFontPack.Instance)`) as the fallback;
+   - the font folders are scanned once per process (`SystemFontSource.Shared`) and each font is loaded once; when the
+     user installs a font while the app runs, call `SystemFontSource.Shared.Refresh()` and the next document sees it;
    - set `UseEmbeddedFonts = true` (the default).
 2. **Show the first page at once.**
    - Call `GetPage(0)`, then `ToSvg()`, and navigate the WebView2 to the result.
