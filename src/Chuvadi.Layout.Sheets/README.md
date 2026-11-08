@@ -27,3 +27,8 @@ Every visible sheet prints in workbook order, as Excel's "Print entire workbook"
 number format rendered, the effective style, merges, widths and heights, page setup, print areas and titles, manual
 page breaks, conditional formats, pictures and shapes. Charts are drawn as labelled placeholders. For a file of
 unknown kind, use Chuvadi.Layout.Documents (`AutoDetectLayout.Open`).
+
+A file that is not a readable workbook raises `LayoutFormatException`, with Chuvadi.Sheets' `XlsxFormatException`
+inside; that includes a damaged workbook whose workbook or worksheet part is missing, or whose cells point at shared
+strings that do not exist (rejected since Chuvadi.Sheets 2.0.2). A `LayoutLimits` value exceeded raises
+`LayoutLimitExceededException`.

@@ -2,6 +2,10 @@
 
 ## 0.1.0 (unreleased)
 
+- On Chuvadi.Sheets 2.0.2 (B12, B13): a damaged workbook with a missing workbook or worksheet part (G2), or with a
+  shared-string reference that does not exist (F3), now raises `LayoutFormatException` ("The workbook could not be read:
+  …", `XlsxFormatException` inside). Before, it opened with blank cells or the index shown as text. No code change in
+  Layout.Sheets; the README says so.
 - First release as its own package (D-115): the xlsx importer of Chuvadi.Layout 0.1.0, on Chuvadi.Sheets 2.0.0.
   Names (D-121): `SheetsLayout.Open` (was `DocumentLayout.OpenXlsx` and
   `DocumentLayout.Open(Chuvadi.Sheets.Excel.Workbook, …)`), `SheetsImporter` (was `XlsxImporter`),
