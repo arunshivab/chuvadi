@@ -2,6 +2,8 @@
 
 ## 0.1.0 (unreleased)
 
+- Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,
+  D-254).
 D-60 (requires Chuvadi.Markup at main b019524 or later: presets removed, `LinkHandling.Keep` renamed `Active`):
 
 - When `HtmlImportOptions.Policy` is null, HTML is sanitized with `new SanitizerPolicy()`, Chuvadi.Markup's safest

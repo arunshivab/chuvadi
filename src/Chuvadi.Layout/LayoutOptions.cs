@@ -83,7 +83,9 @@ namespace Chuvadi.Layout
         /// Also search the operating system's font directories. Off by default so output is identical on every
         /// machine; turn on in desktop viewers to use real Office fonts when present. Installed fonts are searched
         /// before <see cref="FontSources"/> and the built-in fonts, so an installed family wins over a packed copy of
-        /// the same family (D-116), unless <see cref="PreferBundledFonts"/> is set.
+        /// the same family (D-116), unless <see cref="PreferBundledFonts"/> is set. The folders are scanned once per process
+        /// (<see cref="SystemFontSource.Shared"/>); call <see cref="DirectoryFontSource.Refresh"/> on it to see fonts
+        /// installed while the application runs.
         /// </summary>
         public bool AllowSystemFonts { get; set; }
 
@@ -149,7 +151,7 @@ namespace Chuvadi.Layout
             }
             if (AllowSystemFonts && !PreferBundledFonts)
             {
-                sources.Add(new SystemFontSource());
+                sources.Add(SystemFontSource.Shared);
             }
             sources.AddRange(FontSources);
             if (UseBuiltInFonts)
@@ -158,7 +160,7 @@ namespace Chuvadi.Layout
             }
             if (AllowSystemFonts && PreferBundledFonts)
             {
-                sources.Add(new SystemFontSource());
+                sources.Add(SystemFontSource.Shared);
             }
             return new FontResolver(sources, FontSubstitutions);
         }

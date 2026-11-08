@@ -9,6 +9,10 @@
     <AssemblyName>Chuvadi.Layout</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout</Product>
     <Description>Pure-BCL page layout engine for .NET: paginates flow documents (Word-style) and spreadsheet grids (Excel-style) into fixed pages with a neutral, immutable page display list, and lays out plain text. The docx and xlsx importers ship separately as Chuvadi.Layout.Docs and Chuvadi.Layout.Sheets (Chuvadi.Layout.Documents detects the format). Font core (TrueType/OpenType/TTC, metrics, cmap, kerning), font resolution with reported substitution, lazy per-page layout, cancellation and hard limits for untrusted input. No NuGet dependencies; no PDF dependency (PDF/SVG/PNG output ships separately as Chuvadi.Layout.Pdf).</Description>

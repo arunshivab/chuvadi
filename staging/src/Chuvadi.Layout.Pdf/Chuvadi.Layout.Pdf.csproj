@@ -16,6 +16,10 @@
     <AssemblyName>Chuvadi.Layout.Pdf</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Pdf</Product>
     <Description>PDF, SVG and PNG output for Chuvadi.Layout pages (whole documents or one page at a time, memory-only), and PdfShaper: complex-script (Indic) shaping through Chuvadi.Pdf.Text.Shaping as a Chuvadi.Layout IShaper. Pure BCL; built on chuvadi-pdf.</Description>

@@ -159,6 +159,56 @@ public class FontResolverTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public void Directory_source_parses_a_face_once_and_Refresh_rescans()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "chuvadi-layout-fonts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "a.ttf"), TestFonts.Bytes("Carlito-Bold.ttf"));
+            DirectoryFontSource src = new DirectoryFontSource(dir);
+            FontFaceDescriptor bold = Assert.Single(src.GetFaces());
+            FontFace first = src.LoadFace(bold);
+            Assert.Same(first, src.LoadFace(bold));
+
+            File.WriteAllBytes(Path.Combine(dir, "b.ttf"), TestFonts.Bytes("Caladea-Regular.ttf"));
+            Assert.Single(src.GetFaces()); // the scan is kept until Refresh
+            src.Refresh();
+            Assert.Equal(2, src.GetFaces().Count);
+            FontFace again = src.LoadFace(src.GetFaces().Single(f => f.FamilyName == "Carlito"));
+            Assert.NotSame(first, again); // loaded faces were released
+            Assert.Equal("Carlito", first.FamilyName); // a face already handed out stays usable
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void Layout_options_use_one_shared_system_font_source()
+    {
+        Assert.Same(SystemFontSource.Shared, SystemFontSource.Shared);
+        LayoutOptions o = new LayoutOptions { AllowSystemFonts = true };
+        IFontSource a = o.CreateFontResolver().Sources.Single(s => s.Name == "System fonts");
+        IFontSource b = new LayoutOptions { AllowSystemFonts = true }.CreateFontResolver().Sources.Single(s => s.Name == "System fonts");
+        Assert.Same(SystemFontSource.Shared, a);
+        Assert.Same(a, b);
+        o.PreferBundledFonts = true;
+        Assert.Same(SystemFontSource.Shared, o.CreateFontResolver().Sources.Single(s => s.Name == "System fonts"));
+    }
+
+    [Fact]
+    public void System_font_folders_per_os_include_Android()
+    {
+        Assert.Equal(new[] { "/system/fonts", "/product/fonts" }, SystemFontSource.DirectoriesFor("android"));
+        Assert.Contains("/System/Library/Fonts", SystemFontSource.DirectoriesFor("macos"));
+        Assert.Contains("/usr/share/fonts", SystemFontSource.DirectoriesFor("other"));
+        Assert.DoesNotContain("/system/fonts", SystemFontSource.DirectoriesFor("other"));
+        Assert.All(SystemFontSource.DirectoriesFor("windows"), d => Assert.EndsWith("Fonts", d));
+    }
 }
 
 /// <summary>D-116: installed fonts before the pack, the option to prefer the pack, and embedded subset fonts.</summary>

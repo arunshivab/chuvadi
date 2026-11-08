@@ -9,6 +9,10 @@
     <AssemblyName>Chuvadi.Layout.Fonts</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Fonts</Product>
     <Description>Substitute fonts for documents, as a pure data pack: SIL OFL 1.1 fonts embedded as resources, with their names, styles, lengths, SHA-256 hashes and licences, readable through Chuvadi.Fonts' IFontFilePack by Chuvadi.Layout (FontPackSource), a PDF or a print library. Metric-compatible substitutes for common document fonts (Liberation Sans/Serif/Mono for Arial/Times New Roman/Courier New, Carlito for Calibri), Caladea for Cambria (a close design, not metric-compatible), four styles each, plus closer designs for Georgia (Gelasio, four styles) and Segoe UI (Selawik: Regular, Bold, Light, Semilight, Semibold). The LiPi Sans fonts are in Chuvadi.Fonts. No layout engine dependency, no network, no disk access.</Description>
