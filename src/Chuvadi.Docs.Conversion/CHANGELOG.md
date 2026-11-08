@@ -1,6 +1,6 @@
 # Chuvadi.Docs.Conversion — Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-09)
 
 The first release. It is versioned with Chuvadi.Docs 2.0.0 (D-15, D-45) and depends on Chuvadi.Docs 2.0.0 and Chuvadi.Markup 1.1.0. Everything listed under 1.6.0 below is part of it; 1.6.0 was never released (D-135).
 

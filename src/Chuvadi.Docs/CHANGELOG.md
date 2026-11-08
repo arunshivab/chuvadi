@@ -1,6 +1,6 @@
 # Chuvadi.Docs — Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-09)
 
 A major version: the public namespace is renamed, and malformed files are reported one way. 2.0.0 also carries everything listed under 1.6.0 below, which was never released on its own (D-135). It is versioned together with Chuvadi.Docs.Conversion 2.0.0.
 
