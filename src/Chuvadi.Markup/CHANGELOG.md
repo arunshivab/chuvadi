@@ -1,6 +1,6 @@
 # Chuvadi.Markup — Changelog
 
-## 1.1.0 (unreleased)
+## 1.1.0 (2026-11-08)
 
 - **Clean-room Markdown engine (D-106).** The Markdown parser, the HTML renderer and the Markdown syntax helpers
   are a new implementation written from the CommonMark 0.31.2 and GFM 0.29 specifications only, and checked by an
