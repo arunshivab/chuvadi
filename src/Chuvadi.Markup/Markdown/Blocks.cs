@@ -82,14 +82,18 @@ namespace Chuvadi.Markup.Markdown
         /// <summary>Where the definition came from.</summary>
         public SourceSpan Span { get; init; }
 
-        /// <summary>CommonMark label normalization: trim, collapse internal whitespace, Unicode case fold.</summary>
+        /// <summary>
+        /// CommonMark label normalization: strip leading and trailing spaces, tabs and line endings (U+0020, U+0009,
+        /// U+000A, U+000D), collapse each internal run of them to one space, then apply Unicode case folding. Other
+        /// characters, including U+000B, U+000C and U+00A0, are kept as they are.
+        /// </summary>
         public static string NormalizeLabel(string label)
         {
             var sb = new System.Text.StringBuilder(label.Length);
             bool space = false;
-            foreach (char c in label.Trim(' ', '\t', '\n', '\r', '\f'))
+            foreach (char c in label.Trim(' ', '\t', '\n', '\r'))
             {
-                if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f') { space = true; continue; }
+                if (c == ' ' || c == '\t' || c == '\n' || c == '\r') { space = true; continue; }
                 if (space) { sb.Append(' '); space = false; }
                 sb.Append(c);
             }

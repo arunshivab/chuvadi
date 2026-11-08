@@ -1,0 +1,801 @@
+Chuvadi.Markup.Css.CssAtRule :: .ctor(System.String name)
+Chuvadi.Markup.Css.CssAtRule :: property System.Boolean HasBlock { get; set; }
+Chuvadi.Markup.Css.CssAtRule :: property System.String Name { get; }
+Chuvadi.Markup.Css.CssAtRule | sealed class : Chuvadi.Markup.Css.CssRule
+Chuvadi.Markup.Css.CssComponentValue | abstract class
+Chuvadi.Markup.Css.CssDeclaration :: .ctor(System.String name)
+Chuvadi.Markup.Css.CssDeclaration :: override System.String ToString()
+Chuvadi.Markup.Css.CssDeclaration :: property System.Boolean Important { get; set; }
+Chuvadi.Markup.Css.CssDeclaration :: property System.Boolean IsCustomProperty { get; }
+Chuvadi.Markup.Css.CssDeclaration :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssComponentValue> Value { get; }
+Chuvadi.Markup.Css.CssDeclaration :: property System.String Name { get; set; }
+Chuvadi.Markup.Css.CssDeclaration :: property System.String ValueText { get; }
+Chuvadi.Markup.Css.CssDeclaration | sealed class
+Chuvadi.Markup.Css.CssFunction :: .ctor(System.String name)
+Chuvadi.Markup.Css.CssFunction :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssComponentValue> Arguments { get; }
+Chuvadi.Markup.Css.CssFunction :: property System.String Name { get; }
+Chuvadi.Markup.Css.CssFunction | sealed class : Chuvadi.Markup.Css.CssComponentValue
+Chuvadi.Markup.Css.CssParser :: static Chuvadi.Markup.Css.CssStyleSheet ParseStyleSheet(System.String css, Chuvadi.Markup.MarkupLimits limits = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Css.CssParser :: static System.Collections.Generic.List<Chuvadi.Markup.Css.CssDeclaration> ParseDeclarations(System.String css, Chuvadi.Markup.MarkupLimits limits = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Css.CssParser | sealed class
+Chuvadi.Markup.Css.CssRule :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssComponentValue> Prelude { get; }
+Chuvadi.Markup.Css.CssRule :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssDeclaration> Declarations { get; }
+Chuvadi.Markup.Css.CssRule :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssRule> Rules { get; }
+Chuvadi.Markup.Css.CssRule :: property System.String PreludeText { get; }
+Chuvadi.Markup.Css.CssRule | abstract class
+Chuvadi.Markup.Css.CssSerializer :: static System.String Ident(System.String s)
+Chuvadi.Markup.Css.CssSerializer :: static System.String Serialize(Chuvadi.Markup.Css.CssRule rule)
+Chuvadi.Markup.Css.CssSerializer :: static System.String Serialize(Chuvadi.Markup.Css.CssStyleSheet sheet)
+Chuvadi.Markup.Css.CssSerializer :: static System.String Serialize(System.Collections.Generic.IEnumerable<Chuvadi.Markup.Css.CssComponentValue> values)
+Chuvadi.Markup.Css.CssSerializer :: static System.String Serialize(System.Collections.Generic.IEnumerable<Chuvadi.Markup.Css.CssDeclaration> declarations)
+Chuvadi.Markup.Css.CssSerializer :: static System.String String(System.String s)
+Chuvadi.Markup.Css.CssSerializer | static class
+Chuvadi.Markup.Css.CssSimpleBlock :: .ctor(System.Char open)
+Chuvadi.Markup.Css.CssSimpleBlock :: property System.Char Close { get; }
+Chuvadi.Markup.Css.CssSimpleBlock :: property System.Char Open { get; }
+Chuvadi.Markup.Css.CssSimpleBlock :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssComponentValue> Values { get; }
+Chuvadi.Markup.Css.CssSimpleBlock | sealed class : Chuvadi.Markup.Css.CssComponentValue
+Chuvadi.Markup.Css.CssStyleRule :: .ctor()
+Chuvadi.Markup.Css.CssStyleRule :: property System.String SelectorText { get; }
+Chuvadi.Markup.Css.CssStyleRule | sealed class : Chuvadi.Markup.Css.CssRule
+Chuvadi.Markup.Css.CssStyleSheet :: .ctor()
+Chuvadi.Markup.Css.CssStyleSheet :: override System.String ToString()
+Chuvadi.Markup.Css.CssStyleSheet :: property System.Collections.Generic.List<Chuvadi.Markup.Css.CssRule> Rules { get; }
+Chuvadi.Markup.Css.CssStyleSheet | sealed class
+Chuvadi.Markup.Css.CssToken :: override System.String ToString()
+Chuvadi.Markup.Css.CssToken :: property Chuvadi.Markup.Css.CssTokenType Type { get; }
+Chuvadi.Markup.Css.CssToken :: property System.Boolean IsIdHash { get; }
+Chuvadi.Markup.Css.CssToken :: property System.Boolean IsInteger { get; }
+Chuvadi.Markup.Css.CssToken :: property System.Double Number { get; }
+Chuvadi.Markup.Css.CssToken :: property System.String Unit { get; }
+Chuvadi.Markup.Css.CssToken :: property System.String Value { get; }
+Chuvadi.Markup.Css.CssToken :: static Chuvadi.Markup.Css.CssToken Delim(System.Char c)
+Chuvadi.Markup.Css.CssToken :: static Chuvadi.Markup.Css.CssToken Ident(System.String name)
+Chuvadi.Markup.Css.CssToken :: static Chuvadi.Markup.Css.CssToken Space()
+Chuvadi.Markup.Css.CssToken :: static Chuvadi.Markup.Css.CssToken StringToken(System.String value)
+Chuvadi.Markup.Css.CssToken | sealed class : Chuvadi.Markup.Css.CssComponentValue
+Chuvadi.Markup.Css.CssTokenType :: value AtKeyword = 2
+Chuvadi.Markup.Css.CssTokenType :: value BadString = 5
+Chuvadi.Markup.Css.CssTokenType :: value BadUrl = 7
+Chuvadi.Markup.Css.CssTokenType :: value Cdc = 14
+Chuvadi.Markup.Css.CssTokenType :: value Cdo = 13
+Chuvadi.Markup.Css.CssTokenType :: value CloseCurly = 23
+Chuvadi.Markup.Css.CssTokenType :: value CloseParen = 21
+Chuvadi.Markup.Css.CssTokenType :: value CloseSquare = 19
+Chuvadi.Markup.Css.CssTokenType :: value Colon = 15
+Chuvadi.Markup.Css.CssTokenType :: value Comma = 17
+Chuvadi.Markup.Css.CssTokenType :: value Delim = 8
+Chuvadi.Markup.Css.CssTokenType :: value Dimension = 11
+Chuvadi.Markup.Css.CssTokenType :: value EndOfFile = 24
+Chuvadi.Markup.Css.CssTokenType :: value Function = 1
+Chuvadi.Markup.Css.CssTokenType :: value Hash = 3
+Chuvadi.Markup.Css.CssTokenType :: value Ident = 0
+Chuvadi.Markup.Css.CssTokenType :: value Number = 9
+Chuvadi.Markup.Css.CssTokenType :: value OpenCurly = 22
+Chuvadi.Markup.Css.CssTokenType :: value OpenParen = 20
+Chuvadi.Markup.Css.CssTokenType :: value OpenSquare = 18
+Chuvadi.Markup.Css.CssTokenType :: value Percentage = 10
+Chuvadi.Markup.Css.CssTokenType :: value Semicolon = 16
+Chuvadi.Markup.Css.CssTokenType :: value String = 4
+Chuvadi.Markup.Css.CssTokenType :: value Url = 6
+Chuvadi.Markup.Css.CssTokenType :: value Whitespace = 12
+Chuvadi.Markup.Css.CssTokenType | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Css.CssTokenizer :: .ctor(System.String css, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Css.CssTokenizer :: Chuvadi.Markup.Css.CssToken Next()
+Chuvadi.Markup.Css.CssTokenizer :: System.Collections.Generic.List<Chuvadi.Markup.Css.CssToken> TokenizeAll()
+Chuvadi.Markup.Css.CssTokenizer | sealed class
+Chuvadi.Markup.Html.HtmlAttribute :: .ctor(System.String localName, System.String value, Chuvadi.Markup.Html.HtmlAttributeNamespace ns, System.String prefix)
+Chuvadi.Markup.Html.HtmlAttribute :: .ctor(System.String name, System.String value)
+Chuvadi.Markup.Html.HtmlAttribute :: override System.String ToString()
+Chuvadi.Markup.Html.HtmlAttribute :: property Chuvadi.Markup.Html.HtmlAttributeNamespace Namespace { get; }
+Chuvadi.Markup.Html.HtmlAttribute :: property System.String LocalName { get; }
+Chuvadi.Markup.Html.HtmlAttribute :: property System.String Name { get; }
+Chuvadi.Markup.Html.HtmlAttribute :: property System.String Prefix { get; }
+Chuvadi.Markup.Html.HtmlAttribute :: property System.String Value { get; set; }
+Chuvadi.Markup.Html.HtmlAttribute | sealed class
+Chuvadi.Markup.Html.HtmlAttributeList :: .ctor()
+Chuvadi.Markup.Html.HtmlAttributeList :: Chuvadi.Markup.Html.HtmlAttribute Find(System.String name)
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Boolean Contains(System.String name)
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Boolean Remove(System.String name)
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Int32 RemoveAll(System.Predicate<Chuvadi.Markup.Html.HtmlAttribute> match)
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Void Add(Chuvadi.Markup.Html.HtmlAttribute attribute)
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Void Clear()
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Void RemoveAt(System.Int32 index)
+Chuvadi.Markup.Html.HtmlAttributeList :: System.Void Set(System.String name, System.String value)
+Chuvadi.Markup.Html.HtmlAttributeList :: property Chuvadi.Markup.Html.HtmlAttribute Item { get; }
+Chuvadi.Markup.Html.HtmlAttributeList :: property System.Int32 Count { get; }
+Chuvadi.Markup.Html.HtmlAttributeList :: property System.String Item { get; }
+Chuvadi.Markup.Html.HtmlAttributeList :: virtual System.Collections.Generic.IEnumerator<Chuvadi.Markup.Html.HtmlAttribute> GetEnumerator()
+Chuvadi.Markup.Html.HtmlAttributeList | sealed class | System.Collections.Generic.IEnumerable<Chuvadi.Markup.Html.HtmlAttribute>, System.Collections.Generic.IReadOnlyCollection<Chuvadi.Markup.Html.HtmlAttribute>, System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Html.HtmlAttribute>, System.Collections.IEnumerable
+Chuvadi.Markup.Html.HtmlAttributeNamespace :: value None = 0
+Chuvadi.Markup.Html.HtmlAttributeNamespace :: value XLink = 1
+Chuvadi.Markup.Html.HtmlAttributeNamespace :: value Xml = 2
+Chuvadi.Markup.Html.HtmlAttributeNamespace :: value Xmlns = 3
+Chuvadi.Markup.Html.HtmlAttributeNamespace | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Html.HtmlComment :: .ctor(System.String data)
+Chuvadi.Markup.Html.HtmlComment :: override Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlComment :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlComment :: property System.String Data { get; set; }
+Chuvadi.Markup.Html.HtmlComment :: property System.String TextContent { get; }
+Chuvadi.Markup.Html.HtmlComment | sealed class : Chuvadi.Markup.Html.HtmlNode
+Chuvadi.Markup.Html.HtmlDocument :: .ctor()
+Chuvadi.Markup.Html.HtmlDocument :: override Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlDocumentType DocumentType { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlElement Body { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlElement DocumentElement { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlElement Head { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlEncodingSource EncodingSource { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property Chuvadi.Markup.Html.HtmlQuirksMode QuirksMode { get; set; }
+Chuvadi.Markup.Html.HtmlDocument :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Html.HtmlParseError> ParseErrors { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property System.Int32 ParseErrorCount { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property System.String Title { get; }
+Chuvadi.Markup.Html.HtmlDocument :: property System.Text.Encoding Encoding { get; }
+Chuvadi.Markup.Html.HtmlDocument :: static Chuvadi.Markup.Html.HtmlElement CreateElement(System.String localName, Chuvadi.Markup.Html.HtmlNamespace ns = Html)
+Chuvadi.Markup.Html.HtmlDocument | sealed class : Chuvadi.Markup.Html.HtmlNode
+Chuvadi.Markup.Html.HtmlDocumentFragment :: .ctor()
+Chuvadi.Markup.Html.HtmlDocumentFragment :: override Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlDocumentFragment :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlDocumentFragment :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Html.HtmlDocumentFragment :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Html.HtmlParseError> ParseErrors { get; }
+Chuvadi.Markup.Html.HtmlDocumentFragment | sealed class : Chuvadi.Markup.Html.HtmlNode
+Chuvadi.Markup.Html.HtmlDocumentType :: .ctor(System.String name, System.String publicId, System.String systemId)
+Chuvadi.Markup.Html.HtmlDocumentType :: override Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlDocumentType :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlDocumentType :: property System.String Name { get; set; }
+Chuvadi.Markup.Html.HtmlDocumentType :: property System.String PublicId { get; set; }
+Chuvadi.Markup.Html.HtmlDocumentType :: property System.String SystemId { get; set; }
+Chuvadi.Markup.Html.HtmlDocumentType :: property System.String TextContent { get; }
+Chuvadi.Markup.Html.HtmlDocumentType | sealed class : Chuvadi.Markup.Html.HtmlNode
+Chuvadi.Markup.Html.HtmlElement :: .ctor(System.String localName, Chuvadi.Markup.Html.HtmlNamespace ns = Html)
+Chuvadi.Markup.Html.HtmlElement :: System.Boolean HasAttribute(System.String name)
+Chuvadi.Markup.Html.HtmlElement :: System.Boolean IsHtml(System.String localName)
+Chuvadi.Markup.Html.HtmlElement :: System.Boolean RemoveAttribute(System.String name)
+Chuvadi.Markup.Html.HtmlElement :: System.String GetAttribute(System.String name)
+Chuvadi.Markup.Html.HtmlElement :: System.Void SetAttribute(System.String name, System.String value)
+Chuvadi.Markup.Html.HtmlElement :: override Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlElement :: override System.String ToString()
+Chuvadi.Markup.Html.HtmlElement :: property Chuvadi.Markup.Html.HtmlAttributeList Attributes { get; }
+Chuvadi.Markup.Html.HtmlElement :: property Chuvadi.Markup.Html.HtmlDocumentFragment Content { get; }
+Chuvadi.Markup.Html.HtmlElement :: property Chuvadi.Markup.Html.HtmlNamespace Namespace { get; }
+Chuvadi.Markup.Html.HtmlElement :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlElement :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Html.HtmlElement :: property System.Collections.Generic.IReadOnlyList<System.String> ClassList { get; }
+Chuvadi.Markup.Html.HtmlElement :: property System.String Id { get; }
+Chuvadi.Markup.Html.HtmlElement :: property System.String LocalName { get; }
+Chuvadi.Markup.Html.HtmlElement | sealed class : Chuvadi.Markup.Html.HtmlNode
+Chuvadi.Markup.Html.HtmlEncoding :: property System.Text.Encoding Windows1252 { get; }
+Chuvadi.Markup.Html.HtmlEncoding :: static System.String ExtractCharsetFromContent(System.String s)
+Chuvadi.Markup.Html.HtmlEncoding :: static System.Text.Encoding GetEncoding(System.String label)
+Chuvadi.Markup.Html.HtmlEncoding :: static System.Text.Encoding Prescan(System.ReadOnlySpan<System.Byte> input)
+Chuvadi.Markup.Html.HtmlEncoding | static class
+Chuvadi.Markup.Html.HtmlEncodingSource :: value ByteOrderMark = 1
+Chuvadi.Markup.Html.HtmlEncodingSource :: value Caller = 2
+Chuvadi.Markup.Html.HtmlEncodingSource :: value Fallback = 4
+Chuvadi.Markup.Html.HtmlEncodingSource :: value MetaPrescan = 3
+Chuvadi.Markup.Html.HtmlEncodingSource :: value None = 0
+Chuvadi.Markup.Html.HtmlEncodingSource | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Html.HtmlNamespace :: value Html = 0
+Chuvadi.Markup.Html.HtmlNamespace :: value MathML = 2
+Chuvadi.Markup.Html.HtmlNamespace :: value Svg = 1
+Chuvadi.Markup.Html.HtmlNamespace | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Html.HtmlNode :: Chuvadi.Markup.Html.HtmlNode AppendChild(Chuvadi.Markup.Html.HtmlNode child)
+Chuvadi.Markup.Html.HtmlNode :: Chuvadi.Markup.Html.HtmlNode InsertBefore(Chuvadi.Markup.Html.HtmlNode child, Chuvadi.Markup.Html.HtmlNode reference)
+Chuvadi.Markup.Html.HtmlNode :: Chuvadi.Markup.Html.HtmlNode RemoveChild(Chuvadi.Markup.Html.HtmlNode child)
+Chuvadi.Markup.Html.HtmlNode :: System.Collections.Generic.IEnumerable<Chuvadi.Markup.Html.HtmlElement> DescendantElements()
+Chuvadi.Markup.Html.HtmlNode :: System.Collections.Generic.IEnumerable<Chuvadi.Markup.Html.HtmlNode> Descendants()
+Chuvadi.Markup.Html.HtmlNode :: System.Void Remove()
+Chuvadi.Markup.Html.HtmlNode :: System.Void RemoveAllChildren()
+Chuvadi.Markup.Html.HtmlNode :: System.Void ReplaceWith(Chuvadi.Markup.Html.HtmlNode replacement)
+Chuvadi.Markup.Html.HtmlNode :: System.Void Unwrap()
+Chuvadi.Markup.Html.HtmlNode :: abstract Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlNode :: property Chuvadi.Markup.Html.HtmlNode FirstChild { get; }
+Chuvadi.Markup.Html.HtmlNode :: property Chuvadi.Markup.Html.HtmlNode LastChild { get; }
+Chuvadi.Markup.Html.HtmlNode :: property Chuvadi.Markup.Html.HtmlNode NextSibling { get; }
+Chuvadi.Markup.Html.HtmlNode :: property Chuvadi.Markup.Html.HtmlNode Parent { get; }
+Chuvadi.Markup.Html.HtmlNode :: property Chuvadi.Markup.Html.HtmlNode PreviousSibling { get; }
+Chuvadi.Markup.Html.HtmlNode :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.Collections.Generic.IEnumerable<Chuvadi.Markup.Html.HtmlElement> Children { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Html.HtmlNode> ChildNodes { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.Int32 ChildCount { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.Int32 Depth { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.Int32 SourceOffset { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.String InnerHtml { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.String OuterHtml { get; }
+Chuvadi.Markup.Html.HtmlNode :: property System.String TextContent { get; }
+Chuvadi.Markup.Html.HtmlNode | abstract class
+Chuvadi.Markup.Html.HtmlNodeType :: value Comment = 5
+Chuvadi.Markup.Html.HtmlNodeType :: value Document = 0
+Chuvadi.Markup.Html.HtmlNodeType :: value DocumentFragment = 1
+Chuvadi.Markup.Html.HtmlNodeType :: value DocumentType = 2
+Chuvadi.Markup.Html.HtmlNodeType :: value Element = 3
+Chuvadi.Markup.Html.HtmlNodeType :: value Text = 4
+Chuvadi.Markup.Html.HtmlNodeType | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Html.HtmlParseError :: override System.String ToString()
+Chuvadi.Markup.Html.HtmlParseError :: property System.Int32 Column { get; }
+Chuvadi.Markup.Html.HtmlParseError :: property System.Int32 Line { get; }
+Chuvadi.Markup.Html.HtmlParseError :: property System.Int32 Offset { get; }
+Chuvadi.Markup.Html.HtmlParseError :: property System.String Code { get; }
+Chuvadi.Markup.Html.HtmlParseError | sealed class
+Chuvadi.Markup.Html.HtmlParser :: static Chuvadi.Markup.Html.HtmlDocument Parse(System.Byte[] bytes, Chuvadi.Markup.Html.HtmlParserOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlParser :: static Chuvadi.Markup.Html.HtmlDocument Parse(System.IO.Stream stream, Chuvadi.Markup.Html.HtmlParserOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlParser :: static Chuvadi.Markup.Html.HtmlDocument Parse(System.ReadOnlySpan<System.Byte> bytes, Chuvadi.Markup.Html.HtmlParserOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlParser :: static Chuvadi.Markup.Html.HtmlDocument Parse(System.String html, Chuvadi.Markup.Html.HtmlParserOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlParser :: static Chuvadi.Markup.Html.HtmlDocumentFragment ParseFragment(System.String html, Chuvadi.Markup.Html.HtmlElement context, Chuvadi.Markup.Html.HtmlParserOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlParser :: static Chuvadi.Markup.Html.HtmlDocumentFragment ParseFragment(System.String html, System.String contextLocalName = body, Chuvadi.Markup.Html.HtmlNamespace contextNamespace = Html, Chuvadi.Markup.Html.HtmlParserOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlParser | static class
+Chuvadi.Markup.Html.HtmlParserOptions :: .ctor()
+Chuvadi.Markup.Html.HtmlParserOptions :: Chuvadi.Markup.Html.HtmlParserOptions Clone()
+Chuvadi.Markup.Html.HtmlParserOptions :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Html.HtmlParserOptions :: property System.Boolean CollectErrors { get; set; }
+Chuvadi.Markup.Html.HtmlParserOptions :: property System.Boolean PrescanMeta { get; set; }
+Chuvadi.Markup.Html.HtmlParserOptions :: property System.Boolean Scripting { get; set; }
+Chuvadi.Markup.Html.HtmlParserOptions :: property System.Text.Encoding Encoding { get; set; }
+Chuvadi.Markup.Html.HtmlParserOptions :: property System.Text.Encoding FallbackEncoding { get; set; }
+Chuvadi.Markup.Html.HtmlParserOptions | sealed class
+Chuvadi.Markup.Html.HtmlQuirksMode :: value LimitedQuirks = 2
+Chuvadi.Markup.Html.HtmlQuirksMode :: value NoQuirks = 0
+Chuvadi.Markup.Html.HtmlQuirksMode :: value Quirks = 1
+Chuvadi.Markup.Html.HtmlQuirksMode | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Html.HtmlSerializer :: static System.Boolean IsVoidElement(System.String localName)
+Chuvadi.Markup.Html.HtmlSerializer :: static System.String EscapeAttribute(System.String value)
+Chuvadi.Markup.Html.HtmlSerializer :: static System.String EscapeText(System.String text)
+Chuvadi.Markup.Html.HtmlSerializer :: static System.String Serialize(Chuvadi.Markup.Html.HtmlNode node, Chuvadi.Markup.Html.HtmlSerializerOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlSerializer :: static System.String SerializeChildren(Chuvadi.Markup.Html.HtmlNode node, Chuvadi.Markup.Html.HtmlSerializerOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlSerializer :: static System.Void Serialize(Chuvadi.Markup.Html.HtmlNode node, System.IO.TextWriter writer, Chuvadi.Markup.Html.HtmlSerializerOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlSerializer | static class
+Chuvadi.Markup.Html.HtmlSerializerOptions :: .ctor()
+Chuvadi.Markup.Html.HtmlSerializerOptions :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Html.HtmlSerializerOptions :: property System.Boolean EscapeLessThanInAttributes { get; set; }
+Chuvadi.Markup.Html.HtmlSerializerOptions :: property System.Boolean PreserveLeadingNewline { get; set; }
+Chuvadi.Markup.Html.HtmlSerializerOptions :: property System.Boolean Scripting { get; set; }
+Chuvadi.Markup.Html.HtmlSerializerOptions | sealed class
+Chuvadi.Markup.Html.HtmlText :: .ctor(System.String data)
+Chuvadi.Markup.Html.HtmlText :: override Chuvadi.Markup.Html.HtmlNode Clone(System.Boolean deep = True)
+Chuvadi.Markup.Html.HtmlText :: property Chuvadi.Markup.Html.HtmlNodeType NodeType { get; }
+Chuvadi.Markup.Html.HtmlText :: property System.String Data { get; set; }
+Chuvadi.Markup.Html.HtmlText :: property System.String TextContent { get; }
+Chuvadi.Markup.Html.HtmlText | sealed class : Chuvadi.Markup.Html.HtmlNode
+Chuvadi.Markup.Html.HtmlToken :: System.String GetAttribute(System.String name)
+Chuvadi.Markup.Html.HtmlToken :: override System.String ToString()
+Chuvadi.Markup.Html.HtmlToken :: property Chuvadi.Markup.Html.HtmlTokenKind Kind { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.Boolean ForceQuirks { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.Boolean SelfClosing { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Html.HtmlTokenAttribute> Attributes { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.Int32 Offset { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.String Data { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.String Name { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.String PublicId { get; }
+Chuvadi.Markup.Html.HtmlToken :: property System.String SystemId { get; }
+Chuvadi.Markup.Html.HtmlToken | sealed class
+Chuvadi.Markup.Html.HtmlTokenAttribute :: .ctor(System.String Name, System.String Value)
+Chuvadi.Markup.Html.HtmlTokenAttribute :: System.Void Deconstruct(System.String& Name, System.String& Value)
+Chuvadi.Markup.Html.HtmlTokenAttribute :: override System.Boolean Equals(System.Object obj)
+Chuvadi.Markup.Html.HtmlTokenAttribute :: override System.Int32 GetHashCode()
+Chuvadi.Markup.Html.HtmlTokenAttribute :: override System.String ToString()
+Chuvadi.Markup.Html.HtmlTokenAttribute :: property System.String Name { get; init; }
+Chuvadi.Markup.Html.HtmlTokenAttribute :: property System.String Value { get; init; }
+Chuvadi.Markup.Html.HtmlTokenAttribute :: virtual System.Boolean Equals(Chuvadi.Markup.Html.HtmlTokenAttribute other)
+Chuvadi.Markup.Html.HtmlTokenAttribute | struct | System.IEquatable<Chuvadi.Markup.Html.HtmlTokenAttribute>
+Chuvadi.Markup.Html.HtmlTokenKind :: value Character = 4
+Chuvadi.Markup.Html.HtmlTokenKind :: value Comment = 3
+Chuvadi.Markup.Html.HtmlTokenKind :: value Doctype = 0
+Chuvadi.Markup.Html.HtmlTokenKind :: value EndOfFile = 5
+Chuvadi.Markup.Html.HtmlTokenKind :: value EndTag = 2
+Chuvadi.Markup.Html.HtmlTokenKind :: value StartTag = 1
+Chuvadi.Markup.Html.HtmlTokenKind | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Html.HtmlTokenizer :: .ctor(System.String input, Chuvadi.Markup.MarkupLimits limits = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Html.HtmlTokenizer :: Chuvadi.Markup.Html.HtmlToken NextToken()
+Chuvadi.Markup.Html.HtmlTokenizer :: System.Collections.Generic.IEnumerable<Chuvadi.Markup.Html.HtmlToken> Tokens()
+Chuvadi.Markup.Html.HtmlTokenizer :: System.Void SetState(Chuvadi.Markup.Html.HtmlTokenizerState state)
+Chuvadi.Markup.Html.HtmlTokenizer :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Html.HtmlParseError> Errors { get; }
+Chuvadi.Markup.Html.HtmlTokenizer :: property System.Func<System.Boolean> AllowCdata { get; set; }
+Chuvadi.Markup.Html.HtmlTokenizer :: property System.Int32 ErrorCount { get; }
+Chuvadi.Markup.Html.HtmlTokenizer :: property System.String Input { get; }
+Chuvadi.Markup.Html.HtmlTokenizer :: property System.String LastStartTagName { get; set; }
+Chuvadi.Markup.Html.HtmlTokenizer | sealed class
+Chuvadi.Markup.Html.HtmlTokenizerState :: value CdataSection = 5
+Chuvadi.Markup.Html.HtmlTokenizerState :: value Data = 0
+Chuvadi.Markup.Html.HtmlTokenizerState :: value Plaintext = 4
+Chuvadi.Markup.Html.HtmlTokenizerState :: value Rawtext = 2
+Chuvadi.Markup.Html.HtmlTokenizerState :: value Rcdata = 1
+Chuvadi.Markup.Html.HtmlTokenizerState :: value ScriptData = 3
+Chuvadi.Markup.Html.HtmlTokenizerState | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.BlockQuote :: .ctor()
+Chuvadi.Markup.Markdown.BlockQuote :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.BlockQuote :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.BlockQuote :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.BlockQuote | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.CodeBlock :: .ctor()
+Chuvadi.Markup.Markdown.CodeBlock :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.CodeBlock :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.CodeBlock :: property System.Boolean IsFenced { get; set; }
+Chuvadi.Markup.Markdown.CodeBlock :: property System.Char FenceChar { get; set; }
+Chuvadi.Markup.Markdown.CodeBlock :: property System.Int32 FenceLength { get; set; }
+Chuvadi.Markup.Markdown.CodeBlock :: property System.String Code { get; set; }
+Chuvadi.Markup.Markdown.CodeBlock :: property System.String Info { get; set; }
+Chuvadi.Markup.Markdown.CodeBlock :: property System.String Language { get; }
+Chuvadi.Markup.Markdown.CodeBlock | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock | Chuvadi.Markup.Markdown.ILiteralNode
+Chuvadi.Markup.Markdown.CodeSpan :: .ctor(System.String code)
+Chuvadi.Markup.Markdown.CodeSpan :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.CodeSpan :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.CodeSpan :: property System.Int32 DelimiterLength { get; set; }
+Chuvadi.Markup.Markdown.CodeSpan :: property System.String Code { get; set; }
+Chuvadi.Markup.Markdown.CodeSpan | sealed class : Chuvadi.Markup.Markdown.MarkdownInline | Chuvadi.Markup.Markdown.ILiteralNode
+Chuvadi.Markup.Markdown.Emphasis :: .ctor()
+Chuvadi.Markup.Markdown.Emphasis :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Emphasis :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Emphasis :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.Emphasis :: property System.Char Delimiter { get; set; }
+Chuvadi.Markup.Markdown.Emphasis | sealed class : Chuvadi.Markup.Markdown.MarkdownInline
+Chuvadi.Markup.Markdown.HardBreak :: .ctor()
+Chuvadi.Markup.Markdown.HardBreak :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.HardBreak :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.HardBreak :: property System.Boolean IsBackslash { get; set; }
+Chuvadi.Markup.Markdown.HardBreak | sealed class : Chuvadi.Markup.Markdown.MarkdownInline
+Chuvadi.Markup.Markdown.Heading :: .ctor()
+Chuvadi.Markup.Markdown.Heading :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Heading :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Heading :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.Heading :: property System.Boolean IsSetext { get; set; }
+Chuvadi.Markup.Markdown.Heading :: property System.Int32 Level { get; set; }
+Chuvadi.Markup.Markdown.Heading | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.HtmlBlock :: .ctor()
+Chuvadi.Markup.Markdown.HtmlBlock :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.HtmlBlock :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.HtmlBlock :: property System.Int32 BlockType { get; set; }
+Chuvadi.Markup.Markdown.HtmlBlock :: property System.String Html { get; set; }
+Chuvadi.Markup.Markdown.HtmlBlock | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.HtmlInline :: .ctor(System.String html)
+Chuvadi.Markup.Markdown.HtmlInline :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.HtmlInline :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.HtmlInline :: property System.String Html { get; set; }
+Chuvadi.Markup.Markdown.HtmlInline | sealed class : Chuvadi.Markup.Markdown.MarkdownInline | Chuvadi.Markup.Markdown.ILiteralNode
+Chuvadi.Markup.Markdown.ILiteralNode :: property System.String Literal { get; }
+Chuvadi.Markup.Markdown.ILiteralNode | interface
+Chuvadi.Markup.Markdown.Image :: .ctor()
+Chuvadi.Markup.Markdown.Image :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Image :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Image | sealed class : Chuvadi.Markup.Markdown.LinkBase
+Chuvadi.Markup.Markdown.Link :: .ctor()
+Chuvadi.Markup.Markdown.Link :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Link :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Link :: property System.Boolean IsEmail { get; set; }
+Chuvadi.Markup.Markdown.Link | sealed class : Chuvadi.Markup.Markdown.LinkBase
+Chuvadi.Markup.Markdown.LinkBase :: property Chuvadi.Markup.Markdown.LinkStyle Style { get; set; }
+Chuvadi.Markup.Markdown.LinkBase :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.LinkBase :: property System.String Destination { get; set; }
+Chuvadi.Markup.Markdown.LinkBase :: property System.String Label { get; set; }
+Chuvadi.Markup.Markdown.LinkBase :: property System.String Title { get; set; }
+Chuvadi.Markup.Markdown.LinkBase | abstract class : Chuvadi.Markup.Markdown.MarkdownInline
+Chuvadi.Markup.Markdown.LinkReferenceDefinition :: .ctor(System.String label, System.String destination, System.String title)
+Chuvadi.Markup.Markdown.LinkReferenceDefinition :: property Chuvadi.Markup.SourceSpan Span { get; init; }
+Chuvadi.Markup.Markdown.LinkReferenceDefinition :: property System.String Destination { get; }
+Chuvadi.Markup.Markdown.LinkReferenceDefinition :: property System.String Label { get; }
+Chuvadi.Markup.Markdown.LinkReferenceDefinition :: property System.String Title { get; }
+Chuvadi.Markup.Markdown.LinkReferenceDefinition :: static System.String NormalizeLabel(System.String label)
+Chuvadi.Markup.Markdown.LinkReferenceDefinition | sealed class
+Chuvadi.Markup.Markdown.LinkStyle :: value Autolink = 4
+Chuvadi.Markup.Markdown.LinkStyle :: value ExtendedAutolink = 5
+Chuvadi.Markup.Markdown.LinkStyle :: value Inline = 0
+Chuvadi.Markup.Markdown.LinkStyle :: value ReferenceCollapsed = 2
+Chuvadi.Markup.Markdown.LinkStyle :: value ReferenceFull = 1
+Chuvadi.Markup.Markdown.LinkStyle :: value ReferenceShortcut = 3
+Chuvadi.Markup.Markdown.LinkStyle | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.ListBlock :: .ctor()
+Chuvadi.Markup.Markdown.ListBlock :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.ListBlock :: property Chuvadi.Markup.Markdown.ListKind ListKind { get; set; }
+Chuvadi.Markup.Markdown.ListBlock :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.ListBlock :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.ListBlock :: property System.Boolean IsTight { get; set; }
+Chuvadi.Markup.Markdown.ListBlock :: property System.Char BulletChar { get; set; }
+Chuvadi.Markup.Markdown.ListBlock :: property System.Char Delimiter { get; set; }
+Chuvadi.Markup.Markdown.ListBlock :: property System.Int32 Start { get; set; }
+Chuvadi.Markup.Markdown.ListBlock | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.ListItem :: .ctor()
+Chuvadi.Markup.Markdown.ListItem :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.ListItem :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.ListItem :: property Chuvadi.Markup.Markdown.TaskState TaskState { get; set; }
+Chuvadi.Markup.Markdown.ListItem :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.ListItem | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.ListKind :: value Bullet = 0
+Chuvadi.Markup.Markdown.ListKind :: value Ordered = 1
+Chuvadi.Markup.Markdown.ListKind | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.MarkdownBlock :: property System.Boolean IsBlock { get; }
+Chuvadi.Markup.Markdown.MarkdownBlock | abstract class : Chuvadi.Markup.Markdown.MarkdownNode
+Chuvadi.Markup.Markdown.MarkdownConverter :: static System.String ToHtml(System.String markdown, Chuvadi.Markup.Markdown.MarkdownOptions parseOptions = null, Chuvadi.Markup.Markdown.MarkdownHtmlOptions htmlOptions = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownConverter | static class
+Chuvadi.Markup.Markdown.MarkdownDocument :: .ctor()
+Chuvadi.Markup.Markdown.MarkdownDocument :: Chuvadi.Markup.SourcePosition GetPosition(System.Int32 offset)
+Chuvadi.Markup.Markdown.MarkdownDocument :: System.Void SetLinkDefinition(Chuvadi.Markup.Markdown.LinkReferenceDefinition definition)
+Chuvadi.Markup.Markdown.MarkdownDocument :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.MarkdownDocument :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.MarkdownDocument :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.MarkdownDocument :: property System.Collections.Generic.IReadOnlyDictionary<System.String,Chuvadi.Markup.Markdown.LinkReferenceDefinition> LinkDefinitions { get; }
+Chuvadi.Markup.Markdown.MarkdownDocument :: property System.String Source { get; }
+Chuvadi.Markup.Markdown.MarkdownDocument | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: .ctor()
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: Chuvadi.Markup.Markdown.MarkdownHtmlOptions Clone()
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property Chuvadi.Markup.Markdown.RawHtmlMode RawHtml { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property Chuvadi.Markup.Markdown.SoftBreakStyle SoftBreak { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property Chuvadi.Markup.Markdown.TableAlignmentStyle TableAlignment { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property Chuvadi.Markup.Markdown.TaskListStyle TaskLists { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property Chuvadi.Markup.Markdown.UnsafeUrlPolicy UnsafeUrls { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property System.Boolean HeadingIds { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property System.Boolean SourcePositions { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property System.Boolean TagFilter { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property System.Boolean XhtmlVoidElements { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property System.String CodeLanguageClassPrefix { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions :: property System.String HeadingIdPrefix { get; set; }
+Chuvadi.Markup.Markdown.MarkdownHtmlOptions | sealed class
+Chuvadi.Markup.Markdown.MarkdownHtmlRenderer :: static System.String Render(Chuvadi.Markup.Markdown.MarkdownNode node, Chuvadi.Markup.Markdown.MarkdownHtmlOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownHtmlRenderer :: static System.Void Render(Chuvadi.Markup.Markdown.MarkdownNode node, System.IO.TextWriter writer, Chuvadi.Markup.Markdown.MarkdownHtmlOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownHtmlRenderer | static class
+Chuvadi.Markup.Markdown.MarkdownInline :: property System.Boolean IsBlock { get; }
+Chuvadi.Markup.Markdown.MarkdownInline | abstract class : Chuvadi.Markup.Markdown.MarkdownNode
+Chuvadi.Markup.Markdown.MarkdownNode :: System.Boolean RemoveChild(Chuvadi.Markup.Markdown.MarkdownNode child)
+Chuvadi.Markup.Markdown.MarkdownNode :: System.Collections.Generic.IEnumerable<Chuvadi.Markup.Markdown.MarkdownNode> Descendants()
+Chuvadi.Markup.Markdown.MarkdownNode :: System.String ToPlainText()
+Chuvadi.Markup.Markdown.MarkdownNode :: System.Void AppendChild(Chuvadi.Markup.Markdown.MarkdownNode child)
+Chuvadi.Markup.Markdown.MarkdownNode :: System.Void InsertChild(System.Int32 index, Chuvadi.Markup.Markdown.MarkdownNode child)
+Chuvadi.Markup.Markdown.MarkdownNode :: System.Void Remove()
+Chuvadi.Markup.Markdown.MarkdownNode :: abstract System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.MarkdownNode :: property Chuvadi.Markup.Markdown.MarkdownNode Parent { get; }
+Chuvadi.Markup.Markdown.MarkdownNode :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.MarkdownNode :: property Chuvadi.Markup.SourceSpan Span { get; set; }
+Chuvadi.Markup.Markdown.MarkdownNode :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.MarkdownNode :: property System.Boolean IsBlock { get; }
+Chuvadi.Markup.Markdown.MarkdownNode :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Markdown.MarkdownNode> Children { get; }
+Chuvadi.Markup.Markdown.MarkdownNode | abstract class
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value BlockQuote = 1
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value CodeBlock = 4
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value CodeSpan = 13
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Document = 0
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Emphasis = 14
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value HardBreak = 20
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Heading = 7
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value HtmlBlock = 5
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value HtmlInline = 19
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Image = 18
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Link = 17
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value List = 2
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value ListItem = 3
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Paragraph = 6
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value SoftBreak = 21
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Strikethrough = 16
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Strong = 15
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Table = 9
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value TableCell = 11
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value TableRow = 10
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value Text = 12
+Chuvadi.Markup.Markdown.MarkdownNodeKind :: value ThematicBreak = 8
+Chuvadi.Markup.Markdown.MarkdownNodeKind | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.MarkdownOptions :: .ctor()
+Chuvadi.Markup.Markdown.MarkdownOptions :: Chuvadi.Markup.Markdown.MarkdownOptions Clone()
+Chuvadi.Markup.Markdown.MarkdownOptions :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Markdown.MarkdownOptions :: property System.Boolean Autolinks { get; set; }
+Chuvadi.Markup.Markdown.MarkdownOptions :: property System.Boolean Strikethrough { get; set; }
+Chuvadi.Markup.Markdown.MarkdownOptions :: property System.Boolean Tables { get; set; }
+Chuvadi.Markup.Markdown.MarkdownOptions :: property System.Boolean TaskLists { get; set; }
+Chuvadi.Markup.Markdown.MarkdownOptions :: static Chuvadi.Markup.Markdown.MarkdownOptions CommonMark()
+Chuvadi.Markup.Markdown.MarkdownOptions :: static Chuvadi.Markup.Markdown.MarkdownOptions Gfm()
+Chuvadi.Markup.Markdown.MarkdownOptions | sealed class
+Chuvadi.Markup.Markdown.MarkdownParser :: static Chuvadi.Markup.Markdown.MarkdownDocument Parse(System.IO.TextReader reader, Chuvadi.Markup.Markdown.MarkdownOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownParser :: static Chuvadi.Markup.Markdown.MarkdownDocument Parse(System.String markdown, Chuvadi.Markup.Markdown.MarkdownOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownParser | static class
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitBlockQuote(Chuvadi.Markup.Markdown.BlockQuote node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitCodeBlock(Chuvadi.Markup.Markdown.CodeBlock node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitCodeSpan(Chuvadi.Markup.Markdown.CodeSpan node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitDocument(Chuvadi.Markup.Markdown.MarkdownDocument node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitEmphasis(Chuvadi.Markup.Markdown.Emphasis node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitHardBreak(Chuvadi.Markup.Markdown.HardBreak node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitHeading(Chuvadi.Markup.Markdown.Heading node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitHtmlBlock(Chuvadi.Markup.Markdown.HtmlBlock node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitHtmlInline(Chuvadi.Markup.Markdown.HtmlInline node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitImage(Chuvadi.Markup.Markdown.Image node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitLink(Chuvadi.Markup.Markdown.Link node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitList(Chuvadi.Markup.Markdown.ListBlock node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitListItem(Chuvadi.Markup.Markdown.ListItem node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitParagraph(Chuvadi.Markup.Markdown.Paragraph node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitSoftBreak(Chuvadi.Markup.Markdown.SoftBreak node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitStrikethrough(Chuvadi.Markup.Markdown.Strikethrough node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitStrong(Chuvadi.Markup.Markdown.Strong node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitTable(Chuvadi.Markup.Markdown.Table node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitTableCell(Chuvadi.Markup.Markdown.TableCell node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitTableRow(Chuvadi.Markup.Markdown.TableRow node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitText(Chuvadi.Markup.Markdown.TextInline node)
+Chuvadi.Markup.Markdown.MarkdownVisitor :: virtual System.Void VisitThematicBreak(Chuvadi.Markup.Markdown.ThematicBreak node)
+Chuvadi.Markup.Markdown.MarkdownVisitor | abstract class
+Chuvadi.Markup.Markdown.MarkdownWriter :: static System.String Write(Chuvadi.Markup.Markdown.MarkdownNode node, Chuvadi.Markup.Markdown.MarkdownWriterOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownWriter :: static System.Void Write(Chuvadi.Markup.Markdown.MarkdownNode node, System.IO.TextWriter writer, Chuvadi.Markup.Markdown.MarkdownWriterOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Markdown.MarkdownWriter | static class
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: .ctor()
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Boolean AlignTableColumns { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Boolean BackslashHardBreaks { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Boolean PreserveIndentedCode { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Boolean PreserveReferenceLinks { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Boolean PreserveSourceStyle { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Boolean SetextHeadings { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Char BulletChar { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Char EmphasisChar { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Char FenceChar { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Char OrderedDelimiter { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.Char StrongChar { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions :: property System.String ThematicBreak { get; set; }
+Chuvadi.Markup.Markdown.MarkdownWriterOptions | sealed class
+Chuvadi.Markup.Markdown.Paragraph :: .ctor()
+Chuvadi.Markup.Markdown.Paragraph :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Paragraph :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Paragraph :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.Paragraph | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.RawHtmlMode :: value Escape = 0
+Chuvadi.Markup.Markdown.RawHtmlMode :: value Passthrough = 2
+Chuvadi.Markup.Markdown.RawHtmlMode :: value Strip = 1
+Chuvadi.Markup.Markdown.RawHtmlMode | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.SoftBreak :: .ctor()
+Chuvadi.Markup.Markdown.SoftBreak :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.SoftBreak :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.SoftBreak | sealed class : Chuvadi.Markup.Markdown.MarkdownInline
+Chuvadi.Markup.Markdown.SoftBreakStyle :: value LineBreak = 2
+Chuvadi.Markup.Markdown.SoftBreakStyle :: value Newline = 0
+Chuvadi.Markup.Markdown.SoftBreakStyle :: value Space = 1
+Chuvadi.Markup.Markdown.SoftBreakStyle | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.Strikethrough :: .ctor()
+Chuvadi.Markup.Markdown.Strikethrough :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Strikethrough :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Strikethrough :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.Strikethrough :: property System.Int32 DelimiterLength { get; set; }
+Chuvadi.Markup.Markdown.Strikethrough | sealed class : Chuvadi.Markup.Markdown.MarkdownInline
+Chuvadi.Markup.Markdown.Strong :: .ctor()
+Chuvadi.Markup.Markdown.Strong :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Strong :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Strong :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.Strong :: property System.Char Delimiter { get; set; }
+Chuvadi.Markup.Markdown.Strong | sealed class : Chuvadi.Markup.Markdown.MarkdownInline
+Chuvadi.Markup.Markdown.Table :: .ctor()
+Chuvadi.Markup.Markdown.Table :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.Table :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.Table :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.Table :: property System.Collections.Generic.List<Chuvadi.Markup.Markdown.TableAlignment> Alignments { get; }
+Chuvadi.Markup.Markdown.Table | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.TableAlignment :: value Center = 2
+Chuvadi.Markup.Markdown.TableAlignment :: value Left = 1
+Chuvadi.Markup.Markdown.TableAlignment :: value None = 0
+Chuvadi.Markup.Markdown.TableAlignment :: value Right = 3
+Chuvadi.Markup.Markdown.TableAlignment | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.TableAlignmentStyle :: value AlignAttribute = 0
+Chuvadi.Markup.Markdown.TableAlignmentStyle :: value StyleAttribute = 1
+Chuvadi.Markup.Markdown.TableAlignmentStyle | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.TableCell :: .ctor()
+Chuvadi.Markup.Markdown.TableCell :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.TableCell :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.TableCell :: property Chuvadi.Markup.Markdown.TableAlignment Alignment { get; set; }
+Chuvadi.Markup.Markdown.TableCell :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.TableCell | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.TableRow :: .ctor()
+Chuvadi.Markup.Markdown.TableRow :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.TableRow :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.TableRow :: property System.Boolean CanHaveChildren { get; }
+Chuvadi.Markup.Markdown.TableRow :: property System.Boolean IsHeader { get; set; }
+Chuvadi.Markup.Markdown.TableRow | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.TaskListStyle :: value DisabledCheckbox = 0
+Chuvadi.Markup.Markdown.TaskListStyle :: value Glyph = 1
+Chuvadi.Markup.Markdown.TaskListStyle :: value Text = 2
+Chuvadi.Markup.Markdown.TaskListStyle | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.TaskState :: value Checked = 2
+Chuvadi.Markup.Markdown.TaskState :: value None = 0
+Chuvadi.Markup.Markdown.TaskState :: value Unchecked = 1
+Chuvadi.Markup.Markdown.TaskState | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Markdown.TextInline :: .ctor(System.String text)
+Chuvadi.Markup.Markdown.TextInline :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.TextInline :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.TextInline :: property System.String Text { get; set; }
+Chuvadi.Markup.Markdown.TextInline | sealed class : Chuvadi.Markup.Markdown.MarkdownInline | Chuvadi.Markup.Markdown.ILiteralNode
+Chuvadi.Markup.Markdown.ThematicBreak :: .ctor()
+Chuvadi.Markup.Markdown.ThematicBreak :: override System.Void Accept(Chuvadi.Markup.Markdown.MarkdownVisitor visitor)
+Chuvadi.Markup.Markdown.ThematicBreak :: property Chuvadi.Markup.Markdown.MarkdownNodeKind Kind { get; }
+Chuvadi.Markup.Markdown.ThematicBreak :: property System.Char Marker { get; set; }
+Chuvadi.Markup.Markdown.ThematicBreak | sealed class : Chuvadi.Markup.Markdown.MarkdownBlock
+Chuvadi.Markup.Markdown.UnsafeUrlPolicy :: value Keep = 1
+Chuvadi.Markup.Markdown.UnsafeUrlPolicy :: value Remove = 0
+Chuvadi.Markup.Markdown.UnsafeUrlPolicy | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.MarkupLimitExceededException :: .ctor(System.String limitName, System.Int64 limit, System.Int64 actual)
+Chuvadi.Markup.MarkupLimitExceededException :: property System.Int64 Actual { get; }
+Chuvadi.Markup.MarkupLimitExceededException :: property System.Int64 Limit { get; }
+Chuvadi.Markup.MarkupLimitExceededException :: property System.String LimitName { get; }
+Chuvadi.Markup.MarkupLimitExceededException | sealed class : System.Exception | System.Runtime.Serialization.ISerializable
+Chuvadi.Markup.MarkupLimits :: .ctor()
+Chuvadi.Markup.MarkupLimits :: Chuvadi.Markup.MarkupLimits Clone()
+Chuvadi.Markup.MarkupLimits :: System.Void Validate()
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxAttributeValueChars { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxAttributesPerElement { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxDataUriBytes { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxInputChars { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxLinkReferenceDefinitions { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxNestingDepth { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxNodes { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxParserWorkPerChar { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxRecordedErrors { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxTableCells { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int32 MaxTableColumns { get; set; }
+Chuvadi.Markup.MarkupLimits :: property System.Int64 MaxOutputChars { get; set; }
+Chuvadi.Markup.MarkupLimits :: static Chuvadi.Markup.MarkupLimits Strict()
+Chuvadi.Markup.MarkupLimits | sealed class
+Chuvadi.Markup.Sanitization.BlockedResource :: .ctor(System.String Url, Chuvadi.Markup.Sanitization.ResourceKind Kind, System.String Element, System.String Attribute)
+Chuvadi.Markup.Sanitization.BlockedResource :: Chuvadi.Markup.Sanitization.BlockedResource <Clone>$()
+Chuvadi.Markup.Sanitization.BlockedResource :: System.Void Deconstruct(System.String& Url, Chuvadi.Markup.Sanitization.ResourceKind& Kind, System.String& Element, System.String& Attribute)
+Chuvadi.Markup.Sanitization.BlockedResource :: override System.Boolean Equals(System.Object obj)
+Chuvadi.Markup.Sanitization.BlockedResource :: override System.Int32 GetHashCode()
+Chuvadi.Markup.Sanitization.BlockedResource :: override System.String ToString()
+Chuvadi.Markup.Sanitization.BlockedResource :: property Chuvadi.Markup.Sanitization.ResourceKind Kind { get; init; }
+Chuvadi.Markup.Sanitization.BlockedResource :: property System.String Attribute { get; init; }
+Chuvadi.Markup.Sanitization.BlockedResource :: property System.String Element { get; init; }
+Chuvadi.Markup.Sanitization.BlockedResource :: property System.String Url { get; init; }
+Chuvadi.Markup.Sanitization.BlockedResource :: virtual System.Boolean Equals(Chuvadi.Markup.Sanitization.BlockedResource other)
+Chuvadi.Markup.Sanitization.BlockedResource | sealed class | System.IEquatable<Chuvadi.Markup.Sanitization.BlockedResource>
+Chuvadi.Markup.Sanitization.DelegateResourceResolver :: .ctor(System.Func<Chuvadi.Markup.Sanitization.ResourceRequest,System.String> resolve)
+Chuvadi.Markup.Sanitization.DelegateResourceResolver :: virtual System.String Resolve(Chuvadi.Markup.Sanitization.ResourceRequest request)
+Chuvadi.Markup.Sanitization.DelegateResourceResolver | sealed class | Chuvadi.Markup.Sanitization.IResourceResolver
+Chuvadi.Markup.Sanitization.ElementAction :: value Drop = 2
+Chuvadi.Markup.Sanitization.ElementAction :: value Keep = 0
+Chuvadi.Markup.Sanitization.ElementAction :: value Unwrap = 1
+Chuvadi.Markup.Sanitization.ElementAction | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Sanitization.HtmlSanitizer :: static Chuvadi.Markup.Sanitization.SanitizeResult Sanitize(Chuvadi.Markup.Html.HtmlDocument document, Chuvadi.Markup.Sanitization.SanitizerPolicy policy = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Sanitization.HtmlSanitizer :: static Chuvadi.Markup.Sanitization.SanitizeResult Sanitize(System.Byte[] html, Chuvadi.Markup.Sanitization.SanitizerPolicy policy = null, System.Text.Encoding encoding = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Sanitization.HtmlSanitizer :: static Chuvadi.Markup.Sanitization.SanitizeResult Sanitize(System.String html, Chuvadi.Markup.Sanitization.SanitizerPolicy policy = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Sanitization.HtmlSanitizer | static class
+Chuvadi.Markup.Sanitization.IResourceResolver :: abstract System.String Resolve(Chuvadi.Markup.Sanitization.ResourceRequest request)
+Chuvadi.Markup.Sanitization.IResourceResolver | interface
+Chuvadi.Markup.Sanitization.LinkHandling :: value Active = 0
+Chuvadi.Markup.Sanitization.LinkHandling :: value Inert = 1
+Chuvadi.Markup.Sanitization.LinkHandling :: value Rewrite = 2
+Chuvadi.Markup.Sanitization.LinkHandling | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Sanitization.ResourceKind :: value Font = 2
+Chuvadi.Markup.Sanitization.ResourceKind :: value Image = 0
+Chuvadi.Markup.Sanitization.ResourceKind :: value Link = 3
+Chuvadi.Markup.Sanitization.ResourceKind :: value Media = 1
+Chuvadi.Markup.Sanitization.ResourceKind :: value Other = 4
+Chuvadi.Markup.Sanitization.ResourceKind | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Sanitization.ResourceRequest :: .ctor(System.String Url, Chuvadi.Markup.Sanitization.ResourceKind Kind, System.String ElementName, System.String AttributeName)
+Chuvadi.Markup.Sanitization.ResourceRequest :: System.Void Deconstruct(System.String& Url, Chuvadi.Markup.Sanitization.ResourceKind& Kind, System.String& ElementName, System.String& AttributeName)
+Chuvadi.Markup.Sanitization.ResourceRequest :: override System.Boolean Equals(System.Object obj)
+Chuvadi.Markup.Sanitization.ResourceRequest :: override System.Int32 GetHashCode()
+Chuvadi.Markup.Sanitization.ResourceRequest :: override System.String ToString()
+Chuvadi.Markup.Sanitization.ResourceRequest :: property Chuvadi.Markup.Sanitization.ResourceKind Kind { get; init; }
+Chuvadi.Markup.Sanitization.ResourceRequest :: property System.String AttributeName { get; init; }
+Chuvadi.Markup.Sanitization.ResourceRequest :: property System.String ElementName { get; init; }
+Chuvadi.Markup.Sanitization.ResourceRequest :: property System.String Url { get; init; }
+Chuvadi.Markup.Sanitization.ResourceRequest :: virtual System.Boolean Equals(Chuvadi.Markup.Sanitization.ResourceRequest other)
+Chuvadi.Markup.Sanitization.ResourceRequest | struct | System.IEquatable<Chuvadi.Markup.Sanitization.ResourceRequest>
+Chuvadi.Markup.Sanitization.SanitizeResult :: property Chuvadi.Markup.Html.HtmlDocumentFragment Fragment { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.Boolean IsStable { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Sanitization.BlockedResource> BlockedResources { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.Collections.Generic.IReadOnlyList<Chuvadi.Markup.Sanitization.SanitizerAction> Actions { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.Collections.Generic.IReadOnlyList<System.String> Warnings { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.Int32 ActionCount { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.Int32 Passes { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.String Html { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult :: property System.String Title { get; }
+Chuvadi.Markup.Sanitization.SanitizeResult | sealed class
+Chuvadi.Markup.Sanitization.SanitizerAction :: .ctor(Chuvadi.Markup.Sanitization.SanitizerActionKind Kind, System.String Element, System.String Attribute, System.String Detail)
+Chuvadi.Markup.Sanitization.SanitizerAction :: Chuvadi.Markup.Sanitization.SanitizerAction <Clone>$()
+Chuvadi.Markup.Sanitization.SanitizerAction :: System.Void Deconstruct(Chuvadi.Markup.Sanitization.SanitizerActionKind& Kind, System.String& Element, System.String& Attribute, System.String& Detail)
+Chuvadi.Markup.Sanitization.SanitizerAction :: override System.Boolean Equals(System.Object obj)
+Chuvadi.Markup.Sanitization.SanitizerAction :: override System.Int32 GetHashCode()
+Chuvadi.Markup.Sanitization.SanitizerAction :: override System.String ToString()
+Chuvadi.Markup.Sanitization.SanitizerAction :: property Chuvadi.Markup.Sanitization.SanitizerActionKind Kind { get; init; }
+Chuvadi.Markup.Sanitization.SanitizerAction :: property System.String Attribute { get; init; }
+Chuvadi.Markup.Sanitization.SanitizerAction :: property System.String Detail { get; init; }
+Chuvadi.Markup.Sanitization.SanitizerAction :: property System.String Element { get; init; }
+Chuvadi.Markup.Sanitization.SanitizerAction :: virtual System.Boolean Equals(Chuvadi.Markup.Sanitization.SanitizerAction other)
+Chuvadi.Markup.Sanitization.SanitizerAction | sealed class | System.IEquatable<Chuvadi.Markup.Sanitization.SanitizerAction>
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value BlockedResource = 6
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value NeutralizedLink = 8
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value RemovedAttribute = 2
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value RemovedComment = 3
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value RemovedCssDeclaration = 4
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value RemovedCssRule = 5
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value RemovedElement = 0
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value ResolvedResource = 7
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value RewroteAttribute = 9
+Chuvadi.Markup.Sanitization.SanitizerActionKind :: value UnwrappedElement = 1
+Chuvadi.Markup.Sanitization.SanitizerActionKind | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: .ctor()
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: Chuvadi.Markup.Sanitization.SanitizerPolicy AllowAttributes(System.String element, System.String[] attributes)
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: Chuvadi.Markup.Sanitization.SanitizerPolicy Clone()
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property Chuvadi.Markup.Sanitization.ElementAction DefaultElementAction { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property Chuvadi.Markup.Sanitization.IResourceResolver ResourceResolver { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property Chuvadi.Markup.Sanitization.LinkHandling Links { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property Chuvadi.Markup.Sanitization.StyleSheetHandling StyleSheets { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property Chuvadi.Markup.Sanitization.UnstableOutputHandling UnstableOutput { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowAriaAttributes { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowComments { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowCssCustomProperties { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowDataAttributes { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowEmbeddedFonts { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowFixedPositioning { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowFormControls { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowMathML { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowMedia { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowRelativeLinks { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowStyleAttribute { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowSvg { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean AllowSvgDataImages { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean LinksOpenInNewWindow { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean ReplaceBlockedCssImagesWithNone { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Boolean TransferBodyStyle { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.Dictionary<System.String,System.Collections.Generic.HashSet<System.String>> ElementAttributes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedAtRules { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedCssProperties { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedDataFontTypes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedDataImageTypes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedDataMediaTypes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedElements { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedLinkSchemes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedMathMLAttributes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedMathMLElements { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedSvgAttributes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> AllowedSvgElements { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> DeniedCssFunctions { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> DeniedCssProperties { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> DroppedElements { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Collections.Generic.HashSet<System.String> GlobalAttributes { get; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.Int32 MaxStabilityPasses { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.String IdPrefix { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.String InertLinkAttribute { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.String LinkRewriteTemplate { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.String ScopeClass { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy :: property System.String WrapperElement { get; set; }
+Chuvadi.Markup.Sanitization.SanitizerPolicy | sealed class
+Chuvadi.Markup.Sanitization.StyleSheetHandling :: value Drop = 0
+Chuvadi.Markup.Sanitization.StyleSheetHandling :: value Sanitize = 1
+Chuvadi.Markup.Sanitization.StyleSheetHandling :: value SanitizeScoped = 2
+Chuvadi.Markup.Sanitization.StyleSheetHandling | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Sanitization.UnstableOutputHandling :: value LastPass = 1
+Chuvadi.Markup.Sanitization.UnstableOutputHandling :: value PlainText = 0
+Chuvadi.Markup.Sanitization.UnstableOutputHandling | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.SourcePosition :: .ctor(System.Int32 Line, System.Int32 Column)
+Chuvadi.Markup.SourcePosition :: System.Void Deconstruct(System.Int32& Line, System.Int32& Column)
+Chuvadi.Markup.SourcePosition :: override System.Boolean Equals(System.Object obj)
+Chuvadi.Markup.SourcePosition :: override System.Int32 GetHashCode()
+Chuvadi.Markup.SourcePosition :: override System.String ToString()
+Chuvadi.Markup.SourcePosition :: property System.Int32 Column { get; init; }
+Chuvadi.Markup.SourcePosition :: property System.Int32 Line { get; init; }
+Chuvadi.Markup.SourcePosition :: virtual System.Boolean Equals(Chuvadi.Markup.SourcePosition other)
+Chuvadi.Markup.SourcePosition | struct | System.IEquatable<Chuvadi.Markup.SourcePosition>
+Chuvadi.Markup.SourceSpan :: .ctor(System.Int32 start, System.Int32 length)
+Chuvadi.Markup.SourceSpan :: override System.Boolean Equals(System.Object obj)
+Chuvadi.Markup.SourceSpan :: override System.Int32 GetHashCode()
+Chuvadi.Markup.SourceSpan :: override System.String ToString()
+Chuvadi.Markup.SourceSpan :: property Chuvadi.Markup.SourceSpan Empty { get; }
+Chuvadi.Markup.SourceSpan :: property System.Int32 End { get; }
+Chuvadi.Markup.SourceSpan :: property System.Int32 Length { get; }
+Chuvadi.Markup.SourceSpan :: property System.Int32 Start { get; }
+Chuvadi.Markup.SourceSpan :: virtual System.Boolean Equals(Chuvadi.Markup.SourceSpan other)
+Chuvadi.Markup.SourceSpan | struct | System.IEquatable<Chuvadi.Markup.SourceSpan>
+Chuvadi.Markup.Text.PlainText :: static System.String ToHtml(System.String text, Chuvadi.Markup.Text.TextToHtmlOptions options = null, System.Threading.CancellationToken cancellationToken = null)
+Chuvadi.Markup.Text.PlainText | static class
+Chuvadi.Markup.Text.TextLayout :: value Paragraphs = 2
+Chuvadi.Markup.Text.TextLayout :: value PreWrap = 0
+Chuvadi.Markup.Text.TextLayout :: value Preformatted = 1
+Chuvadi.Markup.Text.TextLayout | enum | System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+Chuvadi.Markup.Text.TextToHtmlOptions :: .ctor()
+Chuvadi.Markup.Text.TextToHtmlOptions :: property Chuvadi.Markup.MarkupLimits Limits { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property Chuvadi.Markup.Sanitization.LinkHandling Links { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property Chuvadi.Markup.Text.TextLayout Layout { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Boolean Autolink { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Boolean DelSp { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Boolean ExpandTabs { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Boolean FormatFlowed { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Boolean LinksOpenInNewWindow { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Boolean QuoteLevels { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.Int32 TabSize { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.String InertLinkAttribute { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.String LinkRewriteTemplate { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions :: property System.String WrapperClass { get; set; }
+Chuvadi.Markup.Text.TextToHtmlOptions | sealed class

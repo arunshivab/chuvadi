@@ -1,0 +1,35 @@
+Frozen test data for the Chuvadi.Markup clean-room gate.
+
+- Expected outputs were produced by running Chuvadi.Markup 1.1.0 (unreleased; the library before this rewrite,
+  commit 349ee73, with the approved MaxNodes rule R5-01 applied to its results, and with the approved D-141 rule
+  applied: U+000B, U+000C, U+00A0 and U+2028 are not blank, so a paragraph made only of them is kept and an ATX
+  heading keeps a leading or trailing U+000B or U+000C, 15 fuzz cases; and D-143: a paragraph or setext heading
+  keeps a leading or trailing U+000C, 46 more fuzz cases; and D-157: an extended www. autolink also starts after
+  U+000B, 10 more fuzz cases; and D-174: link labels keep U+000B, U+000C and U+00A0 when normalized, with the
+  given library's Markdown/Blocks.cs changed to match and 41 label cases added; and D-199: 3 cases for the
+  unsafe-URL rule's data:image exception added; and D-232/D-237: the rulings of patch 7 applied and 3,491 cases
+  added: 2,086 minimal and 1,379 longer inputs from my comparison generators (seeds 20261106001 to 20261106005,
+  shrunk automatically) and 26 heading-id inputs I wrote; and D-242: 1,336 more cases on the domain start, 1,330
+  from the same comparison and 6 I wrote) as a
+  program over the inputs. They are data, not code.
+- Spec inputs come from the bundled specification files (see specs/LICENSES.md).
+- Several "pathological" inputs follow the published pathological test cases of the CommonMark project's
+  test suite, which carries this notice:
+
+  Copyright (c) 2014, John MacFarlane
+  All rights reserved.
+  Redistribution and use in source and binary forms, with or without modification, are permitted provided
+  that the following conditions are met:
+  * Redistributions of source code must retain the above copyright notice, this list of conditions and the
+    following disclaimer.
+  * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+    following disclaimer in the documentation and/or other materials provided with the distribution.
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+  PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+- The "documents" set is the three bundled spec files, split at their headings.
