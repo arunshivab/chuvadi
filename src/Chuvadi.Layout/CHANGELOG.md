@@ -2,6 +2,14 @@
 
 ## 0.1.0 (unreleased)
 
+Chuvadi.Pdf 3.31.2 in staging (D-261; claude/layout-D261-results.md):
+
+- Chuvadi.Layout.Pdf references chuvadi-pdf `[3.31.2, 4.0.0)` (was `[3.31.1, 4.0.0)`), the same floor as
+  Chuvadi.Print.Pdf.Raster, so one chuvadi-pdf release serves all of Chuvadi and a plain reference gets the 3.31.2
+  fixes. The staged tests and the acceptance harness use exactly 3.31.2.
+- Measured on the 88 corpus and fixture documents: PDF, PNG and SVG output byte-identical to 3.31.1; staged tests 28 + 5
+  pass; acceptance report unchanged. No source change.
+
 Platform readiness (D-217, D-254; claude/layout-D217-rule5.md):
 
 - System fonts are scanned once per process. `SystemFontSource.Shared` is the one instance `LayoutOptions` uses with
