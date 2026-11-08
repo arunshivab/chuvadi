@@ -1,6 +1,6 @@
 # Chuvadi.Layout — Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-09)
 
 Chuvadi.Pdf 3.31.2 in staging (D-261; claude/layout-D261-results.md):
 

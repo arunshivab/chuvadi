@@ -1,6 +1,6 @@
 # Chuvadi.Layout.Documents — Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-09)
 
 - Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,
   D-254).
