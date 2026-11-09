@@ -11,8 +11,9 @@ Chuvadi.Print.Pdf.Raster and its tests live in `staging/`:
 They stay outside `Chuvadi.slnx` and CI for now. They consume version-pinned `PackageReference`s to the
 Chuvadi.Pdf packages:
 - The packages are `Chuvadi.Pdf.Rendering` and `Chuvadi.Pdf.Operations`.
-- The version is `ChuvadiPdfVersion`, currently 3.22.1.
-- They come from your local package folder, `..\..\..\local-nuget` relative to `staging/nuget.config` (see `staging/README.md`).
+- The package references the range `ChuvadiPdfRange`, `[3.31.2, 4.0.0)`; the tests use `ChuvadiPdfVersion` exactly
+  (both in `staging/Chuvadi.Print.Pdf.Raster/ChuvadiPdf.props`).
+- They come from your local package folder, `../../../local-nuget` relative to `staging/nuget.config` (see `staging/README.md`).
 
 No project references a chuvadi-pdf source clone (D-29).
 

@@ -14,7 +14,7 @@ Chuvadi.Print.Ipp and Chuvadi.Print.Remote each need only the core, Chuvadi.Prin
 | A3 | `Chuvadi.Print.Windows` | Windows printers through the GDI spooler (P/Invoke only) | 0.3.0 |
 | A4 | `Chuvadi.Print.Ipp` | Driverless IPP printing on any OS: PWG Raster or PDF passthrough | 0.4.0 |
 | A6 | `Chuvadi.Print.Remote` | An embeddable print hub and dial-out print agents | 0.5.0 |
-| A5 | package **Chuvadi.Print.Pdf.Raster** (`staging/`) | PDF rendering (`PdfPageRasterizer`) over Chuvadi.Pdf | 0.1.0 |
+| A5 | package **Chuvadi.Print.Pdf.Raster** (`staging/`) | PDF rendering (`PdfPageRasterizer`) and the font check (`PdfFontInspector`) over Chuvadi.Pdf | 0.1.0 |
 
 The architectural invariants (P01–P09) are in [BASELINE.md](BASELINE.md). How Docs/Sheets reports get printed is
 in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
@@ -295,14 +295,26 @@ PrintRouteResult result = router.Print(job);   // a page XPS cannot express fall
 
 ## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
-- **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
-  rendered at the resolution and pixel format the job asks for. Annotations and form fields are printed by
-  flattening them first. All the renderer's options are exposed: `SuperSample`, `GammaCorrect`, `Hinting`,
-  `FlatnessTolerance`, `IgnoreOptionalContent`, `LayerVisibility`, `Password` and `MaxRenderDpi`.
+- **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs.
+  - Pages are rendered at the resolution and pixel format the job asks for, with the page's `/Rotate` applied.
+  - The printed area is the **crop box** (D-235 L1.3a): the page as a viewer shows it, as ISO 32000 says.
+    `PageBox` picks another box (`MediaBox`, `BleedBox`, `TrimBox`, `ArtBox`); the box is clipped to the media box.
+  - Annotations and form fields are printed by flattening them first. With Chuvadi.Pdf 3.31, fields and comments
+    without a stored appearance get one generated, so they print where they printed blank before.
+  - All the renderer's options are exposed: `SuperSample`, `GammaCorrect`, `Hinting`, `FlatnessTolerance`,
+    `IgnoreOptionalContent`, `LayerVisibility`, `Password` and `MaxRenderDpi`.
+- **`PdfFontInspector`** is the `IPdfFontInspector` for `PrintRouter.FontInspector` (D-235 L2). It answers
+  `AllEmbedded`, `NeedsGeneratedAppearances`, `NotAllEmbedded` or `Unknown` from Chuvadi.Pdf's font report.
+  `LastReport` lists each font that is not embedded with its page; `Password` opens encrypted PDFs; `LastError`
+  says why an answer is `Unknown`. With it set, a PDF whose fonts are all embedded goes as-is to IPP and CUPS
+  printers that take PDF.
 - **Saving as PDF** is not a print target: use the Chuvadi.Pdf writer or Chuvadi.Layout's PDF output.
-- **Building**: it lives in `staging/` and consumes the version-pinned Chuvadi.Pdf packages (3.22.1) from
-  the local feed set in `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and
-  CI until Chuvadi.Pdf joins the monorepo or nuget.org (D-28). Building and packing are described in its README.
+- **Chuvadi.Pdf version**: the package references `[3.31.2, 4.0.0)` (D-235, D-258). NuGet uses the lowest version a
+  range allows, so an application that wants a newer Chuvadi.Pdf references it directly. The floor is 3.31.2 because
+  3.31.1 leaves pages whose media box does not start at 0,0 blank.
+- **Building**: it lives in `staging/` and consumes the Chuvadi.Pdf packages from the local feed set in
+  `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and CI until Chuvadi.Pdf joins
+  the monorepo or nuget.org (D-28). Building, testing and packing are described in its README.
 
 ## 6. Remote printing (A6, `Chuvadi.Print.Remote`)
 
