@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.0.3 (unreleased; 2.0.2 released 2026-11-07) |
+| Library version | Chuvadi.Sheets 2.0.3 (released 2026-11-09) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |

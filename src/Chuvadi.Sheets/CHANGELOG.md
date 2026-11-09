@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.3 (unreleased)
+## 2.0.3 (2026-11-09)
 
 A bug fix in the one-line DataSet and DataTable readers (SH-10, D-283, D-285, D-286). The public API is
 unchanged.
