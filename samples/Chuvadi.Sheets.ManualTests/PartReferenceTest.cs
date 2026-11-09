@@ -28,6 +28,7 @@ internal static class PartReferenceTest
         Console.WriteLine("[PartReferenceTest] 2.0.2 relationship targets, missing parts, shared-string references...");
         Console.WriteLine();
         int pass = 0, fail = 0;
+        var failed = new FailedChecks();
         string dir = Path.Combine(outputDir, "partrefs");
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         Directory.CreateDirectory(dir);
@@ -35,7 +36,7 @@ internal static class PartReferenceTest
         void Check(string label, Action body)
         {
             try { body(); Console.WriteLine($"    PASS: {label}"); pass++; }
-            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; }
+            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; failed.Add(label, ex); }
         }
 
         byte[] baseFile = BaseWorkbook();
@@ -176,7 +177,7 @@ internal static class PartReferenceTest
         Console.WriteLine();
         Console.WriteLine($"  {pass} passed, {fail} failed");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"PartReferenceTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"PartReferenceTest: {fail} check(s) failed."));
     }
 
     // ---- the base workbook ---------------------------------------------------------------------------------

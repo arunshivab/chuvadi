@@ -880,6 +880,21 @@ public sealed class SheetReader
 
     internal void SetHeaderIndex(Dictionary<string, int> headers) => _headerIndex = headers;
 
+    /// <summary>
+    /// The header row's cell values and style indices by column, up to its last non-empty cell
+    /// (null before the header row is read, or when the sheet has no rows). Used to name
+    /// DataTable columns; <see cref="HeaderIndex"/> is unchanged.
+    /// </summary>
+    internal object?[]? HeaderValues { get; private set; }
+
+    internal int[]? HeaderStyles { get; private set; }
+
+    internal void SetHeaderRow(object?[] values, int[] styles)
+    {
+        HeaderValues = values;
+        HeaderStyles = styles;
+    }
+
     internal XlsxReader Book => _book;
     internal SheetInfo Info => _info;
 }
@@ -1362,6 +1377,14 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 map.TryAdd(s, i);   // first occurrence wins
         }
         _sheet.SetHeaderIndex(map);
+
+        int width = _maxColumnSeen;
+        while (width > 0 && (_cellValues[width - 1] is null || _cellValues[width - 1] is string { Length: 0 })) width--;
+        var values = new object?[width];
+        var styles = new int[width];
+        Array.Copy(_cellValues, values, width);
+        Array.Copy(_cellStyles, styles, width);
+        _sheet.SetHeaderRow(values, styles);
     }
 
     public void Reset() => throw new NotSupportedException("Sheet rows are forward-only.");

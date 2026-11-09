@@ -42,6 +42,7 @@ internal static class SaveSafetyTest
         Console.WriteLine("[SaveSafetyTest] 2.0.1 stream saves, safe replace, temporary files, CFB/DIFAT...");
         Console.WriteLine();
         int pass = 0, fail = 0, skip = 0;
+        var failed = new FailedChecks();
         string dir = Path.Combine(outputDir, "savesafety");
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         Directory.CreateDirectory(dir);
@@ -51,7 +52,7 @@ internal static class SaveSafetyTest
             var sw = Stopwatch.StartNew();
             try { body(); Console.WriteLine($"    PASS: {label} ({sw.ElapsedMilliseconds} ms)"); pass++; }
             catch (SkipException ex) { Console.WriteLine($"    SKIP: {label}: {ex.Message}"); skip++; }
-            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; }
+            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; failed.Add(label, ex); }
         }
 
         // ---- S1 -----------------------------------------------------------------------------------------
@@ -370,7 +371,7 @@ internal static class SaveSafetyTest
         Console.WriteLine();
         Console.WriteLine($"  {pass} passed, {fail} failed, {skip} skipped");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"SaveSafetyTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"SaveSafetyTest: {fail} check(s) failed."));
     }
 
     // ---- stream save entry points ------------------------------------------------------------------------

@@ -25,6 +25,7 @@ internal static class ProtectionTest
 
         int pass = 0;
         int fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
@@ -38,7 +39,7 @@ internal static class ProtectionTest
             {
                 Console.WriteLine($"    FAIL: {label}");
                 Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}");
-                fail++;
+                fail++; failed.Add(label, ex);
             }
         }
 
@@ -360,6 +361,6 @@ internal static class ProtectionTest
 
         Console.WriteLine();
         Console.WriteLine($"[ProtectionTest] Done. {pass} passed, {fail} failed.");
-        if (fail > 0) throw new Exception($"{fail} protection/encryption tests failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"{fail} protection/encryption tests failed."));
     }
 }

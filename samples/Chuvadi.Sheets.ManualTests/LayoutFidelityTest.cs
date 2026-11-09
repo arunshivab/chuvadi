@@ -32,11 +32,12 @@ internal static class LayoutFidelityTest
         Console.WriteLine("[LayoutFidelityTest] 1.6.0 rows/columns/views, conditional formats, validation, drawings...");
         Console.WriteLine();
         int pass = 0, fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
             try { body(); Console.WriteLine($"    PASS: {label}"); pass++; }
-            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; }
+            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; failed.Add(label, ex); }
         }
 
         static void Eq<T>(T expected, T actual, string what)
@@ -512,7 +513,7 @@ internal static class LayoutFidelityTest
         Console.WriteLine();
         Console.WriteLine($"  LayoutFidelityTest: {pass} passed, {fail} failed.");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"LayoutFidelityTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"LayoutFidelityTest: {fail} check(s) failed."));
     }
 
     // ---- Fixture -------------------------------------------------------------------------

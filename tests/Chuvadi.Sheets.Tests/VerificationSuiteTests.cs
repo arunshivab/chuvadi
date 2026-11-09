@@ -96,6 +96,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void PartReferences() => PartReferenceTest.Run(_dir);
+
+    [Fact]
+    public void DataTables() => DataTablesTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

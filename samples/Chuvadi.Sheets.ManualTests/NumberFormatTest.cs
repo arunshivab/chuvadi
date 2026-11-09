@@ -16,11 +16,13 @@ internal static class NumberFormatTest
         Console.WriteLine("[NumberFormatTest] Excel number format rendering...");
         Console.WriteLine();
         int pass = 0, fail = 0;
+        var failed = new FailedChecks();
 
         void Eq(string label, string expected, string actual)
         {
             if (expected == actual) { pass++; return; }
             fail++;
+            failed.Add(label, $"expected <{expected}> got <{actual}>");
             Console.WriteLine($"    FAIL: {label}: expected <{expected}> got <{actual}>");
         }
 
@@ -131,11 +133,11 @@ internal static class NumberFormatTest
         foreach (var kv in CellStyleTable.BuiltInNumberFormats)
         {
             try { NumberFormatter.Format(45000.75, kv.Value); pass++; }
-            catch (Exception ex) { fail++; Console.WriteLine($"    FAIL: built-in {kv.Key} '{kv.Value}' threw {ex.GetType().Name}"); }
+            catch (Exception ex) { fail++; failed.Add($"built-in {kv.Key}", ex); Console.WriteLine($"    FAIL: built-in {kv.Key} '{kv.Value}' threw {ex.GetType().Name}"); }
         }
 
         Console.WriteLine($"[NumberFormatTest] {pass} passed, {fail} failed.");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"NumberFormatTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"NumberFormatTest: {fail} check(s) failed."));
     }
 }

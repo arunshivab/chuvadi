@@ -22,6 +22,7 @@ internal static class StyleApiTest
 
         var pass = 0;
         var fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
@@ -35,7 +36,7 @@ internal static class StyleApiTest
             {
                 Console.WriteLine($"    FAIL: {label}");
                 Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}");
-                fail++;
+                fail++; failed.Add(label, ex);
             }
         }
 
@@ -603,7 +604,7 @@ internal static class StyleApiTest
         Console.WriteLine();
         Console.WriteLine($"[StyleApiTest] {pass} passed, {fail} failed.");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"StyleApiTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"StyleApiTest: {fail} check(s) failed."));
     }
 
     // ---- Fixture XML -------------------------------------------------------------------
