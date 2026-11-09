@@ -84,6 +84,16 @@ namespace Chuvadi.Layout.Docs
             IncludeHeadersAndFooters = headersAndFooters,
         };
 
+        /// <summary>D-253: a missing or wrong password as <see cref="LayoutPasswordRequiredException"/>.</summary>
+        internal static LayoutPasswordRequiredException PasswordError(string? password, Exception inner)
+        {
+            bool given = !string.IsNullOrEmpty(password);
+            string message = given
+                ? "The password for this document is wrong: " + inner.Message
+                : "The document is encrypted: set LayoutOptions.Password. " + inner.Message;
+            return new LayoutPasswordRequiredException(message, given, inner);
+        }
+
         internal static D.Document Load(Stream source, LayoutOptions lo, DocsImportOptions o, CancellationToken ct)
         {
             try
@@ -92,7 +102,7 @@ namespace Chuvadi.Layout.Docs
             }
             catch (D.DocxPasswordRequiredException ex)
             {
-                throw new LayoutFormatException("The document is encrypted: " + ex.Message + " Set LayoutOptions.Password.", ex);
+                throw PasswordError(lo.Password, ex);
             }
             catch (D.DocxSecurityLimitException ex)
             {

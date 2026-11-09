@@ -23,6 +23,8 @@
     <Compile Include="..\Chuvadi.Layout.Tests\Flow.cs" Link="Shared\Flow.cs" />
     <Compile Include="..\Chuvadi.Layout.Tests\TestFonts.cs" Link="Shared\TestFonts.cs" />
     <Compile Include="..\Chuvadi.Layout.Docs.Tests\EncryptedFixtures.cs" Link="Shared\EncryptedFixtures.cs" />
+    <!-- D-293: the shared compound-file writer builds legacy .doc/.xls files in memory (no binary fixtures). -->
+    <Compile Include="..\..\shared\Chuvadi.Internal\Crypto\CfbContainer.cs" Link="Shared\CfbContainer.cs" />
   </ItemGroup>
 
   <ItemGroup>

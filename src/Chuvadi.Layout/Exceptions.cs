@@ -16,6 +16,33 @@ namespace Chuvadi.Layout
         public LayoutFormatException(string message, Exception? innerException) : base(message, innerException) { }
     }
 
+    /// <summary>
+    /// The input is an encrypted Office file and <see cref="LayoutOptions.Password"/> is missing or wrong (D-253). A
+    /// <see cref="LayoutFormatException"/>, so existing handlers still catch it. Thrown by DocsLayout.Open,
+    /// SheetsLayout.Open and AutoDetectLayout.Open; <see cref="Exception.InnerException"/> is the Chuvadi.Docs or
+    /// Chuvadi.Sheets password exception.
+    /// </summary>
+    /// <remarks>
+    /// Only a compound file with the EncryptionInfo and EncryptedPackage streams is treated as encrypted (D-293). A
+    /// legacy .doc or .xls (not supported) is never reported here: it is a plain <see cref="LayoutFormatException"/>
+    /// whose message names the old format. A compound file whose directory cannot be read may still be a damaged
+    /// encrypted file, so it still asks for the password.
+    /// </remarks>
+    public sealed class LayoutPasswordRequiredException : LayoutFormatException
+    {
+        public LayoutPasswordRequiredException(string message, bool passwordGiven, Exception? innerException)
+            : base(message, innerException)
+        {
+            PasswordGiven = passwordGiven;
+        }
+
+        /// <summary>
+        /// True when <see cref="LayoutOptions.Password"/> was set (not null or empty), so the password given is wrong;
+        /// false when none was given.
+        /// </summary>
+        public bool PasswordGiven { get; }
+    }
+
     /// <summary>A font program is malformed, truncated or of an unsupported kind.</summary>
     public sealed class FontFormatException : LayoutFormatException
     {

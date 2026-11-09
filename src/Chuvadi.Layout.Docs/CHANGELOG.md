@@ -1,5 +1,14 @@
 # Chuvadi.Layout.Docs — Changelog
 
+## Unreleased
+
+- An encrypted document opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a
+  `LayoutFormatException`; D-253), with `PasswordGiven` false or true. Messages: "The document is encrypted: set
+  LayoutOptions.Password. …" and "The password for this document is wrong: …", each followed by the Chuvadi.Docs
+  message. Before, a plain `LayoutFormatException` ending "Set LayoutOptions.Password.".
+- A legacy .doc (or any OLE file without the encryption streams) is never this exception: with the shared decryptor of
+  D-293 it is "The document could not be read: …", naming the old format, with or without a password.
+
 ## 0.1.0 (2026-11-09)
 
 - Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,

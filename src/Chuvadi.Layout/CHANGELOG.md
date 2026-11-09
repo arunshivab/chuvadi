@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+`LayoutPasswordRequiredException` (D-253, D-215 option (a); claude/layout-D213-D215-rule5.md):
+
+- New `public sealed class LayoutPasswordRequiredException : LayoutFormatException`, so existing
+  `catch (LayoutFormatException)` handlers still catch it. `PasswordGiven` is false when `LayoutOptions.Password` was
+  not set (null or empty) and true when the one set is wrong. `InnerException` is the Chuvadi.Docs or Chuvadi.Sheets
+  password exception, as before.
+- Thrown by Chuvadi.Layout.Docs, Chuvadi.Layout.Sheets and Chuvadi.Layout.Documents (see their changelogs). Never for
+  a legacy .doc or .xls: with the shared decryptor of D-293 that is a `LayoutFormatException` naming the old format.
+  The engine's own `DocumentLayout.Open(Stream)` is unchanged: it can't look inside an OLE file, so its message still
+  names both readings ("an encrypted Office document … or a legacy .doc/.xls").
+
 Workbook pages built when asked for, and the printed range as Excel measures it (D-291; claude/layout-D282-options.md):
 
 - Pages of a workbook are computed from each print area's column and row bands when asked for; opening no longer makes

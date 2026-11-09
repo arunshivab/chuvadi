@@ -3,7 +3,8 @@
 One call for a file of unknown kind, for [Chuvadi.Layout](https://github.com/arunshivab/chuvadi): the format is
 detected from the content and the file goes to Chuvadi.Layout.Docs (.docx), Chuvadi.Layout.Sheets (.xlsx) or the
 engine (plain text). With `LayoutOptions.Password`, an encrypted file is decrypted and laid out as a document or a
-workbook, whichever it is. Pure BCL; works in memory.
+workbook, whichever it is; a missing or wrong password is `LayoutPasswordRequiredException` (`PasswordGiven` tells
+which). Pure BCL; works in memory.
 
 ```csharp
 using Chuvadi.Layout;

@@ -64,6 +64,16 @@ namespace Chuvadi.Layout.Sheets
             "#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A", "#GETTING_DATA", "#SPILL!", "#CALC!", "#FIELD!", "#BLOCKED!", "#CONNECT!", "#BUSY!", "#UNKNOWN!",
         };
 
+        /// <summary>D-253: a missing or wrong password as <see cref="LayoutPasswordRequiredException"/>.</summary>
+        internal static LayoutPasswordRequiredException PasswordError(string? password, Exception inner)
+        {
+            bool given = !string.IsNullOrEmpty(password);
+            string message = given
+                ? "The password for this workbook is wrong: " + inner.Message
+                : "The workbook is encrypted: set LayoutOptions.Password. " + inner.Message;
+            return new LayoutPasswordRequiredException(message, given, inner);
+        }
+
         /// <summary>Reads an .xlsx (or an encrypted one, with <see cref="LayoutOptions.Password"/>) and builds the grid IR.</summary>
         /// <exception cref="LayoutFormatException">The data is not a readable workbook (also a damaged encrypted workbook read with a
         /// password), or the password is missing or wrong.</exception>
@@ -102,7 +112,7 @@ namespace Chuvadi.Layout.Sheets
             }
             catch (XlsxPasswordRequiredException ex)
             {
-                throw new LayoutFormatException("The workbook is encrypted: " + ex.Message + " Set LayoutOptions.Password.", ex);
+                throw PasswordError(layoutOptions.Password, ex);
             }
             catch (XlsxLimitExceededException ex)
             {
