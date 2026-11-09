@@ -6,7 +6,7 @@ using System.Text;
 using Chuvadi.Fonts;
 using Chuvadi.Zip;
 
-// Trim and NativeAOT smoke app (D-217 item 2). Exercises Chuvadi.Zip and Chuvadi.Fonts the way a consumer does, and
+// Trim and NativeAOT smoke app (D-217 item 2). Exercises Chuvadi.Zip, Chuvadi.Fonts and Chuvadi.Print the way a consumer does, and
 // exits non-zero on the first thing that is wrong. CI publishes it trimmed (TrimMode=full) and as NativeAOT, with
 // warnings as errors, then runs the published executable.
 internal static class Program
@@ -17,7 +17,8 @@ internal static class Program
         {
             FontsCheck();
             var archive = ZipRoundTrip();
-            Console.WriteLine("OK: Fonts " + FontPack.Files.Count + " files, zip " + archive + " bytes");
+            var print = PrintChecks.Run();
+            Console.WriteLine("OK: Fonts " + FontPack.Files.Count + " files, zip " + archive + " bytes, " + print);
             return 0;
         }
         catch (Exception ex)

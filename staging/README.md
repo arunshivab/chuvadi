@@ -19,6 +19,11 @@ The CI pure-BCL check scans `src/` and `shared/` only. These first-party Package
 its scope, until the move. Then they go to `src/` and `tests/` as ordinary projects
 (see `docs/Chuvadi.Print/INTEGRATION-AFTER-PDF-MOVE.md`).
 
+**Releases.** Chuvadi.Layout.Pdf and Chuvadi.Print.Pdf.Raster are released by the tags `layout-pdf-v*` and
+`print-pdf-raster-v*`. The release workflow downloads the Chuvadi.Pdf packages from the chuvadi-pdf GitHub release
+and checks them against the hashes pinned in `tools/chuvadi-pdf/hashes/`, so it needs no local feed (see
+`RELEASING.md`). The local feed below is only for building on your own machine.
+
 Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf from `Chuvadi.Print.Pdf.Raster/ChuvadiPdf.props`: the package references
 the range `[3.31.2, 4.0.0)` (D-258), and its tests use exactly `ChuvadiPdfVersion` (3.31.2 by default). The feed needs
 every Chuvadi.Pdf 3.31.2 package, plus Chuvadi.Fonts 1.0.0 or later. They are the assets of the chuvadi-pdf `v3.31.2`
@@ -28,10 +33,11 @@ GitHub release (with its SHA256SUMS.txt) and of our `fonts-v1.1.0` release. Then
 dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
 ```
 
-Layout's staged projects take Chuvadi.Pdf 3.31.1 from `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`: the package
-Chuvadi.Layout.Pdf references the range `[3.31.1, 4.0.0)`, and its tests and the acceptance harness use exactly 3.31.1.
-All 21 Chuvadi.Pdf 3.31.1 packages (Svg included) must be in the local feed. They carry their own per-project
-`nuget.config` (same local feed). Build them from the repository root:
+Layout's staged projects take Chuvadi.Pdf 3.31.2 from `src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`: the package
+Chuvadi.Layout.Pdf references the range `[3.31.2, 4.0.0)`, the same floor as Chuvadi.Print.Pdf.Raster (D-258, D-261),
+and its tests and the acceptance harness use exactly 3.31.2. All 21 Chuvadi.Pdf 3.31.2 packages (Svg included) must be
+in the local feed. They carry their own per-project `nuget.config` (same local feed). Build them from the repository
+root:
 
 ```powershell
 dotnet build staging/tests/Chuvadi.Layout.Pdf.Tests -c Release --no-incremental
