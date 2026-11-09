@@ -47,6 +47,7 @@ public static class Program
             ("EncryptedLarge", EncryptedLargeTests.Run),
             ("SkippedParts", SkippedPartsTests.Run),
             ("PathSave", PathSaveTests.Run),
+            ("UntrustedInput", UntrustedInputTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

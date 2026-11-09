@@ -7,10 +7,13 @@ using Chuvadi.Docs.Model;
 namespace Chuvadi.Docs.Internal;
 
 /// <summary>
-/// An <see cref="XmlReader"/> decorator that enforces a maximum element nesting depth and
-/// observes a <see cref="CancellationToken"/> on every node. Every XML part Chuvadi.Docs
-/// reads goes through this type (see <see cref="Create"/>), so the depth guard and the
+/// An <see cref="XmlReader"/> decorator that enforces a maximum element nesting depth, counts
+/// elements against the operation's <see cref="ElementBudget"/> (<see cref="DocxReaderOptions.MaxElements"/>)
+/// and observes a <see cref="CancellationToken"/> on every node. Every XML part Chuvadi.Docs
+/// reads goes through this type (see <see cref="Create"/>), so the depth guard, the element count and the
 /// cancellation check apply uniformly to the reader, the loader and the template engine.
+/// <c>ReadSubtree</c>, <c>Skip</c> and <c>ReadOuterXml</c> are not overridden, so they advance through
+/// <see cref="Read"/> and are counted too.
 ///
 /// The BCL's <see cref="XmlReaderSettings"/> has no depth limit; deep nesting is harmless to
 /// our own (iterative) parsers but is a classic denial-of-service vector for recursive
@@ -20,22 +23,25 @@ internal sealed class GuardedXmlReader : XmlReader, IXmlLineInfo, IXmlNamespaceR
 {
     private readonly XmlReader _inner;
     private readonly int? _maxDepth;
+    private readonly ElementBudget? _budget;
     private readonly CancellationToken _ct;
     private readonly string _partName;
 
-    private GuardedXmlReader(XmlReader inner, int? maxDepth, CancellationToken ct, string partName)
+    private GuardedXmlReader(XmlReader inner, int? maxDepth, ElementBudget? budget, CancellationToken ct, string partName)
     {
         _inner = inner;
         _maxDepth = maxDepth;
+        _budget = budget;
         _ct = ct;
         _partName = partName;
     }
 
     /// <summary>
     /// Creates a hardened reader over <paramref name="input"/>: DTDs prohibited, no external
-    /// resolution, depth-limited, cancellable. The input stream is not closed by the reader.
+    /// resolution, depth-limited, element-counted (when <paramref name="budget"/> is not null), cancellable.
+    /// The input stream is not closed by the reader.
     /// </summary>
-    public static XmlReader Create(Stream input, int? maxDepth, CancellationToken ct, string partName,
+    public static XmlReader Create(Stream input, int? maxDepth, ElementBudget? budget, CancellationToken ct, string partName,
         bool ignoreWhitespace = true, bool ignoreComments = true)
     {
         var inner = XmlReader.Create(input, new XmlReaderSettings
@@ -46,7 +52,7 @@ internal sealed class GuardedXmlReader : XmlReader, IXmlLineInfo, IXmlNamespaceR
             IgnoreComments = ignoreComments,
             CloseInput = false,
         });
-        return new GuardedXmlReader(inner, maxDepth, ct, partName);
+        return new GuardedXmlReader(inner, maxDepth, budget, ct, partName);
     }
 
     public override bool Read()
@@ -55,6 +61,8 @@ internal sealed class GuardedXmlReader : XmlReader, IXmlLineInfo, IXmlNamespaceR
         bool ok = _inner.Read();
         if (ok && _maxDepth is int max && _inner.Depth > max)
             throw new DocxSecurityLimitException(DocxLimit.XmlDepth, _inner.Depth, max, _partName);
+        if (ok && _budget is not null && _inner.NodeType == XmlNodeType.Element)
+            _budget.Add(_partName);
         return ok;
     }
 

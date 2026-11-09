@@ -46,6 +46,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_EncryptedLarge() => EncryptedLargeTests.RunCi(FreshOutDir());   // 50 MB: manual tests only (D-204)
     [Fact] public void Suite_SkippedParts() => SkippedPartsTests.Run(FreshOutDir());
     [Fact] public void Suite_PathSave() => PathSaveTests.Run(FreshOutDir());
+    [Fact] public void Suite_UntrustedInput() => UntrustedInputTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 

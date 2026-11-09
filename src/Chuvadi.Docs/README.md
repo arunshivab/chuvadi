@@ -337,17 +337,36 @@ A header or footer that is missing, cannot be opened or is not well-formed XML r
 
 ## Untrusted input (mail attachments, uploads)
 
+For files from untrusted sources (uploads on a shared server, mail attachments), start from the preset:
+
+```csharp
+var options = DocxReaderOptions.ForUntrustedInput();      // adjust as needed; a new instance on every call
+var doc = Document.Load(upload, password: null, options, cancellationToken);
+```
+
 Every open applies resource limits **before anything is decompressed**, and the same limits guard `Document.Load` and `DocxTemplate.Fill`:
 
-| Limit (`DocxReaderOptions`) | Default | Checked |
-|---|---|---|
-| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | at open |
-| `MaxEntries` | 10,000 zip entries | at open |
-| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | at open |
-| `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | at open |
-| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | at open |
-| `MaxXmlDepth` | 256 nested elements | while reading |
-| `MaxPartBytes` | none | while reading |
+| Limit (`DocxReaderOptions`) | Default | `ForUntrustedInput()` | Checked |
+|---|---|---|---|
+| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | 50 MiB | at open |
+| `MaxEntries` | 10,000 zip entries | 10,000 | at open |
+| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | 256 MiB | at open |
+| `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | 200 : 1 | at open |
+| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | 500,000 | at open |
+| `MaxXmlDepth` | 256 nested elements | 128 | while reading |
+| `MaxPartBytes` | none | 64 MiB | while reading |
+| `MaxElements` (2.1.0) | none | 1,000,000 XML elements | while reading, per operation |
+
+**Why `MaxElements`:** a loaded document's memory follows its number of XML elements, not its size in bytes. Measured on .NET 10:
+- **A Word-like document:** about 200 bytes per element. 20,000 paragraphs (about 800 pages, 860,000 elements) load in 225 MB.
+- **Empty paragraphs:** up to about 520 bytes per element. An 18 KB file of two million empty paragraphs takes 1.1 GB to load, though it passes every byte limit.
+
+`MaxElements` counts every element one operation reads, across all its parts:
+- one `Document.Load`;
+- one template call;
+- each `DocxReader` read call (each enumeration of `Paragraphs()`/`Tables()`).
+
+It stops the operation as soon as the count passes the limit, before most of the memory is used. With the preset, the worst case measured was about 600 MB and a few seconds.
 
 `DocxTemplate.Fill` applies the same defaults; its options overload takes `DocxReaderOptions` and a `CancellationToken`. A breach throws `DocxSecurityLimitException` (a `DocxFormatException`) with `Limit`, `Actual`, `Allowed` and `PartName`. Set any limit to `null` to disable it, or start from `DocxReaderOptions.CreateUnrestricted()` for trusted input.
 
@@ -361,7 +380,13 @@ var a = r.GetActiveContent();
 // a.HasRemoteTemplate, a.HasExternalResources, a.ExternalReferences (verbatim targets)
 ```
 
-**Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
+**Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`.
+
+**The token given to `DocxReader.Open` also covers the reader's later reads** (since 2.1.0):
+- the read methods without a token observe it;
+- the overloads with their own token observe both.
+
+So open with a token that lives as long as the reader, for example a request's token or a timeout for the whole job. A reader whose `Open` token was cancelled can't read any more.
 
 
 `Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Fields, footnotes and endnotes, bookmarks, text boxes, comments, tracked changes and document properties survive a load-save round-trip (since 1.6.0). Content the model can't represent yet is not preserved: charts are dropped, shapes other than text boxes and old-style VML pictures keep only their text, and content controls keep their content but lose the control itself. Use `DocxTemplate` when everything else in the file must stay as it is.
@@ -477,7 +502,7 @@ There is also cooperative "restrict editing" protection — `doc.Protect("pass",
   - an encrypted `SaveTo` spools to the temp folder or `EncryptionOptions.TempDirectory` (see **Password protection**);
   - a save to a path writes beside the target, then replaces it.
 - **Threads:** the library has no mutable static state, so any number of threads can work at once, each on its own documents. A single `Document` or `DocxReader` is not safe for concurrent use: give each request or thread its own.
-- **Untrusted files:** keep the default `DocxReaderOptions` limits, set `MaxPartBytes` (off by default), and pass a `CancellationToken` (see **Untrusted input**).
+- **Untrusted files:** use `DocxReaderOptions.ForUntrustedInput()` and pass a `CancellationToken` (see **Untrusted input**).
 - **Fonts:** none are shipped or loaded. Only font names are written into documents; showing them is the job of the program that renders the document.
 
 ## Scope

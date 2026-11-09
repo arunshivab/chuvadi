@@ -1,5 +1,40 @@
 # Chuvadi.Docs — Changelog
 
+## 2.1.0 (unreleased)
+
+Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284).
+
+### New
+
+- **`DocxReaderOptions.MaxElements`:** the most XML elements one operation may read. One operation is one `Document.Load`, one template call (`Fill`, `GetPlaceholders`, `CheckTemplate`), or one `DocxReader` read call (each enumeration of `Paragraphs()` or `Tables()`, each call of `ExtractText`, `Images`, `SaveImages` or `GetActiveContent`).
+  - It counts every part the operation reads.
+  - A breach throws `DocxSecurityLimitException` with the new `DocxLimit.Elements`, while reading, before most of the memory is used.
+  - Off by default (null), so nothing changes unless you set it.
+  - **Why:** a loaded document's memory follows its number of elements, not its size in bytes. An 18 KB file of two million empty paragraphs took 1.1 GB to load and passed every byte limit.
+- **`DocxReaderOptions.ForUntrustedInput()`:** limits for uploads and attachments.
+  - 50 MB package, 256 MB uncompressed in total, 64 MB per part;
+  - compression ratio 200:1, 10,000 entries;
+  - XML depth 128, spin count 500,000;
+  - 1,000,000 elements.
+  
+  A Word document of roughly 900–1,000 pages still loads. The worst case measured was about 600 MB and a few seconds. The same name as Chuvadi.Sheets' and Chuvadi.Layout's presets.
+
+### Behaviour changes
+
+- **The token given to `DocxReader.Open` now also covers the reader's later reads.**
+  - `Paragraphs()`, `Tables()`, `ExtractText()`, `Images()`, `SaveImages(folder)` and `GetActiveContent()` observe it.
+  - The overloads that take their own token observe both.
+  - Before, the `Open` token was checked only while opening: a cancelled one was ignored by later reads, which ran to the end.
+  - **If you open with a short-lived token** (a timeout meant only for `Open`, or a request's token you keep using after the request), reads now throw `OperationCanceledException` once it is cancelled. Open with a token that lives as long as the reader.
+
+### Documentation
+
+- README, **Untrusted input:**
+  - the preset;
+  - a table with the defaults next to the preset values;
+  - what `MaxElements` counts, with measured memory per element;
+  - the `Open` token rule.
+
 ## 2.0.0 (2026-11-09)
 
 A major version: the public namespace is renamed, and malformed files are reported one way. 2.0.0 also carries everything listed under 1.6.0 below, which was never released on its own (D-135). It is versioned together with Chuvadi.Docs.Conversion 2.0.0.

@@ -20,25 +20,35 @@ public sealed partial class DocxReader
     /// <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/>) — with bytes, display size,
     /// placement, and table location. Returned in document order per part.
     /// </summary>
+    /// <remarks>Observes the token given to <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> (since 2.1.0).</remarks>
     public IReadOnlyList<ImageInfo> Images() => Images(CancellationToken.None);
 
-    /// <summary>As <see cref="Images()"/>, observing <paramref name="cancellationToken"/>.</summary>
+    /// <summary>
+    /// As <see cref="Images()"/>, observing <paramref name="cancellationToken"/> and the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/>.
+    /// </summary>
     public IReadOnlyList<ImageInfo> Images(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
+        using var read = ReadToken.Combine(_openToken, cancellationToken);
+        return ImagesCore(read.Token, _options.NewBudget());
+    }
+
+    private IReadOnlyList<ImageInfo> ImagesCore(CancellationToken cancellationToken, ElementBudget? budget)
+    {
         var result = new List<ImageInfo>();
 
         try
         {
-            CollectImagesFromPart(_documentUri, ImageHost.Body, result, cancellationToken);
+            CollectImagesFromPart(_documentUri, ImageHost.Body, result, cancellationToken, budget);
             if (_options.IncludeHeadersAndFooters)
             {
                 // A header or footer that is not well-formed XML contributes no pictures (as in
                 // Load) and is listed in SkippedParts; all or nothing per part.
                 foreach (var uri in _headerUris)
-                    result.AddRange(ReadOptionalPart(uri, u => { var one = new List<ImageInfo>(); CollectImagesFromPart(u, ImageHost.Header, one, cancellationToken); return one; }));
+                    result.AddRange(ReadOptionalPart(uri, u => { var one = new List<ImageInfo>(); CollectImagesFromPart(u, ImageHost.Header, one, cancellationToken, budget); return one; }));
                 foreach (var uri in _footerUris)
-                    result.AddRange(ReadOptionalPart(uri, u => { var one = new List<ImageInfo>(); CollectImagesFromPart(u, ImageHost.Footer, one, cancellationToken); return one; }));
+                    result.AddRange(ReadOptionalPart(uri, u => { var one = new List<ImageInfo>(); CollectImagesFromPart(u, ImageHost.Footer, one, cancellationToken, budget); return one; }));
             }
         }
         catch (Exception ex) when (!DocxErrors.IsContract(ex))
@@ -53,19 +63,27 @@ public sealed partial class DocxReader
     /// image's package file name (image1.png, image2.jpeg, ...). Returns the full paths
     /// written, in order. Duplicate file names are de-collided with a numeric suffix.
     /// </summary>
+    /// <remarks>Observes the token given to <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> (since 2.1.0).</remarks>
     public IReadOnlyList<string> SaveImages(string folderPath) => SaveImages(folderPath, CancellationToken.None);
 
-    /// <summary>As <see cref="SaveImages(string)"/>, observing <paramref name="cancellationToken"/>.</summary>
+    /// <summary>
+    /// As <see cref="SaveImages(string)"/>, observing <paramref name="cancellationToken"/> and the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/>.
+    /// </summary>
     public IReadOnlyList<string> SaveImages(string folderPath, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(folderPath)) throw new ArgumentException("Folder path required.", nameof(folderPath));
         Directory.CreateDirectory(folderPath);
+        EnsureNotDisposed();
+        using var read = ReadToken.Combine(_openToken, cancellationToken);
+        var ct = read.Token;
+        var images = ImagesCore(ct, _options.NewBudget());
 
         var written = new List<string>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var img in Images(cancellationToken))
+        foreach (var img in images)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            ct.ThrowIfCancellationRequested();
             var name = img.FileName;
             var target = Path.Combine(folderPath, name);
             int n = 1;
@@ -85,7 +103,7 @@ public sealed partial class DocxReader
 
     // ---- Internal: scan one part for drawings ----------------------------------------
 
-    private void CollectImagesFromPart(string partUri, ImageHost host, List<ImageInfo> sink, CancellationToken ct)
+    private void CollectImagesFromPart(string partUri, ImageHost host, List<ImageInfo> sink, CancellationToken ct, ElementBudget? budget)
     {
         // Resolve this part's image relationships: relId -> media part uri.
         var relToMedia = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -99,7 +117,7 @@ public sealed partial class DocxReader
         Stream? s = TryOpenPart(partUri, ct);
         if (s is null) return;
         using var _ = s;
-        using var r = CreateXml(s, partUri, ct);
+        using var r = CreateXml(s, partUri, ct, budget);
 
         // Track table position as we scan, so an image inside a cell records its location.
         int tableIndex = -1;

@@ -32,7 +32,8 @@ internal static class DocumentLoader
 
         using (var scanStream = new MemoryStream(bytes, writable: false))
             PackageGuard.Scan(scanStream, options, ct);
-        var doc = BuildModel(new MemoryStream(bytes, writable: false), options, ct);
+        // One element count for the whole model (MaxElements, D-281): the operation's own copy of the options.
+        var doc = BuildModel(new MemoryStream(bytes, writable: false), options.ForOperation(), ct);
 
         // Populate the Images collection from body, headers, and footers.
         try
@@ -83,7 +84,7 @@ internal static class DocumentLoader
             try { numberingRaw = pkg.OpenPart(numberingUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
             if (numberingRaw is null) break;
             using var ns = GuardedPartStream.Wrap(numberingRaw, options.MaxPartBytes, ct, numberingUri);
-            using var nr = GuardedXmlReader.Create(ns, options.MaxXmlDepth, ct, numberingUri);
+            using var nr = GuardedXmlReader.Create(ns, options.MaxXmlDepth, options.OperationBudget, ct, numberingUri);
             NumberingXml.Read(nr, doc.Numbering);
             EnsureWellFormed(nr, numberingUri);
             // Images that picture bullets refer to (numbering.xml's own relationships).
@@ -120,7 +121,7 @@ internal static class DocumentLoader
             try { stylesRaw = pkg.OpenPart(stylesUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
             if (stylesRaw is null) break;
             using var ss = GuardedPartStream.Wrap(stylesRaw, options.MaxPartBytes, ct, stylesUri);
-            using var sr = GuardedXmlReader.Create(ss, options.MaxXmlDepth, ct, stylesUri);
+            using var sr = GuardedXmlReader.Create(ss, options.MaxXmlDepth, options.OperationBudget, ct, stylesUri);
             StylesXml.Read(sr, doc);
             EnsureWellFormed(sr, stylesUri);
             break;
@@ -135,7 +136,7 @@ internal static class DocumentLoader
             try { settingsRaw = pkg.OpenPart(settingsUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
             if (settingsRaw is null) break;
             using var gs = GuardedPartStream.Wrap(settingsRaw, options.MaxPartBytes, ct, settingsUri);
-            using var gr = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, settingsUri);
+            using var gr = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, settingsUri);
             try
             {
                 ReadSettings(gr, doc);
@@ -154,7 +155,7 @@ internal static class DocumentLoader
         (Section, System.Collections.Generic.List<SectionXml.Reference>)? bodySectPr = null;
         using var raw = pkg.OpenPart(documentUri);
         using var s = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, documentUri);
-        using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, ct, documentUri);
+        using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, options.OperationBudget, ct, documentUri);
         var mediaCache = new System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
         doc.LoadedMediaCache = mediaCache;
         var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache);
@@ -329,7 +330,7 @@ internal static class DocumentLoader
             try
             {
                 using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri);
-                using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, uri);
+                using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, uri);
                 FontTableXml.Read(r, doc.Fonts, Embed);
                 EnsureWellFormed(r, uri);
             }
@@ -356,7 +357,7 @@ internal static class DocumentLoader
             try
             {
                 using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri);
-                using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, uri);
+                using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, uri);
                 var xd = new XmlDocument { XmlResolver = null };
                 xd.Load(r);
                 if (xd.DocumentElement is null) continue;
@@ -485,7 +486,7 @@ internal static class DocumentLoader
         {
             var images = new ImageSource(pkg, commentsUri, options, ct, mediaCache);
             using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, commentsUri);
-            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, commentsUri);
+            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, commentsUri);
             if (!r.Read()) return;
             r.MoveToContent();
             int depth = r.Depth + 1;
@@ -550,7 +551,7 @@ internal static class DocumentLoader
         try
         {
             using var gs = GuardedPartStream.Wrap(ext, options.MaxPartBytes, ct, extendedUri);
-            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, extendedUri);
+            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, extendedUri);
             while (r.Read())
             {
                 if (r.NodeType != XmlNodeType.Element || r.NamespaceURI != W15 || r.LocalName != "commentEx") continue;
@@ -575,7 +576,7 @@ internal static class DocumentLoader
     {
         {
             using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri);
-            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, ct, uri);
+            using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, uri);
             if (!r.Read()) return;
             r.MoveToContent();
             int noteDepth = r.Depth + 1;
@@ -644,14 +645,14 @@ internal static class DocumentLoader
             bytes = ms.ToArray();
         }
         TextWatermark? watermark;
-        using (var wr = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, ct, uri))
+        using (var wr = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, budget: null, ct, uri)) // a scan, no model built: not counted
         {
             watermark = FindWatermark(wr);
             EnsureWellFormed(wr, uri);
         }
         var images = new ImageSource(pkg, uri, options, ct, mediaCache);
         var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
-        using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, ct, uri);
+        using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, options.OperationBudget, ct, uri);
         if (!r.Read()) return (content, watermark);
         while (!r.EOF)
         {
