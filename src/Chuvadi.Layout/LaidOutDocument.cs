@@ -250,6 +250,9 @@ namespace Chuvadi.Layout
 
         public LayoutSourceInfo Source => _source.Source;
 
+        /// <summary>The engine behind the pages (tests and diagnostics).</summary>
+        internal IPageSource PageSource => _source;
+
         public void Dispose()
         {
             lock (_gate)

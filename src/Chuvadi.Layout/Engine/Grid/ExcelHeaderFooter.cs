@@ -245,7 +245,7 @@ namespace Chuvadi.Layout.Engine.Grid
             string? footer = first ? ps.FirstFooter : even ? ps.EvenFooter : ps.OddFooter;
             double fontScale = ps.HeaderFooterScaleWithDocument ? scale : 1;
             CharacterFormat baseFormat = sheet.NormalFont with { FontSize = sheet.NormalFont.FontSize };
-            HeaderFooterValues v = new HeaderFooterValues(rec.PageNumber, _pages.Count, sheet.Name,
+            HeaderFooterValues v = new HeaderFooterValues(rec.PageNumber, _pageCount, sheet.Name,
                 _ctx.Options.DocumentName ?? string.Empty, _ctx.Options.DocumentName ?? string.Empty,
                 _ctx.Options.Now ?? DateTimeOffset.Now, _ctx.Options.Culture);
             double left = ps.HeaderFooterAlignWithMargins ? ps.MarginLeft : 0.7 * 72;

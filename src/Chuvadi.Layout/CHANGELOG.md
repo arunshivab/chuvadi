@@ -1,5 +1,25 @@
 # Chuvadi.Layout — Changelog
 
+## Unreleased
+
+Workbook pages built when asked for, and the printed range as Excel measures it (D-291; claude/layout-D282-options.md):
+
+- Pages of a workbook are computed from each print area's column and row bands when asked for; opening no longer makes
+  a record for every page. A sheet with A1 and XFD1048576 (37,362,644 pages) opens in about 0.2 s and 50 MB; before,
+  opening took 5.9 s and 3.3 GB and then failed. `PageCount` is exact at open.
+- `LayoutLimits.MaxPages` on a workbook applies when a page at or past it is built (`GetPage`, `GetPages`), exported
+  or printed, not when opening. More than `int.MaxValue` pages is refused at open. Flow documents are unchanged.
+- `LayoutLimitExceededException.Location` (new): where the limit was exceeded, for example "Sheet1!A1:XFD1048576".
+  For `MaxPages` on a workbook, `Actual` is the workbook's page count and the message gives the sheet's page grid.
+- Without a print area a sheet prints from **A1** to the last row and column holding a value, a data bar or icon, a
+  visible fill or border, a merge or a drawing. Empty cells with only invisible formats (font, colour, number format,
+  alignment, wrap, indent, protection) no longer widen the printed range, and content that starts away from A1 is
+  printed with the empty rows and columns before it. Measured on 25 sheets against Excel 2021; tested in
+  Layout.Sheets.Tests (Fixtures/measured).
+- Corpus: page counts and warnings unchanged on all 88 documents. ConditionalFormattingSamples.xlsx pages 1, 2, 8, 9,
+  14, 15, 27, 35 and 36 and x05-borders.xlsx page 1 draw differently; every other page is identical (tested against
+  recorded hashes).
+
 ## 0.1.0 (2026-11-09)
 
 Chuvadi.Pdf 3.31.2 in staging (D-261; claude/layout-D261-results.md):

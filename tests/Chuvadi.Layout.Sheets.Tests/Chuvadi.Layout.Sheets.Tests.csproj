@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <None Include="Fixtures\xlsx\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\measured\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Data\*.tsv" CopyToOutputDirectory="PreserveNewest" />
     <!-- Encrypted packages are embedded and read through a MemoryStream, never opened from a path (D-44). -->
     <EmbeddedResource Include="Fixtures\encrypted\*.xlsx" LogicalName="Chuvadi.Layout.Sheets.Tests.Encrypted.%(Filename)%(Extension)" />
   </ItemGroup>

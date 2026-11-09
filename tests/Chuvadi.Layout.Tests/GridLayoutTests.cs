@@ -186,9 +186,35 @@ public class GridPaginationTests
         LayoutOptions o = Flow.Options();
         o.Limits.MaxCellsPerSheet = 10;
         Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.Open(Grid.Book(Grid.Filled(5, 5)), o));
+        // D-291: a workbook opens whatever its page count; building a page at or past MaxPages throws.
         LayoutOptions p = Flow.Options();
         p.Limits.MaxPages = 1;
-        Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.Open(Grid.Book(Grid.Filled(200, 2)), p));
+        using LaidOutDocument doc = DocumentLayout.Open(Grid.Book(Grid.Filled(200, 2)), p);
+        Assert.True(doc.PageCount > 1);
+        Assert.NotNull(doc.GetPage(0));
+        LayoutLimitExceededException ex = Assert.Throws<LayoutLimitExceededException>(() => doc.GetPage(1));
+        Assert.Equal(nameof(LayoutLimits.MaxPages), ex.LimitName);
+        Assert.Equal(1, ex.Limit);
+        Assert.Equal(doc.PageCount, ex.Actual);
+        Assert.StartsWith("Sheet1!A1:", ex.Location, StringComparison.Ordinal);
+        Assert.Throws<LayoutLimitExceededException>(() => doc.GetPages().ToList());
+    }
+
+    [Fact]
+    public void A_workbook_of_more_pages_than_an_index_holds_is_refused_at_open()
+    {
+        // D-291: one cell per page across the whole grid is 16,384 × 1,048,576 pages, more than int.MaxValue.
+        GridSheet s = new GridSheet("Sheet1")
+        {
+            PageSetup = new GridPageSetup { PaperWidth = 120, PaperHeight = 100, MarginLeft = 10, MarginRight = 10, MarginTop = 10, MarginBottom = 10, Scale = 400 },
+        };
+        s.Set(0, 0, "A1");
+        s.Set(1_048_575, 16_383, "XFD1048576");
+        LayoutLimitExceededException ex = Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.Open(Grid.Book(s), Flow.Options()));
+        Assert.Equal(nameof(LayoutLimits.MaxPages), ex.LimitName);
+        Assert.Equal(int.MaxValue, ex.Limit);
+        Assert.True(ex.Actual > int.MaxValue);
+        Assert.Equal("Sheet1!A1:XFD1048576", ex.Location);
     }
 }
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
+using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Engine.Flow;
 using Chuvadi.Layout.Model;
 
@@ -20,9 +22,63 @@ namespace Chuvadi.Layout.Engine.Grid
         int SheetPageIndex);
 
     /// <summary>
+    /// The pages of one print area (D-291): its column and row bands, scale and page order. Page <c>i</c> of the
+    /// area is computed from the bands, so no per-page record is kept; a sheet with millions of pages opens at the
+    /// cost of its bands.
+    /// </summary>
+    internal sealed class GridAreaPages
+    {
+        public GridAreaPages(int sheet, CellRange area, IReadOnlyList<(int First, int Last)> columnBands, IReadOnlyList<(int First, int Last)> rowBands,
+            double scale, bool downThenOver, int firstPageNumber, int firstSheetPageIndex, long firstIndex)
+        {
+            Sheet = sheet;
+            Area = area;
+            ColumnBands = columnBands;
+            RowBands = rowBands;
+            Scale = scale;
+            DownThenOver = downThenOver;
+            FirstPageNumber = firstPageNumber;
+            FirstSheetPageIndex = firstSheetPageIndex;
+            FirstIndex = firstIndex;
+        }
+
+        public int Sheet { get; }
+
+        public CellRange Area { get; }
+
+        public IReadOnlyList<(int First, int Last)> ColumnBands { get; }
+
+        public IReadOnlyList<(int First, int Last)> RowBands { get; }
+
+        public double Scale { get; }
+
+        public bool DownThenOver { get; }
+
+        public int FirstPageNumber { get; }
+
+        public int FirstSheetPageIndex { get; }
+
+        /// <summary>Document index of this area's first page.</summary>
+        public long FirstIndex { get; }
+
+        public long Count => (long)ColumnBands.Count * RowBands.Count;
+
+        /// <summary>The bands of the area's page <paramref name="offset"/> (0-based within the area).</summary>
+        public ((int First, int Last) Rows, (int First, int Last) Columns) Bands(long offset)
+        {
+            int rowCount = RowBands.Count;
+            int colCount = ColumnBands.Count;
+            return DownThenOver
+                ? (RowBands[(int)(offset % rowCount)], ColumnBands[(int)(offset / rowCount)])
+                : (RowBands[(int)(offset / colCount)], ColumnBands[(int)(offset % colCount)]);
+        }
+    }
+
+    /// <summary>
     /// Paginates a <see cref="GridWorkbook"/> the way Excel prints it. Page bands depend only on column widths,
-    /// row heights, breaks and scale, so every page is known at open (the page count is final immediately);
-    /// cells are measured and drawn only for the page being built.
+    /// row heights, breaks and scale, so every page is known at open (the page count is final immediately). A page
+    /// record is computed from its area's bands when the page is asked for (D-291), and cells are measured and drawn
+    /// only for the page being built.
     /// </summary>
     internal sealed partial class GridEngine : IPageSource
     {
@@ -30,7 +86,8 @@ namespace Chuvadi.Layout.Engine.Grid
 
         private readonly GridWorkbook _book;
         private readonly LayoutContext _ctx;
-        private readonly List<GridPageRecord> _pages = new List<GridPageRecord>();
+        private readonly List<GridAreaPages> _areas = new List<GridAreaPages>();
+        private readonly int _pageCount;
         private readonly Dictionary<int, GridGeometry> _geometry = new Dictionary<int, GridGeometry>();
         private readonly Dictionary<int, Dictionary<int, List<int>>> _rowIndex = new Dictionary<int, Dictionary<int, List<int>>>();
         private readonly FieldStub _fields = new FieldStub();
@@ -41,6 +98,7 @@ namespace Chuvadi.Layout.Engine.Grid
             _ctx = ctx;
             Source = source;
             int pageNumber = 1;
+            long total = 0;
             for (int s = 0; s < book.Sheets.Count; s++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -81,11 +139,16 @@ namespace Chuvadi.Layout.Engine.Grid
                 }
                 foreach (CellRange area in areas)
                 {
-                    foreach (GridPageRecord rec in PaginateArea(s, sheet, geo, area, ref pageNumber, ref sheetPageIndex, ct))
+                    GridAreaPages pages = PaginateArea(s, sheet, geo, area, pageNumber, sheetPageIndex, total, ct);
+                    _areas.Add(pages);
+                    total += pages.Count;
+                    if (total > int.MaxValue)
                     {
-                        LayoutLimits.Check(nameof(LayoutLimits.MaxPages), ctx.Limits.MaxPages, _pages.Count + 1);
-                        _pages.Add(rec);
+                        // More pages than a document can index: refused at open, whatever MaxPages is.
+                        throw PageLimit(int.MaxValue, total, pages);
                     }
+                    pageNumber = (int)Math.Min(int.MaxValue, pageNumber + pages.Count);
+                    sheetPageIndex += (int)pages.Count;
                 }
                 foreach ((int r, int c, GridCell cell) in sheet.Cells())
                 {
@@ -97,25 +160,59 @@ namespace Chuvadi.Layout.Engine.Grid
                     }
                 }
             }
+            _pageCount = (int)total;
         }
 
-        /// <summary>The used range, widened to the drawings (Excel prints pictures and shapes beyond the last cell).</summary>
+        /// <summary>
+        /// The range Excel prints when the sheet has no print area (D-291, measured on 25 sheets with Excel 2021):
+        /// from A1 to the last row and the last column that hold something printed, that is a value, a data bar or
+        /// icon, a visible fill, a visible border (diagonals included), a merge or a drawing. Formats with nothing to see (font, colour,
+        /// number format, alignment, wrap, indent, protection) on an empty cell do not extend it. Null when the sheet
+        /// prints nothing.
+        /// </summary>
         private static CellRange? PrintedRange(GridSheet sheet, GridGeometry geo)
         {
-            CellRange? used = sheet.UsedRange();
+            int lastRow = -1;
+            int lastColumn = -1;
+            foreach ((int r, int c, GridCell cell) in sheet.Cells())
+            {
+                if (Prints(cell))
+                {
+                    lastRow = Math.Max(lastRow, r);
+                    lastColumn = Math.Max(lastColumn, c);
+                }
+            }
+            foreach (CellRange m in sheet.MergedRanges)
+            {
+                lastRow = Math.Max(lastRow, m.LastRow);
+                lastColumn = Math.Max(lastColumn, m.LastColumn);
+            }
             foreach (GridDrawing d in sheet.Drawings)
             {
                 if (LastCell(d, geo) is not (int lr, int lc))
                 {
                     continue;
                 }
-                int fr = d.From?.Row ?? 0;
-                int fc = d.From?.Column ?? 0;
-                used = used is CellRange u
-                    ? new CellRange(Math.Min(u.FirstRow, fr), Math.Min(u.FirstColumn, fc), Math.Max(u.LastRow, lr), Math.Max(u.LastColumn, lc))
-                    : new CellRange(fr, fc, Math.Max(fr, lr), Math.Max(fc, lc));
+                lastRow = Math.Max(lastRow, Math.Max(d.From?.Row ?? 0, lr));
+                lastColumn = Math.Max(lastColumn, Math.Max(d.From?.Column ?? 0, lc));
             }
-            return used;
+            return lastRow < 0 ? null : new CellRange(0, 0, lastRow, lastColumn);
+        }
+
+        /// <summary>
+        /// True when the cell puts something on the page or holds a value: a value of any kind (even one its number
+        /// format hides), rich text, a data bar or icon, a visible fill or a visible border.
+        /// </summary>
+        internal static bool Prints(GridCell cell)
+        {
+            if (cell.Kind != CellValueKind.Empty || cell.DisplayText.Length > 0 || cell.Runs is not null || cell.DataBar is not null || cell.Icon is not null)
+            {
+                return true;
+            }
+            GridCellStyle st = cell.Style;
+            return (st.Fill is LayoutColor fill && !fill.IsTransparent)
+                || st.BorderTop.IsVisible || st.BorderBottom.IsVisible || st.BorderLeft.IsVisible || st.BorderRight.IsVisible
+                || st.BorderDiagonalUp.IsVisible || st.BorderDiagonalDown.IsVisible;
         }
 
         /// <summary>
@@ -162,22 +259,83 @@ namespace Chuvadi.Layout.Engine.Grid
 
         public LayoutSourceInfo Source { get; }
 
-        public int EstimatedPageCount => _pages.Count;
+        public int EstimatedPageCount => _pageCount;
 
         public bool IsPageCountFinal => true;
 
-        public int KnownPageCount => _pages.Count;
+        public int KnownPageCount => _pageCount;
 
         public void EnsurePages(int count, CancellationToken ct)
         {
         }
 
-        internal IReadOnlyList<GridPageRecord> Pages => _pages;
+        /// <summary>The print areas, in page order.</summary>
+        internal IReadOnlyList<GridAreaPages> Areas => _areas;
+
+        /// <summary>
+        /// The record of page <paramref name="index"/>, computed from its area's bands. Building a page at or past
+        /// <see cref="LayoutLimits.MaxPages"/> throws (D-291): the limit applies to pages built, exported or printed,
+        /// not to opening.
+        /// </summary>
+        internal GridPageRecord Record(int index)
+        {
+            GridAreaPages area = AreaOf(index);
+            if (index >= _ctx.Limits.MaxPages)
+            {
+                throw PageLimit(_ctx.Limits.MaxPages, _pageCount, area);
+            }
+            return RecordIn(area, index);
+        }
+
+        /// <summary>The record of page <paramref name="index"/> without the MaxPages check (tests and diagnostics).</summary>
+        internal GridPageRecord RecordUnchecked(int index) => RecordIn(AreaOf(index), index);
+
+        private GridAreaPages AreaOf(int index)
+        {
+            if (index < 0 || index >= _pageCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), $"The document has {_pageCount} page(s).");
+            }
+            int lo = 0;
+            int hi = _areas.Count - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi + 1) / 2;
+                if (_areas[mid].FirstIndex <= index)
+                {
+                    lo = mid;
+                }
+                else
+                {
+                    hi = mid - 1;
+                }
+            }
+            return _areas[lo];
+        }
+
+        private GridPageRecord RecordIn(GridAreaPages area, int index)
+        {
+            long offset = index - area.FirstIndex;
+            ((int r0, int r1), (int c0, int c1)) = area.Bands(offset);
+            GridSheet sheet = _book.Sheets[area.Sheet];
+            return Record(area.Sheet, sheet, r0, r1, c0, c1, area.Scale,
+                (int)Math.Min(int.MaxValue, area.FirstPageNumber + offset), (int)(area.FirstSheetPageIndex + offset));
+        }
+
+        private LayoutLimitExceededException PageLimit(long limit, long total, GridAreaPages area)
+        {
+            CultureInfo inv = CultureInfo.InvariantCulture;
+            string location = _book.Sheets[area.Sheet].Name + "!" + area.Area.ToString();
+            string message = string.Format(inv,
+                "Layout limit 'MaxPages' exceeded: the workbook prints as {0:N0} pages and the limit is {1:N0}. {2} prints as {3:N0} × {4:N0} pages ({5:N0}).",
+                total, limit, location, area.ColumnBands.Count, area.RowBands.Count, area.Count);
+            return new LayoutLimitExceededException(nameof(LayoutLimits.MaxPages), limit, total, message, location);
+        }
 
         private static (double Width, double Height) Printable(GridPageSetup ps)
             => (Math.Max(1, ps.PageWidth - ps.MarginLeft - ps.MarginRight), Math.Max(1, ps.PageHeight - ps.MarginTop - ps.MarginBottom));
 
-        private IEnumerable<GridPageRecord> PaginateArea(int s, GridSheet sheet, GridGeometry geo, CellRange area, ref int pageNumber, ref int sheetPageIndex, CancellationToken ct)
+        private static GridAreaPages PaginateArea(int s, GridSheet sheet, GridGeometry geo, CellRange area, int pageNumber, int sheetPageIndex, long firstIndex, CancellationToken ct)
         {
             GridPageSetup ps = sheet.PageSetup;
             (double pw, double ph) = Printable(ps);
@@ -204,28 +362,8 @@ namespace Chuvadi.Layout.Engine.Grid
                 ph - (headingH * scale), TitleExtent(sheet.PrintTitleRows, geo.RowHeight) * scale, sheet.PrintTitleRows?.Last ?? -1,
                 honourBreaks ? sheet.RowBreaks : null, ct);
 
-            List<GridPageRecord> result = new List<GridPageRecord>();
-            if (ps.PageOrder == GridPageOrder.DownThenOver)
-            {
-                foreach ((int c0, int c1) in colBands)
-                {
-                    foreach ((int r0, int r1) in rowBands)
-                    {
-                        result.Add(Record(s, sheet, r0, r1, c0, c1, scale, pageNumber++, sheetPageIndex++));
-                    }
-                }
-            }
-            else
-            {
-                foreach ((int r0, int r1) in rowBands)
-                {
-                    foreach ((int c0, int c1) in colBands)
-                    {
-                        result.Add(Record(s, sheet, r0, r1, c0, c1, scale, pageNumber++, sheetPageIndex++));
-                    }
-                }
-            }
-            return result;
+            return new GridAreaPages(s, area, colBands, rowBands, scale, ps.PageOrder == GridPageOrder.DownThenOver,
+                pageNumber, sheetPageIndex, firstIndex);
         }
 
         private static GridPageRecord Record(int s, GridSheet sheet, int r0, int r1, int c0, int c1, double scale, int number, int index)
