@@ -14,11 +14,27 @@ namespace Chuvadi.Print.Pdf.Raster
         public static void Copy(PixelBuffer source, RasterPage target)
         {
             ArgumentNullException.ThrowIfNull(source);
+            Copy(source, new PixelRegion(0, 0, source.Width, source.Height), target);
+        }
+
+        /// <summary>
+        /// Copies <paramref name="region"/> of <paramref name="source"/> into the whole of <paramref name="target"/>,
+        /// composited over white and resampled (bilinear) when the sizes differ.
+        /// </summary>
+        public static void Copy(PixelBuffer source, PixelRegion region, RasterPage target)
+        {
+            ArgumentNullException.ThrowIfNull(source);
             ArgumentNullException.ThrowIfNull(target);
-            ReadOnlySpan<byte> src = source.Pixels;
-            int sw = source.Width;
-            int sh = source.Height;
+            if (region.X < 0 || region.Y < 0 || region.Width < 1 || region.Height < 1
+                || region.X + region.Width > source.Width || region.Y + region.Height > source.Height)
+            {
+                throw new ArgumentOutOfRangeException(nameof(region), region, "The region is outside the rendered page.");
+            }
+
             int srcStride = source.Stride;
+            ReadOnlySpan<byte> src = source.Pixels.Slice((region.Y * srcStride) + (region.X * 4));
+            int sw = region.Width;
+            int sh = region.Height;
             int tw = target.PixelWidth;
             int th = target.PixelHeight;
             bool same = sw == tw && sh == th;

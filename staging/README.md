@@ -19,9 +19,10 @@ The CI pure-BCL check scans `src/` and `shared/` only. These first-party Package
 its scope, until the move. Then they go to `src/` and `tests/` as ordinary projects
 (see `docs/Chuvadi.Print/INTEGRATION-AFTER-PDF-MOVE.md`).
 
-To build: pack chuvadi-pdf into the feed first. In the chuvadi-pdf clone, run
-`.\build\pack.ps1 -Version 3.22.1` and copy `artifacts\nupkg\*.nupkg` into the feed. Do not point
-`-OutputDir` at the feed: `pack.ps1` deletes its output folder first. Then:
+Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf from `Chuvadi.Print.Pdf.Raster/ChuvadiPdf.props`: the package references
+the range `[3.31.2, 4.0.0)` (D-258), and its tests use exactly `ChuvadiPdfVersion` (3.31.2 by default). The feed needs
+every Chuvadi.Pdf 3.31.2 package, plus Chuvadi.Fonts 1.0.0 or later. They are the assets of the chuvadi-pdf `v3.31.2`
+GitHub release (with its SHA256SUMS.txt) and of our `fonts-v1.1.0` release. Then:
 
 ```powershell
 dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release

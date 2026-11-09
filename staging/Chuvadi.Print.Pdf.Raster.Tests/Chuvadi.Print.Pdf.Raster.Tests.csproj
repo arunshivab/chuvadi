@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\Chuvadi.Print.Pdf.Raster\ChuvadiPdf.props" />
+
   <!-- Tests for the Chuvadi.Print.Pdf.Raster adapter. Like the adapter, under staging/ and outside Chuvadi.slnx and CI;
        the Chuvadi.Pdf packages come from the local feed in staging/nuget.config (D-29). -->
 
@@ -15,6 +17,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- The exact version under test (ChuvadiPdf.props); the adapter itself references the range. -->
+    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Operations" Version="[$(ChuvadiPdfVersion)]" />
   </ItemGroup>
 
   <ItemGroup>

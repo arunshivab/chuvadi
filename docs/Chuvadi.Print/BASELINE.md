@@ -66,7 +66,8 @@ Invariants the packages must always satisfy. Changes to these are deliberate, do
   `IppPrinterTarget` (rendered pages as PWG Raster) and `IppDocumentTarget` (PDF passthrough via the new
   core `PrintJob.SubmitTo` / `IDocumentTarget`): driverless printing on any OS. (0.4.0)
 - **A5 — Chuvadi.Print.Pdf.Raster** — separate package (`staging/Chuvadi.Print.Pdf.Raster`, tests in
-  `staging/Chuvadi.Print.Pdf.Raster.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering). It consumes the version-pinned Chuvadi.Pdf
+  `staging/Chuvadi.Print.Pdf.Raster.Tests`): `PdfPageRasterizer` (`IPageRasterizer` over Chuvadi.Pdf.Rendering, printing the crop box) and
+  `PdfFontInspector` (`IPdfFontInspector` over Chuvadi.Pdf's font report). It consumes the Chuvadi.Pdf
   packages from the local feed through `staging/nuget.config`; it never references a source clone (D-29).
   It stays outside `Chuvadi.slnx` and CI, and outside the `src/` scanned by the pure-BCL check, until
   Chuvadi.Pdf moves into the monorepo or is on nuget.org (D-28). (0.1.0)
