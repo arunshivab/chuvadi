@@ -22,6 +22,8 @@
 | `layout-markup-v*` | Chuvadi.Layout.Markup | `src/Chuvadi.Layout.Markup/Chuvadi.Layout.Markup.csproj` |
 | `opentype-v*` | Chuvadi.OpenType | `src/Chuvadi.OpenType/Chuvadi.OpenType.csproj` |
 | `text-shaping-v*` | Chuvadi.Text.Shaping | `src/Chuvadi.Text.Shaping/Chuvadi.Text.Shaping.csproj` |
+| `layout-pdf-v*` | Chuvadi.Layout.Pdf (staged, see below) | `staging/src/Chuvadi.Layout.Pdf/Chuvadi.Layout.Pdf.csproj` |
+| `print-pdf-raster-v*` | Chuvadi.Print.Pdf.Raster (staged, see below) | `staging/Chuvadi.Print.Pdf.Raster/Chuvadi.Print.Pdf.Raster.csproj` |
 
 Chuvadi.Docs.Conversion has no tag of its own: it rides on `docs-v*`. Chuvadi.Print.Windows, .Ipp and
 .Remote ride on `print-v*`. The workflow refuses a `docs-v*` or `print-v*` tag when any `<Version>` of the
@@ -32,6 +34,27 @@ packages it releases differs from the tag version. The same check runs for `open
 `src/<package>/CHANGELOG.md` (the heading must start with the exact tag version, for example `## 1.0.0 (date)`),
 not the generated list of every pull request since the previous tag. If no section is found, the body is a one-line
 pointer to the changelog. Write the section before you tag.
+
+**Staged packages** (`layout-pdf-v*`, `print-pdf-raster-v*`). Chuvadi.Layout.Pdf and Chuvadi.Print.Pdf.Raster live in
+`staging/`, outside `Chuvadi.slnx`, because they need the Chuvadi.Pdf packages, which come from the separate
+chuvadi-pdf repository. For these two tags the workflow, after building and testing the whole solution:
+
+1. reads `ChuvadiPdfVersion` from the project (Layout.Pdf: `staging/src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`;
+   Raster: its `.csproj`);
+2. runs `tools/chuvadi-pdf/fetch.sh <version> <folder>`, which downloads the 34 Chuvadi.Pdf packages of the
+   chuvadi-pdf GitHub release `v<version>` and Chuvadi.Fonts 1.0.0 from our `fonts-v1.0.0` release, and checks every
+   file against the hashes pinned in `tools/chuvadi-pdf/hashes/` (`<version>.sha256` and `fonts-1.0.0.sha256`).
+   A missing hash file, a missing asset or a different hash stops the release. Chuvadi.* never comes from nuget.org;
+3. builds and tests the staged project with `-p:RestoreConfigFile=<folder>/nuget.ci.config`, which replaces the
+   per-project `nuget.config` files, so a developer's local feed is not used;
+4. checks that the `<Version>` matches the tag, packs it, and attaches only that nupkg. The release notes name the
+   chuvadi-pdf version it was built against. The Chuvadi.Pdf packages are not repackaged: consumers take them
+   from the chuvadi-pdf release.
+
+**Moving to a new chuvadi-pdf release.** In one pull request: add `tools/chuvadi-pdf/hashes/<version>.sha256`
+(the release's `SHA256SUMS.txt`, with every package downloaded and checked against it first), then change
+`ChuvadiPdfVersion`. Keep the older hash files; a staged project can still be rebuilt against them. A staged package
+whose version is stable (no hyphen) cannot depend on a pre-release Chuvadi.Print: `dotnet pack` refuses with NU5104.
 
 A longer prefix is listed before a shorter one that it starts with (`layout-documents-v*`,
 `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*` and `layout-markup-v*` before `layout-v*`), so each tag
@@ -54,6 +77,9 @@ dependencies; Chuvadi.Text.Shaping references Chuvadi.OpenType only:
 6. `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*`, `layout-markup-v*` (any order)
 7. `layout-documents-v*`
 8. `opentype-v*`, then `text-shaping-v*` (OpenType first; both after `fonts-v*`, and independent of the Layout packages)
+
+9. `layout-pdf-v*` (after `layout-v*`, and the Chuvadi.Pdf release it is pinned to must be in `tools/chuvadi-pdf/hashes/`),
+   and `print-pdf-raster-v*` (after the `print-v*` release it depends on)
 
 (`zip-v1.0.0` and `sheets-v2.0.1` are already released. `print-v*` is not scheduled: the Print packages are in progress.
 Chuvadi.Print.Windows, .Ipp and .Remote depend on Chuvadi.Print, and they release with it.)

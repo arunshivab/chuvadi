@@ -15,13 +15,18 @@ name: Release
 #   git tag -s layout-markup-v0.1.0 -m "Chuvadi.Layout.Markup 0.1.0" && git push origin layout-markup-v0.1.0
 #   git tag -s opentype-v0.1.0      -m "Chuvadi.OpenType 0.1.0"      && git push origin opentype-v0.1.0
 #   git tag -s text-shaping-v0.1.0  -m "Chuvadi.Text.Shaping 0.1.0"  && git push origin text-shaping-v0.1.0
+#   git tag -s layout-pdf-v0.1.0    -m "Chuvadi.Layout.Pdf 0.1.0"    && git push origin layout-pdf-v0.1.0
+#   git tag -s print-pdf-raster-v0.1.0 -m "Chuvadi.Print.Pdf.Raster 0.1.0" && git push origin print-pdf-raster-v0.1.0
 # The prefix selects which package is built, tested, packed, and released.
 # docs-v* releases TWO packages at one version: Chuvadi.Docs and Chuvadi.Docs.Conversion.
+# layout-pdf-v* and print-pdf-raster-v* release the two staged projects (staging/). They need the Chuvadi.Pdf packages,
+# which tools/chuvadi-pdf/fetch.sh downloads from the chuvadi-pdf GitHub release and checks against the hashes pinned
+# in tools/chuvadi-pdf/hashes/ (D-236, D-241).
 # Packages are attached to the GitHub release only; nothing is pushed to nuget.org for now.
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*", "opentype-v*", "text-shaping-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*", "opentype-v*", "text-shaping-v*", "layout-pdf-v*", "print-pdf-raster-v*"]
 
 permissions:
   contents: write
@@ -50,6 +55,8 @@ jobs:
             fonts-v*)  NAME="Chuvadi.Fonts" ;;
             opentype-v*)     NAME="Chuvadi.OpenType" ;;
             text-shaping-v*) NAME="Chuvadi.Text.Shaping" ;;
+            layout-pdf-v*)    NAME="Chuvadi.Layout.Pdf"; DIRBASE="staging/src"; STAGED=true; TESTS="staging/tests/Chuvadi.Layout.Pdf.Tests" ;;
+            print-pdf-raster-v*) NAME="Chuvadi.Print.Pdf.Raster"; DIRBASE="staging"; STAGED=true; TESTS="staging/Chuvadi.Print.Pdf.Raster.Tests" ;;
             layout-documents-v*) NAME="Chuvadi.Layout.Documents" ;;
             layout-docs-v*)   NAME="Chuvadi.Layout.Docs" ;;
             layout-sheets-v*) NAME="Chuvadi.Layout.Sheets" ;;
@@ -60,6 +67,9 @@ jobs:
           esac
           PACKAGES="${PACKAGES:-$NAME}"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "dirbase=${DIRBASE:-src}" >> "$GITHUB_OUTPUT"
+          echo "staged=${STAGED:-false}" >> "$GITHUB_OUTPUT"
+          echo "tests=${TESTS:-}" >> "$GITHUB_OUTPUT"
           echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
           echo "Releasing $PACKAGES from tag $TAG"
 
@@ -96,13 +106,32 @@ jobs:
           dotnet run -c Release --no-build --project samples/Chuvadi.Fonts.ManualTests
           dotnet run -c Release --no-build --project samples/Chuvadi.Layout.ManualTests
 
-      - name: Check the package versions match the tag (docs, print, opentype, text-shaping)
-        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') }}
+      # Staged projects (layout-pdf-v*, print-pdf-raster-v*) are not in the solution. They restore Chuvadi.Pdf from the
+      # chuvadi-pdf release, downloaded and hash-checked by tools/chuvadi-pdf/fetch.sh, and are built and tested here.
+      - name: Fetch the Chuvadi.Pdf packages (staged projects)
+        id: pdf
+        if: ${{ steps.pkg.outputs.staged == 'true' }}
+        shell: bash
+        run: |
+          P="${{ steps.pkg.outputs.name }}"
+          PDFV=$(dotnet msbuild "${{ steps.pkg.outputs.dirbase }}/$P/$P.csproj" -getProperty:ChuvadiPdfVersion -nologo | tr -d '[:space:]')
+          if [ -z "$PDFV" ]; then echo "::error::ChuvadiPdfVersion is not set in $P"; exit 1; fi
+          echo "$P is built against chuvadi-pdf $PDFV"
+          bash tools/chuvadi-pdf/fetch.sh "$PDFV" "$RUNNER_TEMP/chuvadi-pdf-feed"
+          echo "version=$PDFV" >> "$GITHUB_OUTPUT"
+          echo "config=$RUNNER_TEMP/chuvadi-pdf-feed/nuget.ci.config" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test the staged project
+        if: ${{ steps.pkg.outputs.staged == 'true' }}
+        run: dotnet test "${{ steps.pkg.outputs.tests }}" -c Release -p:RestoreConfigFile="${{ steps.pdf.outputs.config }}"
+
+      - name: Check the package versions match the tag (docs, print, opentype, text-shaping, staged)
+        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') || steps.pkg.outputs.staged == 'true' }}
         shell: bash
         run: |
           TAGV="${GITHUB_REF_NAME#*-v}"
           for p in ${{ steps.pkg.outputs.packages }}; do
-            V=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "src/$p/$p.csproj" | head -n 1)
+            V=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "${{ steps.pkg.outputs.dirbase }}/$p/$p.csproj" | head -n 1)
             echo "$p version $V (tag version $TAGV)"
             if [ "$V" != "$TAGV" ]; then echo "::error::$p version $V does not match the tag version $TAGV"; exit 1; fi
           done
@@ -112,7 +141,7 @@ jobs:
         run: |
           mkdir -p dist
           for p in ${{ steps.pkg.outputs.packages }}; do
-            dotnet pack "src/$p/$p.csproj" -c Release --no-build
+            dotnet pack "${{ steps.pkg.outputs.dirbase }}/$p/$p.csproj" -c Release --no-build
             cp artifacts/bin/$p/Release/*.nupkg dist/
           done
           ls -l dist
@@ -144,13 +173,16 @@ jobs:
           case "$TAGV" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;; esac
           : > RELEASE_NOTES.md
           for p in ${{ steps.pkg.outputs.packages }}; do
-            f="src/$p/CHANGELOG.md"
+            f="${{ steps.pkg.outputs.dirbase }}/$p/CHANGELOG.md"
             [ -f "$f" ] || continue
             sec=$(awk -v v="$TAGV" '/^## / { if (found) exit; split(substr($0, 4), a, " "); if (a[1] == v) { found = 1; next } } found { print }' "$f")
             if [ -n "$sec" ]; then printf '## %s %s\n\n%s\n\n' "$p" "$TAGV" "$sec" >> RELEASE_NOTES.md; fi
           done
           if [ ! -s RELEASE_NOTES.md ]; then
             echo "${{ steps.pkg.outputs.packages }} $TAGV. See the package CHANGELOG.md for the changes." > RELEASE_NOTES.md
+          fi
+          if [ "${{ steps.pkg.outputs.staged }}" = "true" ]; then
+            printf '\nBuilt and tested against the chuvadi-pdf %s packages (https://github.com/arunshivab/chuvadi-pdf/releases/tag/v%s), checked against the hashes pinned in tools/chuvadi-pdf/hashes/. The Chuvadi.Pdf packages are not part of this release: take them from that release.\n' "${{ steps.pdf.outputs.version }}" "${{ steps.pdf.outputs.version }}" >> RELEASE_NOTES.md
           fi
           cat RELEASE_NOTES.md
 
