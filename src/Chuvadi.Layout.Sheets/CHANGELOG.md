@@ -1,5 +1,11 @@
 # Chuvadi.Layout.Sheets — Changelog
 
+## Unreleased
+
+- README: large workbooks open at the cost of their page bands; `MaxPages` applies to pages built or exported; the
+  printed range follows Excel (D-291, engine change in Chuvadi.Layout). Tests: 25 Excel-measured sheets
+  (Fixtures/measured), the A1 + XFD1048576 workbook, and every corpus page against recorded hashes.
+
 ## 0.1.0 (2026-11-09)
 
 - Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,

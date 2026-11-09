@@ -18,7 +18,7 @@ namespace Chuvadi.Layout.Engine.Grid
 
         public LaidOutPage BuildPage(int index, CancellationToken ct)
         {
-            GridPageRecord rec = _pages[index];
+            GridPageRecord rec = Record(index);
             GridSheet sheet = _book.Sheets[rec.Sheet];
             GridGeometry geo = _geometry[rec.Sheet];
             GridPageSetup ps = sheet.PageSetup;

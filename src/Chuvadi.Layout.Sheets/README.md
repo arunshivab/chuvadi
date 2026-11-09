@@ -32,3 +32,8 @@ A file that is not a readable workbook raises `LayoutFormatException`, with Chuv
 inside; that includes a damaged workbook whose workbook or worksheet part is missing, or whose cells point at shared
 strings that do not exist (rejected since Chuvadi.Sheets 2.0.2). A `LayoutLimits` value exceeded raises
 `LayoutLimitExceededException`.
+
+A workbook opens at the cost of its page bands, not its pages, so even a sheet that reaches XFD1048576 opens at once
+and `PageCount` is exact. `LayoutLimits.MaxPages` applies when pages are built, exported or printed; the exception's
+`Location` names the sheet and printed range (D-291). Without a print area a sheet prints, as Excel does, from A1 to
+its last value, fill or border; formatting alone on empty cells doesn't widen it.

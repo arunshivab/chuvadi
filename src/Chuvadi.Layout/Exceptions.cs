@@ -37,13 +37,35 @@ namespace Chuvadi.Layout
             Actual = actual;
         }
 
+        /// <summary>
+        /// A limit exceeded at a known place in the document (D-291): <paramref name="location"/> names it, for example
+        /// "Sheet1!A1:XFD1048576", and <paramref name="message"/> explains it.
+        /// </summary>
+        public LayoutLimitExceededException(string limitName, long limit, long actual, string message, string? location)
+            : base(message)
+        {
+            LimitName = limitName;
+            Limit = limit;
+            Actual = actual;
+            Location = location;
+        }
+
         /// <summary>Name of the <see cref="LayoutLimits"/> property that was exceeded.</summary>
         public string LimitName { get; }
 
         /// <summary>The configured limit.</summary>
         public long Limit { get; }
 
-        /// <summary>The value that was reached when the limit tripped.</summary>
+        /// <summary>
+        /// The value that was reached when the limit tripped. For <see cref="LayoutLimits.MaxPages"/> on a workbook, the
+        /// workbook's whole page count.
+        /// </summary>
         public long Actual { get; }
+
+        /// <summary>
+        /// Where in the document the limit was exceeded, when known: for <see cref="LayoutLimits.MaxPages"/> on a workbook,
+        /// the sheet and printed range of the page that was asked for ("Sheet1!A1:XFD1048576"). Null otherwise.
+        /// </summary>
+        public string? Location { get; }
     }
 }

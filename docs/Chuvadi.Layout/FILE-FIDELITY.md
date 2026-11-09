@@ -43,6 +43,7 @@ Sources:
 | Workbook font missing (Cambria) | MDW of the font the file names | Real Cambria: MDW 8 at 11 pt | Columns sized with real Cambria's digits (554/1000 em, from Word's PDF); the text drawn in Caladea |
 | Number-format fill (`*x`) | x is repeated to fill the cell | Same | Same, for any character |
 | Text overflowing to the right past the last used column | Standard silent (printing) | Printed in full, adding pages across; a filled neighbour stops it (A7 sheet Overflow) | Same (standard silent; follows Excel): the printed range widens to where the text ends, and the text continues on the page it runs onto |
+| Printed range without a print area | Standard silent (printing) | From A1 to the last value, fill or border; every page printed, blank ones too; bold, number format, alignment and other invisible formats on empty cells don't count (D-287, three Excel exports) | Same (D-291) |
 | Row height | The stored height | Prints about 14.5 pt for a stored 15 pt | The stored height |
 | Row with no stored height | Standard silent | Fits the row to its fonts when it opens the file, using its own font heights (Calibri 16: 28 px; Arial 13 bold: 22 px), never below the default | Same idea, with the font Layout draws: the default while the line fits it, otherwise line height + 2 px to the nearest pixel. Equal to Excel for Calibri; up to a few px apart where the font or its substitute differs (X3) |
 

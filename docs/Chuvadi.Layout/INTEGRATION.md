@@ -57,7 +57,7 @@ Fixed-layout formats (PDF, scans) do not go through Layout.
 | What | How it arrives |
 |---|---|
 | Unreadable or unsupported file, wrong password | `LayoutFormatException` (a `LayoutException`) |
-| A `LayoutLimits` value exceeded | `LayoutLimitExceededException` (`LimitName`, `Limit`, `Actual`) |
+| A `LayoutLimits` value exceeded | `LayoutLimitExceededException` (`LimitName`, `Limit`, `Actual`, and `Location` where known). A workbook opens whatever its page count; `MaxPages` is raised when a page at or past it is built, exported or printed, with `Actual` = the workbook's page count and `Location` = the sheet and printed range, for example "Sheet1!A1:XFD1048576" (D-291) |
 | Cancelled or timed out | `OperationCanceledException` |
 | Fidelity notes (font substituted, chart drawn as a placeholder, …) | `doc.Warnings`, `doc.FontSubstitutions`; output notes through `LayoutPdfOptions.Warning` / `LayoutSvgOptions.Warning` |
 

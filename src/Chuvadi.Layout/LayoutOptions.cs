@@ -13,7 +13,13 @@ namespace Chuvadi.Layout
     /// </summary>
     public sealed class LayoutLimits
     {
-        /// <summary>Maximum number of pages the document may produce. Default 10,000.</summary>
+        /// <summary>
+        /// Maximum number of pages that may be built. Default 10,000. A flow document (docx, text, markup) stops paginating
+        /// here. A workbook opens whatever its page count, since its pages are computed only when asked for, and
+        /// building, exporting or printing a page at or past this limit throws <see cref="LayoutLimitExceededException"/>
+        /// with the workbook's page count and the sheet and range in <see cref="LayoutLimitExceededException.Location"/>
+        /// (D-291). A workbook of more than <see cref="int.MaxValue"/> pages is refused at open.
+        /// </summary>
         public int MaxPages { get; set; } = 10_000;
 
         /// <summary>Maximum number of populated cells per sheet that will be laid out. Default 5,000,000.</summary>
