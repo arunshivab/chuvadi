@@ -106,21 +106,16 @@ public static class XlsxReadExtensions
     private static DataTable ReadSheetIntoDataTable(SheetReader sheet, string tableName)
     {
         var dt = new DataTable(tableName);
-        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        bool headersAdded = false;
+        ColumnNamer? namer = null;
 
         foreach (var row in sheet.Rows)
         {
             // The header row has been consumed before the first data row is yielded.
-            if (!headersAdded)
-            {
-                AddHeaderColumns(dt, sheet, used);
-                headersAdded = true;
-            }
+            namer ??= AddHeaderColumns(dt, sheet);
 
-            // A data row wider than the header row gets generated column names.
+            // A data row wider than the header row: the extra columns are named as empty headers.
             while (dt.Columns.Count < row.Count)
-                AddColumn(dt, used, null, dt.Columns.Count);
+                dt.Columns.Add(namer.Name(null), typeof(object));
 
             var newRow = dt.NewRow();
             for (int i = 0; i < dt.Columns.Count; i++)
@@ -129,46 +124,74 @@ public static class XlsxReadExtensions
         }
 
         // A sheet with a header row and no data rows still gets its columns.
-        if (!headersAdded) AddHeaderColumns(dt, sheet, used);
+        if (namer is null) AddHeaderColumns(dt, sheet);
 
         return dt;
     }
 
     /// <summary>
-    /// One column per header cell, by position: a text header keeps its text exactly; a number,
-    /// date, boolean or error header is named by its display text; an empty header is "ColumnN"
-    /// (N = its 1-based position). Names are made unique as in Excel tables (see <see cref="AddColumn"/>).
+    /// One column per header cell, by position. A header's name is its text exactly, or for a number,
+    /// date, boolean or error header its display text; an empty header has none. The columns are then
+    /// named as Excel names a table's columns (see <see cref="ColumnNamer"/>).
     /// </summary>
-    private static void AddHeaderColumns(DataTable dt, SheetReader sheet, HashSet<string> used)
+    private static ColumnNamer AddHeaderColumns(DataTable dt, SheetReader sheet)
     {
-        var values = sheet.HeaderValues;
-        if (values is null) return;
-        var styles = sheet.HeaderStyles!;
+        var values = sheet.HeaderValues ?? Array.Empty<object?>();
+        var styles = sheet.HeaderStyles ?? Array.Empty<int>();
         var book = sheet.Book;
+        var names = new string?[values.Length];
         for (int i = 0; i < values.Length; i++)
         {
-            string? name = values[i] switch
+            names[i] = values[i] switch
             {
                 null => null,
                 string s => s.Length == 0 ? null : s,
                 var v => NonEmpty(NumberFormatter.Format(v, NullIfEmpty(book.DisplayCode(styles[i])), book.DisplayOptions)),
             };
-            AddColumn(dt, used, name, i);
         }
+
+        var namer = new ColumnNamer(names);
+        foreach (var name in names)
+            dt.Columns.Add(namer.Name(name), typeof(object));
+        return namer;
     }
 
     /// <summary>
-    /// Adds a column named <paramref name="name"/>, or "ColumnN" when it is null. A name already
-    /// in use (ignoring case, as <see cref="SheetReader"/> header lookups and DataTable do) gets
-    /// the smallest number from 2 up that makes it unique: Qty, Qty2, Qty3.
+    /// Names DataTable columns as Excel names the columns of a table made from a range (Insert &gt; Table),
+    /// as observed on 22 header rows (2.0.4, D-292):
+    /// <list type="number">
+    /// <item>Every header name in the row is reserved for its first occurrence, ignoring case, wherever it is.</item>
+    /// <item>Left to right, each repeat and each empty header gets a made-up name from one shared counter that
+    /// starts at 1: an empty header is "Column" + the counter, a repeat is its name + the counter but never 1.
+    /// A name already used, ignoring case, moves the number on until it is free; the counter then continues
+    /// from the number used plus 1.</item>
+    /// </list>
+    /// Examples: Qty, Qty, Qty2 gives Qty, Qty3, Qty2; Name, (empty), Town gives Name, Column1, Town;
+    /// Qty, Qty, Town, Town gives Qty, Qty2, Town, Town3.
     /// </summary>
-    private static void AddColumn(DataTable dt, HashSet<string> used, string? name, int index)
+    private sealed class ColumnNamer
     {
-        var baseName = name ?? "Column" + (index + 1).ToString(CultureInfo.InvariantCulture);
-        var unique = baseName;
-        for (int n = 2; !used.Add(unique); n++)
-            unique = baseName + n.ToString(CultureInfo.InvariantCulture);
-        dt.Columns.Add(unique, typeof(object));
+        private readonly HashSet<string> _used = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _kept = new(StringComparer.OrdinalIgnoreCase);
+        private int _counter = 1;
+
+        public ColumnNamer(IEnumerable<string?> headerNames)
+        {
+            foreach (var n in headerNames)
+                if (n is not null) _used.Add(n);
+        }
+
+        /// <summary>The column name for a header (null for an empty header), in left-to-right order.</summary>
+        public string Name(string? header)
+        {
+            if (header is not null && _kept.Add(header)) return header;   // first occurrence keeps its name
+            var baseName = header ?? "Column";
+            int k = header is null ? _counter : Math.Max(_counter, 2);
+            string name;
+            while (!_used.Add(name = baseName + k.ToString(CultureInfo.InvariantCulture))) k++;
+            _counter = k + 1;
+            return name;
+        }
     }
 
     private static string? NullIfEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;

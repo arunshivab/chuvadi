@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.0.3 (released 2026-11-09) |
+| Library version | Chuvadi.Sheets 2.0.4 (unreleased; 2.0.3 released 2026-11-09) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -89,13 +89,13 @@ it a sound base for viewers and converters (Chuvadi.Layout.Sheets lays out and r
 ## 2.2 Getting the package
 
 Chuvadi.Sheets is published as a NuGet package attached to its GitHub release, not on nuget.org. Download
-`Chuvadi.Sheets.2.0.3.nupkg` from the release page (tag `sheets-v2.0.3`), put it in a folder, and use that folder
+`Chuvadi.Sheets.2.0.4.nupkg` from the release page (tag `sheets-v2.0.4`), put it in a folder, and use that folder
 as a package source.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\local-nuget | Out-Null
-Copy-Item .\Chuvadi.Sheets.2.0.3.nupkg C:\local-nuget\
-Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.3.nupkg -Algorithm SHA256
+Copy-Item .\Chuvadi.Sheets.2.0.4.nupkg C:\local-nuget\
+Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.4.nupkg -Algorithm SHA256
 ```
 
 The release page shows the package's SHA-256 digest; the hash printed here should be the same.
@@ -114,7 +114,7 @@ Add a `nuget.config` next to your solution so the folder is a source:
 Then reference the package:
 
 ```powershell
-dotnet add package Chuvadi.Sheets --version 2.0.3
+dotnet add package Chuvadi.Sheets --version 2.0.4
 ```
 
 ## 2.3 Building from source
@@ -245,8 +245,8 @@ header text.
 
 # 4 Upgrading from 1.x
 
-Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1, 2.0.2 and 2.0.3 are bug-fix releases on
-top of it (sections 4.5 to 4.7). Values, styles, display text and saved
+Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 to 2.0.4 are bug-fix releases on
+top of it (sections 4.5 to 4.8). Values, styles, display text and saved
 output are the same as in 1.8.0; the public API is the same apart from the namespace and the obsolete zip types.
 
 ## 4.1 The namespace is now `Chuvadi.Sheets.Model`
@@ -339,6 +339,22 @@ still `FileNotFoundException`.
 
 Tables whose header names are unique text are unchanged, and so are `RowReader` access by header name and
 `ReadXlsx<T>`.
+
+## 4.8 Changes in 2.0.4
+
+2.0.4 makes the DataSet and DataTable column names match Excel's table names exactly (section 18.2). The public API
+is the same.
+
+| Header row | 2.0.3 | 2.0.4 (as Excel) |
+|---|---|---|
+| `Name, (empty), Town` | `Name, Column2, Town` | `Name, Column1, Town` |
+| `Name, (empty), (empty)` | `Name, Column2, Column3` | `Name, Column1, Column2` |
+| `Column3, Name, (empty)` | `Column3, Name, Column32` | `Column3, Name, Column1` |
+| `Qty, Qty, Qty2` | `Qty, Qty2, Qty22` | `Qty, Qty3, Qty2` |
+| `Qty, Qty, Town, Town` | `Qty, Qty2, Town, Town2` | `Qty, Qty2, Town, Town3` |
+| `Qty, Qty, (empty), Qty` | `Qty, Qty2, Column3, Qty3` | `Qty, Qty2, Column3, Qty4` |
+
+Repeats of one name (`Qty, Qty2, Qty3`), number headers, header-only sheets and unique headers are unchanged.
 
 # 5 Choosing a write API
 
@@ -1273,19 +1289,31 @@ empty cell). A column is named:
 - by the header's text, exactly as written (spaces included);
 - for a number, date, boolean or error header, by its display text: the cell's number format and
   `XlsxReaderOptions.DisplayCulture`, so `2024` is "2024" and a date under `dd-mm-yyyy` is "01-04-2024";
-- for an empty header cell, `ColumnN`, N being the column's position (`Column2` for column B). Data rows wider than
-  the header row get columns named the same way;
-- when the name is already used, compared ignoring case, by the name with the smallest number from 2 up that makes it
-  unique, as Excel numbers repeated table headers.
+- for a repeated name (compared ignoring case) or an empty header cell, as Excel names the columns of a table made
+  from the range (Insert > Table):
+  1. every name typed in the header row keeps it for its first occurrence, wherever it is;
+  2. left to right, each repeat and each empty header gets a made-up name from one shared counter that starts at 1:
+     an empty header is `Column` + the counter, a repeat is its name + the counter but never 1;
+  3. a name already used moves the number on until it is free, and the counter continues from there.
+
+  Data rows wider than the header row get columns named as empty headers.
 
 | Header row | Columns |
 |---|---|
 | `Qty, Qty, Town` | `Qty, Qty2, Town` |
 | `Qty, Qty, Qty` | `Qty, Qty2, Qty3` |
 | `qty, Qty` | `qty, Qty2` |
-| `Name, (empty), Town` | `Name, Column2, Town` |
+| `Name, (empty), Town` | `Name, Column1, Town` |
+| `Name, (empty), (empty)` | `Name, Column1, Column2` |
+| `Qty, Qty, (empty)` | `Qty, Qty2, Column3` |
+| `Qty, Qty, Town, Town` | `Qty, Qty2, Town, Town3` |
+| `Qty, Qty, Qty2` | `Qty, Qty3, Qty2` |
 | `Name, 2024, Town` | `Name, 2024, Town` |
-| `Column3, Name, (empty)` | `Column3, Name, Column32` |
+| `Column3, Name, (empty)` | `Column3, Name, Column1` |
+
+These are the names Excel showed for each of these rows. When comparing in Excel, tick "My table has headers" in the
+Create Table dialog: Excel leaves it unticked when an empty header cell is not the last one, because it then guesses
+that row 1 is data. `ReadXlsx` always takes the first row as the header row.
 
 A sheet with a header row and no data rows gives a table with those columns and no rows; an empty sheet gives a table
 with no columns. Access by header name (`row["Qty"]`, `ReadXlsx<T>`) is separate: there the first column with a name
@@ -1986,6 +2014,8 @@ a local function, such as an upload handler, are compiled but not run.
 
 ## 34.3 History
 
+- **2.0.4** (November 2026): updated for Chuvadi.Sheets 2.0.4 (section 4.8): DataTable column names as in Excel
+  tables (18.2).
 - **2.0.3** (November 2026): updated for Chuvadi.Sheets 2.0.3 (section 4.7): DataTable column names from the header
   row (18.2).
 - **2.0.2** (November 2026): updated for Chuvadi.Sheets 2.0.2 (section 4.6): dot segments in relationship targets,
