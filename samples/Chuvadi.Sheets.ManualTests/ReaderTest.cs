@@ -22,6 +22,7 @@ internal static class ReaderTest
         // Each previously-generated file should at minimum round-trip its data through the reader.
         var pass = 0;
         var fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
@@ -35,7 +36,7 @@ internal static class ReaderTest
             {
                 Console.WriteLine($"    FAIL: {label}");
                 Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}");
-                fail++;
+                fail++; failed.Add(label, ex);
             }
         }
 
@@ -265,7 +266,7 @@ internal static class ReaderTest
 
         Console.WriteLine();
         Console.WriteLine($"[ReaderTest] Done. {pass} passed, {fail} failed.");
-        if (fail > 0) throw new Exception($"{fail} reader tests failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"{fail} reader tests failed."));
     }
 
     /// <summary>Matches the PatientWrite class from ErgonomicExportTest, but with Status not ignored.</summary>

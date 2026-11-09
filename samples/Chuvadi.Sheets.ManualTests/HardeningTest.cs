@@ -23,6 +23,7 @@ internal static class HardeningTest
 
         int pass = 0;
         int fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
@@ -36,7 +37,7 @@ internal static class HardeningTest
             {
                 Console.WriteLine($"    FAIL: {label}");
                 Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}");
-                fail++;
+                fail++; failed.Add(label, ex);
             }
         }
 
@@ -193,6 +194,6 @@ internal static class HardeningTest
 
         Console.WriteLine();
         Console.WriteLine($"[HardeningTest] Done. {pass} passed, {fail} failed.");
-        if (fail > 0) throw new Exception($"{fail} hardening tests failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"{fail} hardening tests failed."));
     }
 }

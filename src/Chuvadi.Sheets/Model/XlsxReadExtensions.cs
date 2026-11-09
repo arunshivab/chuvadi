@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using Chuvadi.Sheets.Internal;
@@ -105,30 +106,21 @@ public static class XlsxReadExtensions
     private static DataTable ReadSheetIntoDataTable(SheetReader sheet, string tableName)
     {
         var dt = new DataTable(tableName);
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool headersAdded = false;
 
         foreach (var row in sheet.Rows)
         {
-            // First yielded row (after header consumption) — establish column count.
+            // The header row has been consumed before the first data row is yielded.
             if (!headersAdded)
             {
-                // Use the sheet's HeaderIndex if present (preserves header text); otherwise generic.
-                if (sheet.HeaderIndex is not null && sheet.HeaderIndex.Count > 0)
-                {
-                    var ordered = new string[sheet.HeaderIndex.Count];
-                    foreach (var kv in sheet.HeaderIndex) ordered[kv.Value] = kv.Key;
-                    foreach (var name in ordered) dt.Columns.Add(name ?? string.Empty, typeof(object));
-                }
-                else
-                {
-                    for (int i = 0; i < row.Count; i++) dt.Columns.Add($"Column{i + 1}", typeof(object));
-                }
+                AddHeaderColumns(dt, sheet, used);
                 headersAdded = true;
             }
 
-            // Ensure DataTable has enough columns for this row.
+            // A data row wider than the header row gets generated column names.
             while (dt.Columns.Count < row.Count)
-                dt.Columns.Add($"Column{dt.Columns.Count + 1}", typeof(object));
+                AddColumn(dt, used, null, dt.Columns.Count);
 
             var newRow = dt.NewRow();
             for (int i = 0; i < dt.Columns.Count; i++)
@@ -136,8 +128,52 @@ public static class XlsxReadExtensions
             dt.Rows.Add(newRow);
         }
 
+        // A sheet with a header row and no data rows still gets its columns.
+        if (!headersAdded) AddHeaderColumns(dt, sheet, used);
+
         return dt;
     }
+
+    /// <summary>
+    /// One column per header cell, by position: a text header keeps its text exactly; a number,
+    /// date, boolean or error header is named by its display text; an empty header is "ColumnN"
+    /// (N = its 1-based position). Names are made unique as in Excel tables (see <see cref="AddColumn"/>).
+    /// </summary>
+    private static void AddHeaderColumns(DataTable dt, SheetReader sheet, HashSet<string> used)
+    {
+        var values = sheet.HeaderValues;
+        if (values is null) return;
+        var styles = sheet.HeaderStyles!;
+        var book = sheet.Book;
+        for (int i = 0; i < values.Length; i++)
+        {
+            string? name = values[i] switch
+            {
+                null => null,
+                string s => s.Length == 0 ? null : s,
+                var v => NonEmpty(NumberFormatter.Format(v, NullIfEmpty(book.DisplayCode(styles[i])), book.DisplayOptions)),
+            };
+            AddColumn(dt, used, name, i);
+        }
+    }
+
+    /// <summary>
+    /// Adds a column named <paramref name="name"/>, or "ColumnN" when it is null. A name already
+    /// in use (ignoring case, as <see cref="SheetReader"/> header lookups and DataTable do) gets
+    /// the smallest number from 2 up that makes it unique: Qty, Qty2, Qty3.
+    /// </summary>
+    private static void AddColumn(DataTable dt, HashSet<string> used, string? name, int index)
+    {
+        var baseName = name ?? "Column" + (index + 1).ToString(CultureInfo.InvariantCulture);
+        var unique = baseName;
+        for (int n = 2; !used.Add(unique); n++)
+            unique = baseName + n.ToString(CultureInfo.InvariantCulture);
+        dt.Columns.Add(unique, typeof(object));
+    }
+
+    private static string? NullIfEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;
+
+    private static string? NonEmpty(string s) => s.Length == 0 ? null : s;
 
     private static List<T> MapSheetToList<T>(SheetReader sheet) where T : new()
     {

@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.0.3 (unreleased)
+
+A bug fix in the one-line DataSet and DataTable readers (SH-10, D-283, D-285, D-286). The public API is
+unchanged.
+
+### Bug fixes
+
+- **`ReadXlsx` (DataSet) and `ReadXlsxSheet` (DataTable) failed on some header rows** (SH-10). A header
+  row with a repeated name (`Qty, Qty`, compared ignoring case), an empty header cell, or a number, date
+  or boolean as a header threw `IndexOutOfRangeException`, so nothing was read; a repeat only in the last
+  column was named `ColumnN`. The columns are now built by position, one per header cell:
+  - a text header keeps its text exactly;
+  - a number, date, boolean or error header is named by its display text (the cell's number format and
+    `XlsxReaderOptions.DisplayCulture`), for example `2024`;
+  - an empty header is `ColumnN`, N being the column's position, as extra columns already were;
+  - a name already used, ignoring case, gets the smallest number from 2 up that makes it unique, as
+    Excel numbers repeated table headers: `Qty, Qty, Qty` becomes `Qty, Qty2, Qty3`.
+  Cell values are unchanged; the values under the second `Qty` are in `Qty2`.
+  **Changed output:** `Name, Town, Town` gave the columns `Name, Town, Column3` and now gives
+  `Name, Town, Town2`. Tables whose header names are unique text are unchanged.
+- **A sheet with a header row and no data rows gave a DataTable with no columns** (A2). It now has the
+  header row's columns, by the same rule, and no rows. A completely empty sheet still has no columns.
+- Unchanged: `RowReader` access by header name, `GetDisplayString(name)` and `ReadXlsx<T>`, where the
+  first occurrence of a name wins and only text headers have names (as documented in 2.0.1).
+
+### Tests
+
+- New manual-test group `datatables` (21 checks): every naming case, header-only and empty sheets,
+  DataSet and DataTable overloads, an encrypted file, and by-name access unchanged.
+- The manual-test groups' summary exceptions now name the first five failed checks and their messages,
+  so a CI log shows which check failed (D-286).
+
 ## 2.0.2 (2026-11-07)
 
 Bug fixes in how the readers follow references inside the package (D-211, D-219). The public API is
