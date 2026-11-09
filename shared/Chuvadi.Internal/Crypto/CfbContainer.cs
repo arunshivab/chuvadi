@@ -577,12 +577,13 @@ internal static class CfbContainer
     // ---- Reader -----------------------------------------------------------------
 
     /// <summary>
-    /// Reads a CFB file and returns a flat dictionary of stream name → bytes.
+    /// Reads the CFB header, the DIFAT, the FAT and the directory chain, and nothing else: no stream body is
+    /// loaded. Shared by <see cref="Read"/> and <see cref="ListStreamNames"/>.
     /// </summary>
-    public static Dictionary<string, byte[]> Read(Stream input)
+    private static void LoadFatAndDirectory(Stream input, out byte[] headerBytes, out List<uint> fat, out byte[] dirData)
     {
         input.Position = 0;
-        var headerBytes = new byte[SectorSize];
+        headerBytes = new byte[SectorSize];
         input.ReadExactly(headerBytes, 0, SectorSize);
 
         for (int i = 0; i < HeaderSignature.Length; i++)
@@ -590,8 +591,6 @@ internal static class CfbContainer
                 throw new InvalidDataException("Not a CFB file (signature mismatch).");
 
         uint firstDirSector = ReadUInt32(headerBytes, 48);
-        uint firstMiniFatSector = ReadUInt32(headerBytes, 60);
-        uint miniStreamCutoff = ReadUInt32(headerBytes, 56);
         uint firstDifatSector = ReadUInt32(headerBytes, 68);
         uint difatSectorCount = ReadUInt32(headerBytes, 72);
 
@@ -622,7 +621,7 @@ internal static class CfbContainer
         }
 
         // Read FAT.
-        var fat = new List<uint>();
+        fat = new List<uint>();
         foreach (var fatSectorIdx in difat)
         {
             input.Position = (long)SectorSize + (long)fatSectorIdx * SectorSize;
@@ -632,7 +631,39 @@ internal static class CfbContainer
         }
 
         // Read directory chain.
-        var dirData = ReadFatChain(input, fat, firstDirSector);
+        dirData = ReadFatChain(input, fat, firstDirSector);
+    }
+
+    /// <summary>
+    /// Returns the names of the streams in a CFB file, read from the directory only: no stream is loaded, so the
+    /// cost does not depend on how large the streams are. Throws <see cref="InvalidDataException"/> or
+    /// <see cref="EndOfStreamException"/> when the header, the FAT or the directory cannot be read.
+    /// </summary>
+    public static HashSet<string> ListStreamNames(Stream input)
+    {
+        LoadFatAndDirectory(input, out _, out _, out var dirData);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        int entryCount = dirData.Length / DirectoryEntrySize;
+        for (int i = 0; i < entryCount; i++)
+        {
+            int off = i * DirectoryEntrySize;
+            if (dirData[off + 66] != TypeStream) continue;
+            int nameLen = ReadUInt16(dirData, off + 64);
+            if (nameLen <= 2 || nameLen > 64) continue;
+            names.Add(Encoding.Unicode.GetString(dirData, off, nameLen - 2));
+        }
+        return names;
+    }
+
+    /// <summary>
+    /// Reads a CFB file and returns a flat dictionary of stream name → bytes.
+    /// </summary>
+    public static Dictionary<string, byte[]> Read(Stream input)
+    {
+        LoadFatAndDirectory(input, out var headerBytes, out var fat, out var dirData);
+
+        uint firstMiniFatSector = ReadUInt32(headerBytes, 60);
+        uint miniStreamCutoff = ReadUInt32(headerBytes, 56);
 
         // Read MiniFAT (if present).
         var miniFat = new List<uint>();
