@@ -9,13 +9,14 @@ using Chuvadi.Sheets.Model;
 namespace Chuvadi.Sheets.ManualTests;
 
 /// <summary>
-/// 2.0.3 (SH-10, D-283, D-285, D-286): DataTable column names from the header row in
+/// 2.0.3 (SH-10, D-283, D-285, D-286) and 2.0.4 (D-292): DataTable column names from the header row in
 /// <c>ReadXlsx</c> (DataSet) and <c>ReadXlsxSheet</c> (DataTable).
 /// <list type="bullet">
 /// <item>Columns by position. A text header keeps its text exactly. A number, date, boolean or error
-/// header is named by its display text. An empty header is "ColumnN" (N = its position).</item>
-/// <item>Duplicates, compared ignoring case: the first keeps its name; later ones get the smallest
-/// number from 2 up that makes them unique (Qty, Qty2, Qty3), as in Excel tables.</item>
+/// header is named by its display text.</item>
+/// <item>Repeats (ignoring case) and empty headers are named as Excel names a table's columns: typed
+/// names are reserved; one shared counter numbers repeats (name + N, never 1) and empty headers
+/// (Column + N), skipping names already used.</item>
 /// <item>A sheet with a header row and no data rows still gets its columns (A2).</item>
 /// <item>Unchanged: RowReader by-name lookup and ReadXlsx&lt;T&gt; (first occurrence wins, text
 /// headers only), and tables with unique text headers.</item>
@@ -33,7 +34,7 @@ internal static class DataTablesTest
 
     public static void Run(string outputDir)
     {
-        Console.WriteLine("[DataTablesTest] 2.0.3 DataTable column names from the header row...");
+        Console.WriteLine("[DataTablesTest] 2.0.3–2.0.4 DataTable column names (Excel table names) from the header row...");
         Console.WriteLine();
         int pass = 0, fail = 0;
         var failed = new FailedChecks();
@@ -75,18 +76,18 @@ internal static class DataTablesTest
         Check("case only: qty, Qty -> qty, Qty2", () =>
             Columns(Make(dir, "case", new object?[] { "qty", "Qty", "Town" }), "qty", "Qty2", "Town"));
 
-        Check("a real Qty2 header after two Qty: Qty, Qty, Qty2 -> Qty, Qty2, Qty22", () =>
-            Columns(Make(dir, "realqty2", new object?[] { "Qty", "Qty", "Qty2" }), "Qty", "Qty2", "Qty22"));
+        Check("a typed Qty2 header after two Qty keeps its name: Qty, Qty, Qty2 -> Qty, Qty3, Qty2 (2.0.3: Qty2, Qty22)", () =>
+            Columns(Make(dir, "realqty2", new object?[] { "Qty", "Qty", "Qty2" }), "Qty", "Qty3", "Qty2"));
 
-        Check("blank header: Name, (blank), Town -> Name, Column2, Town", () =>
+        Check("blank header: Name, (blank), Town -> Name, Column1, Town (2.0.3: Column2)", () =>
         {
             var p = Make(dir, "blank", new object?[] { "Name", null, "Town" });
-            Columns(p, "Name", "Column2", "Town");
-            Eq("row 1 Column2", 3.0, p.ReadXlsxSheet().Rows[0]["Column2"]);
+            Columns(p, "Name", "Column1", "Town");
+            Eq("row 1 Column1", 3.0, p.ReadXlsxSheet().Rows[0]["Column1"]);
         });
 
-        Check("blank third column next to a real Column3 header -> Column3, Name, Column32", () =>
-            Columns(Make(dir, "column3", new object?[] { "Column3", "Name", null }), "Column3", "Name", "Column32"));
+        Check("blank third column next to a typed Column3 header -> Column3, Name, Column1 (2.0.3: Column32)", () =>
+            Columns(Make(dir, "column3", new object?[] { "Column3", "Name", null }), "Column3", "Name", "Column1"));
 
         Check("number header: Name, 2024, Town -> Name, 2024, Town", () =>
             Columns(Make(dir, "number", new object?[] { "Name", 2024, "Town" }), "Name", "2024", "Town"));
@@ -132,7 +133,7 @@ internal static class DataTablesTest
             Eq("row 1 Column1", DBNull.Value, t.Rows[0]["Column1"]);
         });
 
-        Check("data wider than the header row: extra columns are ColumnN, made unique", () =>
+        Check("data wider than the header row: extra columns are named as empty headers, by the shared counter", () =>
         {
             var p = Path.Combine(dir, "wider-data.xlsx");
             using (var w = XlsxWriter.Create(p))
@@ -142,7 +143,7 @@ internal static class DataTablesTest
                 s.WriteRow("Asha", 3.0, "Pune", "x");
                 w.Save();
             }
-            Names(p.ReadXlsxSheet(), "Name", "Column3", "Column32", "Column4");
+            Names(p.ReadXlsxSheet(), "Name", "Column3", "Column1", "Column2");
         });
 
         Check("header row wider than the data: every header is a column, empty values are DBNull", () =>
@@ -173,6 +174,41 @@ internal static class DataTablesTest
             wb.SaveTo(p);
             Names(p.ReadXlsxSheet(), "Name", "Qty");
         });
+
+        // ---- 2.0.4: Excel's own names, observed by Arun with Insert > Table on 22 header rows (D-292) ----
+        // Expected names are exactly what Excel showed. null = an empty header cell.
+
+        var excel = new (string Label, object?[] Headers, string[] Excel)[]
+        {
+            ("Qty, Qty, Town", new object?[] { "Qty", "Qty", "Town" }, new[] { "Qty", "Qty2", "Town" }),
+            ("Qty, Qty, (blank), 2024", new object?[] { "Qty", "Qty", null, 2024 }, new[] { "Qty", "Qty2", "Column3", "2024" }),
+            ("Name, (blank), Town", new object?[] { "Name", null, "Town" }, new[] { "Name", "Column1", "Town" }),
+            ("Name, (blank), (blank)", new object?[] { "Name", null, null }, new[] { "Name", "Column1", "Column2" }),
+            ("Name, 2024, Town", new object?[] { "Name", 2024, "Town" }, new[] { "Name", "2024", "Town" }),
+            ("qty, Qty, Town", new object?[] { "qty", "Qty", "Town" }, new[] { "qty", "Qty2", "Town" }),
+            ("Name, Town, Town", new object?[] { "Name", "Town", "Town" }, new[] { "Name", "Town", "Town2" }),
+            ("Column3, Name, (blank)", new object?[] { "Column3", "Name", null }, new[] { "Column3", "Name", "Column1" }),
+            ("Qty, Qty, Qty", new object?[] { "Qty", "Qty", "Qty" }, new[] { "Qty", "Qty2", "Qty3" }),
+            ("Qty, Qty, Qty2", new object?[] { "Qty", "Qty", "Qty2" }, new[] { "Qty", "Qty3", "Qty2" }),
+            ("Qty, Qty, (blank)", new object?[] { "Qty", "Qty", null }, new[] { "Qty", "Qty2", "Column3" }),
+            ("Name, (blank), 2024", new object?[] { "Name", null, 2024 }, new[] { "Name", "Column1", "2024" }),
+            ("2024, Name, (blank)", new object?[] { 2024, "Name", null }, new[] { "2024", "Name", "Column1" }),
+            ("Qty, Qty, (blank), Town", new object?[] { "Qty", "Qty", null, "Town" }, new[] { "Qty", "Qty2", "Column3", "Town" }),
+            ("Name, (blank), Town, (blank)", new object?[] { "Name", null, "Town", null }, new[] { "Name", "Column1", "Town", "Column2" }),
+            ("Qty, Qty, (blank), (blank)", new object?[] { "Qty", "Qty", null, null }, new[] { "Qty", "Qty2", "Column3", "Column4" }),
+            ("(blank), Name, Town", new object?[] { null, "Name", "Town" }, new[] { "Column1", "Name", "Town" }),
+            ("Name, Qty, Town, (blank)", new object?[] { "Name", "Qty", "Town", null }, new[] { "Name", "Qty", "Town", "Column1" }),
+            ("Qty, Qty, Town, Town", new object?[] { "Qty", "Qty", "Town", "Town" }, new[] { "Qty", "Qty2", "Town", "Town3" }),
+            ("(blank), Qty, Qty", new object?[] { null, "Qty", "Qty" }, new[] { "Column1", "Qty", "Qty2" }),
+            ("Qty, Qty, (blank), Qty", new object?[] { "Qty", "Qty", null, "Qty" }, new[] { "Qty", "Qty2", "Column3", "Qty4" }),
+            ("Name, Name, Column3, (blank)", new object?[] { "Name", "Name", "Column3", null }, new[] { "Name", "Name2", "Column3", "Column4" }),
+        };
+        for (int e = 0; e < excel.Length; e++)
+        {
+            var c = excel[e];
+            Check($"Excel {e + 1:00}: {c.Label} -> {string.Join(", ", c.Excel)}", () =>
+                Columns(Make(dir, $"excel{e + 1:00}", c.Headers), c.Excel));
+        }
 
         // ---- A2: header row with no data rows --------------------------------------------------------
 
@@ -216,8 +252,8 @@ internal static class DataTablesTest
             var ds = p.ReadXlsx();
             Eq("tables", 2, ds.Tables.Count);
             Names(ds.Tables["First"]!, "Qty", "Qty2");
-            Names(ds.Tables["Second"]!, "Name", "Column2", "Name2");
-            Names(p.ReadXlsxSheet("Second"), "Name", "Column2", "Name2");
+            Names(ds.Tables["Second"]!, "Name", "Column1", "Name2");
+            Names(p.ReadXlsxSheet("Second"), "Name", "Column1", "Name2");
         });
 
         Check("encrypted file: the same names", () =>

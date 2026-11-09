@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.0.4 (unreleased)
+
+DataTable column names now match Excel's table names exactly (D-292). The public API is unchanged.
+
+### Bug fixes
+
+- **`ReadXlsx` (DataSet) and `ReadXlsxSheet` (DataTable) named repeated and empty headers differently from
+  Excel.** D-285 asked for Excel's naming. Arun's Excel check (Insert > Table on 22 header rows) showed that Excel
+  works differently from 2.0.3:
+  - every typed header name is reserved, ignoring case, wherever it is in the row;
+  - each repeat and each empty header then gets a made-up name from **one shared counter** starting at 1. An empty
+    header is `Column` + the counter. A repeat is its name + the counter, but never 1. A name already used moves
+    the number on, and the counter continues from the number used plus 1.
+
+  Changed names (2.0.3 → 2.0.4):
+  - `Name, (empty), Town`: `Column2` → `Column1`;
+  - `Name, (empty), (empty)`: `Column2, Column3` → `Column1, Column2`;
+  - `Column3, Name, (empty)`: `Column32` → `Column1`;
+  - `Qty, Qty, Qty2`: `Qty2, Qty22` → `Qty3, Qty2`;
+  - `Qty, Qty, Town, Town`: `Town2` → `Town3`;
+  - `Qty, Qty, (empty), Qty`: `Qty3` → `Qty4`.
+
+  Data columns wider than the header row are named as empty headers. Unchanged: `Qty, Qty2, Qty3`; `qty, Qty2`;
+  `Name, Town, Town2`; number, date and boolean headers; header-only sheets; tables with unique headers; values;
+  by-name access (`row["Qty"]`, `ReadXlsx<T>`).
+
+  Not observed in Excel, inferred: after a skip, the counter continues from the number used (no observed case
+  separates this from continuing from the counter plus 1).
+
+### Tests
+
+- The `datatables` group adds the 22 header rows from Arun's Excel check, with Excel's names as the expected
+  result (43 checks).
+- Layout17's timing checks no longer depend on a fixed wall-clock limit (D-292):
+  - the cancellation checks (key derivation in `Workbook.Load`, `XlsxReader.Open` and `SaveAsync`) allow the
+    larger of 1,500 ms and half of a full, uncancelled derivation measured on the same machine;
+  - the spin-count cap check proves the order instead of timing it: a wrong password still gets
+    `XlsxLimitExceededException`.
+
 ## 2.0.3 (2026-11-09)
 
 A bug fix in the one-line DataSet and DataTable readers (SH-10, D-283, D-285, D-286). The public API is
