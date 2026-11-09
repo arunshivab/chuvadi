@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.4 (unreleased)
+## 2.0.4 (2026-11-10)
 
 DataTable column names now match Excel's table names exactly (D-292). The public API is unchanged.
 
