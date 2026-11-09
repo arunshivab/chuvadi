@@ -280,8 +280,14 @@ public static class DocxTemplate
         public required int DrawingId { get; init; }
     }
 
-    /// <summary>Read limits and cancellation for one Fill call, threaded to every part read.</summary>
-    private sealed record FillLimits(DocxReaderOptions Options, System.Threading.CancellationToken Ct);
+    /// <summary>
+    /// Read limits, cancellation and the element count (MaxElements, D-281) for one template call, threaded to
+    /// every part read, so the parts of one call share one count.
+    /// </summary>
+    private sealed record FillLimits(DocxReaderOptions Options, System.Threading.CancellationToken Ct)
+    {
+        public ElementBudget? Budget { get; } = Options.NewBudget();
+    }
 
     private static void FillPackage(Stream packageIn, Stream packageOut, TemplateData data, TemplateOptions options, FillLimits lim)
     {
@@ -697,7 +703,7 @@ public static class DocxTemplate
         var xml = new XmlDocument { PreserveWhitespace = true };
         using var s = GuardedPartStream.Wrap(entry.Open(), lim.Options.MaxPartBytes, lim.Ct, entry.FullName);
         // Whitespace and comments are preserved: rewritten parts must keep everything else intact.
-        using var reader = GuardedXmlReader.Create(s, lim.Options.MaxXmlDepth, lim.Ct, entry.FullName,
+        using var reader = GuardedXmlReader.Create(s, lim.Options.MaxXmlDepth, lim.Budget, lim.Ct, entry.FullName,
             ignoreWhitespace: false, ignoreComments: false);
         xml.Load(reader);
         return xml;
