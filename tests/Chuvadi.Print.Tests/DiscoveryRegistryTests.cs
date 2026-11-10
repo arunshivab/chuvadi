@@ -248,12 +248,9 @@ public class NetworkPrinterDiscoveryTests
     [Fact]
     public void Nothing_answers_within_the_duration()
     {
-        int port;
-        using (var probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
-        {
-            probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-            port = ((IPEndPoint)probe.LocalEndPoint!).Port;
-        }
+        // Held, never answering: no other test's fake can take the port and reply meanwhile.
+        using ReservedPort silent = LoopbackPorts.ReserveSilentUdpPort();
+        int port = silent.Port;
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var found = NetworkPrinterDiscovery.BrowseFrom(new NetworkPrinterDiscoveryOptions { Duration = TimeSpan.FromMilliseconds(400) },
                                                        new[] { IPAddress.Loopback }, new IPEndPoint(IPAddress.Loopback, port), CancellationToken.None);

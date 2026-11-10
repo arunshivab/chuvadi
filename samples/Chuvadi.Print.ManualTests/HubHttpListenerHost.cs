@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Chuvadi.Print.Remote;
@@ -17,7 +16,7 @@ namespace Chuvadi.Print.ManualTests
     public sealed class HubHttpListenerHost : IDisposable
     {
         private readonly PrintHub _hub;
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly CancellationTokenSource _stop = new();
         private readonly Task _loop;
         private readonly object _gate = new();
@@ -26,10 +25,9 @@ namespace Chuvadi.Print.ManualTests
         public HubHttpListenerHost(PrintHub hub)
         {
             _hub = hub ?? throw new ArgumentNullException(nameof(hub));
-            int port = FreePort();
+            // A free port, started and accepting before anything uses it (LoopbackPorts: no race with other tests).
+            _listener = LoopbackPorts.StartHttpListener(p => "http://localhost:" + p + "/print-hub/", out int port);
             BaseUri = new Uri("http://localhost:" + port + "/print-hub/");
-            _listener.Prefixes.Add(BaseUri.AbsoluteUri);
-            _listener.Start();
             _loop = Task.Run(ServeAsync);
         }
 
@@ -130,15 +128,6 @@ namespace Chuvadi.Print.ManualTests
             }
         }
 
-        private static int FreePort()
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            int port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-            return port;
-        }
-
         public void Dispose()
         {
             _stop.Cancel();
@@ -146,6 +135,7 @@ namespace Chuvadi.Print.ManualTests
             try { _loop.Wait(TimeSpan.FromSeconds(5)); } catch (Exception) { }
             _listener.Close();
             _stop.Dispose();
+            LoopbackPorts.Release(BaseUri.Port);
         }
     }
 }

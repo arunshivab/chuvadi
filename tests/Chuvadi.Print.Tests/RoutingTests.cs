@@ -266,8 +266,9 @@ public class PrintRouterTests
     [Fact]
     public void Unreachable_ipp_printer_is_a_skip_reason_not_a_crash()
     {
-        int port;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0)) { probe.Start(); port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop(); }
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
+        using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
+        int port = closed.Port;
         using PrintRouter router = IppRoutes.CreateRouter("ipp://127.0.0.1:" + port + "/ipp/print", new IppClientOptions { Timeout = TimeSpan.FromSeconds(5) });
         PrintRouteResult result = router.Print(Job(new MemoryAuditSink()).WithFontsEmbedded());
         Assert.Equal(PrintJobStatus.Failed, result.Result.Status);
@@ -383,8 +384,9 @@ public class IppCapabilityCacheTests
     [Fact]
     public void A_failed_read_is_not_cached()
     {
-        int port;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0)) { probe.Start(); port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop(); }
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
+        using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
+        int port = closed.Port;
         var cache = new IppCapabilityCache();
         using var client = new IppClient("ipp://127.0.0.1:" + port + "/ipp/print", new IppClientOptions { Timeout = TimeSpan.FromSeconds(5) });
         Assert.Throws<IppException>(() => cache.Get(client));
@@ -473,8 +475,9 @@ public class RawTargetTests
     [Fact]
     public void Refused_connection_is_an_io_exception()
     {
-        int port;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0)) { probe.Start(); port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop(); }
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
+        using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
+        int port = closed.Port;
         var target = new RawSocketTarget("127.0.0.1", port);
         IOException ex = Assert.Throws<IOException>(() => target.Send(new byte[] { 1, 2, 3 }, null, CancellationToken.None));
         Assert.Contains("socket://127.0.0.1:" + port, ex.Message);

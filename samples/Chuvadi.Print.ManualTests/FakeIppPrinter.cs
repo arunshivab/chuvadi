@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
-using System.Net.Sockets;
 using System.Threading;
 using Chuvadi.Print.Ipp;
 
@@ -15,7 +14,7 @@ namespace Chuvadi.Print.ManualTests
     /// </summary>
     public sealed class FakeIppPrinter : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly Thread _thread;
         private readonly object _gate = new();
         private readonly List<(IppMessage Request, byte[] Document)> _requests = new();
@@ -23,9 +22,9 @@ namespace Chuvadi.Print.ManualTests
 
         public FakeIppPrinter(Action<IppAttributeGroup>? configure = null)
         {
-            Port = FreePort();
-            _listener.Prefixes.Add("http://localhost:" + Port + "/");
-            _listener.Start();
+            // A free port, started and accepting before anything uses it (LoopbackPorts: no race with other tests).
+            _listener = LoopbackPorts.StartHttpListener(p => "http://localhost:" + p + "/", out int port);
+            Port = port;
             PrinterAttributes = DefaultAttributes(Uri);
             configure?.Invoke(PrinterAttributes);
             _thread = new Thread(Serve) { IsBackground = true, Name = "FakeIppPrinter" };
@@ -188,20 +187,12 @@ namespace Chuvadi.Print.ManualTests
             job.Add("job-state-reasons", IppValue.Keyword("none"));
         }
 
-        private static int FreePort()
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            int port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-            return port;
-        }
-
         public void Dispose()
         {
             try { _listener.Stop(); } catch (ObjectDisposedException) { }
             _listener.Close();
             _thread.Join(TimeSpan.FromSeconds(5));
+            LoopbackPorts.Release(Port);
         }
     }
 }
