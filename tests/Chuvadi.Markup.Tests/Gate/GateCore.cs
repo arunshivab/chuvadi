@@ -474,10 +474,12 @@ namespace Chuvadi.Markdown.Gate
     /// <summary>
     /// Cancellation responsiveness (the contract: a cancelled token stops parsing and rendering promptly, on any
     /// input). Each shape is parsed (or rendered) with a token that is cancelled after each of
-    /// <see cref="CancelAfterMs"/>; every run must end within <see cref="MaxSeconds"/> of the cancel, normally with
-    /// <see cref="OperationCanceledException"/>. A run that finishes in that time without seeing the cancel also
-    /// passes (the input was too fast on this machine to tell). The limit leaves room for slow machines: 1.0.0 ends
-    /// within about 0.3 s of the cancel on every shape.
+    /// <see cref="CancelAfterMs"/>; every run must end within <see cref="MaxSeconds"/> of the moment the token
+    /// actually fires, normally with <see cref="OperationCanceledException"/>. That moment is recorded by a callback
+    /// registered on the token, so a cancel timer that fires late on a busy machine (thread pool or GC delay) does
+    /// not count against the parser (D-294). A run that ends before the token fires passes (the input was too fast
+    /// on this machine to tell). Measured on a 2-core machine under load, revision 7 ends within 0.14 s of the
+    /// token firing; revision 6, which did not poll the token in long inline loops, ran on for 1 to 2 s.
     /// </summary>
     public static class GateCancel
     {
@@ -512,8 +514,11 @@ namespace Chuvadi.Markdown.Gate
             var why = new List<string>();
             foreach (int ms in CancelAfterMs)
             {
-                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(ms));
+                using var cts = new System.Threading.CancellationTokenSource();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
+                long firedTicks = -1;
+                using var reg = cts.Token.Register(() => System.Threading.Interlocked.Exchange(ref firedTicks, sw.ElapsedTicks));
+                cts.CancelAfter(TimeSpan.FromMilliseconds(ms));
                 bool cancelled = false;
                 try
                 {
@@ -521,11 +526,16 @@ namespace Chuvadi.Markdown.Gate
                     else MarkdownParser.Parse(input, o, cts.Token);
                 }
                 catch (OperationCanceledException) { cancelled = true; }
-                double late = sw.Elapsed.TotalSeconds - ms / 1000.0;
-                if (cancelled && late >= MaxSeconds)
-                    why.Add(string.Format(CultureInfo.InvariantCulture, "cancel at {0} ms: seen {1:F3} s later (limit {2} s)", ms, late, MaxSeconds));
-                else if (!cancelled && late >= MaxSeconds)
-                    why.Add(string.Format(CultureInfo.InvariantCulture, "cancel at {0} ms: not seen, finished {1:F3} s later (limit {2} s)", ms, late, MaxSeconds));
+                long endTicks = sw.ElapsedTicks;
+                long fired = System.Threading.Interlocked.Read(ref firedTicks);
+                if (fired < 0) continue; // ended before the token fired: too fast on this machine to tell
+                double late = (double)(endTicks - fired) / System.Diagnostics.Stopwatch.Frequency;
+                if (late < MaxSeconds) continue;
+                double firedAt = (double)fired / System.Diagnostics.Stopwatch.Frequency;
+                why.Add(string.Format(CultureInfo.InvariantCulture,
+                    cancelled ? "cancel at {0} ms (fired at {1:F3} s): seen {2:F3} s after it fired (limit {3} s)"
+                              : "cancel at {0} ms (fired at {1:F3} s): not seen, finished {2:F3} s after it fired (limit {3} s)",
+                    ms, firedAt, late, MaxSeconds));
             }
             return why.Count == 0 ? null : string.Join("; ", why);
         }
