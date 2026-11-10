@@ -51,6 +51,7 @@ public static class Program
             ("Settings", SettingsTests.Run),
             ("Theme", ThemeTests.Run),
             ("DamagedEncrypted", DamagedEncryptedTests.Run),
+            ("LoadSkippedParts", LoadSkippedPartsTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

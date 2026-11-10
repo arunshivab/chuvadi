@@ -6,6 +6,7 @@ Limits for untrusted input, and cancellation for the reader's later reads (D-281
 
 ### New
 
+- **`Document.SkippedParts`** (D-310, Layout's B11): the optional parts `Document.Load` left out, with the same `DocxSkippedPart` type as `DocxReader.SkippedParts` (`PartName`, `Reason`: `Missing`, `Unreadable` or `NotWellFormed`, `Error`). It covers a header, footer, picture, theme, styles, numbering, settings, font table or embedded font, footnotes, endnotes, comments and the document-properties parts, each listed once, in the order Load met them. Load behaves as before; it only records what it left out, so a caller (Chuvadi.Layout, for one) can report it without parsing the file a second time. Empty for a new document; edits do not change it.
 - **`DocxReaderOptions.MaxElements`:** the most XML elements one operation may read. One operation is one `Document.Load`, one template call (`Fill`, `GetPlaceholders`, `CheckTemplate`), or one `DocxReader` read call (each enumeration of `Paragraphs()` or `Tables()`, each call of `ExtractText`, `Images`, `SaveImages` or `GetActiveContent`).
   - It counts every part the operation reads.
   - A breach throws `DocxSecurityLimitException` with the new `DocxLimit.Elements`, while reading, before most of the memory is used.
