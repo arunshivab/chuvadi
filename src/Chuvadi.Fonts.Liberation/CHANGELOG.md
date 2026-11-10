@@ -10,4 +10,6 @@ First release: the Liberation fonts as one shared, separate package (D-302, D-30
 - `LiberationPack` implements Chuvadi.Fonts' `IFontFilePack` (`Files`, `Find`, `FindFamily`, `Open`, `TryOpen`,
   `ReadAllBytes`, `LicenseText`, `Instance`, and `GetLicenseText` through `Instance`). It parses nothing, references no
   layout engine (only Chuvadi.Fonts 1.1.0) and reads nothing from disk or the network.
+- Verified on 2026-11-10: all 12 files are byte-identical to the upstream release archive `liberation-fonts-ttf-2.1.5.tar.gz`
+  (see FONTS.md).
 - Trim- and NativeAOT-compatible (`IsTrimmable`, `IsAotCompatible`; D-217, D-254).
