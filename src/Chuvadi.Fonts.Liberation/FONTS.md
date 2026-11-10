@@ -6,10 +6,16 @@ the fonts are shipped unmodified.
 
 | Files | Family | Version | Source |
 |---|---|---|---|
-| LiberationSans-*, LiberationSerif-*, LiberationMono-* (12) | Liberation Sans / Serif / Mono | 2.1.5 | Built TTFs from arunshivab/chuvadi-pdf `tools/fonts`; upstream github.com/liberationfonts/liberation-fonts (licence from commit 49e1358) |
+| LiberationSans-*, LiberationSerif-*, LiberationMono-* (12) | Liberation Sans / Serif / Mono | 2.1.5 | Byte-identical to the TTFs in the upstream release archive `liberation-fonts-ttf-2.1.5.tar.gz` (github.com/liberationfonts/liberation-fonts, release 2.1.5; checked 2026-11-10, see below); licence text from upstream commit 49e1358 |
 
 The same 12 files, byte for byte, were embedded in Chuvadi.Pdf.PdfA 3.32.1 and are in Chuvadi.Layout.Fonts 0.1.0
 (D-302, D-307); this package is their single shared copy.
+
+## Verified against upstream
+
+On 2026-11-10 all 12 files were compared, byte for byte (SHA-256), with the files in upstream's release archive
+`liberation-fonts-ttf-2.1.5.tar.gz`: 12 of 12 identical. The files are therefore unmodified upstream 2.1.5 builds, not
+distribution rebuilds. (Debian and Arch rebuild the fonts from source, so their files differ by a few bytes.)
 
 Copyright lines as stored in the font files (name ID 0): "Digitized data copyright (c) 2010 Google Corporation.
 Copyright (c) 2012 Red Hat, Inc." Liberation is a trademark of Red Hat, Inc.
