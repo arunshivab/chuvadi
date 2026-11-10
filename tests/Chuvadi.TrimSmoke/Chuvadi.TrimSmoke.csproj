@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Zip\Chuvadi.Zip.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Fonts.Liberation\Chuvadi.Fonts.Liberation.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Print.Ipp\Chuvadi.Print.Ipp.csproj" />
     <ProjectReference Include="..\..\src\Chuvadi.Print.Remote\Chuvadi.Print.Remote.csproj" />

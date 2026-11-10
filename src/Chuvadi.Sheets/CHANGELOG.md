@@ -1,5 +1,42 @@
 # Changelog
 
+## 2.0.5 (2026-11-10)
+
+A data fix: dates before 1 March 1900 were written one day late (SH-11, D-306). The public API is unchanged.
+
+### Bug fixes
+
+- **Dates from 31 December 1899 to 28 February 1900 were written one day late** (SH-11). Excel's 1900 date
+  system counts the fictitious 29 February 1900, so 1 January 1900 is serial 1. The readers already used that rule,
+  but every write path converted with `DateTime.ToOADate`, which gives 2:
+  - cells written by `XlsxWriter`, `Workbook.SaveTo` and `ToXlsx` (`DateTime`, `DateOnly`, `DateTimeOffset`);
+  - `DataValidation.Date` bounds;
+  - the formula evaluator behind conditional formats (both directions, so `DATE`, `YEAR`, `MONTH` and `DAY` agree).
+
+  Load → save therefore moved those dates one day later, and 28 February 1900 became serial 60 (the fictitious
+  29 February), which reloads as a plain number. The same hit durations: the reader returns a time value from 24
+  hours up to 59 days as a `DateTime` in that range, so load → save added 24 hours to it (36:30:00 in an
+  `[h]:mm:ss` cell came back as 60:30:00). They are now written with Excel's rule:
+
+  | Value | 2.0.4 wrote | 2.0.5 writes |
+  |---|---|---|
+  | 1900-01-01 | 2 | 1 |
+  | 1900-02-28 | 60 | 59 |
+  | 1899-12-31 (Excel's "0-Jan-1900") | 1 | 0 |
+| Load → save of a 36:30:00 duration | 60:30:00 (serial 2.52) | 36:30:00 (serial 1.52) |
+
+  Unchanged: dates from 1 March 1900 on, time-only values (a `DateTime` on 30 December 1899, as the reader returns
+  for serials below 1), and dates before 30 December 1899. Files are always written in the 1900 date system, as
+  before.
+
+### Tests
+
+- New manual-test group `dates1900` (6 checks): every write path, a load → save round trip of serials 1, 30, 59, 61,
+  0.375 and a 36:30:00 duration, data-validation bounds and the formula evaluator. Five of the six fail on 2.0.4.
+- The streaming-encryption hardening check now spools into its own temporary folder. It scanned the shared temp
+  folder, so a stale `chuvadi_sheets_pkg_*.tmp` from an earlier crashed run, or a spool another test was writing at
+  that moment, failed it although the save had cleaned up.
+
 ## 2.0.4 (2026-11-10)
 
 DataTable column names now match Excel's table names exactly (D-292). The public API is unchanged.

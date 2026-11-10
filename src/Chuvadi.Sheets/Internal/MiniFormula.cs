@@ -169,9 +169,9 @@ internal sealed class MiniFormula
         string s => s,
         bool b => b,
         double d => d,
-        DateTime dt => dt.ToOADate() - (date1904 ? 1462 : 0),
-        DateOnly d => d.ToDateTime(TimeOnly.MinValue).ToOADate() - (date1904 ? 1462 : 0),
-        DateTimeOffset dto => dto.DateTime.ToOADate() - (date1904 ? 1462 : 0),
+        DateTime dt => SerialDate.FromDateTime(dt, date1904),
+        DateOnly d => SerialDate.FromDateTime(d.ToDateTime(TimeOnly.MinValue), date1904),
+        DateTimeOffset dto => SerialDate.FromDateTime(dto.DateTime, date1904),
         TimeSpan ts => ts.TotalDays,
         IConvertible ic when v is int or long or short or byte or float or decimal or uint or ulong or sbyte or ushort
             => ic.ToDouble(CultureInfo.InvariantCulture),
@@ -393,9 +393,12 @@ internal sealed class MiniFormula
             return Math.Round(v * f, MidpointRounding.AwayFromZero) / f;
         }
 
-        private static double Serial(DateTime d, EvalContext c) => d.ToOADate() - (c.Date1904 ? 1462 : 0);
+        private static double Serial(DateTime d, EvalContext c) => SerialDate.FromDateTime(d, c.Date1904);
 
-        private static DateTime FromSerial(double s, EvalContext c) => DateTime.FromOADate(s + (c.Date1904 ? 1462 : 0));
+        // Inverse of Serial (2.0.5, SH-11): Excel's 1900 rule for serials 1..59. Serial 60 (the fictitious
+        // 29-Feb-1900) and other unrepresentable serials fall back to the OLE date, as before.
+        private static DateTime FromSerial(double s, EvalContext c)
+            => SerialDate.ToDateTime(s, c.Date1904) ?? DateTime.FromOADate(s + (c.Date1904 ? 1462 : 0));
 
         /// <summary>SEARCH with ? and * wildcards (~ escapes), case-insensitive.</summary>
         private static int SearchIndex(string within, string find, int start)

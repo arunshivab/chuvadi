@@ -4,9 +4,10 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Chuvadi.Fonts;
+using Chuvadi.Fonts.Liberation;
 using Chuvadi.Zip;
 
-// Trim and NativeAOT smoke app (D-217 item 2). Exercises Chuvadi.Zip, Chuvadi.Fonts and Chuvadi.Print the way a consumer does, and
+// Trim and NativeAOT smoke app (D-217 item 2). Exercises Chuvadi.Zip, Chuvadi.Fonts, Chuvadi.Fonts.Liberation and Chuvadi.Print the way a consumer does, and
 // exits non-zero on the first thing that is wrong. CI publishes it trimmed (TrimMode=full) and as NativeAOT, with
 // warnings as errors, then runs the published executable.
 internal static class Program
@@ -16,9 +17,10 @@ internal static class Program
         try
         {
             FontsCheck();
+            LiberationCheck();
             var archive = ZipRoundTrip();
             var print = PrintChecks.Run();
-            Console.WriteLine("OK: Fonts " + FontPack.Files.Count + " files, zip " + archive + " bytes, " + print);
+            Console.WriteLine("OK: Fonts " + FontPack.Files.Count + " files, Liberation " + LiberationPack.Files.Count + " files, zip " + archive + " bytes, " + print);
             return 0;
         }
         catch (Exception ex)
@@ -55,6 +57,27 @@ internal static class Program
         var first = pack.Files[0];
         using (var s = pack.Open(first.FileName)) Require(s.Length > 0, "pack Open");
         Require(pack.GetLicenseText(first.FileName).Length > 0, "pack licence text");
+    }
+
+    private static void LiberationCheck()
+    {
+        Require(LiberationPack.Files.Count == 12, "expected 12 Liberation files, got " + LiberationPack.Files.Count);
+        // Every embedded face is found by name, has the length and SHA-256 its catalog states, and opens as a stream.
+        foreach (var f in LiberationPack.Files)
+        {
+            var bytes = LiberationPack.ReadAllBytes(f.FileName);
+            Require(bytes.LongLength == f.Length, f.FileName + ": length");
+            Require(Convert.ToHexString(SHA256.HashData(bytes)).Equals(f.Sha256, StringComparison.OrdinalIgnoreCase), f.FileName + ": SHA-256");
+            using var s = LiberationPack.Open(f.FileName);
+            Require(s.Length == f.Length, f.FileName + ": stream length");
+        }
+        Require(LiberationPack.LicenseText.Contains("Open Font License", StringComparison.OrdinalIgnoreCase), "Liberation license text");
+        Require(!LiberationPack.TryOpen("no-such-font.ttf", out _), "TryOpen of a missing Liberation file");
+        Require(LiberationPack.FindFamily("Liberation Sans").Count == 4, "Liberation Sans faces");
+        var pack = LiberationPack.Instance;
+        Require(pack.Name == "Chuvadi.Fonts.Liberation", "Liberation pack name");
+        using (var s = pack.Open("LiberationSerif-Regular.ttf")) Require(s.Length > 0, "Liberation pack Open");
+        Require(pack.GetLicenseText("LiberationMono-Bold.ttf").Length > 0, "Liberation pack licence text");
     }
 
     private static int ZipRoundTrip()

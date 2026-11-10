@@ -313,8 +313,11 @@ PrintRouteResult result = router.Print(job);   // a page XPS cannot express fall
   range allows, so an application that wants a newer Chuvadi.Pdf references it directly. The floor is 3.31.2 because
   3.31.1 leaves pages whose media box does not start at 0,0 blank.
 - **Building**: it lives in `staging/` and consumes the Chuvadi.Pdf packages from the local feed set in
-  `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and CI until Chuvadi.Pdf joins
-  the monorepo or nuget.org (D-28). Building, testing and packing are described in its README.
+  `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and the pull-request CI until
+  Chuvadi.Pdf joins the monorepo or nuget.org (D-28). Building, testing and packing are described in its README.
+- **Releases**: GitHub releases tagged `print-pdf-raster-v*` (0.1.0 first), not nuget.org. The release job builds and
+  tests the package against the Chuvadi.Pdf packages of the chuvadi-pdf release, checked against hashes pinned in
+  `tools/chuvadi-pdf/hashes/`. Take Chuvadi.Pdf from that chuvadi-pdf release.
 
 ## 6. Remote printing (A6, `Chuvadi.Print.Remote`)
 

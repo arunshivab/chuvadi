@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.0.4 (released 2026-11-10) |
+| Library version | Chuvadi.Sheets 2.0.5 (released 2026-11-10) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -89,13 +89,13 @@ it a sound base for viewers and converters (Chuvadi.Layout.Sheets lays out and r
 ## 2.2 Getting the package
 
 Chuvadi.Sheets is published as a NuGet package attached to its GitHub release, not on nuget.org. Download
-`Chuvadi.Sheets.2.0.4.nupkg` from the release page (tag `sheets-v2.0.4`), put it in a folder, and use that folder
+`Chuvadi.Sheets.2.0.5.nupkg` from the release page (tag `sheets-v2.0.5`), put it in a folder, and use that folder
 as a package source.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\local-nuget | Out-Null
-Copy-Item .\Chuvadi.Sheets.2.0.4.nupkg C:\local-nuget\
-Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.4.nupkg -Algorithm SHA256
+Copy-Item .\Chuvadi.Sheets.2.0.5.nupkg C:\local-nuget\
+Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.5.nupkg -Algorithm SHA256
 ```
 
 The release page shows the package's SHA-256 digest; the hash printed here should be the same.
@@ -114,7 +114,7 @@ Add a `nuget.config` next to your solution so the folder is a source:
 Then reference the package:
 
 ```powershell
-dotnet add package Chuvadi.Sheets --version 2.0.4
+dotnet add package Chuvadi.Sheets --version 2.0.5
 ```
 
 ## 2.3 Building from source
@@ -245,8 +245,8 @@ header text.
 
 # 4 Upgrading from 1.x
 
-Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 to 2.0.4 are bug-fix releases on
-top of it (sections 4.5 to 4.8). Values, styles, display text and saved
+Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 to 2.0.5 are bug-fix releases on
+top of it (sections 4.5 to 4.9). Values, styles, display text and saved
 output are the same as in 1.8.0; the public API is the same apart from the namespace and the obsolete zip types.
 
 ## 4.1 The namespace is now `Chuvadi.Sheets.Model`
@@ -355,6 +355,21 @@ is the same.
 | `Qty, Qty, (empty), Qty` | `Qty, Qty2, Column3, Qty3` | `Qty, Qty2, Column3, Qty4` |
 
 Repeats of one name (`Qty, Qty2, Qty3`), number headers, header-only sheets and unique headers are unchanged.
+
+## 4.9 Changes in 2.0.5
+
+2.0.5 fixes how dates before 1 March 1900 are written (section 8.1). The public API is the same.
+
+| Value written | 2.0.4 stored | 2.0.5 stores (as Excel) |
+|---|---|---|
+| 1900-01-01 | 2 (Excel shows 2-Jan-1900) | 1 |
+| 1900-02-28 | 60 (Excel shows 29-Feb-1900) | 59 |
+| 1899-12-31 | 1 | 0 (Excel's "0-Jan-1900") |
+| Load → save of a 36:30:00 duration | 60:30:00 | 36:30:00 |
+
+This applies to every write path: cells, `Workbook.SaveTo`, `ToXlsx`, `DataValidation.Date` and conditional-format
+evaluation. Load → save no longer moves those dates, nor durations from 24 hours up to 59 days, which the reader
+returns as dates in that range. Later dates and time-only values are unchanged.
 
 # 5 Choosing a write API
 
@@ -658,7 +673,10 @@ sheet.WriteRow(new DateTime(2026, 5, 1),
 writer.Save();
 ```
 
-Excel stores dates as serial numbers in the 1900 date system; the writer always saves in that system.
+Excel stores dates as serial numbers in the 1900 date system; the writer always saves in that system. That system
+counts a fictitious 29 February 1900, so 1 January 1900 is serial 1 and 1 March 1900 is serial 61; the writer and the
+readers use the same rule (since 2.0.5), so a date before 1 March 1900 round-trips unchanged. .NET's
+`DateTime.ToOADate` is one day ahead for those dates; don't use it to compare with stored serials.
 
 ## 8.2 Reading
 
@@ -2014,6 +2032,7 @@ a local function, such as an upload handler, are compiled but not run.
 
 ## 34.3 History
 
+- **2.0.5** (November 2026): updated for Chuvadi.Sheets 2.0.5 (section 4.9): dates before 1 March 1900 (8.1).
 - **2.0.4** (November 2026): updated for Chuvadi.Sheets 2.0.4 (section 4.8): DataTable column names as in Excel
   tables (18.2).
 - **2.0.3** (November 2026): updated for Chuvadi.Sheets 2.0.3 (section 4.7): DataTable column names from the header

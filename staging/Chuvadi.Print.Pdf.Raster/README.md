@@ -45,7 +45,12 @@ The package references Chuvadi.Pdf.Rendering and Chuvadi.Pdf.Operations at **`[3
 
 ## Building
 
-This project lives in `staging/` and is **not** in `Chuvadi.slnx` or the monorepo's CI (D-28, D-29). It consumes the
+**Releases:** the package is attached to the GitHub release of its tag (`print-pdf-raster-v0.1.0` and later), not
+nuget.org. Take the Chuvadi.Pdf packages from the chuvadi-pdf GitHub release named in the release notes, and
+Chuvadi.Fonts from our `fonts-v*` release. The release job builds and tests this project against the Chuvadi.Pdf
+packages of that release, each checked against the hashes pinned in `tools/chuvadi-pdf/hashes/` (D-236, D-241).
+
+This project lives in `staging/` and is **not** in `Chuvadi.slnx` or the pull-request CI (D-28, D-29). It consumes the
 Chuvadi.Pdf packages from your local package folder (see `staging/README.md`), configured by `staging/nuget.config`
 for the projects under `staging/` only. It never references a chuvadi-pdf source clone. The tests run on one exact
 Chuvadi.Pdf version, 3.31.2 by default (`-p:ChuvadiPdfVersion=<version>` runs them on a later 3.x):
