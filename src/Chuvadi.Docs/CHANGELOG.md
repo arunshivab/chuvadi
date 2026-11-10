@@ -2,7 +2,7 @@
 
 ## 2.1.0 (unreleased)
 
-Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284).
+Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284). The settings model, theme fonts and colours, and the in-memory spool for encrypted saves (D-296, D-299).
 
 ### New
 
@@ -19,6 +19,13 @@ Limits for untrusted input, and cancellation for the reader's later reads (D-281
   
   A Word document of roughly 900–1,000 pages still loads. The worst case measured was about 600 MB and a few seconds. The same name as Chuvadi.Sheets' and Chuvadi.Layout's presets.
 
+- **Settings model** (`word/settings.xml`), read by Load and written by Save:
+  - `Document.Compatibility` (`CompatibilityOptions`): the compatibility mode (`Mode`), the 65 legacy layout options of `w:compat` as `bool` properties named after their elements (`NoColumnBalance` is Word's "Don't balance columns"), and every other `w:compatSetting` in `OtherSettings` (`CompatibilitySetting`), kept as found.
+  - `ThemeFontLanguages`, `ColorSchemeMapping` (`ColorSchemeIndex`), `AutoHyphenation`, `ConsecutiveHyphenLimit`, `HyphenationZonePt`, `DoNotHyphenateCaps`, `CharacterSpacingControl` (enum), `NoPunctuationKerning`, `BookFoldPrinting`, `BookFoldReversePrinting`, `BookFoldPrintingSheets`, `DisplayBackgroundShape`, `DecimalSymbol` and `ListSeparator`.
+  - **Why:** before, load → save dropped all of these. A Word file's compatibility mode and layout options were lost on the first save, so Word laid it out by different rules.
+- **Theme fonts and colours:** `Document.Theme` (`DocumentTheme`, `ThemeFontScheme`: the Latin, East Asian and complex-script typefaces, the script fonts, the twelve colours), `Document.GetThemeFontName(ThemeFont)` (ECMA-376 §17.15.1.88, with the theme-font languages picking the script font) and `Document.GetThemeColorHex(ThemeColor, tint, shade)` (through the colour mapping). Without a theme part, the Office 2013–2022 defaults, the same as Chuvadi.Layout's.
+- **`EncryptionOptions.TempStorage`** (`TempStorage.File`, the default, or `TempStorage.Memory`): `Memory` builds the encrypted save's package in process memory, so no temporary file is created anywhere and `TempDirectory` is ignored (for read-only file systems). The same setting as Chuvadi.Sheets'.
+
 ### Behaviour changes
 
 - **The token given to `DocxReader.Open` now also covers the reader's later reads.**
@@ -26,9 +33,24 @@ Limits for untrusted input, and cancellation for the reader's later reads (D-281
   - The overloads that take their own token observe both.
   - Before, the `Open` token was checked only while opening: a cancelled one was ignored by later reads, which ran to the end.
   - **If you open with a short-lived token** (a timeout meant only for `Open`, or a request's token you keep using after the request), reads now throw `OperationCanceledException` once it is cancelled. Open with a token that lives as long as the reader.
+- **A new `Document` is saved in compatibility mode 15** (Word 2013 and later): settings.xml now holds `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>` (D-299).
+  - Before, the files stated no mode, so Word opened every one of them as "[Compatibility Mode]" (Word 2007 rules).
+  - Word may now lay some content out slightly differently, by its current rules (for example table cell padding).
+  - To write the 2.0.0 output, set `doc.Compatibility.Mode = null`. A loaded document keeps the file's own mode, or none.
+- **An old binary Office file is now a format error that names its format, not a password prompt** (D-253, D-293, the shared decryptor). A Word 97-2003 `.doc` (or an `.xls`, a `.ppt`, another OLE compound file) used to be taken for an encrypted file, because only its compound-file signature was checked: `DocxPasswordRequiredException` both without a password ("This file is encrypted; supply a password to read it.") and with one ("Encrypted file is missing the EncryptionInfo stream."). Now only a compound file with both an `EncryptionInfo` and an `EncryptedPackage` stream is treated as encrypted. Any other compound file is `DocxFormatException` in every entry point, with a message such as "This is a Word 97-2003 binary file (.doc), not an Office Open XML package, and it is not encrypted. Open it in Office and save it as .docx or .xlsx." (on the `InvalidDataException` inside, and in the outer message). A compound file with only one of the two streams is reported as a damaged encrypted file naming the missing stream. The check reads only the file's directory: a handful of reads, whatever the file's size.
+- **A damaged encrypted container opened with a password is now `DocxFormatException`** in `Document.Load`, `DocxReader.Open` and the template methods, as in Chuvadi.Sheets (D-300). That covers a compound file that cannot be parsed, or one without its `EncryptionInfo` or `EncryptedPackage` stream. Before, it was `DocxPasswordRequiredException`, as if the password were wrong. A missing or wrong password is still `DocxPasswordRequiredException`.
+- **`DocxReader.Open`'s format error now carries the cause:** "Could not open the file as a docx package: " followed by the inner exception's message (it was a fixed sentence). The cause stays the `InnerException`.
+
+### Tests
+
+- The cancellation checks in the Hardening group are deterministic (D-296 R4, D-302):
+  - They cancel from a dedicated thread and measure from when the token fires. Before, the cancel ran on the thread pool, and on a busy CI runner it could arrive only after the key derivation had finished (the macOS "Fill during KDF" and "Load during KDF" failures).
+  - The slow fixture's spin count is measured on the machine running the tests, so the derivation takes at least 20 s and always outlasts the cancel (it was a fixed 3,000,000 spins, about 1–2 s).
+  - The fixture is saved with 1,000 spins and its EncryptionInfo rewritten, which also saves the 2–3 s the old save took.
 
 ### Documentation
 
+- README: **Errors** (the damaged encrypted container), **Theme fonts and colours**, **Document settings and compatibility mode**, and `TempStorage` under **Password protection** and **Platforms and threads**.
 - README, **Untrusted input:**
   - the preset;
   - a table with the defaults next to the preset values;

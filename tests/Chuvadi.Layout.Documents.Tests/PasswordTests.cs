@@ -96,11 +96,14 @@ public class PasswordTests
     public void A_damaged_compound_file_still_asks_for_the_password()
     {
         // A compound file whose directory cannot be read may be a damaged encrypted file, so the shared decryptor
-        // (D-293) still treats it as encrypted: the password exception, as for any encrypted file.
+        // (D-293) still treats it as encrypted: without a password, the password exception, as for any encrypted
+        // file. With a password the container is parsed and found damaged, which Chuvadi.Docs (2.1.0) and
+        // Chuvadi.Sheets report as a format error, not a password error (D-300, D-305).
         byte[] ole = new byte[512];
         new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 }.CopyTo(ole, 0);
         Assert.False(Assert.Throws<LayoutPasswordRequiredException>(() => AutoDetectLayout.Open(ole, LayoutSourceFormat.Auto, With(null))).PasswordGiven);
-        Assert.True(Assert.Throws<LayoutPasswordRequiredException>(() => AutoDetectLayout.Open(ole, LayoutSourceFormat.Auto, With("pw"))).PasswordGiven);
+        LayoutFormatException withPassword = Assert.Throws<LayoutFormatException>(() => AutoDetectLayout.Open(ole, LayoutSourceFormat.Auto, With("pw")));
+        Assert.StartsWith("The file could not be read: ", withPassword.Message);
     }
 
     private static byte[] Cfb(params (string Name, int Size)[] streams)

@@ -148,9 +148,31 @@ internal static class PackageGuard
         {
             throw new DocxSecurityLimitException(DocxLimit.SpinCount, ex.Actual, ex.Allowed);
         }
-        catch (PackagePasswordException ex)
+        catch (PackagePasswordException) when (ct.IsCancellationRequested)
+        {
+            // A cancel is not a password problem.
+            ct.ThrowIfCancellationRequested();
+            throw;
+        }
+        catch (PackagePasswordException ex) when (IsPasswordProblem(ex, password))
         {
             throw new DocxPasswordRequiredException(ex.Message, ex);
         }
+        catch (PackagePasswordException ex)
+        {
+            // A password was given and the container itself is damaged (it cannot be parsed, or its
+            // EncryptionInfo / EncryptedPackage stream is missing): a malformed file, as in
+            // Chuvadi.Sheets (D-300). Before 2.1.0 this was reported as a password problem.
+            throw new DocxFormatException(DocxErrors.ReadMessage + " " + ex.Message, ex.InnerException ?? ex);
+        }
     }
+
+    /// <summary>
+    /// The shared decryptor reports four things as PackagePasswordException: no password given, a wrong
+    /// password ("Incorrect password."), a container that cannot be parsed, and a missing EncryptionInfo
+    /// or EncryptedPackage stream. Only the first two are password problems. (Without a password the
+    /// container is not parsed, so damage is not detected then.) The same rule as Chuvadi.Sheets.
+    /// </summary>
+    private static bool IsPasswordProblem(PackagePasswordException ex, string? password)
+        => string.IsNullOrEmpty(password) || ex.Message == "Incorrect password.";
 }

@@ -1351,8 +1351,12 @@ internal static class DocumentSerializer
         x.WriteStartDocument(standalone: true);
         x.WriteStartElement("w", "settings", W);
 
-        // CT_Settings order: … embedTrueTypeFonts, saveSubsetFonts, mirrorMargins, …, gutterAtTop, …, documentProtection, …,
-        // defaultTabStop, …, evenAndOddHeaders, …, updateFields, footnotePr, endnotePr …
+        // CT_Settings order: … displayBackgroundShape, …, embedTrueTypeFonts, saveSubsetFonts, mirrorMargins, …, gutterAtTop, …,
+        // documentProtection, …, defaultTabStop, autoHyphenation, consecutiveHyphenLimit, hyphenationZone, doNotHyphenateCaps, …,
+        // evenAndOddHeaders, bookFoldRevPrinting, bookFoldPrinting, bookFoldPrintingSheets, …, noPunctuationKerning,
+        // characterSpacingControl, …, updateFields, …, footnotePr, endnotePr, compat, …, themeFontLang, clrSchemeMapping, …,
+        // decimalSymbol, listSeparator.
+        if (doc.DisplayBackgroundShape) OnOffElement(x, "displayBackgroundShape");
         if (doc.EmbedTrueTypeFonts) { x.WriteStartElement("embedTrueTypeFonts", W); x.WriteEndElement(); }
         if (doc.SaveSubsetFonts) { x.WriteStartElement("saveSubsetFonts", W); x.WriteEndElement(); }
         if (doc.MirrorMargins) { x.WriteStartElement("mirrorMargins", W); x.WriteEndElement(); }
@@ -1394,7 +1398,24 @@ internal static class DocumentSerializer
             x.WriteEndElement();
         }
 
+        if (doc.AutoHyphenation) OnOffElement(x, "autoHyphenation");
+        if (doc.ConsecutiveHyphenLimit is int hyphenLimit) ValElement(x, "consecutiveHyphenLimit", hyphenLimit.ToString(CultureInfo.InvariantCulture));
+        if (doc.HyphenationZonePt is double zone) ValElement(x, "hyphenationZone", RunProperties.Twips(zone));
+        if (doc.DoNotHyphenateCaps) OnOffElement(x, "doNotHyphenateCaps");
+
         if (doc.EffectiveOddAndEven) { x.WriteStartElement("evenAndOddHeaders", W); x.WriteEndElement(); }
+
+        if (doc.BookFoldReversePrinting) OnOffElement(x, "bookFoldRevPrinting");
+        if (doc.BookFoldPrinting) OnOffElement(x, "bookFoldPrinting");
+        if (doc.BookFoldPrintingSheets is int sheets) ValElement(x, "bookFoldPrintingSheets", sheets.ToString(CultureInfo.InvariantCulture));
+        if (doc.NoPunctuationKerning) OnOffElement(x, "noPunctuationKerning");
+        if (doc.CharacterSpacingControl is CharacterSpacingControl csc)
+            ValElement(x, "characterSpacingControl", csc switch
+            {
+                CharacterSpacingControl.CompressPunctuation => "compressPunctuation",
+                CharacterSpacingControl.CompressPunctuationAndJapaneseKana => "compressPunctuationAndJapaneseKana",
+                _ => "doNotCompress",
+            });
 
         if (doc.UpdateFieldsOnOpen) { x.WriteStartElement("updateFields", W); x.WriteAttributeString("val", W, "true"); x.WriteEndElement(); }
 
@@ -1414,9 +1435,81 @@ internal static class DocumentSerializer
             NotesXml.Write(x, kind, props, separators);
         }
 
+        var compat = doc.Compatibility;
+        if (!compat.IsEmpty)
+        {
+            x.WriteStartElement("compat", W);
+            for (int i = 0; i < CompatibilityOptions.FlagElements.Length; i++)
+                if (compat.GetFlag(i)) OnOffElement(x, CompatibilityOptions.FlagElements[i]);
+            if (compat.Mode is int mode) CompatSetting(x, "compatibilityMode", CompatibilityOptions.WordSettingsUri, mode.ToString(CultureInfo.InvariantCulture));
+            foreach (var setting in compat.OtherSettings)
+                if (setting is not null) CompatSetting(x, setting.Name, setting.Uri, setting.Value);
+            x.WriteEndElement();
+        }
+
+        var langs = doc.ThemeFontLanguages;
+        if (!langs.IsEmpty)
+        {
+            x.WriteStartElement("themeFontLang", W);
+            if (langs.Latin is string latin) x.WriteAttributeString("val", W, latin);
+            if (langs.EastAsia is string eastAsia) x.WriteAttributeString("eastAsia", W, eastAsia);
+            if (langs.ComplexScript is string bidi) x.WriteAttributeString("bidi", W, bidi);
+            x.WriteEndElement();
+        }
+
+        if (!doc.ColorSchemeMapping.IsEmpty)
+        {
+            x.WriteStartElement("clrSchemeMapping", W);
+            for (int i = 0; i < ColorSchemeMapping.Attributes.Length; i++)
+                if (doc.ColorSchemeMapping.Get(i) is ColorSchemeIndex ci)
+                    x.WriteAttributeString(ColorSchemeMapping.Attributes[i], W, SchemeIndexToken(ci));
+            x.WriteEndElement();
+        }
+
+        if (doc.DecimalSymbol is string dec) ValElement(x, "decimalSymbol", dec);
+        if (doc.ListSeparator is string sep) ValElement(x, "listSeparator", sep);
+
         x.WriteEndElement();
         x.WriteEndDocument();
     }
+
+    private static void OnOffElement(XmlWriter x, string name)
+    {
+        x.WriteStartElement(name, W);
+        x.WriteEndElement();
+    }
+
+    private static void ValElement(XmlWriter x, string name, string value)
+    {
+        x.WriteStartElement(name, W);
+        x.WriteAttributeString("val", W, value);
+        x.WriteEndElement();
+    }
+
+    private static void CompatSetting(XmlWriter x, string name, string uri, string value)
+    {
+        x.WriteStartElement("compatSetting", W);
+        x.WriteAttributeString("name", W, name);
+        x.WriteAttributeString("uri", W, uri);
+        x.WriteAttributeString("val", W, value);
+        x.WriteEndElement();
+    }
+
+    private static string SchemeIndexToken(ColorSchemeIndex i) => i switch
+    {
+        ColorSchemeIndex.Dark1 => "dark1",
+        ColorSchemeIndex.Light1 => "light1",
+        ColorSchemeIndex.Dark2 => "dark2",
+        ColorSchemeIndex.Light2 => "light2",
+        ColorSchemeIndex.Accent1 => "accent1",
+        ColorSchemeIndex.Accent2 => "accent2",
+        ColorSchemeIndex.Accent3 => "accent3",
+        ColorSchemeIndex.Accent4 => "accent4",
+        ColorSchemeIndex.Accent5 => "accent5",
+        ColorSchemeIndex.Accent6 => "accent6",
+        ColorSchemeIndex.Hyperlink => "hyperlink",
+        _ => "followedHyperlink",
+    };
 
     // ---- docProps ----------------------------------------------------------------------------
 

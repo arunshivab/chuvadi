@@ -47,6 +47,9 @@ public class VerificationSuiteTests
     [Fact] public void Suite_SkippedParts() => SkippedPartsTests.Run(FreshOutDir());
     [Fact] public void Suite_PathSave() => PathSaveTests.Run(FreshOutDir());
     [Fact] public void Suite_UntrustedInput() => UntrustedInputTests.Run(FreshOutDir());
+    [Fact] public void Suite_Settings() => SettingsTests.Run(FreshOutDir());
+    [Fact] public void Suite_Theme() => ThemeTests.Run(FreshOutDir());
+    [Fact] public void Suite_DamagedEncrypted() => DamagedEncryptedTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 

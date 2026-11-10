@@ -26,7 +26,9 @@ namespace Chuvadi.Layout
     /// Only a compound file with the EncryptionInfo and EncryptedPackage streams is treated as encrypted (D-293). A
     /// legacy .doc or .xls (not supported) is never reported here: it is a plain <see cref="LayoutFormatException"/>
     /// whose message names the old format. A compound file whose directory cannot be read may still be a damaged
-    /// encrypted file, so it still asks for the password.
+    /// encrypted file, so without a password it still asks for one; with a password, Chuvadi.Docs (2.1.0) and
+    /// Chuvadi.Sheets report the damaged container as a format error, so it is a plain <see cref="LayoutFormatException"/>
+    /// (D-300, D-305).
     /// </remarks>
     public sealed class LayoutPasswordRequiredException : LayoutFormatException
     {

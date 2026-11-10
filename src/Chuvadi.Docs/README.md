@@ -134,6 +134,40 @@ foreach (var p in loaded.Blocks.OfType<Paragraph>())
 }
 ```
 
+### Theme fonts and colours
+
+A run can name a theme font (`TextFormat.AsciiThemeFont` … `ComplexScriptThemeFont`, for example `ThemeFont.MinorHAnsi`) or a theme colour (`ThemeColor.Accent1` with a tint or shade) instead of a name or a hex value. `Document.Theme` reads the document's theme (`word/theme/theme1.xml`), and two methods turn the references into names and colours:
+
+```csharp
+var loaded = Document.Load("report.docx");
+string? body = loaded.GetThemeFontName(ThemeFont.MinorHAnsi);          // "Calibri"
+string? tamil = loaded.GetThemeFontName(ThemeFont.MinorBidi);          // "Latha" when the file's theme-font language is ta-IN
+string accent = loaded.GetThemeColorHex(ThemeColor.Accent1, tint: 0x99); // "8FAADC"
+IReadOnlyDictionary<string, string> scripts = loaded.Theme.MinorFonts.ScriptFonts; // script code → typeface, for example "Taml" → "Latha"
+```
+
+- **Fonts** follow ECMA-376 §17.15.1.88: the language for the slot comes from `Document.ThemeFontLanguages` (Latin for Ascii and HAnsi, EastAsia, ComplexScript for Bidi); if the theme has a script font for that language's script, that font, otherwise the scheme's Latin, East Asian or complex-script typeface. The East Asian and complex-script typefaces are often empty in Office themes, and then the result is null when no script font applies: use the run's own font. The language → script table is Chuvadi's (Word's is not published) and covers the scripts Office themes list. When the file states no theme-font languages, Word guesses from the Office install language and the keyboards; Chuvadi follows the standard and uses the scheme's fonts.
+- **Colours** are six-digit hex. `Text1`, `Background1`, `Text2`, `Background2` and the accent and hyperlink colours go through `Document.ColorSchemeMapping` (Word's default mapping when the file states none); the tint and shade change the HSL lightness, as Word does.
+- **Without a theme part** (new documents, many generated files), the Office 2013–2022 defaults apply: Calibri Light and Calibri, no East Asian or complex-script font, the Office colours. `Theme.IsBuiltInDefault` says so. Chuvadi.Layout uses the same defaults.
+
+### Document settings and compatibility mode
+
+`word/settings.xml` holds document-wide settings. Load reads them and Save writes them back:
+
+```csharp
+var doc = new Document();
+// doc.Compatibility.Mode is 15 (Word 2013 and later): Word opens the file without "[Compatibility Mode]".
+doc.Compatibility.NoColumnBalance = true;          // Word's "Don't balance columns" (w:compat/w:noColumnBalance)
+doc.AutoHyphenation = true;
+doc.HyphenationZonePt = 18;
+doc.ThemeFontLanguages.ComplexScript = "ta-IN";
+doc.DecimalSymbol = ",";
+```
+
+- **`Compatibility`:** the compatibility mode (`Mode`: 11 = Word 2003, 12 = Word 2007, 14 = Word 2010, 15 = Word 2013 and later), the 65 legacy layout options of `w:compat` as `bool` properties named after their elements (`NoColumnBalance`, `UseFELayout`, `DoNotExpandShiftReturn`, …), and every other `w:compatSetting` in `OtherSettings`, kept as found. A new document is in mode 15. A loaded document keeps the file's mode, or none when the file states none (Word then opens it in compatibility mode, as it did before).
+- **Also:** `ThemeFontLanguages`, `ColorSchemeMapping`, `AutoHyphenation`, `ConsecutiveHyphenLimit`, `HyphenationZonePt`, `DoNotHyphenateCaps`, `CharacterSpacingControl`, `NoPunctuationKerning`, `BookFoldPrinting`, `BookFoldReversePrinting`, `BookFoldPrintingSheets`, `DisplayBackgroundShape`, `DecimalSymbol` and `ListSeparator`, next to the older `DifferentOddAndEvenPages`, `MirrorMargins`, `GutterAtTop`, `DefaultTabStopPt`, `UpdateFieldsOnOpen`, `TrackRevisions`, `EmbedTrueTypeFonts` and `SaveSubsetFonts`.
+- **Not kept** through load → save: editor state (zoom, view, proofing state, revision IDs, document variables, mail merge, the attached template). `DocxTemplate` copies the template's settings.xml unchanged.
+
 ## Tables
 
 ```csharp
@@ -397,9 +431,9 @@ Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers
 
 | Exception | When |
 |---|---|
-| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document, missing from the package or corrupt. A broken header or footer is the exception for the readers and `Document.Load`: it reads as blank and `DocxReader` lists it in `SkippedParts` (see **Read documents**). The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
+| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document, missing from the package or corrupt, or an encrypted container that is damaged (opened with a password). A broken header or footer is the exception for the readers and `Document.Load`: it reads as blank and `DocxReader` lists it in `SkippedParts` (see **Read documents**). The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
 | `DocxSecurityLimitException` (a `DocxFormatException`) | A resource limit was exceeded (see **Untrusted input**). Thrown as itself, never wrapped. |
-| `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. |
+| `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. Without a password the container is not read, so a damaged encrypted file also asks for one. |
 | `DocxTemplateException` | A fill problem: a strict fill with missing values, or a template limit (`MaxGeneratedItems`, …). Lists every problem. |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 
@@ -480,7 +514,7 @@ var loaded = Document.Load("secret.docx", "S3cret!");
 
 Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` reference implementation. Integrity (HMAC-SHA512) is verified on every decrypt.
 
-The plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path replaces the target only when the save succeeded (see **Write a report**).
+By default, the plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path replaces the target only when the save succeeded (see **Write a report**).
 
 The temporary file goes to the system temp folder (`Path.GetTempPath()`), or to a folder you choose:
 
@@ -489,6 +523,14 @@ doc.SaveTo(outputStream, new EncryptionOptions { Password = "S3cret!", TempDirec
 ```
 
 If that folder is missing or can't be written to, the save throws (the system's `DirectoryNotFoundException` or `IOException`, naming the temporary file) before anything is written. `DocxTemplate.Fill` with `OutputEncryption` encrypts in memory and writes no temporary file.
+
+On a read-only file system, or when no temporary file is wanted at all, build the package in memory instead:
+
+```csharp
+doc.SaveTo(outputStream, new EncryptionOptions { Password = "S3cret!", TempStorage = TempStorage.Memory });
+```
+
+With `TempStorage.Memory` no file is created anywhere and `TempDirectory` is ignored. The in-memory copy is not encrypted (it holds the text the document already holds in memory, and is gone when the save returns). It costs about two and a half times the package size in memory at the peak (an 11.8 MB package: about 90 MB more than the file spool, at the same speed), and a package over about 2 GB fails with an `IOException`. The encrypted file is the same either way. Chuvadi.Sheets has the same `TempStorage` setting.
 
 On Windows, real-time antivirus (Microsoft Defender) scans an encrypted Office file when it is opened, by trying the default Office password, which runs the full key derivation at the file's declared spin count. That happens inside the operating system's file-open call, before the library reads a byte, so neither `MaxSpinCount` nor the `CancellationToken` can shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine, then milliseconds once the scan result was cached. Both limits apply in full to the library's own work, and to streams that are already open or held in memory.
 
@@ -499,7 +541,7 @@ There is also cooperative "restrict editing" protection — `doc.Protect("pass",
 - **Platforms:** pure managed code for plain `net10.0`, with no native code and no Windows-only API. It runs the same on Windows, macOS, Linux and Android, and in server processes. The package is marked trim- and NativeAOT-compatible, and the analyzers run on every build.
 - **Streams everywhere:** every method that takes a path has a stream or byte-array version. Use those for Android content URIs, uploads and cloud storage.
 - **The disk:** only two things write temporary files, and nothing is read from fixed locations:
-  - an encrypted `SaveTo` spools to the temp folder or `EncryptionOptions.TempDirectory` (see **Password protection**);
+  - an encrypted `SaveTo` spools to the temp folder or `EncryptionOptions.TempDirectory`, or to memory with `TempStorage.Memory` (see **Password protection**);
   - a save to a path writes beside the target, then replaces it.
 - **Threads:** the library has no mutable static state, so any number of threads can work at once, each on its own documents. A single `Document` or `DocxReader` is not safe for concurrent use: give each request or thread its own.
 - **Untrusted files:** use `DocxReaderOptions.ForUntrustedInput()` and pass a `CancellationToken` (see **Untrusted input**).

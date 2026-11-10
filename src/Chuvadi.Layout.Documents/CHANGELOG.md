@@ -10,7 +10,9 @@
   `LayoutFormatException` "The file could not be read: …", whose `InnerException` is the Chuvadi.Sheets
   `XlsxFormatException` naming the old format. Any OLE file that neither Docs nor Sheets can read now says "file"
   where it said "workbook" (D-301). A compound file whose directory cannot be read may be a damaged encrypted file, so
-  it still asks for the password.
+  without a password it still asks for one; with a password it is `LayoutFormatException` "The file could not be
+  read: …", because Chuvadi.Docs 2.1.0 and Chuvadi.Sheets both report a damaged container as a format error (D-300,
+  D-305).
 - A wrong password is reported from the document step, so its message says "document" for a workbook too.
 
 ## 0.1.0 (2026-11-09)

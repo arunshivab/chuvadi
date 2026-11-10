@@ -38,16 +38,17 @@ public sealed class LegacyOleFileTests
         return ms.ToArray();
     }
 
-    // DocxReader.Open wraps every failure in a fixed message ("Could not open the file as a docx package."), so for
-    // it the text that names the old format is on the InnerException only (outerNamesIt: false).
-    private static void AssertLegacy(Action read, string format, bool outerNamesIt = true)
+    // Every entry point names the old format in its own message too: since Docs 2.1.0, DocxReader.Open's format
+    // error ends with the cause's message (D-300), like Document.Load and the template methods.
+    private static void AssertLegacy(Action read, string format)
     {
         var ex = Assert.Throws<DocxFormatException>(read);
         Assert.IsNotType<DocxPasswordRequiredException>(ex);
         var inner = Assert.IsType<InvalidDataException>(ex.InnerException);
         Assert.Contains(format, inner.Message);
         Assert.Contains("not an Office Open XML package", inner.Message);
-        if (outerNamesIt) Assert.Contains(format, ex.Message);
+        Assert.Contains(format, ex.Message);
+        Assert.EndsWith(inner.Message, ex.Message);
     }
 
     [Fact]
@@ -56,8 +57,8 @@ public sealed class LegacyOleFileTests
         byte[] file = LegacyWord();
         AssertLegacy(() => Document.Load(new MemoryStream(file)), ".doc");
         AssertLegacy(() => Document.Load(new MemoryStream(file), "pw"), ".doc");
-        AssertLegacy(() => DocxReader.Open(new MemoryStream(file)), ".doc", outerNamesIt: false);
-        AssertLegacy(() => DocxReader.Open(new MemoryStream(file), "pw"), ".doc", outerNamesIt: false);
+        AssertLegacy(() => DocxReader.Open(new MemoryStream(file)), ".doc");
+        AssertLegacy(() => DocxReader.Open(new MemoryStream(file), "pw"), ".doc");
         AssertLegacy(() => DocxTemplate.CheckTemplate(new MemoryStream(file)), ".doc");
         AssertLegacy(() => DocxTemplate.GetPlaceholders(new MemoryStream(file), "pw"), ".doc");
     }
@@ -70,7 +71,7 @@ public sealed class LegacyOleFileTests
         {
             File.WriteAllBytes(path, LegacyWord());
             AssertLegacy(() => Document.Load(path), ".doc");
-            AssertLegacy(() => DocxReader.Open(path), ".doc", outerNamesIt: false);
+            AssertLegacy(() => DocxReader.Open(path), ".doc");
         }
         finally { File.Delete(path); }
     }
@@ -125,10 +126,12 @@ public sealed class LegacyOleFileTests
         byte[] sigOnly = { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
         Assert.True(EncryptedPackageReader.IsEncryptedPackage(new MemoryStream(sigOnly)));
         Assert.Throws<DocxPasswordRequiredException>(() => Document.Load(new MemoryStream(sigOnly)));
-        // With a password Docs reports the damaged container its own way (a password error, as in 2.0); what matters
-        // here is that it is never told it is an old binary file.
-        var withPassword = Assert.ThrowsAny<Exception>(() => Document.Load(new MemoryStream(sigOnly), "pw"));
+        // With a password it is a malformed file (Docs 2.1.0, D-300, as in Sheets), never an old binary file and
+        // never a password error.
+        var withPassword = Assert.Throws<DocxFormatException>(() => Document.Load(new MemoryStream(sigOnly), "pw"));
+        Assert.Contains("could not be parsed", withPassword.Message);
         Assert.DoesNotContain("binary Office file", withPassword.Message);
+        Assert.Throws<DocxFormatException>(() => DocxReader.Open(new MemoryStream(sigOnly), "pw"));
     }
 
     [Fact]
