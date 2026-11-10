@@ -400,8 +400,12 @@ public class RawTargetTests
     /// <summary>A loopback "printer" that reads one connection to the end and keeps the bytes.</summary>
     private sealed class RawPrinter : IDisposable
     {
+        /// <summary>How long a printer made with <c>closeAfterReading: false</c> keeps the connection open after the data ends.</summary>
+        public static readonly TimeSpan Hold = TimeSpan.FromSeconds(10);
+
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
         private readonly Task<byte[]> _received;
+        private readonly TaskCompletionSource<long> _dataEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public RawPrinter(bool closeAfterReading = true)
         {
@@ -414,7 +418,8 @@ public class RawTargetTests
                 var chunk = new byte[8192];
                 int read;
                 while ((read = socket.Receive(chunk)) > 0) buffer.Write(chunk, 0, read);
-                if (!closeAfterReading) Thread.Sleep(5000);
+                _dataEnded.TrySetResult(System.Diagnostics.Stopwatch.GetTimestamp());
+                if (!closeAfterReading) Thread.Sleep(Hold);
                 socket.Shutdown(SocketShutdown.Both);
                 return buffer.ToArray();
             });
@@ -422,6 +427,13 @@ public class RawTargetTests
 
         public int Port { get; }
         public byte[] Received => _received.Wait(TimeSpan.FromSeconds(20)) ? _received.Result : throw new TimeoutException();
+
+        /// <summary>
+        /// When the printer saw the end of the data (<see cref="System.Diagnostics.Stopwatch.GetTimestamp"/>): the
+        /// target's <c>Shutdown(Send)</c>, made just before it starts draining.
+        /// </summary>
+        public long DataEnded => _dataEnded.Task.Wait(TimeSpan.FromSeconds(20)) ? _dataEnded.Task.Result : throw new TimeoutException();
+
         public void Dispose() => _listener.Stop();
     }
 
@@ -441,11 +453,17 @@ public class RawTargetTests
     [Fact]
     public void Socket_target_does_not_wait_longer_than_the_drain_timeout()
     {
+        // The printer keeps the connection open for RawPrinter.Hold (10 s) after the data ends, so Send can only
+        // return sooner because its 300 ms drain timeout ran out. The time is measured from when the drain starts
+        // (the printer sees the end of the data), not from before connecting, so a slow, loaded machine does not count
+        // connecting and sending against the drain (D-320, as D-294). Load can only make the printer's timestamp
+        // later, which shortens the measured time, so it cannot fail this test falsely.
         using var printer = new RawPrinter(closeAfterReading: false);
         var target = new RawSocketTarget("127.0.0.1", printer.Port) { DrainTimeout = TimeSpan.FromMilliseconds(300) };
-        var watch = System.Diagnostics.Stopwatch.StartNew();
         target.Send(Encoding.ASCII.GetBytes("^XA^FDTest^FS^XZ"), null, CancellationToken.None);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), watch.Elapsed.ToString());
+        long returned = System.Diagnostics.Stopwatch.GetTimestamp();
+        TimeSpan sinceDrainStarted = System.Diagnostics.Stopwatch.GetElapsedTime(printer.DataEnded, returned);
+        Assert.True(sinceDrainStarted < TimeSpan.FromSeconds(5), "Send returned " + sinceDrainStarted + " after the drain started.");
     }
 
     [Fact]
