@@ -21,9 +21,10 @@ namespace Chuvadi.Print.ManualTests
     /// with <see cref="Release"/> when it is disposed. It returns only once a TCP connection to the prefix's host
     /// and port succeeds, trying every address the host name resolves to, as the clients do: .NET's HttpListener
     /// on Linux and macOS binds "localhost" to the first address it resolves to, which can be IPv6 (::1).</para>
-    /// <para>A test that needs a port where nothing answers takes a <see cref="ReservedPort"/>: a socket bound
-    /// to the port and never listening, so no other test can take the port while connections to it are refused
-    /// (TCP) or never answered (UDP).</para>
+    /// <para>A test that needs a port where nothing answers takes a <see cref="ReservedPort"/>, which no fake in
+    /// this process is given while it is held. A closed TCP port has no socket at all, so a connection is refused
+    /// at once on every system (a socket bound without listening is refused on Linux and Windows, but on macOS the
+    /// connection waits until it times out). A silent UDP port is held by a bound socket that never answers.</para>
     /// </remarks>
     public static class LoopbackPorts
     {
@@ -107,15 +108,16 @@ namespace Chuvadi.Print.ManualTests
             }
         }
 
-        /// <summary>A TCP port on loopback that nothing listens on, held until disposed: connections are refused.</summary>
-        public static ReservedPort ReserveClosedTcpPort() => Reserve(SocketType.Stream, ProtocolType.Tcp);
+        /// <summary>
+        /// A TCP port on loopback with nothing bound to it, so a connection is refused at once; no fake in this
+        /// process is given it until the <see cref="ReservedPort"/> is disposed.
+        /// </summary>
+        public static ReservedPort ReserveClosedTcpPort() => new(null, Candidate());
 
-        /// <summary>A UDP port on loopback that nothing answers on, held until disposed.</summary>
-        public static ReservedPort ReserveSilentUdpPort() => Reserve(SocketType.Dgram, ProtocolType.Udp);
-
-        private static ReservedPort Reserve(SocketType type, ProtocolType protocol)
+        /// <summary>A UDP port on loopback held by a bound socket that never answers, until disposed.</summary>
+        public static ReservedPort ReserveSilentUdpPort()
         {
-            var socket = new Socket(AddressFamily.InterNetwork, type, protocol);
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             try
             {
                 socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
@@ -150,12 +152,12 @@ namespace Chuvadi.Print.ManualTests
         }
     }
 
-    /// <summary>A loopback port held by a bound socket that never listens or answers. Dispose to release it.</summary>
+    /// <summary>A loopback port where nothing answers, kept from the fakes in this process. Dispose to release it.</summary>
     public sealed class ReservedPort : IDisposable
     {
-        private readonly Socket _socket;
+        private readonly Socket? _socket;
 
-        internal ReservedPort(Socket socket, int port)
+        internal ReservedPort(Socket? socket, int port)
         {
             _socket = socket;
             Port = port;
@@ -167,7 +169,7 @@ namespace Chuvadi.Print.ManualTests
         /// <inheritdoc />
         public void Dispose()
         {
-            _socket.Dispose();
+            _socket?.Dispose();
             LoopbackPorts.Release(Port);
         }
     }

@@ -266,7 +266,7 @@ public class PrintRouterTests
     [Fact]
     public void Unreachable_ipp_printer_is_a_skip_reason_not_a_crash()
     {
-        // Held, never listening: nothing can answer on it, and no other test can take it meanwhile.
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
         using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
         int port = closed.Port;
         using PrintRouter router = IppRoutes.CreateRouter("ipp://127.0.0.1:" + port + "/ipp/print", new IppClientOptions { Timeout = TimeSpan.FromSeconds(5) });
@@ -384,7 +384,7 @@ public class IppCapabilityCacheTests
     [Fact]
     public void A_failed_read_is_not_cached()
     {
-        // Held, never listening: nothing can answer on it, and no other test can take it meanwhile.
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
         using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
         int port = closed.Port;
         var cache = new IppCapabilityCache();
@@ -475,7 +475,7 @@ public class RawTargetTests
     [Fact]
     public void Refused_connection_is_an_io_exception()
     {
-        // Held, never listening: nothing can answer on it, and no other test can take it meanwhile.
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
         using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
         int port = closed.Port;
         var target = new RawSocketTarget("127.0.0.1", port);
