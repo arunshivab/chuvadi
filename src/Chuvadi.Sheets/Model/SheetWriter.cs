@@ -585,7 +585,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             var hasTime = dt.TimeOfDay != TimeSpan.Zero;
             var sid = styleId ?? (hasTime ? _state.DefaultDateTimeStyleId : _state.DefaultDateStyleId);
             WriteCellOpen(column, sid, null);
-            WriteValue(dt.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            WriteValue(SerialDate.FromDateTime(dt).ToString("R", CultureInfo.InvariantCulture));
             _xml.WriteEndElement();
             return;
         }
@@ -593,7 +593,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         {
             var sid = styleId ?? _state.DefaultDateStyleId;
             WriteCellOpen(column, sid, null);
-            WriteValue(d.ToDateTime(TimeOnly.MinValue).ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            WriteValue(SerialDate.FromDateTime(d.ToDateTime(TimeOnly.MinValue)).ToString("R", CultureInfo.InvariantCulture));
             _xml.WriteEndElement();
             return;
         }
@@ -602,7 +602,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             var hasTime = dto.TimeOfDay != TimeSpan.Zero;
             var sid = styleId ?? (hasTime ? _state.DefaultDateTimeStyleId : _state.DefaultDateStyleId);
             WriteCellOpen(column, sid, null);
-            WriteValue(dto.DateTime.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            WriteValue(SerialDate.FromDateTime(dto.DateTime).ToString("R", CultureInfo.InvariantCulture));
             _xml.WriteEndElement();
             return;
         }
@@ -747,9 +747,9 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             case null: return (null, null);
             case string s: return (ErrorLiterals.Contains(s) ? "e" : "str", s);
             case bool b: return ("b", b ? "1" : "0");
-            case DateTime dt: return (null, dt.ToOADate().ToString("R", CultureInfo.InvariantCulture));
-            case DateOnly d: return (null, d.ToDateTime(TimeOnly.MinValue).ToOADate().ToString("R", CultureInfo.InvariantCulture));
-            case DateTimeOffset dto: return (null, dto.DateTime.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            case DateTime dt: return (null, SerialDate.FromDateTime(dt).ToString("R", CultureInfo.InvariantCulture));
+            case DateOnly d: return (null, SerialDate.FromDateTime(d.ToDateTime(TimeOnly.MinValue)).ToString("R", CultureInfo.InvariantCulture));
+            case DateTimeOffset dto: return (null, SerialDate.FromDateTime(dto.DateTime).ToString("R", CultureInfo.InvariantCulture));
             case TimeSpan ts: return (null, ts.TotalDays.ToString("R", CultureInfo.InvariantCulture));
             case double dbl: return (null, dbl.ToString("R", CultureInfo.InvariantCulture));
             case float fl: return (null, ((double)fl).ToString("R", CultureInfo.InvariantCulture));

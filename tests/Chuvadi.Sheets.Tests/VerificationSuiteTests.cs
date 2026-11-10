@@ -99,6 +99,9 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void DataTables() => DataTablesTest.Run(_dir);
+
+    [Fact]
+    public void Dates1900() => Dates1900Test.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

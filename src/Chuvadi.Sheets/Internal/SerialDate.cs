@@ -11,6 +11,34 @@ internal static class SerialDate
 {
     private const double MaxSerial1900 = 2958465.99999999;   // 9999-12-31 23:59:59.999
 
+    private static readonly DateTime OleBase = new(1899, 12, 30);
+    private static readonly DateTime Excel1900Day0 = new(1899, 12, 31);   // serial 0 = "0-Jan-1900"
+    private static readonly DateTime FirstAfterFakeLeapDay = new(1900, 3, 1);
+
+    /// <summary>
+    /// The serial Excel stores for a DateTime in the 1900 date system, the inverse of
+    /// <see cref="ToDateTime"/> (2.0.5, SH-11): dates on or after 1-Mar-1900 are the OLE Automation
+    /// date; 31-Dec-1899 to 28-Feb-1900 count from 31-Dec-1899, because Excel's 1900 system includes
+    /// the fictitious 29-Feb-1900 (1-Jan-1900 is serial 1, not 2 as ToOADate gives); a DateTime on
+    /// 30-Dec-1899 is a time-only value (serial 0 to 1), which the reader produces for serials below
+    /// 1. Earlier dates keep ToOADate (Excel shows any negative serial as "####" anyway).
+    /// Written files are always in the 1900 system.
+    /// </summary>
+    public static double FromDateTime(DateTime value)
+    {
+        if (value >= FirstAfterFakeLeapDay) return value.ToOADate();
+        if (value >= Excel1900Day0) return (value - Excel1900Day0).TotalDays;
+        if (value >= OleBase) return (value - OleBase).TotalDays;
+        return value.ToOADate();
+    }
+
+    /// <summary>
+    /// <see cref="FromDateTime(DateTime)"/> in the given date system (the formula evaluator works in the
+    /// workbook's own system).
+    /// </summary>
+    public static double FromDateTime(DateTime value, bool date1904)
+        => date1904 ? value.ToOADate() - 1462 : FromDateTime(value);
+
     /// <summary>
     /// Converts a serial to a DateTime, or null if it cannot be represented: negative serials,
     /// serials beyond 9999-12-31, and serial 60 in the 1900 system (Excel's fictitious
