@@ -156,6 +156,10 @@ public class FaceMetricsTests
             },
             all);
         Assert.Equal(7, m.GetGlyph(0x30, 0xFE00));
+
+        // U+0042 is listed both as a default sequence and with glyph 9: enumerated twice, looked up as its own glyph (L3).
+        Assert.Equal(VariationSequenceKind.OwnGlyph, m.GetVariationKind(0x42, 0xFE00));
+        Assert.Equal(9, m.GetGlyph(0x42, 0xFE00));
         Assert.Equal(VariationSequenceKind.NotListed, m.GetVariationKind(0x43, 0xFE00));
         Assert.Empty(OpenTypeFont.Load(FontBuilder.Basic(2).Build()).CharacterMap.EnumerateVariationSequences());
     }

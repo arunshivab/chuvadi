@@ -233,9 +233,13 @@ public sealed class CharacterMap
     }
 
     /// <summary>
-    /// Enumerates every variation sequence the format 14 subtable lists, by selector then code point: default
-    /// sequences (the base character's own glyph is used) and sequences with a glyph of their own.
+    /// Enumerates every variation sequence the format 14 subtable lists, in table order: for each selector, its
+    /// default sequences (the base character's own glyph is used), then its sequences with a glyph of their own.
     /// </summary>
+    /// <remarks>
+    /// A font may list the same sequence in both lists; it is then enumerated twice, once of each kind. Lookups
+    /// (<see cref="GetVariationKind"/>, <see cref="GetGlyph(int, int)"/>) give the sequence's own glyph (D-316, L3).
+    /// </remarks>
     /// <returns>(base code point, selector, kind, glyph); for a default sequence the glyph is the base character's.</returns>
     public IEnumerable<(int CodePoint, int VariationSelector, VariationSequenceKind Kind, int GlyphId)> EnumerateVariationSequences()
     {

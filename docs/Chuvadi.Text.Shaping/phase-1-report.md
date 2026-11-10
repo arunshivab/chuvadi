@@ -104,6 +104,22 @@ Decisions:
   SHA256SUMS.txt; Chuvadi.Pdf.Text.Shaping never touched). The oldtags and uvs fixtures are unpacked into the pack as part
   of the block.
 
+- D-316 (2026-11-10): L1, L2 and L3 approved (L3 with one line in the docs on the double listing). One PR for the font
+  reader once L1–L3 and the fallback shape are in, with the `opentype-v0.1.0` tag at its merge; the engine later in its
+  own PR, so main never holds a half engine.
+- D-319 (2026-11-10): every recommendation of the D-316 follow-up (project doc `claude/D-316-fallback-and-engine-options.md`)
+  approved. Wrapper: F1 new `ShapeRun` methods returning `ShapedRun`, `Shape` unchanged; F2 wrapper-owned
+  `ShapingDiagnostic` types (FontReaderFallback = 3); F3 the fallback reports FontReaderFallback and MissingGlyph; F4 the
+  message names the font and the reader's reason, captured once per face. Engine: E1 Latin and the non-complex scripts
+  only in phase 1, Indic unchanged; E2 normalisation against the font with our own NFC/NFD tables; E3 combining
+  character sequences as initial clusters; E4 no GDEF means no classes; E5 the registry's required and on-by-default
+  features always on, switchable off with value 0; E6 LookupList order, one GSUB and one GPOS pass; E7 automatic
+  fraction slash, switchable with frac = 0; E8 default ignorables as invisible zero-advance glyphs after GSUB; E9 a mark's
+  advance zeroed only when a mark lookup positions it; E10 legacy 'kern' only without GPOS; E11 record buffer, views in
+  place, per-lookup glyph bit sets, a bounded plan cache; E12 `ShapingLimits` with a `LimitReached` diagnostic.
+  Order: 1) this font-reader PR, 2) `opentype-v0.1.0` at its merge, 3) the engine on `feat/shaping-engine` in its own
+  PR at the phase-1 exit (Latin 852 of 852, cpsp-on 358 of 358, Indic unchanged), 4) the wrapper fallback to Pdf as a zip.
+
 ## Inputs applied
 
 - Harness revision 2 (d.3) and the D-188 contract change: applied to the pack copy used here. Pack harness through the
@@ -153,7 +169,7 @@ New API only (nothing existing changes):
 | `Os2Table.FamilyClassId`, `FamilySubclassId`; `CharacterMap.HasGlyph`, `HasSymbolSubtable`, `EnumerateVariationSequences` | Chuvadi.OpenType |
 | `ShapingDiagnostic`, `ShapingDiagnosticKind`, `GlyphBuffer.Diagnostics`, `ShapedRun.Diagnostics` (approved D-246) | Chuvadi.Text.Shaping |
 
-Behaviour, for Arun's approval:
+Behaviour (approved D-316):
 
 - L1: a script is found in a font under its Indic "v.2" tag first, then its original tag (dev2 then deva, and so on);
   other scripts under their lower-case ISO 15924 code (R-TS-0013). Used now by ScriptNotInFont; the engine uses the
@@ -163,8 +179,8 @@ Behaviour, for Arun's approval:
 - L3: a format 14 sequence listed in both the default and the non-default list appears twice in
   `EnumerateVariationSequences`; the lookups give the non-default glyph, as FontFace does (R-OT-0058, R-OT-0024).
 
-Wrapper (goes to chuvadi-pdf): no surface change. The D-246 FontReaderFallback diagnostic is not built: exposing it
-changes the 3.26 contract surface, so its shape comes to Arun first.
+Wrapper (goes to chuvadi-pdf): no surface change in this delivery. The FontReaderFallback diagnostic's shape was
+approved in D-319 (F1–F4) and is delivered to the Pdf chat as its own zip.
 
 ## Results (Linux, merge of main 9b8110b and this branch, 2026-11-10)
 
@@ -177,3 +193,19 @@ changes the 3.26 contract surface, so its shape comes to Arun first.
 - Oracle against the real Chuvadi.Pdf 3.32.1 packages: ORACLE AGREES on all 16 fonts and the 22 probes.
 - Pack harness r2 through the wrapper on 3.32.1 with the 0.1.0-phase1.1 packages: self-test passed (22 checks);
   gate 1 2,144 of 29,493; gate 2 `Default` tags match the contract, 0 of 358. GATE FAILED is expected until phase 4.
+
+## Results on Arun's machine (Windows, 2026-11-10)
+
+Pushed as commit 4ea450f on feat/shaping-phase1, on top of the merge 49644cf of main f87ea0a; the pushed tree is
+identical, file by file, to the tree built and tested on Linux.
+
+- Chuvadi.slnx builds with 0 warnings and 0 errors. Full-solution `dotnet test`: 4,636 passed, 1 skipped (Tamil, phase
+  3), 1 failed: Chuvadi.Print.Tests `RawTargetTests.Socket_target_does_not_wait_longer_than_the_drain_timeout` took
+  4.25 s against its 3 s budget while every suite ran at once. Run alone, Chuvadi.Print.Tests passed 337 of 337. A
+  Print timing flake under load, not touched here (Print chat's test); Chuvadi.Print.Xps.Tests passed.
+- Local gate: PHASE TARGET MET, 2,144 of 29,493; oldtags 400 of 6,743; cpsp-on 0 of 358; parity 36,594 of 36,594;
+  font check clean on 15 fonts. Every count identical to Linux.
+- Oracle against the real Chuvadi.Pdf 3.32.1 packages (checked against SHA256SUMS.txt): ORACLE AGREES on 16 fonts,
+  33 format 14 sequences and the 22 recorded probes.
+- Pack harness r2 through the wrapper on 3.32.1 with the 0.1.0-phase1.1 packages: SELF-TEST PASSED (22 checks);
+  gate 1 2,144 of 29,493; gate 2 Default tags match the contract, 0 of 358; GATE FAILED, expected until phase 4.

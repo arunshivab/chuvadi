@@ -1,8 +1,10 @@
 # Changelog — Chuvadi.OpenType
 
-## Unreleased (0.1.0)
+## 0.1.0 (2026-11-11)
 
-Phase 1 (D-205, D-206, D-295):
+First release (tag `opentype-v0.1.0`, D-206 P13(a), D-316, D-319).
+
+Phase 1 (D-205, D-206, D-295, D-316):
 
 - Read-only layout views (`Chuvadi.OpenType.Layout`): `OpenTypeFont.Gsub`, `Gpos` (`LayoutTable`: scripts, language
   systems, features, lookups, every GSUB type 1–8 and GPOS type 1–9 subtable, Extension resolved) and `Gdef` (glyph
@@ -15,9 +17,11 @@ Phase 1 (D-205, D-206, D-295):
   italic, fixed pitch, font box, hhea/typographic/Windows values, the chosen ascender, descender and line gap,
   cap height, x-height, underline, strikeout, italic angle.
 - `Os2Table.FamilyClassId`/`FamilySubclassId`, `CharacterMap.HasGlyph`, `CharacterMap.HasSymbolSubtable`,
-  `CharacterMap.EnumerateVariationSequences` (D-247, D-295).
+  `CharacterMap.EnumerateVariationSequences` (D-247, D-295); a sequence listed both as a default and with its own
+  glyph is enumerated twice, and the lookups give its own glyph (L3, D-316).
 - `FontLoadOptions` (`MaxDecodedBytes`, default 256 MiB; P5(b), D-205) with new `Load`/`TryLoad` overloads on
-  `OpenTypeFont` and `FontCollection`; a value not above 0 throws `ArgumentOutOfRangeException`.
+  `OpenTypeFont` and `FontCollection`; a value not above 0 throws `ArgumentOutOfRangeException`. A WOFF or WOFF2 file
+  declaring more decoded data than the largest .NET array (about 2 GiB) is refused whatever the limit (L2, D-316).
 - Lazily read tables are cached without allocating on later reads.
 - `IsTrimmable` and `IsAotCompatible` set (D-217).
 

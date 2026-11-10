@@ -3,7 +3,7 @@
 Reads OpenType and TrueType fonts in pure .NET with no dependencies (D-75 / S2 boundary B3: the shared
 font reader under Chuvadi.Text.Shaping, for Layout, Print and later Pdf). Tag: `opentype-vX.Y.Z`.
 
-Status: phase 1 of design note v1 (unreleased 0.1.0; tag `opentype-v0.1.0` once the layout views are merged, D-206 P13(a)).
+Status: 0.1.0 (tag `opentype-v0.1.0`, D-206 P13(a), D-316). Phase 1 of design note v1: the font reader with layout views.
 
 ## What it reads
 
@@ -16,7 +16,8 @@ Status: phase 1 of design note v1 (unreleased 0.1.0; tag `opentype-v0.1.0` once 
   with `OutlineFormat.Cff2` (D-153).
 - 'head', 'maxp', 'hhea' (always read), 'OS/2', 'post' header, 'name', 'kern' (read on first use).
 - 'cmap': formats 0, 2, 4, 6, 10, 12, 13 and 14 (`CharacterMap`, `CmapSubtable`), with a fixed choice of
-  the Unicode subtable, variation-sequence lookups and enumeration, `HasGlyph` and `HasSymbolSubtable`.
+  the Unicode subtable, variation-sequence lookups and enumeration, `HasGlyph` and `HasSymbolSubtable`. A sequence a
+  font lists both as a default and with its own glyph is enumerated twice; the lookups give its own glyph.
 - 'hmtx' advances and left side bearings.
 - Glyph bounds: from 'glyf' headers (TrueType) or by running the Type 2 charstrings of 'CFF ' (curve
   extremes included, CID-keyed fonts supported).

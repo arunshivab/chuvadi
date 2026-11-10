@@ -19,7 +19,7 @@
     <RootNamespace>Chuvadi.OpenType</RootNamespace>
     <PackageId>Chuvadi.OpenType</PackageId>
     <Version>0.1.0</Version>
-    <Description>Reads OpenType and TrueType fonts: table directory, collections, cmap, metrics, glyph bounds and naming; decodes WOFF and WOFF2. Pure .NET, no dependencies.</Description>
+    <Description>Reads OpenType and TrueType fonts: table directory, collections, cmap, metrics, face metrics, glyph bounds and naming, and read-only views of GDEF, GSUB and GPOS; decodes WOFF and WOFF2. Pure .NET, no dependencies.</Description>
     <IsPackable>true</IsPackable>
 
     <!-- Package metadata (as the other monorepo libraries) -->
@@ -29,7 +29,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>fonts;opentype;truetype;cff;cmap;woff;woff2</PackageTags>
+    <PackageTags>fonts;opentype;truetype;cff;cmap;gsub;gpos;gdef;woff;woff2</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
