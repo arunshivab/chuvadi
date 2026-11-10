@@ -1,6 +1,6 @@
 # Chuvadi.Print.Pdf.Raster — Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-10)
 
 Renamed from Chuvadi.Print.Pdf (D-107, D-125): package, assembly and namespace are now
 `Chuvadi.Print.Pdf.Raster`; the tests are `staging/Chuvadi.Print.Pdf.Raster.Tests`.
