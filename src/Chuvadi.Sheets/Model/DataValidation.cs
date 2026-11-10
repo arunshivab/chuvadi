@@ -183,8 +183,8 @@ public sealed class DataValidation
     public static DataValidation Date(DateTime? min = null, DateTime? max = null)
     {
         var (op, f1, f2) = ResolveBounds(
-            min?.ToOADate().ToString("R", CultureInfo.InvariantCulture),
-            max?.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+            (min is { } lo ? Chuvadi.Sheets.Internal.SerialDate.FromDateTime(lo) : (double?)null)?.ToString("R", CultureInfo.InvariantCulture),
+            (max is { } hi ? Chuvadi.Sheets.Internal.SerialDate.FromDateTime(hi) : (double?)null)?.ToString("R", CultureInfo.InvariantCulture));
         return new DataValidation { Type = "date", Operator = op, Formula1 = f1, Formula2 = f2 };
     }
 

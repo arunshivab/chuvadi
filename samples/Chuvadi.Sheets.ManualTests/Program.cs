@@ -90,6 +90,9 @@ public static class Program
             if (testName is "all" or "datatables")
                 DataTablesTest.Run(outputDir);
 
+            if (testName is "all" or "dates1900")
+                Dates1900Test.Run(outputDir);
+
             if (testName is "all" or "perf")
                 LoadBenchmarkTest.Run(outputDir);
 

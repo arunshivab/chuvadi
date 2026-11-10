@@ -47,9 +47,15 @@ internal static class HardeningTest
             var path = Path.Combine(outputDir, "streamed_encrypted.xlsx");
             if (File.Exists(path)) File.Delete(path);
 
+            // A private temp folder for this save (2.0.5, test-only): the leftover check below used to scan the
+            // shared temp folder, so a stale chuvadi_sheets_pkg_*.tmp from an earlier crashed run, or a spool
+            // another test was writing at the same moment, failed it although this save cleaned up.
+            var spoolDir = Path.Combine(Path.GetTempPath(), "chuvadi_hardening_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(spoolDir);
             using (var writer = XlsxWriter.Create(path, new XlsxWriterOptions
             {
                 Encryption = new EncryptionOptions { Password = "stream-pass" },
+                TempDirectory = spoolDir,
             }))
             {
                 using var sheet = writer.AddSheet("Big");
@@ -69,9 +75,11 @@ internal static class HardeningTest
             if (!(sig[0] == 0xD0 && sig[1] == 0xCF && sig[2] == 0x11 && sig[3] == 0xE0))
                 throw new Exception("Output is not CFB-wrapped (not encrypted).");
 
-            // No leftover plaintext package temp files.
-            foreach (var leftover in Directory.GetFiles(Path.GetTempPath(), "chuvadi_sheets_pkg_*.tmp"))
-                throw new Exception($"Plaintext package temp file not cleaned up: {leftover}");
+            // No leftover package or sheet spool files in this save's own temp folder.
+            var leftovers = Directory.GetFiles(spoolDir);
+            Directory.Delete(spoolDir, recursive: true);
+            foreach (var leftover in leftovers)
+                throw new Exception($"Temp file not cleaned up: {Path.GetFileName(leftover)}");
 
             var wb = Workbook.Load(path, "stream-pass");
             var s = wb["Big"];

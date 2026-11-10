@@ -24,7 +24,7 @@ public sealed class Visit
     public decimal Fee { get; set; }
 }
 #line default
-#line 738 "GUIDE.md"
+#line 756 "GUIDE.md"
 public sealed class WorkItem
 {
     public string Title { get; set; } = "";
@@ -32,7 +32,7 @@ public sealed class WorkItem
     public string Status { get; set; } = "";
 }
 #line default
-#line 806 "GUIDE.md"
+#line 824 "GUIDE.md"
 public sealed class Patient
 {
     [Column("Patient ID", Order = 1, Width = 14)]
@@ -59,50 +59,50 @@ public sealed class Patient
             (178, "3.2 Read it back", S178),
             (199, "3.3 Stream a large export", S199),
             (216, "3.4 Export a list in one line", S216),
-            (384, "6.1 Sheets and cells", S384),
-            (419, "6.2 Ranges, merges and sizes", S419),
-            (442, "6.3 Load, edit, save", S442),
-            (458, "6.4 Saving to a stream", S458),
-            (480, "7.1 The shape of a streamed export", S480),
-            (512, "7.2 Per-cell control with `RowBuilder`", S512),
-            (545, "7.3 Row and column settings", S545),
-            (569, "7.4 Auto-fit", S569),
-            (590, "7.5 Asynchronous writing", S590),
-            (647, "8.1 Writing", S647),
-            (686, "9.1 `CellStyle` and the builder", S686),
-            (755, "10.1 Formulas", S755),
-            (780, "10.2 Defined names", S780),
-            (826, "11.1 Lists of objects", S826),
-            (862, "11.2 DataTables", S862),
-            (881, "11.3 Several sheets", S881),
-            (901, "12.1 Views, panes and visibility", S901),
-            (928, "12.3 Tables", S928),
-            (944, "12.4 Hyperlinks and comments", S944),
-            (975, "13.1 Headers and footers", S975),
-            (991, "13.2 Paper, scaling, margins, breaks and print titles", S991),
-            (1025, "14 Data validation", S1025),
-            (1062, "15.1 Writing rules", S1062),
-            (1095, "15.2 The full rule set", S1095),
-            (1131, "16.1 Opening a file", S1131),
-            (1177, "16.2 Rows", S1177),
-            (1226, "17 Loading a workbook", S1226),
-            (1260, "18.1 Into objects", S1260),
-            (1277, "18.2 Into DataTables", S1277),
-            (1332, "19.1 What a person sees", S1332),
-            (1358, "19.2 On read", S1358),
-            (1393, "20.1 Three layers", S1393),
-            (1433, "21.1 The layout of a streamed sheet", S1433),
-            (1457, "21.2 Conditional formats as Excel shows them", S1457),
-            (1484, "22.1 Rich text", S1484),
-            (1506, "22.2 Hyperlinks", S1506),
-            (1527, "23 Drawings, charts and header pictures", S1527),
-            (1562, "24.1 Sheet protection", S1562),
-            (1588, "24.2 Workbook structure protection", S1588),
-            (1603, "25.1 Writing an encrypted workbook", S1603),
-            (1643, "25.2 Reading an encrypted workbook", S1643),
-            (1688, "26.1 Limits", S1688),
-            (1771, "27.1 What the readers throw", S1771),
-            (1841, "29 Threading", S1841),
+            (399, "6.1 Sheets and cells", S399),
+            (434, "6.2 Ranges, merges and sizes", S434),
+            (457, "6.3 Load, edit, save", S457),
+            (473, "6.4 Saving to a stream", S473),
+            (495, "7.1 The shape of a streamed export", S495),
+            (527, "7.2 Per-cell control with `RowBuilder`", S527),
+            (560, "7.3 Row and column settings", S560),
+            (584, "7.4 Auto-fit", S584),
+            (605, "7.5 Asynchronous writing", S605),
+            (662, "8.1 Writing", S662),
+            (704, "9.1 `CellStyle` and the builder", S704),
+            (773, "10.1 Formulas", S773),
+            (798, "10.2 Defined names", S798),
+            (844, "11.1 Lists of objects", S844),
+            (880, "11.2 DataTables", S880),
+            (899, "11.3 Several sheets", S899),
+            (919, "12.1 Views, panes and visibility", S919),
+            (946, "12.3 Tables", S946),
+            (962, "12.4 Hyperlinks and comments", S962),
+            (993, "13.1 Headers and footers", S993),
+            (1009, "13.2 Paper, scaling, margins, breaks and print titles", S1009),
+            (1043, "14 Data validation", S1043),
+            (1080, "15.1 Writing rules", S1080),
+            (1113, "15.2 The full rule set", S1113),
+            (1149, "16.1 Opening a file", S1149),
+            (1195, "16.2 Rows", S1195),
+            (1244, "17 Loading a workbook", S1244),
+            (1278, "18.1 Into objects", S1278),
+            (1295, "18.2 Into DataTables", S1295),
+            (1350, "19.1 What a person sees", S1350),
+            (1376, "19.2 On read", S1376),
+            (1411, "20.1 Three layers", S1411),
+            (1451, "21.1 The layout of a streamed sheet", S1451),
+            (1475, "21.2 Conditional formats as Excel shows them", S1475),
+            (1502, "22.1 Rich text", S1502),
+            (1524, "22.2 Hyperlinks", S1524),
+            (1545, "23 Drawings, charts and header pictures", S1545),
+            (1580, "24.1 Sheet protection", S1580),
+            (1606, "24.2 Workbook structure protection", S1606),
+            (1621, "25.1 Writing an encrypted workbook", S1621),
+            (1661, "25.2 Reading an encrypted workbook", S1661),
+            (1706, "26.1 Limits", S1706),
+            (1789, "27.1 What the readers throw", S1789),
+            (1859, "29 Threading", S1859),
         };
         private static Task S149()
         {
@@ -179,9 +179,9 @@ Console.WriteLine($"{back.Count} visits read back");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S384()
+        private static Task S399()
         {
-#line 384 "GUIDE.md"
+#line 399 "GUIDE.md"
 var wb = new Workbook();
 var summary = wb.AddSheet("Summary");
 var data = wb.AddSheet("Data");
@@ -199,9 +199,9 @@ wb.SaveTo("model.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S419()
+        private static Task S434()
         {
-#line 419 "GUIDE.md"
+#line 434 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Report");
 
@@ -220,9 +220,9 @@ wb.SaveTo("ranges.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S442()
+        private static Task S457()
         {
-#line 442 "GUIDE.md"
+#line 457 "GUIDE.md"
 var wb = Workbook.Load("model.xlsx");
 var data = wb["Data"];
 data.Cell(3, 1).Value = "South";
@@ -231,9 +231,9 @@ wb.SaveTo("model-edited.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S458()
+        private static Task S473()
         {
-#line 458 "GUIDE.md"
+#line 473 "GUIDE.md"
 var wb = new Workbook();
 wb.AddSheet("Data").Cell("A1").Value = "Hello";
 
@@ -246,9 +246,9 @@ Console.WriteLine(Workbook.Load(ms)["Data"].Cell("A1").Value);
 #line default
             return Task.CompletedTask;
         }
-        private static Task S480()
+        private static Task S495()
         {
-#line 480 "GUIDE.md"
+#line 495 "GUIDE.md"
 using (var writer = XlsxWriter.Create("export.xlsx"))
 {
     using (var sheet = writer.AddSheet("Orders"))
@@ -268,9 +268,9 @@ using (var writer = XlsxWriter.Create("export.xlsx"))
 #line default
             return Task.CompletedTask;
         }
-        private static Task S512()
+        private static Task S527()
         {
-#line 512 "GUIDE.md"
+#line 527 "GUIDE.md"
 var money = CellStyle.Default with { NumberFormat = "#,##0.00" };
 var bold = new CellStyleBuilder().Bold().Build();
 
@@ -293,9 +293,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static Task S545()
+        private static Task S560()
         {
-#line 545 "GUIDE.md"
+#line 560 "GUIDE.md"
 using var writer = XlsxWriter.Create("formats.xlsx");
 using var sheet = writer.AddSheet("Grouped");
 
@@ -311,9 +311,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static Task S569()
+        private static Task S584()
         {
-#line 569 "GUIDE.md"
+#line 584 "GUIDE.md"
 using var writer = XlsxWriter.Create("autofit.xlsx");
 using var sheet = writer.AddSheet("Fit");
 sheet.AutoFitColumns(new AutoFitOptions { MaxWidth = 50 });   // before the first row
@@ -324,9 +324,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static async Task S590()
+        private static async Task S605()
         {
-#line 590 "GUIDE.md"
+#line 605 "GUIDE.md"
 await using (var writer = XlsxWriter.Create("async.xlsx"))
 {
     await using (var sheet = writer.AddSheet("Data"))
@@ -339,9 +339,9 @@ await using (var writer = XlsxWriter.Create("async.xlsx"))
 }
 #line default
         }
-        private static Task S647()
+        private static Task S662()
         {
-#line 647 "GUIDE.md"
+#line 662 "GUIDE.md"
 var options = new XlsxWriterOptions
 {
     DefaultDateFormat = "dd/mm/yyyy",
@@ -357,9 +357,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static Task S686()
+        private static Task S704()
         {
-#line 686 "GUIDE.md"
+#line 704 "GUIDE.md"
 var header = new CellStyleBuilder()
     .Font("Calibri", 12)
     .Bold()
@@ -383,9 +383,9 @@ wb.SaveTo("styles.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S755()
+        private static Task S773()
         {
-#line 755 "GUIDE.md"
+#line 773 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Calc");
 sheet.Cell("A1").Value = 120;
@@ -399,9 +399,9 @@ Console.WriteLine($"{back.Formula} = {back.CachedValue}");   // "A1*B1/100 = 21.
 #line default
             return Task.CompletedTask;
         }
-        private static Task S780()
+        private static Task S798()
         {
-#line 780 "GUIDE.md"
+#line 798 "GUIDE.md"
 var wb = new Workbook();
 var rates = wb.AddSheet("Rates");
 rates.Cell("B2").Value = 0.18;
@@ -416,9 +416,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static Task S826()
+        private static Task S844()
         {
-#line 826 "GUIDE.md"
+#line 844 "GUIDE.md"
 var patients = new[]
 {
     new Patient { Id = "P-001", Name = "Asha Rao",
@@ -439,9 +439,9 @@ patients.ToXlsx("patients.xlsx", cfg => cfg
 #line default
             return Task.CompletedTask;
         }
-        private static Task S862()
+        private static Task S880()
         {
-#line 862 "GUIDE.md"
+#line 880 "GUIDE.md"
 var table = new DataTable("Visits");
 table.Columns.Add("Id", typeof(int));
 table.Columns.Add("Patient", typeof(string));
@@ -456,9 +456,9 @@ table.ToXlsx("table.xlsx", cfg => cfg
 #line default
             return Task.CompletedTask;
         }
-        private static Task S881()
+        private static Task S899()
         {
-#line 881 "GUIDE.md"
+#line 899 "GUIDE.md"
 var visits = new DataTable("Visits");
 visits.Columns.Add("Id", typeof(int));
 visits.Rows.Add(1);
@@ -472,9 +472,9 @@ new XlsxExport("multi.xlsx")
 #line default
             return Task.CompletedTask;
         }
-        private static Task S901()
+        private static Task S919()
         {
-#line 901 "GUIDE.md"
+#line 919 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("View");
 var hidden = wb.AddSheet("Lookup");
@@ -489,9 +489,9 @@ wb.SaveTo("view.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S928()
+        private static Task S946()
         {
-#line 928 "GUIDE.md"
+#line 946 "GUIDE.md"
 using var writer = XlsxWriter.Create("table-stream.xlsx");
 using var sheet = writer.AddSheet("Stock");
 sheet.WriteHeader("Item", "Qty");
@@ -502,9 +502,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static Task S944()
+        private static Task S962()
         {
-#line 944 "GUIDE.md"
+#line 962 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Links");
 wb.AddSheet("Other Sheet").Cell("B5").Value = "target";
@@ -519,9 +519,9 @@ wb.SaveTo("links.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S975()
+        private static Task S993()
         {
-#line 975 "GUIDE.md"
+#line 993 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Printed");
 sheet.Cell("A1").Value = "Content";
@@ -530,9 +530,9 @@ wb.SaveTo("header.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S991()
+        private static Task S1009()
         {
-#line 991 "GUIDE.md"
+#line 1009 "GUIDE.md"
 using var writer = XlsxWriter.Create("print.xlsx");
 using var sheet = writer.AddSheet("Report");
 var page = sheet.PageSetup;
@@ -550,9 +550,9 @@ writer.Save();
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1025()
+        private static Task S1043()
         {
-#line 1025 "GUIDE.md"
+#line 1043 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Form");
 sheet.Cell("A1").Value = "Status";
@@ -573,9 +573,9 @@ wb.SaveTo("validation.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1062()
+        private static Task S1080()
         {
-#line 1062 "GUIDE.md"
+#line 1080 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Scores");
 sheet.Cell("A1").Value = "Score";
@@ -592,9 +592,9 @@ wb.SaveTo("conditional.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1095()
+        private static Task S1113()
         {
-#line 1095 "GUIDE.md"
+#line 1113 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Rules");
 for (int r = 1; r <= 20; r++) sheet.Cell(r, 1).Value = r * 3 % 17;
@@ -623,9 +623,9 @@ wb.SaveTo("rules.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1131()
+        private static Task S1149()
         {
-#line 1131 "GUIDE.md"
+#line 1149 "GUIDE.md"
 var wb = new Workbook();
 var s = wb.AddSheet("Staff");
 s.Cell("A1").Value = "Id";  s.Cell("B1").Value = "Name";      s.Cell("C1").Value = "Joined";
@@ -647,9 +647,9 @@ foreach (var row in staff.Rows)
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1177()
+        private static Task S1195()
         {
-#line 1177 "GUIDE.md"
+#line 1195 "GUIDE.md"
 var noHeaders = new XlsxReaderOptions { TreatFirstRowAsHeaders = false };
 using var reader = XlsxReader.Open("staff.xlsx", noHeaders);
 var copied = new List<(int Id, string Name)>();
@@ -663,9 +663,9 @@ Console.WriteLine(string.Join(", ", copied));
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1226()
+        private static Task S1244()
         {
-#line 1226 "GUIDE.md"
+#line 1244 "GUIDE.md"
 var wb = Workbook.Load("staff.xlsx");
 foreach (var sheet in wb.Sheets)
 {
@@ -677,9 +677,9 @@ Console.WriteLine($"macros: {wb.HasMacros}, strict: {wb.IsStrict}, 1904 dates: {
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1260()
+        private static Task S1278()
         {
-#line 1260 "GUIDE.md"
+#line 1278 "GUIDE.md"
 var patients = new[]
 {
     new Patient { Id = "P-001", Name = "Asha Rao",
@@ -692,9 +692,9 @@ Console.WriteLine($"{back[0].Id} {back[0].Name} {back[0].DateOfBirth:yyyy-MM-dd}
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1277()
+        private static Task S1295()
         {
-#line 1277 "GUIDE.md"
+#line 1295 "GUIDE.md"
 DataSet all = XlsxReadExtensions.ReadXlsx("staff.xlsx");               // one table per sheet
 DataTable first = XlsxReadExtensions.ReadXlsxSheet("staff.xlsx");      // the first sheet
 DataTable named = XlsxReadExtensions.ReadXlsxSheet("staff.xlsx", "Staff");
@@ -702,9 +702,9 @@ Console.WriteLine($"{all.Tables.Count} tables; {named.Rows.Count} rows in Staff"
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1332()
+        private static Task S1350()
         {
-#line 1332 "GUIDE.md"
+#line 1350 "GUIDE.md"
 Console.WriteLine(NumberFormatter.Format(45000, "dd/mm/yyyy"));          // 15/03/2023
 Console.WriteLine(NumberFormatter.Format(1234.5, "#,##0.00"));           // 1,234.50
 Console.WriteLine(NumberFormatter.Format(0.256, "0.0%"));                // 25.6%
@@ -720,9 +720,9 @@ Console.WriteLine($"{red.Text} in {red.Color}");                         // -5 i
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1358()
+        private static Task S1376()
         {
-#line 1358 "GUIDE.md"
+#line 1376 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Money");
 sheet.Cell("A1").Value = 1234567.891;
@@ -740,9 +740,9 @@ foreach (var row in reader.Sheet(1).Rows)
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1393()
+        private static Task S1411()
         {
-#line 1393 "GUIDE.md"
+#line 1411 "GUIDE.md"
 var options = new XlsxReaderOptions { IncludeStyledEmptyCells = true };
 var book = Workbook.Load("styles.xlsx", null, options);
 var sheet = book.Sheets[0];
@@ -759,9 +759,9 @@ Console.WriteLine($"number format: {book.StyleTable.GetNumberFormatCode(format.N
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1433()
+        private static Task S1451()
         {
-#line 1433 "GUIDE.md"
+#line 1451 "GUIDE.md"
 var noHeaders = new XlsxReaderOptions { TreatFirstRowAsHeaders = false };
 using var reader = XlsxReader.Open("ranges.xlsx", noHeaders);
 var sheet = reader.Sheet(1);
@@ -782,9 +782,9 @@ foreach (var row in sheet.Rows)
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1457()
+        private static Task S1475()
         {
-#line 1457 "GUIDE.md"
+#line 1475 "GUIDE.md"
 var wb = Workbook.Load("conditional.xlsx");
 var sheet = wb["Scores"];
 var cf = sheet.EvaluateConditionalFormats();
@@ -799,9 +799,9 @@ var bar = cf.Evaluate(2, 3)?.DataBar;                // a data bar to draw (leng
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1484()
+        private static Task S1502()
         {
-#line 1484 "GUIDE.md"
+#line 1502 "GUIDE.md"
 var title = new RichText(
     new RichTextRun("Total: ", new RichTextFont { Bold = true }),
     new RichTextRun("42", new RichTextFont { Color = ColorRef.FromRgb("FF00B050") }));
@@ -817,9 +817,9 @@ foreach (var run in loaded?.RichText?.Runs ?? Array.Empty<RichTextRun>())
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1506()
+        private static Task S1524()
         {
-#line 1506 "GUIDE.md"
+#line 1524 "GUIDE.md"
 var links = Workbook.Load("links.xlsx")["Links"];
 foreach (var link in links.Hyperlinks)
     Console.WriteLine($"{link.Reference}: {(link.IsInternal ? link.Location : link.Target)}");
@@ -827,9 +827,9 @@ Console.WriteLine(links.FindHyperlink(1, 1)?.Target);
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1527()
+        private static Task S1545()
         {
-#line 1527 "GUIDE.md"
+#line 1545 "GUIDE.md"
 void ExtractPictures(string path, string folder)
 {
     var wb = Workbook.Load(path);
@@ -848,9 +848,9 @@ void ExtractPictures(string path, string folder)
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1562()
+        private static Task S1580()
         {
-#line 1562 "GUIDE.md"
+#line 1580 "GUIDE.md"
 var wb = new Workbook();
 var sheet = wb.AddSheet("Locked");
 sheet.Cell("A1").Value = "Read me, do not edit me";
@@ -864,9 +864,9 @@ wb.SaveTo("protected.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1588()
+        private static Task S1606()
         {
-#line 1588 "GUIDE.md"
+#line 1606 "GUIDE.md"
 var wb = new Workbook();
 wb.AddSheet("One").Cell("A1").Value = 1;
 wb.AddSheet("Two").Cell("A1").Value = 2;
@@ -875,9 +875,9 @@ wb.SaveTo("structure.xlsx");
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1603()
+        private static Task S1621()
         {
-#line 1603 "GUIDE.md"
+#line 1621 "GUIDE.md"
 var wb = new Workbook();
 wb.AddSheet("Private").Cell("A1").Value = "Confidential";
 wb.SaveTo("encrypted.xlsx", new EncryptionOptions { Password = "open-sesame" });
@@ -894,9 +894,9 @@ using (var writer = XlsxWriter.Create("encrypted-stream.xlsx", new XlsxWriterOpt
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1643()
+        private static Task S1661()
         {
-#line 1643 "GUIDE.md"
+#line 1661 "GUIDE.md"
 var wb = Workbook.Load("encrypted.xlsx", "open-sesame");
 Console.WriteLine(wb["Private"].Cell("A1").Value);
 
@@ -915,9 +915,9 @@ catch (XlsxPasswordRequiredException ex)
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1688()
+        private static Task S1706()
         {
-#line 1688 "GUIDE.md"
+#line 1706 "GUIDE.md"
 void HandleUpload(Stream upload, string? password, CancellationToken requestAborted)
 {
     var options = XlsxReaderOptions.ForUntrustedInput();
@@ -950,9 +950,9 @@ void HandleUpload(Stream upload, string? password, CancellationToken requestAbor
 #line default
             return Task.CompletedTask;
         }
-        private static Task S1771()
+        private static Task S1789()
         {
-#line 1771 "GUIDE.md"
+#line 1789 "GUIDE.md"
 File.WriteAllText("not-a-workbook.xlsx", "plain text, not a zip");
 try
 {
@@ -965,9 +965,9 @@ catch (XlsxFormatException ex)
 #line default
             return Task.CompletedTask;
         }
-        private static async Task S1841()
+        private static async Task S1859()
         {
-#line 1841 "GUIDE.md"
+#line 1859 "GUIDE.md"
 async Task ExportAsync(IAsyncEnumerable<(int Id, string Name)> source, string path)
 {
     await using var writer = XlsxWriter.Create(path);
