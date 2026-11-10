@@ -21,6 +21,13 @@
     <ProjectReference Include="..\..\src\Chuvadi.Text.Shaping\Chuvadi.Text.Shaping.csproj" />
     <Compile Include="..\..\tools\Chuvadi.Fonts.TestSupport\TraceLogCheck.cs" Link="TestSupport\TraceLogCheck.cs" />
     <Compile Include="..\Chuvadi.OpenType.Tests\FontBuilder.cs" Link="TestSupport\FontBuilder.cs" />
+    <Compile Include="..\Chuvadi.OpenType.Tests\LayoutBuilder.cs" Link="TestSupport\LayoutBuilder.cs" />
+    <Compile Include="..\Chuvadi.OpenType.Tests\LayoutWalker.cs" Link="TestSupport\LayoutWalker.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- d.6 malformed-font fixtures (D-190): base fonts, patch list, recipes and expected outcomes. -->
+    <None Include="Fixtures\Malformed\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

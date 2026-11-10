@@ -14,8 +14,8 @@ Source types: **spec** (public specification or Unicode data file, read 2026-11-
 Short names:
 - UAX44 = Unicode Standard Annex #44, Unicode Character Database, https://www.unicode.org/reports/tr44/
 - UAX15 = Unicode Standard Annex #15, Unicode Normalization Forms, https://www.unicode.org/reports/tr15/
-- TUS = The Unicode Standard, Version 17.0, Chapter 3 "Conformance"
-- UCD = the Unicode Character Database 17.0.0 files in tools/ucd/17.0.0/
+- TUS = The Unicode Standard, Version 17.0, Chapter 3 "Conformance" (read for phase 0). The data is now UCD 18.0.0; the normalization rules cited are checked against NormalizationTest.txt 18.0.0
+- UCD = the Unicode Character Database 18.0.0 files in tools/ucd/18.0.0/ (17.0.0 until 2026-11-05, D-190)
 
 ## R-TS-0001
 - Rule: General_Category and Canonical_Combining_Class come from UnicodeData.txt fields 2 and 3; a "<…, First>" / "<…, Last>" pair gives one value to the whole range; code points not listed are Cn with class 0. The UCD version is read from the first line of Scripts.txt. Category order in the tables: Cn first, then the order of UAX44 Table 12.
@@ -75,4 +75,19 @@ Short names:
 ## R-TS-0012
 - Rule: The run is read as UTF-16. A high surrogate followed by a low surrogate inside the run is one code point; any other surrogate (including half of a pair cut by the run's boundary) is read as U+FFFD.
 - Source: spec/decision. CONTRACT.md "An unpaired surrogate is treated as U+FFFD"; TUS §3.9 D91 (UTF-16 code unit sequences), TUS §3.9.6 "U+FFFD Substitution of Maximal Subparts". A pair cut by the run boundary being unpaired: decision.
+- Code: src/Chuvadi.Text.Shaping/TextShaper.cs
+
+## R-TS-0013
+- Rule: A script is looked up in a font's script list by its OpenType tags, in order: Devanagari dev2 then deva, Bengali bng2/beng, Gurmukhi gur2/guru, Gujarati gjr2/gujr, Odia ory2/orya, Tamil tml2/taml, Telugu tel2/telu, Kannada knd2/knda, Malayalam mlm2/mlym; Latin latn; any other script its ISO 15924 code in lower case. Common, Inherited and Unknown have no tags of their own. The default script tag is DFLT. The tag arrays are built once, so a lookup does not allocate.
+- Source: spec + decision. OpenType 1.9.1 "Script tags" registry (each Indic script has a "v.2" tag alongside its original tag; "DFLT" is the default script; the other scripts' tags are their ISO 15924 codes in lower case). Trying the v.2 tag first, then the original one (so fonts with only the original tags still work; the oldtags gate set checks this): decision, listed for Arun in the phase-1 report (rule 5 item L1).
+- Code: src/Chuvadi.Text.Shaping/Layout/ScriptTags.cs
+
+## R-TS-0014
+- Rule: Shaping reports typed diagnostics on the result (GlyphBuffer.Diagnostics, ShapedRun.Diagnostics), each kind at most once per call, in the order first found; the list is empty, with nothing allocated, when there is nothing to report. MissingGlyph: a code point with no glyph in the font (glyph 0 used); the message names the first such code point and its UTF-16 index.
+- Source: decision D-195 → D-246 (Arun): typed diagnostics, MissingGlyph and ScriptNotInFont first, once per call, no allocation when none.
+- Code: src/Chuvadi.Text.Shaping/GlyphBuffer.cs, src/Chuvadi.Text.Shaping/TextShaper.cs
+
+## R-TS-0015
+- Rule: ScriptNotInFont is reported when the font has a GSUB or GPOS table and neither lists any of the requested script's tags (R-TS-0013). It is not reported for Common, Inherited or Unknown, nor for a font with no layout tables (nothing to choose between).
+- Source: decision D-246; what "lists" means: OpenType 1.9.1 chapter2 "Script List Table and Script Record" (a font without the script's tag uses its DFLT script, or no script, for that text).
 - Code: src/Chuvadi.Text.Shaping/TextShaper.cs

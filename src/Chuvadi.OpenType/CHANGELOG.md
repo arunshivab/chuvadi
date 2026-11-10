@@ -1,6 +1,28 @@
 # Changelog — Chuvadi.OpenType
 
-## Unreleased (0.1.0, phase 0)
+## Unreleased (0.1.0)
+
+Phase 1 (D-205, D-206, D-295):
+
+- Read-only layout views (`Chuvadi.OpenType.Layout`): `OpenTypeFont.Gsub`, `Gpos` (`LayoutTable`: scripts, language
+  systems, features, lookups, every GSUB type 1–8 and GPOS type 1–9 subtable, Extension resolved) and `Gdef` (glyph
+  classes, mark attachment classes, mark glyph sets, attachment points, ligature carets). Coverage, ClassDef and
+  Device/VariationIndex tables.
+- Variable fonts at the default instance only (D-194): FeatureVariations evaluated at all coordinates 0
+  (`LayoutTable.DefaultInstanceVariation`, `GetFeatureAtDefaultInstance`); VariationIndex deltas are 0.
+  `OpenTypeFont.VariationAxisCount`.
+- `OpenTypeFont.Metrics` (`FaceMetrics`, D-201/D-247 option A, FontFace's member names): names, weight, bold,
+  italic, fixed pitch, font box, hhea/typographic/Windows values, the chosen ascender, descender and line gap,
+  cap height, x-height, underline, strikeout, italic angle.
+- `Os2Table.FamilyClassId`/`FamilySubclassId`, `CharacterMap.HasGlyph`, `CharacterMap.HasSymbolSubtable`,
+  `CharacterMap.EnumerateVariationSequences` (D-247, D-295).
+- `FontLoadOptions` (`MaxDecodedBytes`, default 256 MiB; P5(b), D-205) with new `Load`/`TryLoad` overloads on
+  `OpenTypeFont` and `FontCollection`; a value not above 0 throws `ArgumentOutOfRangeException`.
+- Lazily read tables are cached without allocating on later reads.
+- `IsTrimmable` and `IsAotCompatible` set (D-217).
+
+Phase 0:
+
 
 - New library: sfnt and 'ttcf' collection reading, table directory, 'head', 'maxp', 'hhea', 'hmtx',
   'OS/2', 'post' header, 'name', 'kern' (format 0 values), 'cmap' formats 0/2/4/6/10/12/13/14,

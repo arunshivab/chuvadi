@@ -274,4 +274,58 @@ public class WoffTests
             }
         }
     }
+
+    [Fact]
+    public void Woff1LimitIsTheDeclaredSize()
+    {
+        byte[] woff = ToWoff1(SampleFont(4, 1000, 1));
+        long declared = BinaryPrimitives.ReadUInt32BigEndian(woff.AsSpan(16));
+        Assert.NotNull(OpenTypeFont.Load(woff, 0, new FontLoadOptions { MaxDecodedBytes = declared }));
+        OpenTypeFormatException e = Assert.Throws<OpenTypeFormatException>(() => OpenTypeFont.Load(woff, 0, new FontLoadOptions { MaxDecodedBytes = declared - 1 }));
+        Assert.Contains((declared - 1).ToString(System.Globalization.CultureInfo.InvariantCulture), e.Message, StringComparison.Ordinal);
+        Assert.False(OpenTypeFont.TryLoad(woff, 0, new FontLoadOptions { MaxDecodedBytes = declared - 1 }, out _));
+        Assert.Throws<OpenTypeFormatException>(() => FontCollection.Load(woff, new FontLoadOptions { MaxDecodedBytes = 1 }));
+        Assert.NotNull(OpenTypeFont.Load(woff, 0, null));
+    }
+
+    [Fact]
+    public void Woff2LimitHasAnExactBoundary()
+    {
+        byte[] w = ToWoff2(SampleFont(3, 1000, 1));
+        bool Loads(long limit) => FontCollection.TryLoad(w, new FontLoadOptions { MaxDecodedBytes = limit }, out _);
+        Assert.False(Loads(1));
+        Assert.True(Loads(FontLoadOptions.Default.MaxDecodedBytes));
+        long lo = 1;
+        long hi = FontLoadOptions.Default.MaxDecodedBytes;
+        while (hi - lo > 1)
+        {
+            long mid = (lo + hi) / 2;
+            if (Loads(mid))
+            {
+                hi = mid;
+            }
+            else
+            {
+                lo = mid;
+            }
+        }
+
+        Assert.True(Loads(hi));
+        Assert.False(Loads(hi - 1));
+        Assert.True(hi < 10_000);
+    }
+
+    [Fact]
+    public void LoadOptionsAreValidated()
+    {
+        Assert.Equal(256L * 1024 * 1024, FontLoadOptions.Default.MaxDecodedBytes);
+        byte[] sfnt = SampleFont(3, 1000, 1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => OpenTypeFont.Load(sfnt, 0, new FontLoadOptions { MaxDecodedBytes = 0 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => OpenTypeFont.TryLoad(sfnt, 0, new FontLoadOptions { MaxDecodedBytes = -1 }, out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FontCollection.Load(sfnt, new FontLoadOptions { MaxDecodedBytes = 0 }));
+
+        // Plain sfnt data is not decoded, so the limit does not apply to it.
+        Assert.NotNull(OpenTypeFont.Load(sfnt, 0, new FontLoadOptions { MaxDecodedBytes = 1 }));
+        Assert.NotNull(OpenTypeFont.Load(ToWoff2(SampleFont(3, 1000, 1)), 0, new FontLoadOptions { MaxDecodedBytes = long.MaxValue }));
+    }
 }

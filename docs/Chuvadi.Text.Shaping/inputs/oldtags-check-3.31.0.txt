@@ -1,0 +1,23 @@
+Chuvadi shaping gate
+Engine: Chuvadi.Pdf.Text.Shaping 3.31.0.0. Language: the fonts' default language system.
+Gate 1 features: the D-68 set, passed explicitly (ccmp,locl,calt,liga,kern,mark,mkmk).
+Gate 2 features: ShapingFeatures.Default, the engine's own (contract: ccmp,locl,calt,liga,cpsp,kern,mark,mkmk).
+Parity: Shape(byte[]) must equal Shape(FontFace) on every matching line.
+
+Gate 1: corpus/syllables.tsv and corpus/words.tsv, the D-68 set
+set        script        lines   match  percent
+words      Devanagari     3428    3428  100.00%
+words      Malayalam      3315    3315  100.00%
+words      all            6743    6743  100.00%
+all        all            6743    6743  100.00%
+
+By font:
+  LiPi-Sans-Devanagari-OldTags.ttf    3428    3428  100.00%
+  LiPi-Sans-Malayalam-OldTags.ttf    3315    3315  100.00%
+
+Timing (one call per line and form, first calls included; for the engine's own trend, not a benchmark):
+  words      Shape(FontFace)     6743 calls      328.1 ms      48.7 us per call
+  words      Shape(byte[])       6743 calls      240.2 ms      35.6 us per call
+
+Gate 1 passed.
+GATE PASSED

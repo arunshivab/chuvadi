@@ -12,6 +12,9 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Trimming and NativeAOT safe (D-217): the analyzers fail the build on reflection or dynamic code. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
     <AssemblyName>Chuvadi.OpenType</AssemblyName>
     <RootNamespace>Chuvadi.OpenType</RootNamespace>
     <PackageId>Chuvadi.OpenType</PackageId>

@@ -32,6 +32,10 @@ public sealed class OpenTypeFont
     private static readonly Tag LocaTag = new Tag(0x6C6F6361); // loca
     private static readonly Tag CffTag = new Tag(0x43464620);  // 'CFF '
     private static readonly Tag Cff2Tag = new Tag(0x43464632); // CFF2
+    private static readonly Tag GsubTag = new Tag(0x47535542); // GSUB
+    private static readonly Tag GposTag = new Tag(0x47504F53); // GPOS
+    private static readonly Tag GdefTag = new Tag(0x47444546); // GDEF
+    private static readonly Tag FvarTag = new Tag(0x66766172); // fvar
 
     private readonly ReadOnlyMemory<byte> _data;
     private readonly TableRecord[] _tables;
@@ -50,6 +54,14 @@ public sealed class OpenTypeFont
     private int _postRead;
     private int _nameRead;
     private int _kernRead;
+    private Layout.LayoutTable? _gsub;
+    private Layout.LayoutTable? _gpos;
+    private Layout.GdefTable? _gdef;
+    private int _gsubRead;
+    private int _gposRead;
+    private int _gdefRead;
+    private FaceMetrics? _metrics;
+    private int _metricsRead;
 
     private OpenTypeFont(ReadOnlyMemory<byte> data, int faceIndex, uint sfntVersion, TableRecord[] tables, Dictionary<Tag, TableRecord> byTag, bool fromCollection)
     {
@@ -177,16 +189,49 @@ public sealed class OpenTypeFont
     public HheaTable? Hhea { get; }
 
     /// <summary>Gets the 'OS/2' table, or null when it is missing or shorter than 68 bytes.</summary>
-    public Os2Table? Os2 => ReadOnce(ref _os2, ref _os2Read, () => { ReadOnlySpan<byte> s = TableSpan(Os2Tag); return s.Length >= 68 ? new Os2Table(s) : null; });
+    public Os2Table? Os2 => ReadOnce(ref _os2, ref _os2Read, this, static f => { ReadOnlySpan<byte> s = f.TableSpan(Os2Tag); return s.Length >= 68 ? new Os2Table(s) : null; });
 
     /// <summary>Gets the 'post' table, or null when it is missing or shorter than 32 bytes.</summary>
-    public PostTable? Post => ReadOnce(ref _post, ref _postRead, () => { ReadOnlySpan<byte> s = TableSpan(PostTag); return s.Length >= 32 ? new PostTable(s) : null; });
+    public PostTable? Post => ReadOnce(ref _post, ref _postRead, this, static f => { ReadOnlySpan<byte> s = f.TableSpan(PostTag); return s.Length >= 32 ? new PostTable(s) : null; });
 
     /// <summary>Gets the 'name' table, or null when it is missing or shorter than its header.</summary>
-    public NameTable? Names => ReadOnce(ref _name, ref _nameRead, () => { ReadOnlySpan<byte> s = TableSpan(NameTag); return s.Length >= 6 ? new NameTable(s) : null; });
+    public NameTable? Names => ReadOnce(ref _name, ref _nameRead, this, static f => { ReadOnlySpan<byte> s = f.TableSpan(NameTag); return s.Length >= 6 ? new NameTable(s) : null; });
 
     /// <summary>Gets the 'kern' table, or null when it is missing or unreadable.</summary>
-    public KernTable? Kern => ReadOnce(ref _kern, ref _kernRead, () => { ReadOnlySpan<byte> s = TableSpan(KernTag); return s.Length >= 4 ? KernTable.TryRead(s) : null; });
+    public KernTable? Kern => ReadOnce(ref _kern, ref _kernRead, this, static f => { ReadOnlySpan<byte> s = f.TableSpan(KernTag); return s.Length >= 4 ? KernTable.TryRead(s) : null; });
+
+    /// <summary>
+    /// Gets the 'GSUB' table, or null when it is missing, empty or not version 1.x. Read at the default instance of a
+    /// variable font (D-194).
+    /// </summary>
+    public Layout.LayoutTable? Gsub => ReadOnce(ref _gsub, ref _gsubRead, this, static f => f.ReadLayout(Layout.LayoutTableKind.Gsub, GsubTag));
+
+    /// <summary>
+    /// Gets the 'GPOS' table, or null when it is missing, empty or not version 1.x. Read at the default instance of a
+    /// variable font (D-194).
+    /// </summary>
+    public Layout.LayoutTable? Gpos => ReadOnce(ref _gpos, ref _gposRead, this, static f => f.ReadLayout(Layout.LayoutTableKind.Gpos, GposTag));
+
+    /// <summary>Gets the 'GDEF' table, or null when it is missing, empty or not version 1.x.</summary>
+    public Layout.GdefTable? Gdef => ReadOnce(ref _gdef, ref _gdefRead, this, static f =>
+    {
+        // TRACE R-OT-0053
+        ReadOnlyMemory<byte> m = f.GetTableData(GdefTag);
+        return m.Length >= 12 && Internal.BigEndian.U16(m.Span, 0) == 1 ? new Layout.GdefTable(m) : null;
+    });
+
+    /// <summary>Derived names, metrics and style flags, computed on first use (D-247).</summary>
+    public FaceMetrics Metrics => ReadOnce(ref _metrics, ref _metricsRead, this, static f => new FaceMetrics(f))!;
+
+    /// <summary>The number of variation axes in the 'fvar' table; 0 for a font that is not variable.</summary>
+    public int VariationAxisCount
+    {
+        get
+        {
+            ReadOnlySpan<byte> s = TableSpan(FvarTag);
+            return Internal.BigEndian.U16(s, 0) == 1 ? Internal.BigEndian.U16(s, 8) : 0;
+        }
+    }
 
     /// <summary>Gets the character map. It is empty when the font has no usable 'cmap'.</summary>
     public CharacterMap CharacterMap
@@ -226,15 +271,35 @@ public sealed class OpenTypeFont
     public static OpenTypeFont Load(ReadOnlyMemory<byte> data, int faceIndex = 0) =>
         FontCollection.Load(data).GetFont(faceIndex);
 
+    /// <summary>Loads a font from memory with load options. The memory must stay unchanged for the font's lifetime.</summary>
+    /// <param name="data">The font file bytes (sfnt, collection, WOFF or WOFF2).</param>
+    /// <param name="faceIndex">The face to load.</param>
+    /// <param name="options">The options; null for <see cref="FontLoadOptions.Default"/>.</param>
+    /// <returns>The font.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="faceIndex"/> is not a face of the data, or the options are invalid.</exception>
+    /// <exception cref="OpenTypeFormatException">The data is not a usable font.</exception>
+    public static OpenTypeFont Load(ReadOnlyMemory<byte> data, int faceIndex, FontLoadOptions? options) =>
+        FontCollection.Load(data, options).GetFont(faceIndex);
+
     /// <summary>Tries to load a font; returns false instead of throwing for unusable data or a bad face index.</summary>
     /// <param name="data">The font file bytes.</param>
     /// <param name="faceIndex">The face to load.</param>
     /// <param name="font">The font, or null.</param>
     /// <returns>True when the font loaded.</returns>
-    public static bool TryLoad(ReadOnlyMemory<byte> data, int faceIndex, out OpenTypeFont? font)
+    public static bool TryLoad(ReadOnlyMemory<byte> data, int faceIndex, out OpenTypeFont? font) =>
+        TryLoad(data, faceIndex, null, out font);
+
+    /// <summary>Tries to load a font with load options; returns false instead of throwing for unusable data or a bad face index.</summary>
+    /// <param name="data">The font file bytes.</param>
+    /// <param name="faceIndex">The face to load.</param>
+    /// <param name="options">The options; null for <see cref="FontLoadOptions.Default"/>.</param>
+    /// <param name="font">The font, or null.</param>
+    /// <returns>True when the font loaded.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The options are invalid.</exception>
+    public static bool TryLoad(ReadOnlyMemory<byte> data, int faceIndex, FontLoadOptions? options, out OpenTypeFont? font)
     {
         font = null;
-        if (!FontCollection.TryLoad(data, out FontCollection? c, out _) || (uint)faceIndex >= (uint)c!.Count)
+        if (!FontCollection.TryLoad(data, (options ?? FontLoadOptions.Default).Validate(), out FontCollection? c, out _) || (uint)faceIndex >= (uint)c!.Count)
         {
             return false;
         }
@@ -368,6 +433,13 @@ public sealed class OpenTypeFont
         return new OpenTypeFont(data, faceIndex, sfntVersion, list.ToArray(), byTag, fromCollection);
     }
 
+    private Layout.LayoutTable? ReadLayout(Layout.LayoutTableKind kind, Tag tag)
+    {
+        // TRACE R-OT-0040
+        ReadOnlyMemory<byte> m = GetTableData(tag);
+        return m.Length >= 10 && Internal.BigEndian.U16(m.Span, 0) == 1 ? new Layout.LayoutTable(kind, m, VariationAxisCount) : null;
+    }
+
     internal ReadOnlySpan<byte> TableSpan(Tag tag) =>
         _byTag.TryGetValue(tag, out TableRecord r) ? _data.Span.Slice(r.Offset, r.Length) : ReadOnlySpan<byte>.Empty;
 
@@ -383,12 +455,13 @@ public sealed class OpenTypeFont
         return c;
     }
 
-    private static T? ReadOnce<T>(ref T? field, ref int done, Func<T?> read)
+    // The reader is a static lambda taking the font, so a property read allocates nothing once the value is cached.
+    private static T? ReadOnce<T>(ref T? field, ref int done, OpenTypeFont font, Func<OpenTypeFont, T?> read)
         where T : class
     {
         if (Volatile.Read(ref done) == 0)
         {
-            T? v = read();
+            T? v = read(font);
             Interlocked.CompareExchange(ref field, v, null);
             Volatile.Write(ref done, 1);
         }

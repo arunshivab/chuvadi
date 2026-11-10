@@ -37,7 +37,7 @@ public class UnicodeDataTests
     }
 
     [Fact]
-    public void VersionIsPinned() => Assert.Equal("17.0.0", UnicodeData.Version);
+    public void VersionIsPinned() => Assert.Equal("18.0.0", UnicodeData.Version);
 
     [Fact]
     public void GeneralCategoryAndCombiningClassMatchUnicodeDataTxt()

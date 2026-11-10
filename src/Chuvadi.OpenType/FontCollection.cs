@@ -40,9 +40,17 @@ public sealed class FontCollection
     /// <param name="data">The font file bytes.</param>
     /// <returns>The collection.</returns>
     /// <exception cref="OpenTypeFormatException">The data is not an sfnt font or a font collection.</exception>
-    public static FontCollection Load(ReadOnlyMemory<byte> data)
+    public static FontCollection Load(ReadOnlyMemory<byte> data) => Load(data, null);
+
+    /// <summary>Reads the container header of font data, with load options.</summary>
+    /// <param name="data">The font file bytes.</param>
+    /// <param name="options">The options; null for <see cref="FontLoadOptions.Default"/>.</param>
+    /// <returns>The collection.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="FontLoadOptions.MaxDecodedBytes"/> is not greater than 0.</exception>
+    /// <exception cref="OpenTypeFormatException">The data is not a font or font collection, or a WOFF/WOFF2 file declares more than the limit.</exception>
+    public static FontCollection Load(ReadOnlyMemory<byte> data, FontLoadOptions? options)
     {
-        if (!TryLoad(data, out FontCollection? result, out string? error))
+        if (!TryLoad(data, (options ?? FontLoadOptions.Default).Validate(), out FontCollection? result, out string? error))
         {
             throw new OpenTypeFormatException(error!);
         }
@@ -55,7 +63,16 @@ public sealed class FontCollection
     /// <param name="result">The collection, or null on failure.</param>
     /// <returns>True when the data is an sfnt font or a font collection.</returns>
     public static bool TryLoad(ReadOnlyMemory<byte> data, out FontCollection? result) =>
-        TryLoad(data, out result, out _);
+        TryLoad(data, FontLoadOptions.Default.MaxDecodedBytes, out result, out _);
+
+    /// <summary>Tries to read the container header of font data, with load options.</summary>
+    /// <param name="data">The font file bytes.</param>
+    /// <param name="options">The options; null for <see cref="FontLoadOptions.Default"/>.</param>
+    /// <param name="result">The collection, or null on failure.</param>
+    /// <returns>True when the data is a usable font container.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="FontLoadOptions.MaxDecodedBytes"/> is not greater than 0.</exception>
+    public static bool TryLoad(ReadOnlyMemory<byte> data, FontLoadOptions? options, out FontCollection? result) =>
+        TryLoad(data, (options ?? FontLoadOptions.Default).Validate(), out result, out _);
 
     /// <summary>Loads one font of the collection.</summary>
     /// <param name="faceIndex">Zero-based index of the font.</param>
@@ -72,7 +89,7 @@ public sealed class FontCollection
         return OpenTypeFont.Create(_data, faceIndex, _faceOffsets[faceIndex], IsCollection);
     }
 
-    internal static bool TryLoad(ReadOnlyMemory<byte> data, out FontCollection? result, out string? error)
+    internal static bool TryLoad(ReadOnlyMemory<byte> data, long maxDecodedBytes, out FontCollection? result, out string? error)
     {
         result = null;
         ReadOnlySpan<byte> s = data.Span;
@@ -89,7 +106,7 @@ public sealed class FontCollection
         {
             try
             {
-                data = signature == 0x774F4646u ? Woff.Woff1Decoder.Decode(s) : Woff.Woff2Decoder.Decode(s);
+                data = signature == 0x774F4646u ? Woff.Woff1Decoder.Decode(s, maxDecodedBytes) : Woff.Woff2Decoder.Decode(s, maxDecodedBytes);
             }
             catch (OpenTypeFormatException e)
             {

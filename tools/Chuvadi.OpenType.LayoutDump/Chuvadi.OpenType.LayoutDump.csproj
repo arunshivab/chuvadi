@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Writes a canonical text dump of a font's GDEF, GSUB and GPOS as read by Chuvadi.OpenType, so it can be compared
+    line by line with the same dump made by fontTools (fonttools_dump.py, run as a black box; D-206). Test tool only.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.OpenType\Chuvadi.OpenType.csproj" />
+  </ItemGroup>
+
+</Project>

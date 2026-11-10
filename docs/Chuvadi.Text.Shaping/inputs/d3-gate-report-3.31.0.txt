@@ -1,0 +1,64 @@
+Chuvadi shaping gate
+Engine: Chuvadi.Pdf.Text.Shaping 3.31.0.0. Language: the fonts' default language system.
+Gate 1 features: the D-68 set, passed explicitly (ccmp,locl,calt,liga,kern,mark,mkmk).
+Gate 2 features: ShapingFeatures.Default, the engine's own (contract: ccmp,locl,calt,liga,cpsp,kern,mark,mkmk).
+Parity: Shape(byte[]) must equal Shape(FontFace) on every matching line.
+
+Gate 1: corpus/syllables.tsv and corpus/words.tsv, the D-68 set
+set        script        lines   match  percent
+syllables  Bengali        2102    2102  100.00%
+syllables  Devanagari     2428    2428  100.00%
+syllables  Gujarati       2250    2250  100.00%
+syllables  Gurmukhi       2039    2039  100.00%
+syllables  Kannada        2264    2264  100.00%
+syllables  Malayalam      2315    2315  100.00%
+syllables  Odia           2158    2158  100.00%
+syllables  Tamil          1817    1817  100.00%
+syllables  Telugu         2268    2268  100.00%
+words      Bengali        1000    1000  100.00%
+words      Devanagari     1000    1000  100.00%
+words      Gujarati       1000    1000  100.00%
+words      Gurmukhi       1000    1000  100.00%
+words      Kannada        1000    1000  100.00%
+words      Latin           852     852  100.00%
+words      Malayalam      1000    1000  100.00%
+words      Odia           1000    1000  100.00%
+words      Tamil          1000    1000  100.00%
+words      Telugu         1000    1000  100.00%
+syllables  all           19641   19641  100.00%
+words      all            9852    9852  100.00%
+all        all           29493   29493  100.00%
+
+By font:
+  Carlito-Regular.ttf                213     213  100.00%
+  ChuvadiTest-Cff.otf                213     213  100.00%
+  LiPi-Sans-Bengali.woff2           3102    3102  100.00%
+  LiPi-Sans-Devanagari.woff2        3428    3428  100.00%
+  LiPi-Sans-Gujarati.woff2          3250    3250  100.00%
+  LiPi-Sans-Gurmukhi.woff2          3039    3039  100.00%
+  LiPi-Sans-Kannada.woff2           3264    3264  100.00%
+  LiPi-Sans-Latin.woff2              213     213  100.00%
+  LiPi-Sans-Malayalam.woff2         3315    3315  100.00%
+  LiPi-Sans-Odia.woff2              3158    3158  100.00%
+  LiPi-Sans-Tamil.woff2             2817    2817  100.00%
+  LiPi-Sans-Telugu.woff2            3268    3268  100.00%
+  LiberationSerif-Regular.ttf        213     213  100.00%
+
+Gate 2: corpus/cpsp-on.tsv, ShapingFeatures.Default
+ShapingFeatures.Default tags: ccmp,locl,calt,liga,cpsp,kern,mark,mkmk (matches the contract).
+cpsp-on    Latin           358     358  100.00%
+By font:
+  Carlito-Regular.ttf                182     182  100.00%
+  LiPi-Sans-Latin.woff2              176     176  100.00%
+
+Timing (one call per line and form, first calls included; for the engine's own trend, not a benchmark):
+  cpsp-on    Shape(FontFace)      358 calls        3.2 ms       9.1 us per call
+  cpsp-on    Shape(byte[])        358 calls        2.6 ms       7.2 us per call
+  syllables  Shape(FontFace)    19641 calls     1078.7 ms      54.9 us per call
+  syllables  Shape(byte[])      19641 calls      921.2 ms      46.9 us per call
+  words      Shape(FontFace)     9852 calls      210.7 ms      21.4 us per call
+  words      Shape(byte[])       9852 calls      186.0 ms      18.9 us per call
+
+Gate 1 passed.
+Gate 2 passed.
+GATE PASSED

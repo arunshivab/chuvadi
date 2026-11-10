@@ -75,7 +75,7 @@ public readonly record struct Script(Tag Iso15924)
         return new Script(Tag.Parse(new string(c)));
     }
 
-    /// <summary>Gets the Unicode Script property of a code point (Unicode 17.0.0 data).</summary>
+    /// <summary>Gets the Unicode Script property of a code point (Unicode 18.0.0 data).</summary>
     /// <param name="codePoint">The code point.</param>
     /// <returns>The script; <see cref="Unknown"/> for unassigned or invalid code points.</returns>
     public static Script FromCodePoint(int codePoint)

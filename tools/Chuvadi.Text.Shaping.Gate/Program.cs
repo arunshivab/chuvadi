@@ -6,7 +6,11 @@
 // Usage:
 //   dotnet run -c Release --project tools/Chuvadi.Text.Shaping.Gate -- --pack <pack folder>
 //       [--set syllables|words] [--script <LipiScript name>] [--diffs <n>] [--out <file>]
-//       [--features <file>] [--parity] [--bench <rounds>] [--fontcheck] [--expect-lines <n>]
+//       [--features <file>] [--parity] [--bench <rounds>] [--fontcheck] [--expect-lines <n>] [--oldtags] [--cpsp]
+//
+// --oldtags adds the old-style Indic tag fixtures (pack oldtags/corpus, fonts in oldtags/fonts; D-201).
+// --cpsp adds gate 2: corpus/cpsp-on.tsv shaped with the default features, cpsp on (D-188).
+// These extra sets are reported per set and are not counted in --expect-lines.
 //
 // --expect-lines n checks a phase target instead of the final gate: it reports PHASE TARGET MET when
 // exactly n lines match (with --parity and --fontcheck also clean). GATE PASSED needs every line.
@@ -61,7 +65,7 @@ internal static class Program
             if (!fonts.ContainsKey(l.Font))
             {
                 // WOFF2 files are decoded by Chuvadi.OpenType itself; the decoded sfnt is kept for the byte-array checks.
-                OpenTypeFont font = OpenTypeFont.Load(File.ReadAllBytes(Path.Combine(o.Pack, "fonts", l.Font)));
+                OpenTypeFont font = OpenTypeFont.Load(File.ReadAllBytes(l.FontPath));
                 fonts[l.Font] = (font.Data.ToArray(), font);
             }
         }
@@ -69,6 +73,11 @@ internal static class Program
         Dictionary<string, ShapeOptions> optionsByScript = Scripts.ToDictionary(
             kv => kv.Key,
             kv => new ShapeOptions { Script = kv.Value, Language = Language.Default, UseDefaultFeatures = false, Features = features }, // language always explicit (D-182)
+            StringComparer.Ordinal);
+
+        Dictionary<string, ShapeOptions> defaultOptionsByScript = Scripts.ToDictionary(
+            kv => kv.Key,
+            kv => new ShapeOptions { Script = kv.Value, Language = Language.Default }, // gate 2: default features (D-188)
             StringComparer.Ordinal);
 
         GlyphBuffer buffer = new GlyphBuffer();
@@ -80,7 +89,7 @@ internal static class Program
         foreach (Line l in lines)
         {
             ShapingFont font = ShapingFont.Get(fonts[l.Font].Font);
-            ShapeOptions options = optionsByScript[l.Script];
+            ShapeOptions options = l.Defaults ? defaultOptionsByScript[l.Script] : optionsByScript[l.Script];
             string? error = null;
             Glyph[] actual;
             try
@@ -139,10 +148,10 @@ internal static class Program
         if (o.BenchRounds > 0)
         {
             report.AppendLine();
-            Bench(report, lines, fonts, optionsByScript, o.BenchRounds);
+            Bench(report, lines.Where(l => Array.IndexOf(Sets, l.Set) >= 0).ToList(), fonts, optionsByScript, o.BenchRounds);
         }
 
-        int matched = results.Count(r => r.Match);
+        int matched = results.Count(r => r.Match && Array.IndexOf(Sets, r.Line.Set) >= 0);
         if (o.ExpectLines >= 0)
         {
             bool met = matched == o.ExpectLines && (!o.Parity || parityFailures == 0) && fontCheckOk;
@@ -276,11 +285,50 @@ internal static class Program
                     continue;
                 }
 
-                lines.Add(new Line(set, lineNumber, cols[0], cols[1], cols[2], Decode(cols[2]), ParseGlyphs(cols[3])));
+                lines.Add(new Line(set, lineNumber, cols[0], cols[1], cols[2], Decode(cols[2]), ParseGlyphs(cols[3]), Path.Combine(o.Pack, "fonts", cols[1]), false));
             }
         }
 
+        if (o.OldTags)
+        {
+            foreach (string file in Directory.GetFiles(Path.Combine(o.Pack, "oldtags", "corpus"), "*.tsv").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                AddExtra(lines, o, "oldtags", file, Path.Combine(o.Pack, "oldtags", "fonts"), defaults: false);
+            }
+        }
+
+        if (o.Cpsp)
+        {
+            AddExtra(lines, o, "cpsp-on", Path.Combine(o.Pack, "corpus", "cpsp-on.tsv"), Path.Combine(o.Pack, "fonts"), defaults: true);
+        }
+
         return lines;
+    }
+
+    private static void AddExtra(List<Line> lines, Options o, string set, string file, string fontDir, bool defaults)
+    {
+        int lineNumber = 0;
+        foreach (string raw in File.ReadLines(file))
+        {
+            lineNumber++;
+            if (raw.Length == 0 || raw[0] == '#')
+            {
+                continue;
+            }
+
+            string[] cols = raw.Split('\t');
+            if (cols.Length != 4)
+            {
+                throw new InvalidDataException($"{Path.GetFileName(file)} line {lineNumber}: expected 4 columns, found {cols.Length}.");
+            }
+
+            if (o.Script is not null && !string.Equals(o.Script, cols[0], StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            lines.Add(new Line(set, lineNumber, cols[0], cols[1], cols[2], Decode(cols[2]), ParseGlyphs(cols[3]), Path.Combine(fontDir, cols[1]), defaults));
+        }
     }
 
     private static IReadOnlyList<Feature> ReadFeatures(string path)
@@ -417,7 +465,7 @@ internal static class Program
 
     private readonly record struct Glyph(int Id, int Cluster, int XAdvance, int XOffset, int YOffset);
 
-    private sealed record Line(string Set, int LineNumber, string Script, string Font, string Hex, string Text, Glyph[] Expected);
+    private sealed record Line(string Set, int LineNumber, string Script, string Font, string Hex, string Text, Glyph[] Expected, string FontPath, bool Defaults);
 
     private sealed class Options
     {
@@ -441,6 +489,10 @@ internal static class Program
 
         internal int ExpectLines { get; private set; } = -1;
 
+        internal bool OldTags { get; private set; }
+
+        internal bool Cpsp { get; private set; }
+
         internal static Options Parse(string[] args)
         {
             Options o = new Options();
@@ -450,6 +502,12 @@ internal static class Program
                 {
                     case "--parity":
                         o.Parity = true;
+                        continue;
+                    case "--oldtags":
+                        o.OldTags = true;
+                        continue;
+                    case "--cpsp":
+                        o.Cpsp = true;
                         continue;
                     case "--fontcheck":
                         o.FontCheck = true;
