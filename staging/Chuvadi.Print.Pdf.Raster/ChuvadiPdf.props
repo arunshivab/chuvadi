@@ -2,16 +2,19 @@
 
   <!--
     D-29: Chuvadi.Print.Pdf.Raster takes chuvadi-pdf as packages, never a source clone.
-    D-235 L1.1, D-258: the package references the range ChuvadiPdfRange, [3.31.2, 4.0.0) (D-216: chuvadi-pdf keeps its
-    API compatible within 3.x). The floor is 3.31.2, not 3.31.1, because 3.31.1 renders pages whose media box does not
-    start at 0,0 blank (D-258 supersedes L1.6 option A of D-256). NuGet picks the lowest version a range allows, so an
+    D-235 L1.1, D-258, D-326: the package references the range ChuvadiPdfRange, [3.32.0, 4.0.0) (D-216: chuvadi-pdf
+    keeps its API compatible within 3.x). The floor is 3.32.0 (D-326 R1): 3.32.0 paints form XObjects with the graphics
+    state in effect at their Do (D-259; 3.31.2 painted them black, so LibreOffice watermarks printed far too dark), and
+    the adapter sets 3.32.0's RenderOptions.DisplayBox (3.32.0 renders the crop box by default; the adapter renders the
+    media box and cuts out PageBox itself). Earlier floors: 3.31.2 (D-258; 3.31.1 rendered pages whose media box does
+    not start at 0,0 blank). NuGet picks the lowest version a range allows, so an
     application that wants a newer chuvadi-pdf references it directly. The tests reference ChuvadiPdfVersion exactly,
     so they run on one measured version; run them on a later 3.x with -p:ChuvadiPdfVersion=<version>.
     Imported by Chuvadi.Print.Pdf.Raster and Chuvadi.Print.Pdf.Raster.Tests; neither is in Chuvadi.slnx or CI.
   -->
   <PropertyGroup>
-    <ChuvadiPdfVersion Condition="'$(ChuvadiPdfVersion)' == ''">3.31.2</ChuvadiPdfVersion>
-    <ChuvadiPdfFloor>3.31.2</ChuvadiPdfFloor>
+    <ChuvadiPdfVersion Condition="'$(ChuvadiPdfVersion)' == ''">3.32.0</ChuvadiPdfVersion>
+    <ChuvadiPdfFloor>3.32.0</ChuvadiPdfFloor>
     <ChuvadiPdfRange>[$(ChuvadiPdfFloor), 4.0.0)</ChuvadiPdfRange>
   </PropertyGroup>
 

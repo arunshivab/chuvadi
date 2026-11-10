@@ -25,8 +25,8 @@ and checks them against the hashes pinned in `tools/chuvadi-pdf/hashes/`, so it 
 `RELEASING.md`). The local feed below is only for building on your own machine.
 
 Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf from `Chuvadi.Print.Pdf.Raster/ChuvadiPdf.props`: the package references
-the range `[3.31.2, 4.0.0)` (D-258), and its tests use exactly `ChuvadiPdfVersion` (3.31.2 by default). The feed needs
-every Chuvadi.Pdf 3.31.2 package, plus Chuvadi.Fonts 1.0.0 or later. They are the assets of the chuvadi-pdf `v3.31.2`
+the range `[3.32.0, 4.0.0)` (D-326), and its tests use exactly `ChuvadiPdfVersion` (3.32.0 by default). The feed needs
+every Chuvadi.Pdf 3.32.0 package, plus Chuvadi.Fonts 1.0.0 or later. They are the assets of the chuvadi-pdf `v3.32.0`
 GitHub release (with its SHA256SUMS.txt) and of our `fonts-v1.1.0` release. Then:
 
 ```powershell
