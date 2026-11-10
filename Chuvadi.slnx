@@ -13,6 +13,7 @@
     <Project Path="src/Chuvadi.Docs/Chuvadi.Docs.csproj" />
     <Project Path="src/Chuvadi.Docs.Conversion/Chuvadi.Docs.Conversion.csproj" />
     <Project Path="src/Chuvadi.Fonts/Chuvadi.Fonts.csproj" />
+    <Project Path="src/Chuvadi.Fonts.Liberation/Chuvadi.Fonts.Liberation.csproj" />
     <Project Path="src/Chuvadi.Layout/Chuvadi.Layout.csproj" />
     <Project Path="src/Chuvadi.Layout.Docs/Chuvadi.Layout.Docs.csproj" />
     <Project Path="src/Chuvadi.Layout.Documents/Chuvadi.Layout.Documents.csproj" />
@@ -32,6 +33,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Chuvadi.Docs.Conversion.Tests/Chuvadi.Docs.Conversion.Tests.csproj" />
     <Project Path="tests/Chuvadi.Docs.Tests/Chuvadi.Docs.Tests.csproj" />
+    <Project Path="tests/Chuvadi.Fonts.Liberation.Tests/Chuvadi.Fonts.Liberation.Tests.csproj" />
     <Project Path="tests/Chuvadi.Fonts.Tests/Chuvadi.Fonts.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Docs.Tests/Chuvadi.Layout.Docs.Tests.csproj" />
     <Project Path="tests/Chuvadi.Layout.Documents.Tests/Chuvadi.Layout.Documents.Tests.csproj" />

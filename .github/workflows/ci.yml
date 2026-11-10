@@ -80,6 +80,9 @@ jobs:
       - name: Unit tests — Chuvadi.Fonts (xUnit)
         run: dotnet test tests/Chuvadi.Fonts.Tests -c Release --no-build --logger "trx;LogFileName=fonts.trx"
 
+      - name: Unit tests — Chuvadi.Fonts.Liberation (xUnit)
+        run: dotnet test tests/Chuvadi.Fonts.Liberation.Tests -c Release --no-build --logger "trx;LogFileName=fonts-liberation.trx"
+
       - name: Unit tests — Chuvadi.Layout (xUnit)
         run: dotnet test tests/Chuvadi.Layout.Tests -c Release --no-build --logger "trx;LogFileName=layout.trx"
 
@@ -138,6 +141,7 @@ jobs:
           dotnet pack src/Chuvadi.Zip/Chuvadi.Zip.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Markup/Chuvadi.Markup.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Fonts/Chuvadi.Fonts.csproj -c Release --no-build
+          dotnet pack src/Chuvadi.Fonts.Liberation/Chuvadi.Fonts.Liberation.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Layout/Chuvadi.Layout.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Layout.Docs/Chuvadi.Layout.Docs.csproj -c Release --no-build
           dotnet pack src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj -c Release --no-build
@@ -163,6 +167,7 @@ jobs:
             artifacts/bin/Chuvadi.Zip/Release/*.nupkg
             artifacts/bin/Chuvadi.Markup/Release/*.nupkg
             artifacts/bin/Chuvadi.Fonts/Release/*.nupkg
+            artifacts/bin/Chuvadi.Fonts.Liberation/Release/*.nupkg
             artifacts/bin/Chuvadi.Layout/Release/*.nupkg
             artifacts/bin/Chuvadi.Layout.Docs/Release/*.nupkg
             artifacts/bin/Chuvadi.Layout.Sheets/Release/*.nupkg
@@ -172,8 +177,8 @@ jobs:
             artifacts/bin/Chuvadi.OpenType/Release/*.nupkg
             artifacts/bin/Chuvadi.Text.Shaping/Release/*.nupkg
 
-  # D-217 item 2: the shipped libraries must survive trimming and NativeAOT. tests/Chuvadi.TrimSmoke uses Chuvadi.Zip and
-  # Chuvadi.Fonts (add the other packages here as they get the same flags). Both publishes treat warnings as errors, and the
+  # D-217 item 2: the shipped libraries must survive trimming and NativeAOT. tests/Chuvadi.TrimSmoke uses Chuvadi.Zip,
+  # Chuvadi.Fonts and Chuvadi.Fonts.Liberation (add the other packages here as they get the same flags). Both publishes treat warnings as errors, and the
   # published executable is run: it exits non-zero on the first wrong result. The app is not in Chuvadi.slnx, never packed.
   trim-aot:
     runs-on: ubuntu-latest
@@ -205,7 +210,7 @@ jobs:
         run: ./artifacts/aot-smoke/Chuvadi.TrimSmoke
 
   # D-217 item 3: the shipped libraries must compile for the Android target framework. tests/Chuvadi.AndroidSmoke is a
-  # net10.0-android class library that references Chuvadi.Zip and Chuvadi.Fonts and calls their public API (add the other
+  # net10.0-android class library that references Chuvadi.Zip, Chuvadi.Fonts and Chuvadi.Fonts.Liberation and calls their public API (add the other
   # packages as they are checked). Nothing is run on a device or emulator. Not in Chuvadi.slnx, never packed. Until it has
   # passed on the runner once it does not block a merge.
   android-build:

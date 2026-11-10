@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Chuvadi.Fonts.Tests" />
+    <InternalsVisibleTo Include="Chuvadi.Fonts.Liberation.Tests" />
   </ItemGroup>
 
 </Project>

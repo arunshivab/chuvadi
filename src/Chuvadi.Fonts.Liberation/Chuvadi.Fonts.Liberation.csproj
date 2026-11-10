@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Chuvadi.Fonts.Liberation</RootNamespace>
+    <AssemblyName>Chuvadi.Fonts.Liberation</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <!-- Package metadata -->
+    <Product>Chuvadi.Fonts.Liberation</Product>
+    <Description>The Liberation fonts 2.1.5 for .NET as embedded resources, as a pure data pack: Liberation Sans, Serif and Mono, four styles each (12 TrueType files), metric-compatible with Arial, Times New Roman and Courier New and the stand-ins for the Helvetica, Times and Courier families of the PDF Standard 14 fonts. With their names, styles, lengths and SHA-256 hashes, and the SIL Open Font License 1.1, readable through Chuvadi.Fonts' IFontFilePack. No layout engine dependency, no disk or network access.</Description>
+    <Authors>Arun</Authors>
+    <Company>Chuvadi</Company>
+    <Version>1.0.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageLicenseExpression>MIT AND OFL-1.1</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
+    <PackageTags>fonts;ofl;liberation;arial;times;courier;truetype;pdf</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Chuvadi.Fonts.Liberation.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- D-195, D-307: a pure data pack; the only reference is Chuvadi.Fonts, for IFontFilePack and FontFileInfo. -->
+    <ProjectReference Include="..\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts\*.ttf" LogicalName="Chuvadi.Fonts.Liberation.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Licenses\Liberation-OFL.txt" LogicalName="Chuvadi.Fonts.Liberation.Liberation-OFL.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)FONTS.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)Licenses\*.txt" Pack="true" PackagePath="licenses" />
+  </ItemGroup>
+
+</Project>
