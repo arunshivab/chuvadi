@@ -12,7 +12,7 @@ internal static class Flow
     public static LayoutOptions Options()
     {
         LayoutOptions o = new LayoutOptions { Now = new DateTimeOffset(2026, 10, 28, 9, 30, 0, TimeSpan.FromHours(5.5)) };
-        o.FontSources.Add(BundledFontSource.Instance);
+        o.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         return o;
     }
 

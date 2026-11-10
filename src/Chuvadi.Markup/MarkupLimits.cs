@@ -18,14 +18,22 @@ namespace Chuvadi.Markup
         /// <summary>Maximum input length in UTF-16 chars (bytes for byte input). Throws. Default 32 Mi.</summary>
         public int MaxInputChars { get; set; } = 32 * 1024 * 1024;
 
-        /// <summary>Maximum number of nodes (AST nodes, DOM nodes, CSS rules) a single call may create. Throws. Default 4 Mi.</summary>
+        /// <summary>
+        /// Maximum number of nodes (AST nodes, DOM nodes, CSS rules) a single call may create. Throws. For Markdown
+        /// these are the nodes of the resulting AST: the document node and link reference definitions are not
+        /// counted, and the parser throws as soon as the count would pass the limit (Actual is the limit plus one).
+        /// Default 4 Mi.
+        /// </summary>
         public int MaxNodes { get; set; } = 4 * 1024 * 1024;
 
         /// <summary>
         /// Maximum tree depth. Degrades, never throws: HTML elements deeper than this are attached to the
         /// deepest allowed ancestor (the behaviour of Chromium-based browsers at 512); Markdown container
-        /// blocks deeper than this are not opened and their markers are read as text; Markdown emphasis
-        /// nested deeper keeps its text but loses the formatting. Default 512.
+        /// blocks are opened only below this depth, except that a list item may also sit exactly at this
+        /// depth unless it would interrupt a paragraph at that depth, and the markers of a container that is
+        /// not opened are read as text; Markdown emphasis nested deeper keeps its text but loses the
+        /// formatting. Very deep Markdown block quotes (thousands of levels, possible only with a limit far
+        /// above the default) cost under a microsecond per '&gt;' marker to parse. Default 512.
         /// </summary>
         public int MaxNestingDepth { get; set; } = 512;
 
@@ -33,7 +41,9 @@ namespace Chuvadi.Markup
         /// Bound on parser work, as steps per input char: HTML tree construction (scope checks, stack and
         /// formatting-list walks) and Markdown inline parsing (delimiter and bracket processing). Real
         /// documents use a few steps per char; adversarial input that would make either algorithm
-        /// super-linear throws instead of running unbounded. Default 64.
+        /// super-linear throws instead of running unbounded. The Markdown budget is this value times
+        /// (input length + 1024), plus 1,000,000 steps (the exception's Limit); what counts as one step is
+        /// implementation-defined. Default 64.
         /// </summary>
         public int MaxParserWorkPerChar { get; set; } = 64;
 

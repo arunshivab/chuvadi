@@ -6,7 +6,8 @@ using System.IO.Compression;
 namespace Chuvadi.Print
 {
     /// <summary>
-    /// Minimal pure-BCL PNG writer (8-bit grayscale or 8-bit RGB, no interlace, filter type 0).
+    /// Minimal pure-BCL PNG writer (8-bit grayscale, RGB, grayscale with alpha or RGB with alpha; no interlace,
+    /// filter type 0).
     /// Rows are supplied one at a time so the image is never held twice in memory.
     /// </summary>
     internal sealed class PngEncoder
@@ -17,6 +18,10 @@ namespace Chuvadi.Print
         public const byte ColorTypeGray = 0;
         /// <summary>PNG colour type 2.</summary>
         public const byte ColorTypeRgb = 2;
+        /// <summary>PNG colour type 4: grey, then alpha.</summary>
+        public const byte ColorTypeGrayAlpha = 4;
+        /// <summary>PNG colour type 6: red, green, blue, then alpha (not premultiplied).</summary>
+        public const byte ColorTypeRgba = 6;
 
         private readonly int _width;
         private readonly int _height;
@@ -28,7 +33,8 @@ namespace Chuvadi.Print
         {
             if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
             if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));
-            if (colorType != ColorTypeGray && colorType != ColorTypeRgb) throw new ArgumentOutOfRangeException(nameof(colorType));
+            if (colorType != ColorTypeGray && colorType != ColorTypeRgb && colorType != ColorTypeGrayAlpha && colorType != ColorTypeRgba)
+                throw new ArgumentOutOfRangeException(nameof(colorType));
             _width = width;
             _height = height;
             _colorType = colorType;
@@ -36,7 +42,13 @@ namespace Chuvadi.Print
             _dpiY = dpiY;
         }
 
-        public int RowBytes => _colorType == ColorTypeRgb ? _width * 3 : _width;
+        public int RowBytes => _width * _colorType switch
+        {
+            ColorTypeRgb => 3,
+            ColorTypeGrayAlpha => 2,
+            ColorTypeRgba => 4,
+            _ => 1
+        };
 
         /// <summary>
         /// Writes the PNG. <paramref name="fillRow"/> is called once per row, top to bottom, with a

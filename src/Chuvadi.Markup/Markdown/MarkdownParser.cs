@@ -32,12 +32,8 @@ namespace Chuvadi.Markup.Markdown
             Guard.InputLength(markdown.Length, limits);
             cancellationToken.ThrowIfCancellationRequested();
 
-            var budget = new NodeBudget(limits.MaxNodes);
-            var poll = new CancellationPoll(cancellationToken);
             var doc = new MarkdownDocument { Source = markdown };
-            var blocks = new BlockParser(options, budget, cancellationToken, doc.MutableDefinitions).Parse(markdown);
-            var inline = new InlineParser(options, doc.MutableDefinitions, budget, poll, markdown.Length);
-            AstBuilder.Build(blocks, doc, inline, options, poll);
+            MarkdownEngine.Parse(markdown, options, doc, cancellationToken);
             doc.Span = new SourceSpan(0, markdown.Length);
             return doc;
         }

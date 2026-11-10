@@ -15,11 +15,17 @@ env:
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 30 || 15 }}
+    # D-217 item 3: macOS has never run these tests. Until it has passed once it does not block a merge
+    # (a macOS failure shows red in the job list, but the workflow result stays green).
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    env:
+      # Outside tools the tests may require: Ghostscript on Ubuntu, WPF's XPS reader on Windows, none on macOS.
+      CHUVADI_TEST_TOOLS: ${{ matrix.os == 'ubuntu-latest' && 'ghostscript' || matrix.os == 'windows-latest' && 'wpf' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,6 +34,13 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+
+      - name: Install test tools (Ubuntu) - Ghostscript, run by tests only, never redistributed
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ghostscript
+          gs --version
 
       - name: Build solution (warnings as errors)
         run: dotnet build -c Release
@@ -53,6 +66,10 @@ jobs:
 
       - name: Unit tests — Chuvadi.Print (xUnit)
         run: dotnet test tests/Chuvadi.Print.Tests -c Release --no-build --logger "trx;LogFileName=print.trx"
+
+      - name: Unit tests — Chuvadi.Print.Xps (xUnit, Windows only, WPF)
+        if: matrix.os == 'windows-latest'
+        run: dotnet test tests/Chuvadi.Print.Xps.Tests -c Release --no-build --logger "trx;LogFileName=print-xps.trx"
 
       - name: Unit tests — Chuvadi.Zip (xUnit)
         run: dotnet test tests/Chuvadi.Zip.Tests -c Release --no-build --logger "trx;LogFileName=zip.trx"
@@ -154,3 +171,58 @@ jobs:
             artifacts/bin/Chuvadi.Layout.Markup/Release/*.nupkg
             artifacts/bin/Chuvadi.OpenType/Release/*.nupkg
             artifacts/bin/Chuvadi.Text.Shaping/Release/*.nupkg
+
+  # D-217 item 2: the shipped libraries must survive trimming and NativeAOT. tests/Chuvadi.TrimSmoke uses Chuvadi.Zip and
+  # Chuvadi.Fonts (add the other packages here as they get the same flags). Both publishes treat warnings as errors, and the
+  # published executable is run: it exits non-zero on the first wrong result. The app is not in Chuvadi.slnx, never packed.
+  trim-aot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install NativeAOT build tools (Ubuntu) - clang and zlib, used to link the test app only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+
+      - name: Publish trimmed (TrimMode=full, warnings are errors)
+        run: dotnet publish tests/Chuvadi.TrimSmoke -c Release -r linux-x64 -p:PublishTrimmed=true -p:TrimMode=full -p:TreatWarningsAsErrors=true -o artifacts/trim-smoke
+
+      - name: Run the trimmed app
+        run: ./artifacts/trim-smoke/Chuvadi.TrimSmoke
+
+      - name: Publish NativeAOT (warnings are errors)
+        run: dotnet publish tests/Chuvadi.TrimSmoke -c Release -r linux-x64 -p:PublishAot=true -p:TreatWarningsAsErrors=true -o artifacts/aot-smoke
+
+      - name: Run the NativeAOT app
+        run: ./artifacts/aot-smoke/Chuvadi.TrimSmoke
+
+  # D-217 item 3: the shipped libraries must compile for the Android target framework. tests/Chuvadi.AndroidSmoke is a
+  # net10.0-android class library that references Chuvadi.Zip and Chuvadi.Fonts and calls their public API (add the other
+  # packages as they are checked). Nothing is run on a device or emulator. Not in Chuvadi.slnx, never packed. Until it has
+  # passed on the runner once it does not block a merge.
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install the Android workload (build tooling only, never shipped)
+        run: dotnet workload install android
+
+      - name: Build the Android smoke library (warnings are errors)
+        run: dotnet build tests/Chuvadi.AndroidSmoke -c Release -p:TreatWarningsAsErrors=true

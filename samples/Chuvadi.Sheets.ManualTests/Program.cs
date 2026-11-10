@@ -81,6 +81,15 @@ public static class Program
             if (testName is "all" or "errors")
                 ErrorsTest.Run(outputDir);
 
+            if (testName is "all" or "savesafety")
+                SaveSafetyTest.Run(outputDir);
+
+            if (testName is "all" or "partrefs")
+                PartReferenceTest.Run(outputDir);
+
+            if (testName is "all" or "datatables")
+                DataTablesTest.Run(outputDir);
+
             if (testName is "all" or "perf")
                 LoadBenchmarkTest.Run(outputDir);
 

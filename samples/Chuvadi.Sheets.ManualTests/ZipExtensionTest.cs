@@ -32,6 +32,7 @@ internal static class ZipExtensionTest
 
         int pass = 0;
         int fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
@@ -45,7 +46,7 @@ internal static class ZipExtensionTest
             {
                 Console.WriteLine($"    FAIL: {label}");
                 Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}");
-                fail++;
+                fail++; failed.Add(label, ex);
             }
         }
 
@@ -233,6 +234,6 @@ internal static class ZipExtensionTest
 
         Console.WriteLine();
         Console.WriteLine($"[ZipExtensionTest] Done. {pass} passed, {fail} failed.");
-        if (fail > 0) throw new Exception($"{fail} zip tests failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"{fail} zip tests failed."));
     }
 }

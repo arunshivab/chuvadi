@@ -32,11 +32,12 @@ internal static class Layout17Test
         Console.WriteLine("[Layout17Test] 1.7.0 Layout requests...");
         Console.WriteLine();
         int pass = 0, fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
             try { body(); Console.WriteLine($"    PASS: {label}"); pass++; }
-            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; }
+            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; failed.Add(label, ex); }
         }
 
         static void Eq<T>(T expected, T actual, string what)
@@ -466,6 +467,21 @@ internal static class Layout17Test
         var enc = EncryptedBytes(600_000, "secret", 1);
         File.WriteAllBytes(Path.Combine(outputDir, "f170_encrypted_spin.xlsx"), enc);   // for inspection only; not read back
 
+        // The cancellation checks compare against a full, uncancelled 3,000,000-spin key derivation on this
+        // machine, at this moment (2.0.4, D-292): writing the fixture runs exactly that derivation. A fixed
+        // wall-clock limit failed on busy CI runners although cancellation worked; a cancellation that is
+        // ignored runs the whole derivation and still fails on any machine.
+        byte[]? big = null;
+        long fullMs = 0;
+        void EnsureBig()
+        {
+            if (big is not null) return;
+            var sw = Stopwatch.StartNew();
+            big = EncryptedBytes(3_000_000, "x");
+            fullMs = sw.ElapsedMilliseconds;
+        }
+        long CancelLimitMs() => Math.Max(1500, fullMs / 2);
+
         Check("D-25: MaxSpinCount (default 500,000) rejects a higher declared spin count before key derivation", () =>
         {
             Eq(500_000, new XlsxReaderOptions().MaxSpinCount, "default");
@@ -474,7 +490,12 @@ internal static class Layout17Test
             var ex = Throws<XlsxLimitExceededException>(() => Workbook.Load(Mem(enc), "pw", null), "default cap");
             sw.Stop();
             True(ex.LimitName == "MaxSpinCount" && ex.Limit == 500_000 && ex.Actual == 600_000, ex.Message);
-            True(sw.ElapsedMilliseconds < 2000, $"rejected in {sw.ElapsedMilliseconds} ms");
+            Console.WriteLine($"          (rejected in {sw.ElapsedMilliseconds} ms)");
+            // Order, not time (2.0.4, D-292): with a wrong password the cap still wins. Had the key been derived
+            // and checked first, this would be XlsxPasswordRequiredException.
+            var wrong = Throws<XlsxLimitExceededException>(() => Workbook.Load(Mem(enc), "not-the-password", null), "wrong password, default cap");
+            True(wrong.LimitName == "MaxSpinCount", wrong.Message);
+            Throws<XlsxLimitExceededException>(() => XlsxReader.Open(Mem(enc), "not-the-password", null).Dispose(), "wrong password, streaming");
             Throws<XlsxLimitExceededException>(() => XlsxReader.Open(Mem(enc), "pw", new XlsxReaderOptions { MaxSpinCount = 100_000 }).Dispose(), "streaming");
             Eq("secret", Workbook.Load(Mem(enc), "pw", new XlsxReaderOptions { MaxSpinCount = null })["E"].FindCell("A1")!.Value, "unlimited reads it");
             Eq("secret", Workbook.Load(Mem(enc), "pw", new XlsxReaderOptions { MaxSpinCount = 600_000 })["E"].FindCell("A1")!.Value, "equal to the cap reads it");
@@ -482,7 +503,7 @@ internal static class Layout17Test
 
         Check("D-25: cancellation lands inside key derivation (Workbook.Load and XlsxReader.Open)", () =>
         {
-            var big = EncryptedBytes(3_000_000, "x");
+            EnsureBig();
             foreach (var model in new[] { true, false })
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
@@ -490,17 +511,18 @@ internal static class Layout17Test
                 var sw = Stopwatch.StartNew();
                 Throws<OperationCanceledException>(() =>
                 {
-                    if (model) Workbook.Load(Mem(big), "pw", opts);
-                    else XlsxReader.Open(Mem(big), "pw", opts).Dispose();
+                    if (model) Workbook.Load(Mem(big!), "pw", opts);
+                    else XlsxReader.Open(Mem(big!), "pw", opts).Dispose();
                 }, model ? "model" : "streaming");
                 sw.Stop();
-                True(sw.ElapsedMilliseconds < 1500, $"{(model ? "model" : "streaming")}: stopped in {sw.ElapsedMilliseconds} ms");
-                Console.WriteLine($"          ({(model ? "Workbook.Load" : "XlsxReader.Open")}: cancel at 100 ms landed after {sw.ElapsedMilliseconds} ms of a 3,000,000-spin derivation)");
+                True(sw.ElapsedMilliseconds < CancelLimitMs(), $"{(model ? "model" : "streaming")}: stopped in {sw.ElapsedMilliseconds} ms; limit {CancelLimitMs()} ms (full derivation {fullMs} ms)");
+                Console.WriteLine($"          ({(model ? "Workbook.Load" : "XlsxReader.Open")}: cancel at 100 ms landed after {sw.ElapsedMilliseconds} ms; the full 3,000,000-spin derivation took {fullMs} ms)");
             }
         });
 
         Check("D-25: SaveAsync's token cancels encryption key derivation", () =>
         {
+            EnsureBig();
             var p = Path.Combine(outputDir, "f170_encrypt_cancel.xlsx");
             using var cts = new CancellationTokenSource();
             var w = XlsxWriter.Create(p, new XlsxWriterOptions { Encryption = new EncryptionOptions { Password = "pw", SpinCount = 3_000_000 } });
@@ -510,13 +532,14 @@ internal static class Layout17Test
             Throws<OperationCanceledException>(() => w.SaveAsync(cts.Token).GetAwaiter().GetResult(), "SaveAsync");
             sw.Stop();
             try { w.Dispose(); } catch { /* the writer is unusable after a cancelled save */ }
-            True(sw.ElapsedMilliseconds < 1500, $"stopped in {sw.ElapsedMilliseconds} ms");
+            True(sw.ElapsedMilliseconds < CancelLimitMs(), $"stopped in {sw.ElapsedMilliseconds} ms; limit {CancelLimitMs()} ms (full derivation {fullMs} ms)");
+            Console.WriteLine($"          (SaveAsync: cancel at 100 ms landed after {sw.ElapsedMilliseconds} ms; the full derivation took {fullMs} ms)");
         });
 
         Console.WriteLine();
         Console.WriteLine($"  Layout17Test: {pass} passed, {fail} failed.");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"Layout17Test: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"Layout17Test: {fail} check(s) failed."));
     }
 
     // ---- Fixtures ---------------------------------------------------------------------------

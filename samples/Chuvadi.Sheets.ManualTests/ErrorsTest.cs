@@ -25,11 +25,12 @@ internal static class ErrorsTest
         Console.WriteLine("[ErrorsTest] 2.0.0 exceptions for malformed input...");
         Console.WriteLine();
         int pass = 0, fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
             try { body(); Console.WriteLine($"    PASS: {label}"); pass++; }
-            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; }
+            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; failed.Add(label, ex); }
         }
 
         static T Throws<T>(Action a, string what) where T : Exception
@@ -169,7 +170,7 @@ internal static class ErrorsTest
         Console.WriteLine();
         Console.WriteLine($"  ErrorsTest: {pass} passed, {fail} failed.");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"ErrorsTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"ErrorsTest: {fail} check(s) failed."));
     }
 
     // ---- Fixtures (in memory) -------------------------------------------------------------

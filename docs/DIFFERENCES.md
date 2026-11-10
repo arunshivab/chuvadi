@@ -54,3 +54,26 @@ Layout's full point-by-point account, including the points where it matches Word
 - **Effect:** column widths and page breaks across match Excel; inside each cell the text is about 6.5% narrower than
   Excel draws it, so it rarely overflows where Excel's would.
 - **Decision:** F7c, approved 3 Nov 2026; built under D-181.
+
+### L-4: Tamil text whose font has no Tamil letters (.docx)
+
+- **The standard:** silent on which font draws characters the chosen font lacks.
+- **Word 2021:** Vijaya, even when Nirmala UI and Latha are installed (calib-tamil-slots and calib-tamil-theme-*,
+  5 Nov 2026, on Arun's PC).
+- **Chuvadi.Layout:** LiPi Sans Tamil, the bundled Tamil face, on every machine, with or without `AllowSystemFonts`.
+- **Effect:** such Tamil text is drawn in a different, wider design than Word's, so lines break differently (d04:
+  3 pages in Layout, 2 in Word). Text in a run whose font has Tamil letters, or with `<w:cs/>` and a Tamil cs font,
+  is drawn in that font, as in Word.
+- **Decision:** R2, option A (keep LiPi Sans Tamil as the only fallback; Arun's earlier LiPi-fallback decision),
+  D-191.
+
+### L-5: Floating tables that must not overlap (.docx)
+
+- **The standard:** with `w:tblOverlap="never"` on either table, they "shall be adjusted as needed to prevent them
+  from overlapping" (§17.4.56); how is not said.
+- **Word 2021** (calib-overlap, 5 Nov 2026): no single rule. Two narrow margin-anchored tables at one spot are drawn
+  on top of each other (O1, O3), which the standard does not allow. With wide tables the second moves down, the upper
+  table's distance from text below it (O2). With page-anchored tables the second moves sideways (O4).
+- **Chuvadi.Layout:** always moves the later table down, to the upper table's `bottomFromText` below it.
+- **Effect:** where Word overlaps the tables or moves one sideways, Layout stacks them.
+- **Decision:** decision B (3 Nov 2026) and N5, D-191.

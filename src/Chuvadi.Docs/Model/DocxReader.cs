@@ -46,13 +46,16 @@ public sealed partial class DocxReader : IDisposable
     private readonly MemoryStream? _ownedBuffer;
     private readonly PackageScanResult _scan;
     private readonly string _mainContentType;
+    private readonly List<DocxSkippedPart> _skipped = new();
+    private readonly CancellationToken _openToken;
     private bool _disposed;
 
     private DocxReader(OoxmlPackage package, string documentUri,
         List<string> headerUris, List<string> footerUris, List<string> noteUris,
         DocxReaderOptions options, MemoryStream? ownedBuffer,
-        PackageScanResult scan, string mainContentType)
+        PackageScanResult scan, string mainContentType, CancellationToken openToken)
     {
+        _openToken = openToken;
         _package = package;
         _documentUri = documentUri;
         _headerUris = headerUris;
@@ -89,6 +92,26 @@ public sealed partial class DocxReader : IDisposable
     /// <summary>Opens a .docx from a stream, observing <paramref name="cancellationToken"/>. Ownership as in <see cref="Open(Stream, string?, DocxReaderOptions?)"/>.</summary>
     public static DocxReader Open(Stream input, string? password, DocxReaderOptions? options, CancellationToken cancellationToken)
         => OpenCore(input, password, options, cancellationToken);
+
+    /// <summary>
+    /// Decompresses the whole main document part once, so a main part whose compressed data is
+    /// damaged is a <see cref="DocxFormatException"/> at Open, like every other entry point (Docs 2.0,
+    /// D-194 and D-206). Nothing is parsed and nothing is kept: the bytes stream through a small
+    /// buffer, about 50 ms for a text-heavy 10 MB docx. The part-size limit
+    /// (<see cref="DocxReaderOptions.MaxPartBytes"/>) and cancellation apply as in every read.
+    /// </summary>
+    private static void VerifyMainPart(OoxmlPackage pkg, string documentUri, DocxReaderOptions options, CancellationToken ct)
+    {
+        try
+        {
+            using var part = GuardedPartStream.Wrap(pkg.OpenPart(documentUri), options.MaxPartBytes, ct, documentUri);
+            part.CopyTo(Stream.Null, 81920);
+        }
+        catch (Exception ex) when (!DocxErrors.IsContract(ex))
+        {
+            throw new DocxFormatException($"The main document part '{documentUri}' is corrupt and cannot be read.", ex);
+        }
+    }
 
     private static DocxReader OpenCore(Stream input, string? password, DocxReaderOptions? options, CancellationToken ct)
     {
@@ -131,6 +154,7 @@ public sealed partial class DocxReader : IDisposable
                 throw new DocxFormatException("Package has no officeDocument relationship; not a valid docx.");
 
             DocumentLoader.CheckMainPart(pkg, documentUri);
+            VerifyMainPart(pkg, documentUri, options, ct);
             string mainContentType = pkg.GetPart(documentUri)!.ContentType;
 
             // Header/footer/footnote/endnote part URIs from the document's own relationships.
@@ -156,7 +180,7 @@ public sealed partial class DocxReader : IDisposable
             if (owned is not null) input.Dispose();
 
             return new DocxReader(pkg, documentUri, headerUris, footerUris, noteUris,
-                options, owned, scan, mainContentType);
+                options, owned, scan, mainContentType, ct);
         }
         catch (Exception ex)
         {
@@ -167,7 +191,7 @@ public sealed partial class DocxReader : IDisposable
             if (ex is DocxFormatException or DocxSecurityLimitException or DocxPasswordRequiredException
                 or OperationCanceledException)
                 throw;
-            throw new DocxFormatException("Could not open the file as a docx package.", ex);
+            throw new DocxFormatException("Could not open the file as a docx package: " + ex.Message, ex);
         }
     }
 
@@ -227,21 +251,28 @@ public sealed partial class DocxReader : IDisposable
     /// <summary>The main document part's content type exactly as declared in the package.</summary>
     public string MainPartContentType => _mainContentType;
 
-    /// <summary>Full active/remote-content report. See <see cref="DocxActiveContent"/>.</summary>
+    /// <summary>
+    /// Full active/remote-content report. See <see cref="DocxActiveContent"/>. Observes the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> (since 2.1.0).
+    /// </summary>
     public DocxActiveContent GetActiveContent() => GetActiveContent(CancellationToken.None);
 
-    /// <summary>Full active/remote-content report, observing <paramref name="cancellationToken"/>.</summary>
+    /// <summary>
+    /// Full active/remote-content report, observing <paramref name="cancellationToken"/> and the token given
+    /// to <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/>.
+    /// </summary>
     public DocxActiveContent GetActiveContent(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
-        try { return GetActiveContentCore(cancellationToken); }
+        using var read = ReadToken.Combine(_openToken, cancellationToken);
+        try { return GetActiveContentCore(read.Token, _options.NewBudget()); }
         catch (Exception ex) when (!DocxErrors.IsContract(ex))
         {
             throw DocxErrors.Wrap(ex, DocxErrors.ReadMessage);
         }
     }
 
-    private DocxActiveContent GetActiveContentCore(CancellationToken cancellationToken)
+    private DocxActiveContent GetActiveContentCore(CancellationToken cancellationToken, ElementBudget? budget)
     {
         bool activeX = _scan.HasActiveXParts;
         bool embedded = _scan.HasEmbeddedObjects;
@@ -285,7 +316,7 @@ public sealed partial class DocxReader : IDisposable
         if (!scanParts.Contains(_documentUri)) scanParts.Insert(0, _documentUri);
         foreach (var uri in scanParts)
         {
-            if (ScanPartForDde(uri, cancellationToken)) { dde = true; break; }
+            if (ScanPartForDde(uri, cancellationToken, budget)) { dde = true; break; }
         }
 
         return new DocxActiveContent
@@ -303,12 +334,12 @@ public sealed partial class DocxReader : IDisposable
     }
 
     /// <summary>Scans one part's field instructions (complex and simple fields) for DDE/DDEAUTO.</summary>
-    private bool ScanPartForDde(string uri, CancellationToken ct)
+    private bool ScanPartForDde(string uri, CancellationToken ct, ElementBudget? budget)
     {
         Stream? s = TryOpenPart(uri, ct);
         if (s is null) return false;
         using var _ = s;
-        using var r = CreateXml(s, uri, ct);
+        using var r = CreateXml(s, uri, ct, budget);
 
         // One entry per open complex field; null once its instruction is complete.
         var fieldStack = new List<StringBuilder?>();
@@ -377,58 +408,102 @@ public sealed partial class DocxReader : IDisposable
     /// Streams paragraphs in document order: body first, then headers, then footers
     /// (when <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/> is true).
     /// Table-cell paragraphs are not included here — use <see cref="Tables()"/> for tables.
+    /// Observes the token given to <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/>
+    /// while enumerating (since 2.1.0).
     /// </summary>
     public IEnumerable<ParagraphInfo> Paragraphs() => Paragraphs(CancellationToken.None);
 
-    /// <summary>As <see cref="Paragraphs()"/>, observing <paramref name="cancellationToken"/> while enumerating.</summary>
+    /// <summary>
+    /// As <see cref="Paragraphs()"/>, observing <paramref name="cancellationToken"/> and the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> while enumerating.
+    /// </summary>
     public IEnumerable<ParagraphInfo> Paragraphs(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
         return DocxErrors.Guard(ParagraphsIterator(cancellationToken));
     }
 
-    private IEnumerable<ParagraphInfo> ParagraphsIterator(CancellationToken ct)
+    private IEnumerable<ParagraphInfo> ParagraphsIterator(CancellationToken callerToken)
     {
+        // Each enumeration is one operation: its own combined token and element count.
+        using var read = ReadToken.Combine(_openToken, callerToken);
+        var ct = read.Token;
+        var budget = _options.NewBudget();
         foreach (var uri in ReadOrder())
-            foreach (var info in ReadParagraphsFromPart(uri, ct))
+        {
+            var items = IsMainPart(uri) ? ReadParagraphsFromPart(uri, ct, budget)
+                : ReadOptionalPart(uri, u => ReadParagraphsFromPart(u, ct, budget));
+            foreach (var info in items)
                 yield return info;
+        }
     }
+
+    private bool IsMainPart(string uri) => string.Equals(uri, _documentUri, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Streams tables in document order: body first, then headers, then footers
-    /// (when <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/> is true).
+    /// (when <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/> is true). Observes the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> while enumerating (since 2.1.0).
     /// </summary>
     public IEnumerable<string[][]> Tables() => Tables(CancellationToken.None);
 
-    /// <summary>As <see cref="Tables()"/>, observing <paramref name="cancellationToken"/> while enumerating.</summary>
+    /// <summary>
+    /// As <see cref="Tables()"/>, observing <paramref name="cancellationToken"/> and the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> while enumerating.
+    /// </summary>
     public IEnumerable<string[][]> Tables(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
         return DocxErrors.Guard(TablesIterator(cancellationToken));
     }
 
-    private IEnumerable<string[][]> TablesIterator(CancellationToken ct)
+    private IEnumerable<string[][]> TablesIterator(CancellationToken callerToken)
     {
+        using var read = ReadToken.Combine(_openToken, callerToken);
+        var ct = read.Token;
+        var budget = _options.NewBudget();
         foreach (var uri in ReadOrder())
-            foreach (var grid in ReadTablesFromPart(uri, ct))
+        {
+            var items = IsMainPart(uri) ? ReadTablesFromPart(uri, ct, budget)
+                : ReadOptionalPart(uri, u => ReadTablesFromPart(u, ct, budget));
+            foreach (var grid in items)
                 yield return grid;
+        }
     }
 
     /// <summary>
     /// All text — paragraphs and table cells from body, headers, and footers
     /// (when <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/> is true),
-    /// newline-separated.
+    /// newline-separated. Observes the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/> (since 2.1.0).
     /// </summary>
     public string ExtractText() => ExtractText(CancellationToken.None);
 
-    /// <summary>As <see cref="ExtractText()"/>, observing <paramref name="cancellationToken"/>.</summary>
+    /// <summary>
+    /// As <see cref="ExtractText()"/>, observing <paramref name="cancellationToken"/> and the token given to
+    /// <see cref="Open(Stream, string?, DocxReaderOptions?, CancellationToken)"/>.
+    /// </summary>
     public string ExtractText(CancellationToken cancellationToken)
     {
         EnsureNotDisposed();
+        using var read = ReadToken.Combine(_openToken, cancellationToken);
+        var ct = read.Token;
+        var budget = _options.NewBudget();
         try
         {
             var sb = new StringBuilder();
-            foreach (var uri in ReadOrder()) AppendTextFromPart(uri, sb, cancellationToken);
+            foreach (var uri in ReadOrder())
+            {
+                if (IsMainPart(uri)) { AppendTextFromPart(uri, sb, ct, budget); continue; }
+                // A header or footer goes in whole or not at all (all-or-nothing, as in Load).
+                var part = ReadOptionalPart(uri, u =>
+                {
+                    var one = new StringBuilder();
+                    AppendTextFromPart(u, one, ct, budget);
+                    return new[] { one.ToString() };
+                });
+                foreach (var text in part) sb.Append(text);
+            }
             return sb.ToString();
         }
         catch (Exception ex) when (!DocxErrors.IsContract(ex))
@@ -448,12 +523,12 @@ public sealed partial class DocxReader : IDisposable
 
     // ---- Per-part scanning ----------------------------------------------------------
 
-    private IEnumerable<ParagraphInfo> ReadParagraphsFromPart(string uri, CancellationToken ct)
+    private IEnumerable<ParagraphInfo> ReadParagraphsFromPart(string uri, CancellationToken ct, ElementBudget? budget)
     {
         Stream? s = TryOpenPart(uri, ct);
         if (s is null) yield break;
         using var _ = s;
-        using var r = CreateXml(s, uri, ct);
+        using var r = CreateXml(s, uri, ct, budget);
 
         if (!r.Read()) yield break;
         while (!r.EOF)
@@ -474,12 +549,12 @@ public sealed partial class DocxReader : IDisposable
         }
     }
 
-    private IEnumerable<string[][]> ReadTablesFromPart(string uri, CancellationToken ct)
+    private IEnumerable<string[][]> ReadTablesFromPart(string uri, CancellationToken ct, ElementBudget? budget)
     {
         Stream? s = TryOpenPart(uri, ct);
         if (s is null) yield break;
         using var _ = s;
-        using var r = CreateXml(s, uri, ct);
+        using var r = CreateXml(s, uri, ct, budget);
 
         if (!r.Read()) yield break;
         while (!r.EOF)
@@ -496,12 +571,12 @@ public sealed partial class DocxReader : IDisposable
         }
     }
 
-    private void AppendTextFromPart(string uri, StringBuilder sb, CancellationToken ct)
+    private void AppendTextFromPart(string uri, StringBuilder sb, CancellationToken ct, ElementBudget? budget)
     {
         Stream? s = TryOpenPart(uri, ct);
         if (s is null) return;
         using var _ = s;
-        using var r = CreateXml(s, uri, ct);
+        using var r = CreateXml(s, uri, ct, budget);
 
         if (!r.Read()) return;
         while (!r.EOF)
@@ -668,26 +743,73 @@ public sealed partial class DocxReader : IDisposable
            && (r.LocalName == "moveFrom" || r.LocalName == "del");
 
     /// <summary>
-    /// Opens a part with the per-part size cap and the cancellation check applied. Returns
-    /// null when the part is referenced but missing (skipped gracefully).
+    /// Every optional part this reader has skipped so far, in the order it skipped them, each part
+    /// once (Docs 2.0, D-194). A header or footer that is missing, cannot be opened or is not
+    /// well-formed XML reads as blank, as in <see cref="Document.Load(Stream, string?)"/>; a picture
+    /// that is missing or cannot be opened is left out of <see cref="Images()"/>. Each such skip is
+    /// listed here, so nothing is dropped silently. The list grows as parts are read (the readers
+    /// are lazy); read it after the calls whose result you need to judge. The main document part
+    /// is never skipped: a problem there is a <see cref="DocxFormatException"/>.
+    /// </summary>
+    public IReadOnlyList<DocxSkippedPart> SkippedParts => _skipped;
+
+    private void RecordSkip(string uri, DocxSkippedPartReason reason, Exception? error)
+    {
+        foreach (var s in _skipped)
+            if (string.Equals(s.PartName, uri, StringComparison.OrdinalIgnoreCase)) return;
+        _skipped.Add(new DocxSkippedPart(uri, reason, error));
+    }
+
+    /// <summary>
+    /// Opens a part with the per-part size cap and the cancellation check applied. Returns null
+    /// when an optional part is missing or its entry cannot be opened, and records the skip in
+    /// <see cref="SkippedParts"/>. The main document part is never skipped: a failure there throws.
     /// </summary>
     private Stream? TryOpenPart(string uri, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        bool isMain = string.Equals(uri, _documentUri, StringComparison.OrdinalIgnoreCase);
+        if (!isMain && (!_package.HasPart(uri) || !_package.HasEntry(uri)))
+        {
+            RecordSkip(uri, DocxSkippedPartReason.Missing, null);
+            return null;
+        }
         Stream raw;
         try
         {
             raw = _package.OpenPart(uri);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (isMain)
+                throw new DocxFormatException($"The main document part '{uri}' is corrupt and cannot be read.", ex);
+            RecordSkip(uri, DocxSkippedPartReason.Unreadable, ex);
             return null;
         }
         return GuardedPartStream.Wrap(raw, _options.MaxPartBytes, ct, uri);
     }
 
-    private XmlReader CreateXml(Stream s, string partUri, CancellationToken ct)
-        => GuardedXmlReader.Create(s, _options.MaxXmlDepth, ct, partUri);
+    /// <summary>
+    /// Reads an optional header or footer part completely with <paramref name="read"/>. When the
+    /// part is not well-formed XML it reads as blank (as Document.Load treats it) and the skip is
+    /// recorded; the result is all or nothing, never a partial part. Every other failure, limits
+    /// and cancellation included, propagates as before.
+    /// </summary>
+    private List<T> ReadOptionalPart<T>(string uri, Func<string, IEnumerable<T>> read)
+    {
+        try
+        {
+            return new List<T>(read(uri));
+        }
+        catch (XmlException ex)
+        {
+            RecordSkip(uri, DocxSkippedPartReason.NotWellFormed, ex);
+            return new List<T>();
+        }
+    }
+
+    private XmlReader CreateXml(Stream s, string partUri, CancellationToken ct, ElementBudget? budget)
+        => GuardedXmlReader.Create(s, _options.MaxXmlDepth, budget, ct, partUri);
 
     private void EnsureNotDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 

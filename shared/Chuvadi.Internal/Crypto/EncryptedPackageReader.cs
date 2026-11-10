@@ -50,7 +50,20 @@ internal sealed class PackageLimitException : Exception
 /// </summary>
 internal static class EncryptedPackageReader
 {
-    /// <summary>Sniffs the first 8 bytes of <paramref name="input"/>. Returns true if it's a CFB file.</summary>
+    /// <summary>
+    /// True when <paramref name="input"/> is an encrypted Office Open XML file: a compound file (CFB) whose directory
+    /// holds both an <c>EncryptionInfo</c> and an <c>EncryptedPackage</c> stream. False for anything that is not a
+    /// compound file (a normal zip package, or garbage: the caller's zip reader reports that).
+    /// <para>
+    /// A compound file without those two streams is an old binary Office file (Word 97-2003 .doc, Excel 97-2003 .xls,
+    /// PowerPoint 97-2003 .ppt) or some other OLE file (or an encrypted file that lost one of its two streams). It is not encrypted and not readable here, so this throws an
+    /// <see cref="InvalidDataException"/> that names the legacy format; the callers already report any
+    /// <see cref="InvalidDataException"/> from reading the package as their own format exception. Only the directory
+    /// is read (no stream body), so the cost does not depend on the size of the streams. If the directory itself
+    /// cannot be read, the old answer stays: true, so a damaged encrypted container reaches the decryptor.
+    /// </para>
+    /// The stream position is restored.
+    /// </summary>
     public static bool IsEncryptedPackage(Stream input)
     {
         long pos = input.Position;
@@ -60,13 +73,44 @@ internal static class EncryptedPackageReader
             // Use ReadAtLeast — handles short reads on slow streams (network shares etc.).
             int read = input.ReadAtLeast(sig, 8, throwOnEndOfStream: false);
             if (read < 8) return false;
-            return sig[0] == 0xD0 && sig[1] == 0xCF && sig[2] == 0x11 && sig[3] == 0xE0
+            bool cfb = sig[0] == 0xD0 && sig[1] == 0xCF && sig[2] == 0x11 && sig[3] == 0xE0
                 && sig[4] == 0xA1 && sig[5] == 0xB1 && sig[6] == 0x1A && sig[7] == 0xE1;
+            if (!cfb) return false;
+
+            HashSet<string> names;
+            try
+            {
+                names = CfbContainer.ListStreamNames(input);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException
+                or ArgumentException or IndexOutOfRangeException or OverflowException)
+            {
+                return true;   // Directory unreadable: let the decryptor report the damaged container.
+            }
+
+            if (names.Contains("EncryptionInfo") && names.Contains("EncryptedPackage")) return true;
+            throw new InvalidDataException(LegacyFormatMessage(names));
         }
         finally
         {
             input.Position = pos;
         }
+    }
+
+    private static string LegacyFormatMessage(HashSet<string> names)
+    {
+        // One of the two encryption streams without the other: a damaged encrypted file, not a legacy one.
+        bool hasInfo = names.Contains("EncryptionInfo");
+        if (hasInfo || names.Contains("EncryptedPackage"))
+            return "The file looks like an encrypted Office file but its " + (hasInfo ? "EncryptedPackage" : "EncryptionInfo")
+                + " stream is missing, so it cannot be read.";
+        string kind =
+            names.Contains("WordDocument") ? "a Word 97-2003 binary file (.doc)" :
+            names.Contains("Workbook") || names.Contains("Book") ? "an Excel 97-2003 binary file (.xls)" :
+            names.Contains("PowerPoint Document") ? "a PowerPoint 97-2003 binary file (.ppt)" :
+            "an old binary Office file (.doc, .xls or .ppt) or another OLE compound file";
+        return "This is " + kind + ", not an Office Open XML package, and it is not encrypted. "
+            + "Open it in Office and save it as .docx or .xlsx.";
     }
 
     /// <summary>

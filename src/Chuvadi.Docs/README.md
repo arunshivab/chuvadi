@@ -48,6 +48,8 @@ doc.Page.Orientation = PageOrientation.Portrait;
 doc.SaveTo("report.docx");
 ```
 
+Every save to a path (`SaveTo(path)`, `SaveTo(path, EncryptionOptions)`, `DocxTemplate.Fill(inputPath, outputPath, …)`) writes beside the target and replaces it only when the save succeeded, so a failing save never leaves a truncated file or destroys the one being overwritten. An existing file keeps its permissions (Unix) or attributes and security settings (Windows), and a symbolic link stays a link (the file it points to is written). A missing folder, a read-only target and a folder at the path fail before anything is written, with the target's name in the error.
+
 Paragraph styles: `Title`, `Heading1`–`Heading9`, `Quote`, `Normal`, plus lists, hyperlinks (`p.Hyperlink(text, url)`), page breaks (`doc.AddPageBreak()`), different first-page headers/footers (`doc.FirstPageHeader`), and landscape/Letter/Legal page setups.
 
 ## Character formatting, scripts and breaks
@@ -55,14 +57,16 @@ Paragraph styles: `Title`, `Heading1`–`Heading9`, `Quote`, `Normal`, plus list
 `TextFormat` covers the full run-property set: fonts per script slot, complex-script bold/italic/size, language, every underline style, caps/small caps, hidden, outline/shadow/emboss/engrave, superscript/subscript, baseline shift, character spacing and scaling, kerning, theme colors and arbitrary shading.
 
 ```csharp
-// Indic text: set the complex-script slot — Word's Font box (and TextFormat.Font) only sets Latin.
+// Indic text: FontForAllScripts sets every slot, so Word uses the font whether or not the run is
+// marked complex script. (Word uses ComplexScriptFont alone only when ComplexScript = true, w:cs;
+// Word's Font box and TextFormat.Font set the Latin slots only.)
 var tamil = new TextFormat { FontForAllScripts = "Nirmala UI", SizePt = 12, Bold = true, ComplexScriptLanguage = "ta-IN" };
 doc.AddParagraph().Text("நோயாளி அறிக்கை — Patient report", tamil);
 
 doc.AddParagraph().Text("H").Text("2", TextFormat.SubscriptText).Text("O, E = mc").Text("2", TextFormat.SuperscriptText);
 doc.AddParagraph().Text("Ref:").Tab().Text("APL/2026/0042");
 doc.Footer.Add(new Paragraph("Confidential").PositionalTab(PositionalTabAlignment.Right).PageNumber());   // right edge, whatever the tab stops
-doc.AddParagraph("Apulki Medical Center\nBaner, Pune");        // \n → line break
+doc.AddParagraph("Example Clinic\n12 Sample Road, Testville");        // \n → line break
 doc.AddParagraph().Text("Part 1").Break(BreakType.Page).Text("Part 2");
 ```
 
@@ -129,6 +133,40 @@ foreach (var p in loaded.Blocks.OfType<Paragraph>())
     }
 }
 ```
+
+### Theme fonts and colours
+
+A run can name a theme font (`TextFormat.AsciiThemeFont` … `ComplexScriptThemeFont`, for example `ThemeFont.MinorHAnsi`) or a theme colour (`ThemeColor.Accent1` with a tint or shade) instead of a name or a hex value. `Document.Theme` reads the document's theme (`word/theme/theme1.xml`), and two methods turn the references into names and colours:
+
+```csharp
+var loaded = Document.Load("report.docx");
+string? body = loaded.GetThemeFontName(ThemeFont.MinorHAnsi);          // "Calibri"
+string? tamil = loaded.GetThemeFontName(ThemeFont.MinorBidi);          // "Latha" when the file's theme-font language is ta-IN
+string accent = loaded.GetThemeColorHex(ThemeColor.Accent1, tint: 0x99); // "8FAADC"
+IReadOnlyDictionary<string, string> scripts = loaded.Theme.MinorFonts.ScriptFonts; // script code → typeface, for example "Taml" → "Latha"
+```
+
+- **Fonts** follow ECMA-376 §17.15.1.88: the language for the slot comes from `Document.ThemeFontLanguages` (Latin for Ascii and HAnsi, EastAsia, ComplexScript for Bidi); if the theme has a script font for that language's script, that font, otherwise the scheme's Latin, East Asian or complex-script typeface. The East Asian and complex-script typefaces are often empty in Office themes, and then the result is null when no script font applies: use the run's own font. The language → script table is Chuvadi's (Word's is not published) and covers the scripts Office themes list. When the file states no theme-font languages, Word guesses from the Office install language and the keyboards; Chuvadi follows the standard and uses the scheme's fonts.
+- **Colours** are six-digit hex. `Text1`, `Background1`, `Text2`, `Background2` and the accent and hyperlink colours go through `Document.ColorSchemeMapping` (Word's default mapping when the file states none); the tint and shade change the HSL lightness, as Word does.
+- **Without a theme part** (new documents, many generated files), the Office 2013–2022 defaults apply: Calibri Light and Calibri, no East Asian or complex-script font, the Office colours. `Theme.IsBuiltInDefault` says so. Chuvadi.Layout uses the same defaults.
+
+### Document settings and compatibility mode
+
+`word/settings.xml` holds document-wide settings. Load reads them and Save writes them back:
+
+```csharp
+var doc = new Document();
+// doc.Compatibility.Mode is 15 (Word 2013 and later): Word opens the file without "[Compatibility Mode]".
+doc.Compatibility.NoColumnBalance = true;          // Word's "Don't balance columns" (w:compat/w:noColumnBalance)
+doc.AutoHyphenation = true;
+doc.HyphenationZonePt = 18;
+doc.ThemeFontLanguages.ComplexScript = "ta-IN";
+doc.DecimalSymbol = ",";
+```
+
+- **`Compatibility`:** the compatibility mode (`Mode`: 11 = Word 2003, 12 = Word 2007, 14 = Word 2010, 15 = Word 2013 and later), the 65 legacy layout options of `w:compat` as `bool` properties named after their elements (`NoColumnBalance`, `UseFELayout`, `DoNotExpandShiftReturn`, …), and every other `w:compatSetting` in `OtherSettings`, kept as found. A new document is in mode 15. A loaded document keeps the file's mode, or none when the file states none (Word then opens it in compatibility mode, as it did before).
+- **Also:** `ThemeFontLanguages`, `ColorSchemeMapping`, `AutoHyphenation`, `ConsecutiveHyphenLimit`, `HyphenationZonePt`, `DoNotHyphenateCaps`, `CharacterSpacingControl`, `NoPunctuationKerning`, `BookFoldPrinting`, `BookFoldReversePrinting`, `BookFoldPrintingSheets`, `DisplayBackgroundShape`, `DecimalSymbol` and `ListSeparator`, next to the older `DifferentOddAndEvenPages`, `MirrorMargins`, `GutterAtTop`, `DefaultTabStopPt`, `UpdateFieldsOnOpen`, `TrackRevisions`, `EmbedTrueTypeFonts` and `SaveSubsetFonts`.
+- **Not kept** through load → save: editor state (zoom, view, proofing state, revision IDs, document variables, mail merge, the attached template). `DocxTemplate` copies the template's settings.xml unchanged.
 
 ## Tables
 
@@ -245,7 +283,7 @@ Loaded documents keep their footnotes, endnotes, bookmarks, fields, text boxes, 
 ### Comments and tracked changes
 
 ```csharp
-var note = doc.Comments.Add("Dr. Arun Shiva", "Please confirm the dose.");
+var note = doc.Comments.Add("Dr. Jane Example", "Please confirm the dose.");
 doc.AddParagraph("The dose is ").Commented("2 Gy per fraction", note);
 doc.Comments.Reply(note, "Physicist", "Confirmed against the plan.").Done = true;
 
@@ -324,21 +362,47 @@ foreach (string[][] table in r.Tables())
     Console.WriteLine($"table: {table.Length} rows");
 
 string everything = r.ExtractText();
+
+foreach (var skipped in r.SkippedParts)                    // parts the reader could not use
+    Console.WriteLine($"{skipped.PartName}: {skipped.Reason}");
 ```
+
+A header or footer that is missing, cannot be opened or is not well-formed XML reads as blank, as in `Document.Load`; a picture whose part is missing or cannot be opened is left out of `Images()`. Nothing is dropped silently: each such part is listed once in `SkippedParts` (`PartName`, `Reason`: `Missing`, `Unreadable` or `NotWellFormed`, and the `Error`). The list grows as the lazy readers reach the parts. The main document part is never skipped: a problem there is a `DocxFormatException`. `GetActiveContent` and the template methods stay strict: a part they cannot read is an error.
+
+`Document.Load` keeps the same kind of list in `Document.SkippedParts`, with the same types. It covers every optional part Load left out: a header, footer, picture, theme, styles, numbering, settings, font table or embedded font, footnotes, endnotes, comments or a document-properties part that is missing, cannot be opened or is not well-formed XML. Load itself behaves as it always has (a broken header loads blank, a broken settings part leaves the defaults); the list only says what happened. It describes the load: edits don't change it, and saving doesn't use it.
 
 ## Untrusted input (mail attachments, uploads)
 
+For files from untrusted sources (uploads on a shared server, mail attachments), start from the preset:
+
+```csharp
+var options = DocxReaderOptions.ForUntrustedInput();      // adjust as needed; a new instance on every call
+var doc = Document.Load(upload, password: null, options, cancellationToken);
+```
+
 Every open applies resource limits **before anything is decompressed**, and the same limits guard `Document.Load` and `DocxTemplate.Fill`:
 
-| Limit (`DocxReaderOptions`) | Default | Checked |
-|---|---|---|
-| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | at open |
-| `MaxEntries` | 10,000 zip entries | at open |
-| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | at open |
-| `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | at open |
-| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | at open |
-| `MaxXmlDepth` | 256 nested elements | while reading |
-| `MaxPartBytes` | none | while reading |
+| Limit (`DocxReaderOptions`) | Default | `ForUntrustedInput()` | Checked |
+|---|---|---|---|
+| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | 50 MiB | at open |
+| `MaxEntries` | 10,000 zip entries | 10,000 | at open |
+| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | 256 MiB | at open |
+| `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | 200 : 1 | at open |
+| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | 500,000 | at open |
+| `MaxXmlDepth` | 256 nested elements | 128 | while reading |
+| `MaxPartBytes` | none | 64 MiB | while reading |
+| `MaxElements` (2.1.0) | none | 1,000,000 XML elements | while reading, per operation |
+
+**Why `MaxElements`:** a loaded document's memory follows its number of XML elements, not its size in bytes. Measured on .NET 10:
+- **A Word-like document:** about 200 bytes per element. 20,000 paragraphs (about 800 pages, 860,000 elements) load in 225 MB.
+- **Empty paragraphs:** up to about 520 bytes per element. An 18 KB file of two million empty paragraphs takes 1.1 GB to load, though it passes every byte limit.
+
+`MaxElements` counts every element one operation reads, across all its parts:
+- one `Document.Load`;
+- one template call;
+- each `DocxReader` read call (each enumeration of `Paragraphs()`/`Tables()`).
+
+It stops the operation as soon as the count passes the limit, before most of the memory is used. With the preset, the worst case measured was about 600 MB and a few seconds.
 
 `DocxTemplate.Fill` applies the same defaults; its options overload takes `DocxReaderOptions` and a `CancellationToken`. A breach throws `DocxSecurityLimitException` (a `DocxFormatException`) with `Limit`, `Actual`, `Allowed` and `PartName`. Set any limit to `null` to disable it, or start from `DocxReaderOptions.CreateUnrestricted()` for trusted input.
 
@@ -352,10 +416,16 @@ var a = r.GetActiveContent();
 // a.HasRemoteTemplate, a.HasExternalResources, a.ExternalReferences (verbatim targets)
 ```
 
-**Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`; the reader stays usable afterwards.
+**Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`.
+
+**The token given to `DocxReader.Open` also covers the reader's later reads** (since 2.1.0):
+- the read methods without a token observe it;
+- the overloads with their own token observe both.
+
+So open with a token that lives as long as the reader, for example a request's token or a timeout for the whole job. A reader whose `Open` token was cancelled can't read any more.
 
 
-`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Content the model can't represent yet (charts and shapes, most fields, comments, tracked changes, content controls) is not preserved through a load-save round-trip; use `DocxTemplate` when preservation matters.
+`Document.Load(path)` instead builds an **editable** model — paragraphs with full run and paragraph formatting, styles (with the theme), lists with their full numbering definitions, pictures in place with their full positioning, and structured tables with their properties, merges, nested tables and table styles — which you can modify and save. Fields, footnotes and endnotes, bookmarks, text boxes, comments, tracked changes and document properties survive a load-save round-trip (since 1.6.0). Content the model can't represent yet is not preserved: charts are dropped, shapes other than text boxes and old-style VML pictures keep only their text, and content controls keep their content but lose the control itself. Use `DocxTemplate` when everything else in the file must stay as it is.
 
 ## Errors
 
@@ -363,9 +433,9 @@ Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers
 
 | Exception | When |
 |---|---|
-| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document. The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
+| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document, missing from the package or corrupt, or an encrypted container that is damaged (opened with a password). A broken header or footer is the exception for the readers and `Document.Load`: it reads as blank and both list it in their `SkippedParts` (see **Read documents**). The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
 | `DocxSecurityLimitException` (a `DocxFormatException`) | A resource limit was exceeded (see **Untrusted input**). Thrown as itself, never wrapped. |
-| `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. |
+| `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. Without a password the container is not read, so a damaged encrypted file also asks for one. |
 | `DocxTemplateException` | A fill problem: a strict fill with missing values, or a template limit (`MaxGeneratedItems`, …). Lists every problem. |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 
@@ -446,11 +516,38 @@ var loaded = Document.Load("secret.docx", "S3cret!");
 
 Compatible both directions with Microsoft Word and with the `msoffcrypto-tool` reference implementation. Integrity (HMAC-SHA512) is verified on every decrypt.
 
-The plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path writes beside the target and replaces it only when the save succeeded, so a failing save leaves an existing file untouched.
+By default, the plaintext package of an encrypted save never reaches the disk and is never held fully in memory. It is spooled to a temporary file that is itself encrypted (AES-256, a one-time key held only in memory), created readable and writable by the current user only, opened exclusively, and deleted when the save ends. On Windows the file is also deleted if the process dies; elsewhere a file left by a crash holds only ciphertext whose key is gone. Saving to a path replaces the target only when the save succeeded (see **Write a report**).
+
+The temporary file goes to the system temp folder (`Path.GetTempPath()`), or to a folder you choose:
+
+```csharp
+doc.SaveTo(outputStream, new EncryptionOptions { Password = "S3cret!", TempDirectory = "/var/app/tmp" });
+```
+
+If that folder is missing or can't be written to, the save throws (the system's `DirectoryNotFoundException` or `IOException`, naming the temporary file) before anything is written. `DocxTemplate.Fill` with `OutputEncryption` encrypts in memory and writes no temporary file.
+
+On a read-only file system, or when no temporary file is wanted at all, build the package in memory instead:
+
+```csharp
+doc.SaveTo(outputStream, new EncryptionOptions { Password = "S3cret!", TempStorage = TempStorage.Memory });
+```
+
+With `TempStorage.Memory` no file is created anywhere and `TempDirectory` is ignored. The in-memory copy is not encrypted (it holds the text the document already holds in memory, and is gone when the save returns). It costs about two and a half times the package size in memory at the peak (an 11.8 MB package: about 90 MB more than the file spool, at the same speed), and a package over about 2 GB fails with an `IOException`. The encrypted file is the same either way. Chuvadi.Sheets has the same `TempStorage` setting.
 
 On Windows, real-time antivirus (Microsoft Defender) scans an encrypted Office file when it is opened, by trying the default Office password, which runs the full key derivation at the file's declared spin count. That happens inside the operating system's file-open call, before the library reads a byte, so neither `MaxSpinCount` nor the `CancellationToken` can shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine, then milliseconds once the scan result was cached. Both limits apply in full to the library's own work, and to streams that are already open or held in memory.
 
 There is also cooperative "restrict editing" protection — `doc.Protect("pass", DocumentProtectionMode.ReadOnly)` — which, like Excel's sheet protection, signals intent but does not encrypt; anyone can still read the content.
+
+## Platforms and threads
+
+- **Platforms:** pure managed code for plain `net10.0`, with no native code and no Windows-only API. It runs the same on Windows, macOS, Linux and Android, and in server processes. The package is marked trim- and NativeAOT-compatible, and the analyzers run on every build.
+- **Streams everywhere:** every method that takes a path has a stream or byte-array version. Use those for Android content URIs, uploads and cloud storage.
+- **The disk:** only two things write temporary files, and nothing is read from fixed locations:
+  - an encrypted `SaveTo` spools to the temp folder or `EncryptionOptions.TempDirectory`, or to memory with `TempStorage.Memory` (see **Password protection**);
+  - a save to a path writes beside the target, then replaces it.
+- **Threads:** the library has no mutable static state, so any number of threads can work at once, each on its own documents. A single `Document` or `DocxReader` is not safe for concurrent use: give each request or thread its own.
+- **Untrusted files:** use `DocxReaderOptions.ForUntrustedInput()` and pass a `CancellationToken` (see **Untrusted input**).
+- **Fonts:** none are shipped or loaded. Only font names are written into documents; showing them is the job of the program that renders the document.
 
 ## Scope
 

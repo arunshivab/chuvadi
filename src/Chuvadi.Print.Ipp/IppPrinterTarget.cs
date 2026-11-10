@@ -16,6 +16,9 @@ namespace Chuvadi.Print.Ipp
     {
         public const string PwgRasterFormat = "image/pwg-raster";
 
+        /// <summary>The default for <see cref="MemorySpoolLimit"/>: 256 MB.</summary>
+        public const long DefaultMemorySpoolLimit = 256L * 1024 * 1024;
+
         private readonly IppClient _client;
         private readonly bool _ownsClient;
         private readonly List<string> _approximations = new();
@@ -23,7 +26,9 @@ namespace Chuvadi.Print.Ipp
 
         private IppPrinterCapabilities? _caps;
         private PrintJobContext? _context;
-        private FileStream? _spool;
+        private Stream? _spool;
+        private IppSpoolMode _spoolMode = IppSpoolMode.TemporaryFile;
+        private long _memorySpoolLimit = DefaultMemorySpoolLimit;
         private PwgRasterWriter? _writer;
         private IppAttributeGroup? _ticket;
         private PwgColorSpace _colorSpace;
@@ -68,8 +73,41 @@ namespace Chuvadi.Print.Ipp
         /// <summary>Overrides the printer's pwg-raster-document-sheet-back. Null (default) = use the printer's value.</summary>
         public PwgSheetBack? SheetBackOverride { get; set; }
 
-        /// <summary>Folder for the temporary spool file. Null = the system temp folder.</summary>
+        /// <summary>Folder for the temporary spool file (<see cref="IppSpoolMode.TemporaryFile"/>). Null = the system temp folder.</summary>
         public string? TemporaryFolder { get; set; }
+
+        /// <summary>
+        /// Where the PWG Raster job is held until it is sent as one Print-Job. Default
+        /// <see cref="IppSpoolMode.TemporaryFile"/> (a file in <see cref="TemporaryFolder"/>, deleted when the job ends).
+        /// <see cref="IppSpoolMode.Memory"/> keeps it in memory, for machines without a writable temp folder, up to
+        /// <see cref="MemorySpoolLimit"/>.
+        /// </summary>
+        public IppSpoolMode Spool
+        {
+            get => _spoolMode;
+            set
+            {
+                if (value != IppSpoolMode.TemporaryFile && value != IppSpoolMode.Memory) throw new ArgumentOutOfRangeException(nameof(Spool));
+                _spoolMode = value;
+            }
+        }
+
+        /// <summary>
+        /// The most a memory spool may hold, in bytes (1 byte to <see cref="Array.MaxLength"/>). A job that grows past
+        /// it fails before anything is sent to the printer, with an <see cref="IppException"/>; it does not switch to a
+        /// file. The memory is released as soon as the job is sent or fails. Default <see cref="DefaultMemorySpoolLimit"/>
+        /// (256 MB). About 25 MB per A4 colour page at 300 dpi before compression; PWG Raster's run-length coding
+        /// usually makes it far smaller. Not used with <see cref="IppSpoolMode.TemporaryFile"/>.
+        /// </summary>
+        public long MemorySpoolLimit
+        {
+            get => _memorySpoolLimit;
+            set
+            {
+                if (value < 1 || value > Array.MaxLength) throw new ArgumentOutOfRangeException(nameof(MemorySpoolLimit));
+                _memorySpoolLimit = value;
+            }
+        }
 
         /// <summary>When set, waits up to this long for the printer to finish the job (see <see cref="IppDocumentTarget.WaitForCompletion"/>).</summary>
         public TimeSpan? WaitForCompletion { get; set; }
@@ -93,6 +131,12 @@ namespace Chuvadi.Print.Ipp
 
         public IppPrinterTarget WithMaxRasterDpi(double? dpi) { MaxRasterDpi = dpi; return this; }
         public IppPrinterTarget WithSheetBack(PwgSheetBack? sheetBack) { SheetBackOverride = sheetBack; return this; }
+        public IppPrinterTarget WithSpool(IppSpoolMode mode, long? memoryLimit = null)
+        {
+            Spool = mode;
+            if (memoryLimit.HasValue) MemorySpoolLimit = memoryLimit.Value;
+            return this;
+        }
         public IppPrinterTarget WithWaitForCompletion(TimeSpan? timeout) { WaitForCompletion = timeout; return this; }
 
         // ------------------------------------------------------------------ IPrintTarget
@@ -144,9 +188,16 @@ namespace Chuvadi.Print.Ipp
             _ticket = IppJobTicket.Build(context.Settings, caps, JobOptions, documentMode: false,
                                          printerMakesCopies: context.TargetHandlesCopies, null, _resolution, _approximations);
 
-            string folder = TemporaryFolder ?? Path.GetTempPath();
-            _spool = new FileStream(Path.Combine(folder, "chuvadi-ipp-" + Guid.NewGuid().ToString("N") + ".pwg"),
-                                    FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.DeleteOnClose);
+            if (_spoolMode == IppSpoolMode.Memory)
+            {
+                _spool = new BoundedMemorySpool(_memorySpoolLimit);
+            }
+            else
+            {
+                string folder = TemporaryFolder ?? Path.GetTempPath();
+                _spool = new FileStream(Path.Combine(folder, "chuvadi-ipp-" + Guid.NewGuid().ToString("N") + ".pwg"),
+                                        FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.DeleteOnClose);
+            }
             _writer = new PwgRasterWriter(_spool);
         }
 
@@ -226,7 +277,7 @@ namespace Chuvadi.Print.Ipp
         /// <inheritdoc />
         public void EndJob()
         {
-            FileStream spool = _spool ?? throw new InvalidOperationException("StartJob was not called.");
+            Stream spool = _spool ?? throw new InvalidOperationException("StartJob was not called.");
             try
             {
                 spool.Flush();
@@ -382,7 +433,7 @@ namespace Chuvadi.Print.Ipp
             _writer = null;
             _ticket = null;
             _context = null;
-            FileStream? spool = _spool;
+            Stream? spool = _spool;
             _spool = null;
             spool?.Dispose();
         }

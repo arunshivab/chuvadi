@@ -9,7 +9,7 @@ using Chuvadi.Layout.Docs;
 using Chuvadi.Layout.Fonts;
 
 var options = new LayoutOptions();                     // options.Password = "..." for encrypted documents
-options.FontSources.Add(BundledFontSource.Instance);   // Office metric-compatible substitutes (Chuvadi.Layout.Fonts)
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));   // metric-compatible substitutes (Chuvadi.Layout.Fonts)
 using LaidOutDocument doc = DocsLayout.Open(File.OpenRead("report.docx"), null, options);
 int pages = doc.ResolvePageCount();
 LaidOutPage first = doc.GetPage(0);                    // display list, boxes, text; SVG with LayoutSvg

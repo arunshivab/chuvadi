@@ -22,11 +22,12 @@ internal static class AutoFitTest
         Console.WriteLine("[AutoFitTest] Column auto-fit...");
         Console.WriteLine();
         int pass = 0, fail = 0;
+        var failed = new FailedChecks();
 
         void Check(string label, Action body)
         {
             try { body(); Console.WriteLine($"    PASS: {label}"); pass++; }
-            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; }
+            catch (Exception ex) { Console.WriteLine($"    FAIL: {label}"); Console.WriteLine($"          {ex.GetType().Name}: {ex.Message}"); fail++; failed.Add(label, ex); }
         }
 
         static void Between(double lo, double hi, double actual, string what)
@@ -217,7 +218,7 @@ internal static class AutoFitTest
         Console.WriteLine();
         Console.WriteLine($"[AutoFitTest] {pass} passed, {fail} failed.");
         Console.WriteLine();
-        if (fail > 0) throw new Exception($"AutoFitTest: {fail} check(s) failed.");
+        if (fail > 0) throw new Exception(failed.Summary($"AutoFitTest: {fail} check(s) failed."));
     }
 
     private sealed class Visit

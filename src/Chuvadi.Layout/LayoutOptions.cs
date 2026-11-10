@@ -13,7 +13,13 @@ namespace Chuvadi.Layout
     /// </summary>
     public sealed class LayoutLimits
     {
-        /// <summary>Maximum number of pages the document may produce. Default 10,000.</summary>
+        /// <summary>
+        /// Maximum number of pages that may be built. Default 10,000. A flow document (docx, text, markup) stops paginating
+        /// here. A workbook opens whatever its page count, since its pages are computed only when asked for, and
+        /// building, exporting or printing a page at or past this limit throws <see cref="LayoutLimitExceededException"/>
+        /// with the workbook's page count and the sheet and range in <see cref="LayoutLimitExceededException.Location"/>
+        /// (D-291). A workbook of more than <see cref="int.MaxValue"/> pages is refused at open.
+        /// </summary>
         public int MaxPages { get; set; } = 10_000;
 
         /// <summary>Maximum number of populated cells per sheet that will be laid out. Default 5,000,000.</summary>
@@ -73,7 +79,8 @@ namespace Chuvadi.Layout
         /// <summary>
         /// Font sources, searched in order after any fonts embedded in the document and (unless
         /// <see cref="PreferBundledFonts"/>) installed fonts. Typically the
-        /// Chuvadi.Layout.Fonts pack (BundledFontSource.Instance, the Office metric-compatible substitutes). Nothing is
+        /// Chuvadi.Layout.Fonts pack, the metric-compatible substitutes:
+        /// <c>FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance))</c> (see <see cref="FontPackSource"/>). Nothing is
         /// read from disk or the network unless a source does so itself.
         /// </summary>
         public IList<IFontSource> FontSources { get; } = new List<IFontSource>();
@@ -82,7 +89,9 @@ namespace Chuvadi.Layout
         /// Also search the operating system's font directories. Off by default so output is identical on every
         /// machine; turn on in desktop viewers to use real Office fonts when present. Installed fonts are searched
         /// before <see cref="FontSources"/> and the built-in fonts, so an installed family wins over a packed copy of
-        /// the same family (D-116), unless <see cref="PreferBundledFonts"/> is set.
+        /// the same family (D-116), unless <see cref="PreferBundledFonts"/> is set. The folders are scanned once per process
+        /// (<see cref="SystemFontSource.Shared"/>); call <see cref="DirectoryFontSource.Refresh"/> on it to see fonts
+        /// installed while the application runs.
         /// </summary>
         public bool AllowSystemFonts { get; set; }
 
@@ -148,16 +157,16 @@ namespace Chuvadi.Layout
             }
             if (AllowSystemFonts && !PreferBundledFonts)
             {
-                sources.Add(new SystemFontSource());
+                sources.Add(SystemFontSource.Shared);
             }
             sources.AddRange(FontSources);
             if (UseBuiltInFonts)
             {
-                sources.Add(BuiltInFontSource.Instance);
+                sources.Add(FontPackSource.For(Chuvadi.Fonts.FontPack.Instance));
             }
             if (AllowSystemFonts && PreferBundledFonts)
             {
-                sources.Add(new SystemFontSource());
+                sources.Add(SystemFontSource.Shared);
             }
             return new FontResolver(sources, FontSubstitutions);
         }

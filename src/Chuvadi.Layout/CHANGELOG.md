@@ -1,6 +1,120 @@
 # Chuvadi.Layout — Changelog
 
-## 0.1.0 (unreleased)
+## Unreleased
+
+`LayoutPasswordRequiredException` (D-253, D-215 option (a); claude/layout-D213-D215-rule5.md):
+
+- New `public sealed class LayoutPasswordRequiredException : LayoutFormatException`, so existing
+  `catch (LayoutFormatException)` handlers still catch it. `PasswordGiven` is false when `LayoutOptions.Password` was
+  not set (null or empty) and true when the one set is wrong. `InnerException` is the Chuvadi.Docs or Chuvadi.Sheets
+  password exception, as before.
+- Thrown by Chuvadi.Layout.Docs, Chuvadi.Layout.Sheets and Chuvadi.Layout.Documents (see their changelogs). Never for
+  a legacy .doc or .xls: with the shared decryptor of D-293 that is a `LayoutFormatException` naming the old format.
+  The engine's own `DocumentLayout.Open(Stream)` is unchanged: it can't look inside an OLE file, so its message still
+  names both readings ("an encrypted Office document … or a legacy .doc/.xls").
+
+Font comparison tooling (D-287, option 2):
+
+- Manual tests, `--compare-metrics` (D-287, font comparison option 2): every document character whose width differs is
+  listed after the table, with both widths (at most 40 per pair, then a count). A pair with the same vertical metrics
+  and at most 5 characters differing by more than 1/1000 em is "metric-compatible except U+…", naming them; on
+  Arun's Windows run that is Times New Roman / Liberation Serif (U+20AA) and Arial / Liberation Sans (U+20BF). New
+  check `M1_MetricVerdictNamesTheDifferingCharacters` (manual tests 29 → 30). Tooling only; no library change.
+
+Workbook pages built when asked for, and the printed range as Excel measures it (D-291; claude/layout-D282-options.md):
+
+- Pages of a workbook are computed from each print area's column and row bands when asked for; opening no longer makes
+  a record for every page. A sheet with A1 and XFD1048576 (37,362,644 pages) opens in about 0.2 s and 50 MB; before,
+  opening took 5.9 s and 3.3 GB and then failed. `PageCount` is exact at open.
+- `LayoutLimits.MaxPages` on a workbook applies when a page at or past it is built (`GetPage`, `GetPages`), exported
+  or printed, not when opening. More than `int.MaxValue` pages is refused at open. Flow documents are unchanged.
+- `LayoutLimitExceededException.Location` (new): where the limit was exceeded, for example "Sheet1!A1:XFD1048576".
+  For `MaxPages` on a workbook, `Actual` is the workbook's page count and the message gives the sheet's page grid.
+- Without a print area a sheet prints from **A1** to the last row and column holding a value, a data bar or icon, a
+  visible fill or border, a merge or a drawing. Empty cells with only invisible formats (font, colour, number format,
+  alignment, wrap, indent, protection) no longer widen the printed range, and content that starts away from A1 is
+  printed with the empty rows and columns before it. Measured on 25 sheets against Excel 2021; tested in
+  Layout.Sheets.Tests (Fixtures/measured).
+- Corpus: page counts and warnings unchanged on all 88 documents. ConditionalFormattingSamples.xlsx pages 1, 2, 8, 9,
+  14, 15, 27, 35 and 36 and x05-borders.xlsx page 1 draw differently; every other page is identical (tested against
+  recorded hashes).
+
+## 0.1.0 (2026-11-09)
+
+Chuvadi.Pdf 3.31.2 in staging (D-261; claude/layout-D261-results.md):
+
+- Chuvadi.Layout.Pdf references chuvadi-pdf `[3.31.2, 4.0.0)` (was `[3.31.1, 4.0.0)`), the same floor as
+  Chuvadi.Print.Pdf.Raster, so one chuvadi-pdf release serves all of Chuvadi and a plain reference gets the 3.31.2
+  fixes. The staged tests and the acceptance harness use exactly 3.31.2.
+- Measured on the 88 corpus and fixture documents: PDF, PNG and SVG output byte-identical to 3.31.1; staged tests 28 + 5
+  pass; acceptance report unchanged. No source change.
+
+Platform readiness (D-217, D-254; claude/layout-D217-rule5.md):
+
+- System fonts are scanned once per process. `SystemFontSource.Shared` is the one instance `LayoutOptions` uses with
+  `AllowSystemFonts`; before, every open document made its own source and scanned every font folder again (23–48 ms
+  with 304 files). `new SystemFontSource()` still gives an app its own.
+- `DirectoryFontSource.Refresh()` (and so `SystemFontSource.Shared.Refresh()`) forgets the scan and the loaded fonts, so
+  the next use scans again, for example after a font is installed. Documents already open keep their fonts.
+- `DirectoryFontSource` keeps each parsed font instead of the file bytes, so a font is parsed once per source and one
+  copy is shared by every document. A font installed while the app runs is seen only after `Refresh()`.
+- Android: the system font folders are `/system/fonts` and `/product/fonts` (before, none were found there).
+- `IsTrimmable` and `IsAotCompatible` in Layout, Layout.Fonts, Layout.Docs, Layout.Sheets, Layout.Markup,
+  Layout.Documents and the staged Layout.Pdf: the trim and NativeAOT analyzers run on every build (0 warnings).
+- Manual tests, `--compare-metrics` (D-255): the verdict skips invisible formatting characters (Unicode category Cf,
+  such as U+200C and U+202A), as it already skipped characters only one font has.
+
+No layout output changes.
+
+Rows with no stored height grow to fit their font (X3; claude/layout-X3-rule5.md):
+
+- A row with no stored height used to stay at the default height unless it had wrapped text, so large text was cut
+  off (the x04 title). Now each cell's text is measured as one line in the font Layout draws it with, fallback fonts
+  included. If the line fits within the default row height the row stays at the default; otherwise the row is the line
+  height + 2 px, to the nearest whole pixel at 96 dpi. A merge within one row counts; a merge over several rows does
+  not. Wrapped cells keep their fit, and the row takes the larger. Stored heights and hidden rows are unchanged.
+- The rule uses only the font being drawn, so it works for any font. Measured on the 88 corpus and fixture documents:
+  page counts and warnings unchanged; only x03 (rows 4 and 5: 18.75 and 21 pt) and x04 (title row: 22.5 pt) change.
+
+INTEGRATION.md: a damaged workbook (missing workbook or worksheet part, or a shared-string reference that does not
+exist) raises `LayoutFormatException`, as Chuvadi.Sheets 2.0.2 rejects these files (G2, F3). No code change: Layout.Sheets
+already turns the Sheets error into `LayoutFormatException` (B13).
+
+Chuvadi.Pdf 3.31.1 in staging (D-213, D-225; claude/layout-D213-results.md):
+
+- Chuvadi.Layout.Pdf references chuvadi-pdf as the range `[3.31.1, 4.0.0)` (was exactly `[3.30.2]`), set in
+  `ChuvadiPdf.props` (`ChuvadiPdfVersion` 3.31.1, `ChuvadiPdfRange`). The staged tests and the acceptance harness keep
+  the exact version. NuGet picks the lowest allowed version, so an application that wants a newer chuvadi-pdf
+  references it directly.
+- No source change. Measured on the 88 corpus and fixture documents: PDF and PNG byte-identical to 3.30.2; staged
+  tests and the acceptance report unchanged. `ToSvgViaPdf` gives its clip-path IDs other names (120 of 212 pages);
+  what it draws is identical.
+- chuvadi-pdf 3.31.1 depends on Chuvadi.Fonts (≥ 1.0.0) instead of its own LiPi copies; 1.1.0 satisfies it.
+
+Font packs (D-195, D-197; claude/layout-fonts-pack-rule5.md):
+
+- New `FontPackSource : IFontSource`: a font source over any Chuvadi.Fonts `IFontFilePack`. `FontPackSource.For(pack)`
+  returns one shared source per pack (faces parsed once per process); `new FontPackSource(pack, origin)` a separate
+  one. Each face is described from the pack's `FontFileInfo` and parsed on first use.
+- The built-in fonts are now `FontPackSource.For(FontPack.Instance)` (the internal `BuiltInFontSource` is gone): the
+  same LiPi Sans faces, descriptors and search order.
+- Chuvadi.Layout.Fonts is a pure data pack and no longer references this engine. Its `BundledFontSource` is replaced
+  by `SubstituteFontPack` (`Files`, `Find`, `FindFamily`, `Open`, `TryOpen`, `ReadAllBytes`, `GetLicenseText`,
+  `Instance`). To lay out with it: `options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance))` (was
+  `options.FontSources.Add(BundledFontSource.Instance)`). The internal `ReadResource` becomes the public
+  `SubstituteFontPack.ReadAllBytes`. Same 29 files, byte for byte, and the same face descriptors, so the output is
+  unchanged. Pdf and Print can read the files without the engine.
+
+Tamil font slots and table overlap (D-191; claude/layout-tamil-overlap-rule5.md):
+
+- New `CharacterFormat.ComplexScriptRun` (bool?, additive): which characters take the complex-script font, size and
+  bold. Null keeps the earlier rule (every character of a script that needs complex shaping). True: every character
+  of the run (ECMA-376 17.3.2.26 step 2a). False: as the standard's table classifies the character; Hebrew, Arabic,
+  Syriac and Thaana take the ASCII font, and Tamil and the other scripts the table leaves out the High ANSI font, as
+  Word does (measured). The space between two complex-script words follows the same choice.
+- `w:tblOverlap="never"` (N5): the table placed later still moves down below the earlier one (decision B), now leaving
+  the upper table's distance from text (`bottomFromText`) between them, as Word does where it moves a table down
+  (calib-overlap O2). Word sometimes overlaps the tables or moves one sideways (docs/DIFFERENCES.md, L-5).
 
 Follow-up rules (D-181; claude/layout-followup-rule5.md). Judged against the file and ECMA-376; where the standard
 is silent, against Word or Excel 2021 as measured (A7 calibration). Differences from Word and Excel are listed in

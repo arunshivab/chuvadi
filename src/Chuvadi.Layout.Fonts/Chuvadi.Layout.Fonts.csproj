@@ -9,9 +9,13 @@
     <AssemblyName>Chuvadi.Layout.Fonts</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Fonts</Product>
-    <Description>Offline font pack for Chuvadi.Layout: SIL OFL 1.1 fonts embedded as resources, exposed as an IFontSource. Metric-compatible substitutes for the Office core fonts (Liberation Sans/Serif/Mono for Arial/Times New Roman/Courier New, Carlito for Calibri, Caladea for Cambria), four styles each, plus closer designs for Georgia (Gelasio, four styles) and Segoe UI (Selawik: Regular, Bold, Light, Semilight, Semibold). The LiPi Sans fonts are in Chuvadi.Fonts, which Chuvadi.Layout uses as its built-in fonts. No network, no disk access.</Description>
+    <Description>Substitute fonts for documents, as a pure data pack: SIL OFL 1.1 fonts embedded as resources, with their names, styles, lengths, SHA-256 hashes and licences, readable through Chuvadi.Fonts' IFontFilePack by Chuvadi.Layout (FontPackSource), a PDF or a print library. Metric-compatible substitutes for common document fonts (Liberation Sans/Serif/Mono for Arial/Times New Roman/Courier New, Carlito for Calibri), Caladea for Cambria (a close design, not metric-compatible), four styles each, plus closer designs for Georgia (Gelasio, four styles) and Segoe UI (Selawik: Regular, Bold, Light, Semilight, Semibold). The LiPi Sans fonts are in Chuvadi.Fonts. No layout engine dependency, no network, no disk access.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>0.1.0</Version>
@@ -20,24 +24,17 @@
     <PackageLicenseExpression>MIT AND OFL-1.1</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>fonts;ofl;liberation;carlito;caladea;gelasio;selawik;layout</PackageTags>
+    <PackageTags>fonts;ofl;liberation;carlito;caladea;gelasio;selawik;layout;pdf</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Chuvadi.Layout\Chuvadi.Layout.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
-    <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
-    <InternalsVisibleTo Include="Chuvadi.Layout.Pdf.Tests" />
-    <InternalsVisibleTo Include="Chuvadi.Layout.Docs.Tests" />
-    <InternalsVisibleTo Include="Chuvadi.Layout.Sheets.Tests" />
-    <InternalsVisibleTo Include="Chuvadi.Layout.Documents.Tests" />
+    <!-- D-195: a pure data pack; the only reference is Chuvadi.Fonts, for IFontFilePack and FontFileInfo. -->
+    <ProjectReference Include="..\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Fonts\*.ttf" LogicalName="Chuvadi.Layout.Fonts.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Licenses\*.txt" LogicalName="Chuvadi.Layout.Fonts.Licenses.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

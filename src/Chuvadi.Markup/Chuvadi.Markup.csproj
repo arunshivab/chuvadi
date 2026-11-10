@@ -8,6 +8,9 @@
     <RootNamespace>Chuvadi.Markup</RootNamespace>
     <AssemblyName>Chuvadi.Markup</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- D-217: trimming and NativeAOT safe. Turns on the trim, AOT and single-file analyzers (errors, with
+         TreatWarningsAsErrors) and marks the assembly as trimmable for consumers. -->
+    <IsAotCompatible>true</IsAotCompatible>
 
     <!-- Package metadata -->
     <Product>Chuvadi.Markup</Product>
@@ -35,7 +38,6 @@
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
-    <None Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

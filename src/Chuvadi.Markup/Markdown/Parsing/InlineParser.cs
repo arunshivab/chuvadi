@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
 using Chuvadi.Markup.Internal;
@@ -6,876 +5,603 @@ using Chuvadi.Markup.Internal;
 namespace Chuvadi.Markup.Markdown.Parsing
 {
     /// <summary>
-    /// CommonMark inline parser (delimiter-run and bracket algorithm of the reference implementation),
-    /// with the GFM strikethrough and extended autolink extensions. Linear in the input apart from
-    /// bounded rescans (link labels are capped at 999 chars, backtick and HTML-end scans are memoised).
+    /// Phase 2 of parsing: turns the raw content of one paragraph or heading into inline nodes
+    /// (CommonMark "Inlines" and "Phase 2: inline structure").
     /// </summary>
-    internal sealed class InlineParser
+    internal sealed partial class InlineParser
     {
-        private const int MaxBackticks = 1000;
-        private const int MaxLinkLabelLength = 999;
-
-        private sealed class Delimiter
+        /// <summary>A position in the run of inline nodes being built (a doubly linked list).</summary>
+        private sealed class Slot
         {
-            public Delimiter? Prev, Next;
-            public InlineNode Inl = null!;
-            public int Position;
+            public Slot(MarkdownInline node) => Node = node;
+            public MarkdownInline Node;
+            public Slot? Prev;
+            public Slot? Next;
+        }
+
+        /// <summary>A run of '*' or '_' that may open or close emphasis.</summary>
+        private sealed class DelimiterRun
+        {
             public char Char;
-            public int Length;
-            public int NumDelims;
-            public bool CanOpen, CanClose;
+            public int Count;
+            public int Original;
+            public bool CanOpen;
+            public bool CanClose;
+            public bool Changed;
+            public long Order;
+            public Slot Slot = null!;
+            public DelimiterRun? Prev;
+            public DelimiterRun? Next;
         }
 
-        private sealed class Bracket
+        /// <summary>An opening '[' or '![' waiting for its ']'.</summary>
+        private sealed class BracketOpener
         {
-            public Bracket? Previous;
-            public InlineNode Inl = null!;
-            public int Position;
-            public long Seq;
-            public bool Image, BracketAfter;
+            public bool Image;
+            public int TextIndex;
+            public long Order;
+            public Slot Slot = null!;
+            public DelimiterRun? RunsBelow;
+            public BracketOpener? Prev;
         }
 
-        private readonly MarkdownOptions _options;
-        private readonly IReadOnlyDictionary<string, LinkReferenceDefinition> _refs;
-        private readonly NodeBudget _budget;
-        private CancellationPoll _poll;
+        private readonly string _t;
+        private readonly int _n;
+        private readonly InlineContent _content;
+        private readonly MarkdownDocument _document;
+        private readonly WorkBudget _work;
+        private readonly int _emphasisDepthRoom;
 
-        private string _s = string.Empty;
-        private int _pos;
-        private Delimiter? _lastDelim;
-        private Bracket? _lastBracket;
-        private readonly int[] _backticks = new int[MaxBackticks + 1];
-        private bool _scannedForBackticks;
-        private bool _noCommentEnd, _noPiEnd, _noCdataEnd, _noDeclEnd;
-        private long _bracketSeq;
-        private long _inactiveUpTo; // link openers with Seq <= this are inactive (a link has formed after them)
-        private readonly long _maxWork;
-        private long _work;
-        // Delimiter runs whose text was shortened by emphasis matching; their literal is cut once, at the end
-        // of ProcessEmphasis (cutting on every match copies the run each time: quadratic for long runs).
-        private readonly List<InlineNode> _shortened = new List<InlineNode>();
+        private Slot? _head;
+        private Slot? _tail;
+        private DelimiterRun? _runsHead;
+        private DelimiterRun? _runsTail;
+        private BracketOpener? _brackets;
+        private long _order;
+        private long _linkBarrier = -1;
 
-        public InlineParser(MarkdownOptions options, IReadOnlyDictionary<string, LinkReferenceDefinition> refs, NodeBudget budget, CancellationPoll poll, int sourceLength)
+        private readonly StringBuilder _pending = new StringBuilder();
+        private int _pendingStart = -1;
+        private int _pendingEnd;
+
+        private readonly bool _strikethrough;
+        private readonly bool _autolinks;
+
+        public InlineParser(InlineContent content, MarkdownDocument document, WorkBudget work, int emphasisDepthRoom, bool strikethrough, bool autolinks)
         {
-            _options = options;
-            _refs = refs;
-            _budget = budget;
-            _poll = poll;
-            _maxWork = (long)options.Limits.MaxParserWorkPerChar * ((long)sourceLength + 1024) + 1_000_000;
+            _strikethrough = strikethrough;
+            _autolinks = autolinks;
+            _content = content;
+            _t = content.Text;
+            _n = _t.Length;
+            _document = document;
+            _work = work;
+            _emphasisDepthRoom = emphasisDepthRoom;
+            _finder = new ForwardFinder(_t);
         }
 
-        /// <summary>Counts inline-parser work against <see cref="MarkupLimits.MaxParserWorkPerChar"/> and polls cancellation.</summary>
-        private void Work()
+        private int Src(int textIndex) => _content.ToSource(textIndex);
+
+        // TRACE R-MD-0166
+        /// <summary>Spaces and tabs at the start of a line after a line break are not content.</summary>
+        private int SkipIndentation(int i)
         {
-            _poll.Tick();
-            if (++_work > _maxWork)
-                throw new MarkupLimitExceededException(nameof(MarkupLimits.MaxParserWorkPerChar), _maxWork, _work);
+            while (i < _n && (_t[i] == ' ' || _t[i] == '\t')) i++;
+            return i;
         }
 
-        public InlineNode Parse(string subject)
+        /// <summary>Where a line break ends, given the text index of the first char of the next line.</summary>
+        private int BreakEnd(int nextLineIndex) => _content.BreakEnds[_content.LineOf(nextLineIndex)];
+
+        /// <summary>Source span of the text range [from, to).</summary>
+        private SourceSpan SpanOf(int from, int to)
         {
-            _s = subject;
-            _pos = 0;
-            _lastDelim = null;
-            _lastBracket = null;
-            _scannedForBackticks = false;
-            _noCommentEnd = _noPiEnd = _noCdataEnd = _noDeclEnd = false;
-            _bracketSeq = 0;
-            _inactiveUpTo = 0;
-            var root = new InlineNode(InlineType.Container) { Start = 0, End = subject.Length };
-            while (_pos < _s.Length)
+            int s = Src(from);
+            int e = to > from ? Src(to - 1) + 1 : s;
+            return new SourceSpan(s, e - s);
+        }
+
+        // ---------------------------------------------------------------- driver
+
+        /// <summary>Parses the content and appends the inline nodes to <paramref name="block"/>.</summary>
+        public void ParseInto(MarkdownBlock block)
+        {
+            int i = 0;
+            while (i < _n)
             {
-                Work();
-                ParseInline(root);
+                _work.Step();
+                char c = _t[i];
+                if (_autolinks && IsAutolinkTrigger(i) && TryExtendedAutolink(ref i)) continue;
+                switch (c)
+                {
+                    case '\n':
+                        i = LineEnding(i, i);
+                        break;
+                    case ' ':
+                    case '\t':
+                        i = Spaces(i);
+                        break;
+                    case '\\':
+                        i = Backslash(i);
+                        break;
+                    case '`':
+                        i = CodeSpanAt(i);
+                        break;
+                    case '*':
+                    case '_':
+                        i = DelimiterRunAt(i);
+                        break;
+                    case '~':
+                        // TRACE R-MD-0197
+                        if (_strikethrough) i = DelimiterRunAt(i);
+                        else i = PlainText(i);
+                        break;
+                    case '[':
+                        i = OpenBracket(i, image: false);
+                        break;
+                    case '!':
+                        if (i + 1 < _n && _t[i + 1] == '[') i = OpenBracket(i, image: true);
+                        else i = PlainText(i);
+                        break;
+                    case ']':
+                        i = CloseBracket(i);
+                        break;
+                    case '<':
+                        i = AngleBracket(i);
+                        break;
+                    case '&':
+                        i = Entity(i);
+                        break;
+                    default:
+                        i = PlainText(i);
+                        break;
+                }
             }
-            ProcessEmphasis(0);
-            while (_lastBracket is not null) _lastBracket = _lastBracket.Previous;
-            if (_options.Autolinks)
-                ExtendedAutolinks.ProcessEmails(root, _budget);
-            return root;
+            FlushText();
+            // TRACE R-MD-0109
+            ProcessEmphasis(null);
+            for (var s = _head; s is not null; s = s.Next) block.AppendChildUnchecked(s.Node);
         }
 
-        private char Peek(int i) => i < _s.Length ? _s[i] : '\0';
+        // ---------------------------------------------------------------- text
 
-        private InlineNode Make(InlineType type, int start, int end)
+        private void AddText(string text, int from, int to)
         {
-            _budget.Take();
-            return new InlineNode(type) { Start = start, End = end };
+            if (_pendingStart < 0) _pendingStart = Src(from);
+            _pending.Append(text);
+            _pendingEnd = Src(to - 1) + 1;
         }
 
-        private InlineNode Text(string literal, int start, int end)
+        private void AddText(char c, int from, int to)
         {
-            var n = Make(InlineType.Text, start, end);
-            n.Literal = literal;
-            return n;
+            if (_pendingStart < 0) _pendingStart = Src(from);
+            _pending.Append(CharacterReferences.SafeChar(c));
+            _pendingEnd = Src(to - 1) + 1;
         }
 
-        private bool IsSpecial(char c)
+        private void FlushText()
         {
-            switch (c)
+            if (_pendingStart < 0) return;
+            var node = new TextInline(_pending.ToString()) { Span = new SourceSpan(_pendingStart, _pendingEnd - _pendingStart) };
+            _pending.Clear();
+            _pendingStart = -1;
+            Append(node);
+        }
+
+        private Slot Append(MarkdownInline node)
+        {
+            var slot = new Slot(node) { Prev = _tail };
+            if (_tail is null) _head = slot;
+            else _tail.Next = slot;
+            _tail = slot;
+            return slot;
+        }
+
+        private Slot AddNode(MarkdownInline node)
+        {
+            FlushText();
+            return Append(node);
+        }
+
+        private static bool IsSpecial(char c) => c switch
+        {
+            '\n' or ' ' or '\t' or '\\' or '`' or '*' or '_' or '~' or '[' or ']' or '!' or '<' or '&' => true,
+            _ => false,
+        };
+
+        // TRACE R-MD-0110
+        private int PlainText(int i)
+        {
+            int j = i + 1;
+            while (j < _n && !IsSpecial(_t[j]) && !(_autolinks && IsAutolinkTrigger(j))) j++;
+            string piece = _t.Substring(i, j - i);
+            AddText(CharacterReferences.Safe(piece), i, j);
+            return j;
+        }
+
+        // TRACE R-MD-0164
+        /// <summary>
+        /// A run of spaces and tabs: text, unless it ends the line; then it is dropped, and the spaces right
+        /// before the line ending decide between a hard and a soft break.
+        /// </summary>
+        private int Spaces(int i)
+        {
+            int j = i;
+            while (j < _n && (_t[j] == ' ' || _t[j] == '\t')) j++;
+            if (j < _n && _t[j] == '\n')
             {
-                case '\n':
-                case '\r':
-                case '`':
-                case '\\':
-                case '&':
-                case '<':
-                case '[':
-                case ']':
-                case '!':
-                case '*':
-                case '_':
-                    return true;
-                case '~':
-                    return _options.Strikethrough;
-                case ':':
-                case 'w':
-                    return _options.Autolinks;
-                default:
-                    return false;
+                int spaces = j;
+                while (spaces > i && _t[spaces - 1] == ' ') spaces--;
+                return LineEnding(j, spaces);
+            }
+            AddText(_t.Substring(i, j - i), i, j);
+            return j;
+        }
+
+        // ---------------------------------------------------------------- line breaks
+
+        /// <summary>
+        /// The line ending at <paramref name="newline"/>, preceded by spaces from <paramref name="spacesStart"/>.
+        /// </summary>
+        private int LineEnding(int newline, int spacesStart)
+        {
+            // TRACE R-MD-0111
+            bool hard = newline - spacesStart >= 2;
+            MarkdownInline node = hard ? new HardBreak { IsBackslash = false } : new SoftBreak();
+            // TRACE R-MD-0112
+            int start = Src(newline);
+            int end = BreakEnd(newline + 1);
+            node.Span = new SourceSpan(start, end - start);
+            AddNode(node);
+            return SkipIndentation(newline + 1);
+        }
+
+        private int Backslash(int i)
+        {
+            if (i + 1 < _n)
+            {
+                char next = _t[i + 1];
+                if (next == '\n')
+                {
+                    // TRACE R-MD-0113
+                    var node = new HardBreak { IsBackslash = true };
+                    int start = Src(i);
+                    int end = BreakEnd(i + 2);
+                    node.Span = new SourceSpan(start, end - start);
+                    AddNode(node);
+                    return SkipIndentation(i + 2);
+                }
+                // TRACE R-MD-0114
+                if (CharUtil.IsAsciiPunctuation(next))
+                {
+                    AddText(next, i, i + 2);
+                    return i + 2;
+                }
+            }
+            AddText('\\', i, i + 1);
+            return i + 1;
+        }
+
+        // ---------------------------------------------------------------- entities
+
+        private int Entity(int i)
+        {
+            // TRACE R-MD-0115
+            int len = CharacterReferences.Match(_t, i, _n, out var value);
+            if (len > 0)
+            {
+                AddText(value, i, i + len);
+                return i + len;
+            }
+            AddText('&', i, i + 1);
+            return i + 1;
+        }
+
+        // ---------------------------------------------------------------- code spans
+
+        private Dictionary<int, BacktickRuns>? _backtickRuns;
+
+        /// <summary>Start positions of the backtick strings of one length, consumed in order.</summary>
+        private sealed class BacktickRuns
+        {
+            public readonly List<int> Starts = new List<int>();
+            public int Next;
+        }
+
+        // TRACE R-MD-0116
+        private void IndexBacktickRuns()
+        {
+            _backtickRuns = new Dictionary<int, BacktickRuns>();
+            int k = 0;
+            while (k < _n)
+            {
+                if (_t[k] != '`')
+                {
+                    k++;
+                    continue;
+                }
+                int start = k;
+                while (k < _n && _t[k] == '`') k++;
+                int len = k - start;
+                if (!_backtickRuns.TryGetValue(len, out var runs)) _backtickRuns[len] = runs = new BacktickRuns();
+                runs.Starts.Add(start);
             }
         }
 
-        private void ParseInline(InlineNode parent)
+        private int FindClosingBackticks(int length, int after)
         {
-            int start = _pos;
-            char c = _s[_pos];
-            InlineNode? node = null;
-            switch (c)
+            if (_backtickRuns is null) IndexBacktickRuns();
+            if (!_backtickRuns!.TryGetValue(length, out var runs)) return -1;
+            while (runs.Next < runs.Starts.Count && runs.Starts[runs.Next] < after)
             {
-                case '\n':
-                case '\r':
-                    node = HandleNewline();
-                    break;
-                case '`':
-                    node = HandleBackticks();
-                    break;
-                case '\\':
-                    node = HandleBackslash();
-                    break;
-                case '&':
-                    node = HandleEntity();
-                    break;
-                case '<':
-                    node = HandlePointyBrace();
-                    break;
-                case '*':
-                case '_':
-                    node = HandleDelim(c);
-                    break;
-                case '[':
-                    _pos++;
-                    node = Text("[", start, _pos);
-                    parent.Append(node);
-                    PushBracket(false, node);
-                    return;
-                case ']':
-                    node = HandleCloseBracket(parent);
-                    break;
-                case '!':
-                    _pos++;
-                    if (Peek(_pos) == '[')
+                _work.Step();
+                runs.Next++;
+            }
+            return runs.Next < runs.Starts.Count ? runs.Starts[runs.Next] : -1;
+        }
+
+        private int CodeSpanAt(int i)
+        {
+            int j = i;
+            while (j < _n && _t[j] == '`') j++;
+            int length = j - i;
+            // TRACE R-MD-0117
+            int close = FindClosingBackticks(length, j);
+            if (close < 0)
+            {
+                AddText(_t.Substring(i, length), i, j);
+                return j;
+            }
+            // TRACE R-MD-0118
+            var code = new StringBuilder(close - j);
+            for (int k = j; k < close; k++) code.Append(_t[k] == '\n' ? ' ' : CharacterReferences.SafeChar(_t[k]));
+            // TRACE R-MD-0119
+            if (code.Length >= 2 && code[0] == ' ' && code[code.Length - 1] == ' ')
+            {
+                bool allSpaces = true;
+                for (int k = 0; k < code.Length; k++)
+                {
+                    if (code[k] != ' ')
                     {
-                        _pos++;
-                        node = Text("![", start, _pos);
-                        parent.Append(node);
-                        PushBracket(true, node);
-                        return;
-                    }
-                    node = Text("!", start, _pos);
-                    break;
-                default:
-                    if (c == '~' && _options.Strikethrough)
-                    {
-                        node = HandleTilde();
+                        allSpaces = false;
                         break;
                     }
-                    if ((c == ':' || c == 'w') && _options.Autolinks && _lastBracket is null)
-                    {
-                        node = c == ':' ? UrlMatch(parent) : WwwMatch();
-                        if (node is not null) break;
-                    }
-                    node = HandleTextRun();
-                    break;
-            }
-            if (node is not null) parent.Append(node);
-        }
-
-        private InlineNode HandleTextRun()
-        {
-            int start = _pos;
-            int end = _pos + 1;
-            while (end < _s.Length && !IsSpecial(_s[end])) end++;
-            _pos = end;
-            int textEnd = end;
-            if (end < _s.Length && (_s[end] == '\n' || _s[end] == '\r'))
-            {
-                while (textEnd > start && (_s[textEnd - 1] == ' ' || _s[textEnd - 1] == '\t')) textEnd--;
-            }
-            return Text(_s.Substring(start, textEnd - start), start, textEnd);
-        }
-
-        private InlineNode HandleNewline()
-        {
-            int nlpos = _pos;
-            if (_s[_pos] == '\r') _pos++;
-            if (Peek(_pos) == '\n') _pos++;
-            int end = _pos;
-            while (_pos < _s.Length && (_s[_pos] == ' ' || _s[_pos] == '\t')) _pos++;
-            if (nlpos > 1 && _s[nlpos - 1] == ' ' && _s[nlpos - 2] == ' ')
-                return Make(InlineType.HardBreak, nlpos, end);
-            return Make(InlineType.SoftBreak, nlpos, end);
-        }
-
-        private InlineNode HandleBackslash()
-        {
-            int start = _pos;
-            _pos++;
-            char c = Peek(_pos);
-            if (CharUtil.IsAsciiPunctuation(c))
-            {
-                _pos++;
-                return Text(c.ToString(), start, _pos);
-            }
-            if (c == '\n' || c == '\r')
-            {
-                if (c == '\r') _pos++;
-                if (Peek(_pos) == '\n') _pos++;
-                int end = _pos;
-                while (_pos < _s.Length && (_s[_pos] == ' ' || _s[_pos] == '\t')) _pos++;
-                var br = Make(InlineType.HardBreak, start, end);
-                br.IsBackslash = true;
-                return br;
-            }
-            return Text("\\", start, _pos);
-        }
-
-        private InlineNode HandleEntity()
-        {
-            int start = _pos;
-            var sb = new StringBuilder();
-            int e = Scanners.EntityReference(_s, _pos, sb);
-            if (e < 0)
-            {
-                _pos++;
-                return Text("&", start, _pos);
-            }
-            _pos = e;
-            return Text(sb.ToString(), start, e);
-        }
-
-        // ---- code spans ----
-
-        private InlineNode HandleBackticks()
-        {
-            int start = _pos;
-            while (_pos < _s.Length && _s[_pos] == '`') _pos++;
-            int n = _pos - start;
-            int endpos = ScanToClosingBackticks(n);
-            if (endpos == 0)
-            {
-                _pos = start + n;
-                return Text(new string('`', n), start, _pos);
-            }
-            string raw = _s.Substring(start + n, endpos - n - (start + n));
-            var sb = new StringBuilder(raw.Length);
-            for (int i = 0; i < raw.Length; i++)
-            {
-                char c = raw[i];
-                if (c == '\r')
-                {
-                    sb.Append(' ');
-                    if (i + 1 < raw.Length && raw[i + 1] == '\n') i++;
                 }
-                else if (c == '\n') sb.Append(' ');
-                else sb.Append(c);
-            }
-            string code = sb.ToString();
-            if (code.Length >= 2 && code[0] == ' ' && code[code.Length - 1] == ' ' && code.AsSpan().ContainsAnyExcept(' '))
-                code = code.Substring(1, code.Length - 2);
-            var node = Make(InlineType.Code, start, endpos);
-            node.Literal = code;
-            node.DelimiterLength = n;
-            return node;
-        }
-
-        private int ScanToClosingBackticks(int openLength)
-        {
-            if (openLength > MaxBackticks) return 0;
-            if (_scannedForBackticks && _backticks[openLength] <= _pos) return 0;
-            while (true)
-            {
-                while (_pos < _s.Length && _s[_pos] != '`') _pos++;
-                if (_pos >= _s.Length) break;
-                int st = _pos;
-                while (_pos < _s.Length && _s[_pos] == '`') _pos++;
-                int numticks = _pos - st;
-                if (numticks <= MaxBackticks) _backticks[numticks] = st;
-                if (numticks == openLength) return _pos;
-            }
-            _scannedForBackticks = true;
-            return 0;
-        }
-
-        // ---- autolinks and raw HTML ----
-
-        private InlineNode HandlePointyBrace()
-        {
-            int start = _pos;
-            int e = Scanners.AutolinkUri(_s, _pos + 1);
-            if (e > 0)
-            {
-                string contents = _s.Substring(start + 1, e - start - 2);
-                _pos = e;
-                return MakeAutolink(DecodeEntities(contents), DecodeEntities(contents), false, start, e);
-            }
-            e = Scanners.AutolinkEmail(_s, _pos + 1);
-            if (e > 0)
-            {
-                string contents = _s.Substring(start + 1, e - start - 2);
-                _pos = e;
-                return MakeAutolink("mailto:" + DecodeEntities(contents), DecodeEntities(contents), true, start, e);
-            }
-            e = HtmlTag(start);
-            if (e > 0)
-            {
-                _pos = e;
-                var h = Make(InlineType.Html, start, e);
-                h.Literal = _s.Substring(start, e - start);
-                return h;
-            }
-            _pos++;
-            return Text("<", start, _pos);
-        }
-
-        private InlineNode MakeAutolink(string url, string text, bool email, int start, int end)
-        {
-            var link = Make(InlineType.Link, start, end);
-            link.Destination = url;
-            link.Style = LinkStyle.Autolink;
-            link.IsEmail = email;
-            link.Append(Text(text, start + 1, end - 1));
-            return link;
-        }
-
-        private static string DecodeEntities(string s)
-        {
-            if (s.IndexOf('&') < 0) return s;
-            var sb = new StringBuilder(s.Length);
-            for (int i = 0; i < s.Length; i++)
-            {
-                if (s[i] == '&')
+                if (!allSpaces)
                 {
-                    int e = Scanners.EntityReference(s, i, sb);
-                    if (e > 0) { i = e - 1; continue; }
+                    code.Remove(code.Length - 1, 1);
+                    code.Remove(0, 1);
                 }
-                sb.Append(s[i]);
             }
-            return sb.ToString();
+            var node = new CodeSpan(code.ToString()) { DelimiterLength = length, Span = SpanOf(i, close + length) };
+            AddNode(node);
+            return close + length;
         }
 
-        private int HtmlTag(int i)
-        {
-            int e = Scanners.OpenTag(_s, i);
-            if (e > 0) return e;
-            e = Scanners.ClosingTag(_s, i);
-            if (e > 0) return e;
-            if (Peek(i + 1) == '!')
-            {
-                if (Peek(i + 2) == '-' && Peek(i + 3) == '-')
-                {
-                    if (Peek(i + 4) == '>') return i + 5;
-                    if (Peek(i + 4) == '-' && Peek(i + 5) == '>') return i + 6;
-                    if (_noCommentEnd) return -1;
-                    int x = _s.IndexOf("-->", i + 4, StringComparison.Ordinal);
-                    if (x < 0) { _noCommentEnd = true; return -1; }
-                    return x + 3;
-                }
-                if (string.CompareOrdinal(_s, i, "<![CDATA[", 0, 9) == 0)
-                {
-                    if (_noCdataEnd) return -1;
-                    int x = _s.IndexOf("]]>", i + 9, StringComparison.Ordinal);
-                    if (x < 0) { _noCdataEnd = true; return -1; }
-                    return x + 3;
-                }
-                if (CharUtil.IsAsciiAlpha(Peek(i + 2)))
-                {
-                    if (_noDeclEnd) return -1;
-                    int x = _s.IndexOf('>', i + 2);
-                    if (x < 0) { _noDeclEnd = true; return -1; }
-                    return x + 1;
-                }
-                return -1;
-            }
-            if (Peek(i + 1) == '?')
-            {
-                if (_noPiEnd) return -1;
-                int x = _s.IndexOf("?>", i + 2, StringComparison.Ordinal);
-                if (x < 0) { _noPiEnd = true; return -1; }
-                return x + 2;
-            }
-            return -1;
-        }
+        // ---------------------------------------------------------------- emphasis delimiters
 
-        // ---- emphasis and strikethrough delimiters ----
-
-        private void ScanDelims(char c, out int numdelims, out bool canOpen, out bool canClose)
+        private int DelimiterRunAt(int i)
         {
-            int before = _pos == 0 ? '\n' : CharUtil.CodePointBefore(_s, _pos);
-            int st = _pos;
-            while (_pos < _s.Length && _s[_pos] == c) _pos++;
-            numdelims = _pos - st;
-            int after = _pos >= _s.Length ? '\n' : CharUtil.CodePointAt(_s, _pos);
-            bool beforeWs = CharUtil.IsUnicodeWhitespace(before), afterWs = CharUtil.IsUnicodeWhitespace(after);
-            bool beforePunct = CharUtil.IsUnicodePunctuation(before), afterPunct = CharUtil.IsUnicodePunctuation(after);
-            bool left = numdelims > 0 && !afterWs && (!afterPunct || beforeWs || beforePunct);
-            bool right = numdelims > 0 && !beforeWs && (!beforePunct || afterWs || afterPunct);
-            if (c == '_')
+            char c = _t[i];
+            int j = i;
+            while (j < _n && _t[j] == c) j++;
+            int count = j - i;
+
+            // TRACE R-MD-0120
+            int before = i == 0 ? '\n' : CharUtil.CodePointBefore(_t, i);
+            int after = j >= _n ? '\n' : CharUtil.CodePointAt(_t, j);
+            bool spaceBefore = CharUtil.IsUnicodeWhitespace(before);
+            bool spaceAfter = CharUtil.IsUnicodeWhitespace(after);
+            bool punctBefore = CharUtil.IsUnicodePunctuation(before);
+            bool punctAfter = CharUtil.IsUnicodePunctuation(after);
+            bool leftFlanking = !spaceAfter && (!punctAfter || spaceBefore || punctBefore);
+            bool rightFlanking = !spaceBefore && (!punctBefore || spaceAfter || punctAfter);
+
+            bool canOpen, canClose;
+            if (c == '~')
             {
-                canOpen = left && (!right || beforePunct);
-                canClose = right && (!left || afterPunct);
+                // TRACE R-MD-0198
+                canOpen = leftFlanking && count <= 2;
+                canClose = rightFlanking && count <= 2;
+            }
+            else if (c == '*')
+            {
+                // TRACE R-MD-0121
+                canOpen = leftFlanking;
+                canClose = rightFlanking;
             }
             else
             {
-                canOpen = left;
-                canClose = right;
+                // TRACE R-MD-0122
+                canOpen = leftFlanking && (!rightFlanking || punctBefore);
+                canClose = rightFlanking && (!leftFlanking || punctAfter);
             }
-        }
 
-        private InlineNode HandleDelim(char c)
-        {
-            int start = _pos;
-            ScanDelims(c, out int n, out bool canOpen, out bool canClose);
-            var node = Text(_s.Substring(start, n), start, _pos);
-            if (canOpen || canClose) PushDelimiter(c, canOpen, canClose, node, n);
-            return node;
-        }
-
-        private InlineNode HandleTilde()
-        {
-            int start = _pos;
-            ScanDelims('~', out int n, out bool left, out bool right);
-            var node = Text(_s.Substring(start, n), start, _pos);
-            if ((left || right) && (n == 1 || n == 2)) PushDelimiter('~', left, right, node, n);
-            return node;
-        }
-
-        private void PushDelimiter(char c, bool canOpen, bool canClose, InlineNode inl, int length)
-        {
-            var d = new Delimiter
+            // TRACE R-MD-0246
+            if (!canOpen && !canClose)
             {
-                Char = c,
-                CanOpen = canOpen,
-                CanClose = canClose,
-                Inl = inl,
-                Length = length,
-                NumDelims = length,
-                Position = _pos,
-                Prev = _lastDelim,
-            };
-            if (_lastDelim is not null) _lastDelim.Next = d;
-            _lastDelim = d;
+                AddText(new string(c, count), i, j);
+                return j;
+            }
+            FlushText();
+            var text = new TextInline(new string(c, count)) { Span = SpanOf(i, j) };
+            var slot = Append(text);
+            {
+                _work.Step();
+                var run = new DelimiterRun
+                {
+                    Char = c,
+                    Count = count,
+                    Original = count,
+                    CanOpen = canOpen,
+                    CanClose = canClose,
+                    Order = _order++,
+                    Slot = slot,
+                    Prev = _runsTail,
+                };
+                if (_runsTail is null) _runsHead = run;
+                else _runsTail.Next = run;
+                _runsTail = run;
+            }
+            return j;
         }
 
-        private void RemoveDelimiter(Delimiter d)
+        // TRACE R-MD-0123
+        private static bool BreaksRuleOfThree(DelimiterRun opener, DelimiterRun closer)
         {
-            if (d.Next is not null) d.Next.Prev = d.Prev;
-            else _lastDelim = d.Prev;
-            if (d.Prev is not null) d.Prev.Next = d.Next;
-            d.Prev = d.Next = null;
+            if (!opener.CanClose && !closer.CanOpen) return false;
+            if ((opener.Original + closer.Original) % 3 != 0) return false;
+            return !(opener.Original % 3 == 0 && closer.Original % 3 == 0);
         }
 
-        // openers_bottom is keyed by delimiter char x closer can-open x closer length % 3: every closer in a
-        // bucket fails against exactly the same openers, so the lower bound is exact for each bucket.
-        private const int BottomBuckets = 18;
-
-        private static int BottomIndex(Delimiter closer) =>
-            (closer.Char switch { '*' => 0, '_' => 6, _ => 12 }) + (closer.CanOpen ? 3 : 0) + closer.Length % 3;
-
-        private void ProcessEmphasis(int stackBottom)
+        private void RemoveRun(DelimiterRun run)
         {
-            Span<int> openersBottom = stackalloc int[BottomBuckets];
-            openersBottom.Fill(stackBottom);
+            if (run.Changed)
+            {
+                ((TextInline)run.Slot.Node).Text = new string(run.Char, run.Count);
+                run.Changed = false;
+            }
+            if (run.Prev is null) _runsHead = run.Next;
+            else run.Prev.Next = run.Next;
+            if (run.Next is null) _runsTail = run.Prev;
+            else run.Next.Prev = run.Prev;
+            run.Prev = run.Next = null;
+        }
 
-            Delimiter? closer = null;
-            for (var cand = _lastDelim; cand is not null && cand.Position >= stackBottom; cand = cand.Prev)
-                closer = cand;
+        private void RemoveSlot(Slot slot)
+        {
+            if (slot.Prev is null) _head = slot.Next;
+            else slot.Prev.Next = slot.Next;
+            if (slot.Next is null) _tail = slot.Prev;
+            else slot.Next.Prev = slot.Prev;
+            slot.Prev = slot.Next = null;
+        }
 
+        /// <summary>
+        /// Matches closers with openers above <paramref name="bottom"/> (the whole list when null), wrapping the
+        /// nodes between them in emphasis or strong emphasis (CommonMark "Emphasis and strong emphasis", rules 1-17).
+        /// </summary>
+        private void ProcessEmphasis(DelimiterRun? bottom)
+        {
+            long bottomOrder = bottom is null ? -1 : bottom.Order;
+            // TRACE R-MD-0124
+            var floors = new long[14];
+            for (int k = 0; k < floors.Length; k++) floors[k] = bottomOrder;
+
+            var closer = bottom is null ? _runsHead : bottom.Next;
             while (closer is not null)
             {
-                Work();
+                _work.Step();
                 if (!closer.CanClose)
                 {
                     closer = closer.Next;
                     continue;
                 }
-                int idx = BottomIndex(closer);
-                var opener = closer.Prev;
-                bool found = false;
-                while (opener is not null && opener.Position >= stackBottom && opener.Position >= openersBottom[idx])
+                int key = closer.Char == '~' ? 12 + (closer.Original - 1)
+                    : (closer.Char == '*' ? 0 : 6) + (closer.Original % 3) * 2 + (closer.CanOpen ? 1 : 0);
+                long floor = floors[key];
+                DelimiterRun? opener = closer.Prev;
+                DelimiterRun? found = null;
+                while (opener is not null && opener.Order > floor)
                 {
-                    Work();
-                    if (opener.CanOpen && opener.Char == closer.Char)
+                    _work.Step();
+                    // TRACE R-MD-0229
+                    // a closing-only tilde run that reaches an opening-only tilde run of another length
+                    // discards that run and every run between them, and matches nothing
+                    if (closer.Char == '~' && !closer.CanOpen && opener.Char == '~' && opener.CanOpen && !opener.CanClose
+                        && opener.Count != closer.Count)
                     {
-                        if (closer.Char == '~')
-                        {
-                            if (!(closer.CanOpen || opener.CanClose) || closer.Length % 3 == 0 || (opener.Length + closer.Length) % 3 != 0)
-                            {
-                                found = true;
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            bool oddMatch = (closer.CanOpen || opener.CanClose)
-                                && (opener.Length + closer.Length) % 3 == 0
-                                && !(opener.Length % 3 == 0 && closer.Length % 3 == 0);
-                            if (!oddMatch)
-                            {
-                                found = true;
-                                break;
-                            }
-                        }
+                        while (opener.Next is not null && !ReferenceEquals(opener.Next, closer)) RemoveRun(opener.Next);
+                        RemoveRun(opener);
+                        break;
+                    }
+                    // TRACE R-MD-0125
+                    if (opener.Char == closer.Char && opener.CanOpen
+                        && (closer.Char == '~' ? opener.Count == closer.Count : !BreaksRuleOfThree(opener, closer)))
+                    {
+                        found = opener;
+                        break;
                     }
                     opener = opener.Prev;
                 }
-                var oldCloser = closer;
+
+                if (found is null)
+                {
+                    // TRACE R-MD-0126
+                    floors[key] = closer.Prev?.Order ?? bottomOrder;
+                    if (floors[key] < bottomOrder) floors[key] = bottomOrder;
+                    var next = closer.Next;
+                    if (!closer.CanOpen) RemoveRun(closer);
+                    closer = next;
+                    continue;
+                }
+
+                // TRACE R-MD-0127
+                int use;
+                MarkdownInline wrapper;
                 if (closer.Char == '~')
-                    closer = found ? InsertStrike(opener!, closer) : closer.Next;
-                else
-                    closer = found ? InsertEmph(opener!, closer) : closer.Next;
-                if (!found)
                 {
-                    openersBottom[idx] = oldCloser.Position;
-                    if (!oldCloser.CanOpen) RemoveDelimiter(oldCloser);
-                }
-            }
-            while (_lastDelim is not null && _lastDelim.Position >= stackBottom)
-                RemoveDelimiter(_lastDelim);
-            foreach (var inl in _shortened)
-                if (inl.PendingLength >= 0)
-                {
-                    inl.Literal = inl.Literal.Substring(0, inl.PendingLength);
-                    inl.PendingLength = -1;
-                }
-            _shortened.Clear();
-        }
-
-        private void Shorten(InlineNode inl, int by)
-        {
-            if (inl.PendingLength < 0)
-            {
-                inl.PendingLength = inl.Literal.Length;
-                _shortened.Add(inl);
-            }
-            inl.PendingLength -= by;
-        }
-
-        private Delimiter? InsertEmph(Delimiter opener, Delimiter closer)
-        {
-            var openerInl = opener.Inl;
-            var closerInl = closer.Inl;
-            int use = closer.NumDelims >= 2 && opener.NumDelims >= 2 ? 2 : 1;
-            opener.NumDelims -= use;
-            closer.NumDelims -= use;
-            Shorten(openerInl, use);
-            Shorten(closerInl, use);
-
-            for (var d = closer.Prev; d is not null && d != opener;)
-            {
-                Work();
-                var prev = d.Prev;
-                RemoveDelimiter(d);
-                d = prev;
-            }
-
-            var emph = Make(use == 1 ? InlineType.Emphasis : InlineType.Strong, openerInl.End - use, closerInl.Start + use);
-            emph.Delimiter = opener.Char;
-            openerInl.End -= use;
-            closerInl.Start += use;
-            for (var tmp = openerInl.Next; tmp is not null && tmp != closerInl;)
-            {
-                Work();
-                var next = tmp.Next;
-                tmp.Unlink();
-                emph.Append(tmp);
-                tmp = next;
-            }
-            openerInl.InsertAfter(emph);
-
-            if (opener.NumDelims == 0)
-            {
-                openerInl.Unlink();
-                RemoveDelimiter(opener);
-            }
-            if (closer.NumDelims == 0)
-            {
-                var next = closer.Next;
-                closerInl.Unlink();
-                RemoveDelimiter(closer);
-                return next;
-            }
-            return closer;
-        }
-
-        private Delimiter? InsertStrike(Delimiter opener, Delimiter closer)
-        {
-            var res = closer.Next;
-            var openerInl = opener.Inl;
-            var closerInl = closer.Inl;
-            if (openerInl.Literal.Length == closerInl.Literal.Length)
-            {
-                var strike = Make(InlineType.Strikethrough, openerInl.Start, closerInl.End);
-                strike.DelimiterLength = openerInl.Literal.Length;
-                for (var tmp = openerInl.Next; tmp is not null && tmp != closerInl;)
-                {
-                    Work();
-                    var next = tmp.Next;
-                    tmp.Unlink();
-                    strike.Append(tmp);
-                    tmp = next;
-                }
-                openerInl.InsertAfter(strike);
-                openerInl.Unlink();
-                closerInl.Unlink();
-            }
-            for (var d = closer; d is not null && d != opener;)
-            {
-                var prev = d.Prev;
-                RemoveDelimiter(d);
-                d = prev;
-            }
-            RemoveDelimiter(opener);
-            return res;
-        }
-
-        // ---- links and images ----
-
-        private void PushBracket(bool image, InlineNode inl)
-        {
-            if (_lastBracket is not null) _lastBracket.BracketAfter = true;
-            _lastBracket = new Bracket
-            {
-                Previous = _lastBracket,
-                Inl = inl,
-                Position = _pos,
-                Image = image,
-                Seq = ++_bracketSeq,
-            };
-        }
-
-        private int SkipWhitespace(int i)
-        {
-            while (i < _s.Length && (_s[i] == ' ' || _s[i] == '\t' || _s[i] == '\n' || _s[i] == '\r' || _s[i] == '\f' || _s[i] == '\v')) i++;
-            return i;
-        }
-
-        /// <summary>Scans a link label at i ('['); returns end index after ']' or -1. Label is trimmed raw text.</summary>
-        private int LinkLabel(int i, out string label)
-        {
-            label = string.Empty;
-            if (Peek(i) != '[') return -1;
-            int j = i + 1;
-            int length = 0;
-            while (j < _s.Length)
-            {
-                char c = _s[j];
-                if (c == '[' || c == ']') break;
-                if (c == '\\')
-                {
-                    j++;
-                    length++;
-                    if (j < _s.Length && CharUtil.IsAsciiPunctuation(_s[j])) { j++; length++; }
+                    // TRACE R-MD-0199
+                    use = closer.Count;
+                    wrapper = new Strikethrough { DelimiterLength = use };
                 }
                 else
                 {
-                    j++;
-                    length++;
+                    use = closer.Count >= 2 && found.Count >= 2 ? 2 : 1;
+                    wrapper = use == 2 ? new Strong { Delimiter = found.Char } : new Emphasis { Delimiter = found.Char };
                 }
-                if (length > MaxLinkLabelLength) return -1;
-            }
-            if (j >= _s.Length || _s[j] != ']') return -1;
-            label = _s.Substring(i + 1, j - i - 1).Trim(' ', '\t', '\n', '\r', '\f');
-            return j + 1;
-        }
+                // TRACE R-MD-0128
+                var openText = (TextInline)found.Slot.Node;
+                var closeText = (TextInline)closer.Slot.Node;
+                int openStart = openText.Span.Start;
+                int closeStart = closeText.Span.Start;
+                found.Count -= use;
+                closer.Count -= use;
+                wrapper.Span = new SourceSpan(openStart + found.Count, closeStart + use - (openStart + found.Count));
+                // the run texts are rewritten once, when the runs leave the list
+                openText.Span = new SourceSpan(openStart, found.Count);
+                closeText.Span = new SourceSpan(closeStart + use, closer.Count);
+                found.Changed = closer.Changed = true;
 
-        private InlineNode? HandleCloseBracket(InlineNode parent)
-        {
-            int start = _pos;
-            _pos++;
-            int initialPos = _pos;
-            var opener = _lastBracket;
-            if (opener is null)
-                return Text("]", start, _pos);
-            if (!opener.Image && opener.Seq <= _inactiveUpTo)
-            {
-                _lastBracket = opener.Previous;
-                return Text("]", start, _pos);
-            }
-            bool isImage = opener.Image;
-            int afterLinkTextPos = _pos;
-            string url = string.Empty;
-            string? title = null;
-            string? label = null;
-            LinkStyle style = LinkStyle.Inline;
-            bool matched = false;
+                // move the nodes between the two runs into the wrapper
+                var inner = found.Slot.Next;
+                while (inner is not null && !ReferenceEquals(inner, closer.Slot))
+                {
+                    var nextInner = inner.Next;
+                    RemoveSlot(inner);
+                    wrapper.AppendChildUnchecked(inner.Node);
+                    inner = nextInner;
+                }
+                var wrapperSlot = new Slot(wrapper) { Prev = found.Slot, Next = closer.Slot };
+                found.Slot.Next = wrapperSlot;
+                closer.Slot.Prev = wrapperSlot;
 
-            if (Peek(_pos) == '(')
-            {
-                int i = SkipWhitespace(_pos + 1);
-                int n = Scanners.LinkDestination(_s, i, out string rawUrl);
-                if (n == -2) { n = i; rawUrl = string.Empty; }
-                if (n >= 0)
-                {
-                    int endUrl = n;
-                    int startTitle = SkipWhitespace(endUrl);
-                    int endTitle = startTitle;
-                    string? rawTitle = null;
-                    if (startTitle != endUrl)
-                    {
-                        int t = Scanners.LinkTitle(_s, startTitle, out string rt);
-                        if (t >= 0) { endTitle = t; rawTitle = rt; }
-                    }
-                    int endAll = SkipWhitespace(endTitle);
-                    if (Peek(endAll) == ')')
-                    {
-                        _pos = endAll + 1;
-                        url = Scanners.Unescape(rawUrl);
-                        title = rawTitle is null ? null : Scanners.Unescape(rawTitle);
-                        matched = true;
-                    }
-                }
-                if (!matched) _pos = afterLinkTextPos;
-            }
+                // runs between the opener and the closer can no longer match anything
+                // TRACE R-MD-0129
+                while (found.Next is not null && !ReferenceEquals(found.Next, closer)) RemoveRun(found.Next);
 
-            if (!matched)
-            {
-                int e = LinkLabel(_pos, out string rawLabel);
-                bool found = e > 0;
-                if (found)
+                if (found.Count == 0)
                 {
-                    _pos = e;
-                    style = rawLabel.Length == 0 ? LinkStyle.ReferenceCollapsed : LinkStyle.ReferenceFull;
+                    RemoveSlot(found.Slot);
+                    RemoveRun(found);
                 }
-                else
+                if (closer.Count == 0)
                 {
-                    _pos = afterLinkTextPos;
-                    style = LinkStyle.ReferenceShortcut;
-                }
-                if ((!found || rawLabel.Length == 0) && !opener.BracketAfter)
-                {
-                    rawLabel = _s.Substring(opener.Position, initialPos - opener.Position - 1);
-                    found = true;
-                }
-                if (found && rawLabel.Length <= MaxLinkLabelLength
-                    && _refs.TryGetValue(LinkReferenceDefinition.NormalizeLabel(rawLabel), out var def))
-                {
-                    url = def.Destination;
-                    title = def.Title;
-                    label = rawLabel;
-                    matched = true;
+                    var next = closer.Next;
+                    RemoveSlot(closer.Slot);
+                    RemoveRun(closer);
+                    closer = next;
                 }
             }
 
-            if (!matched)
+            // TRACE R-MD-0130
+            if (bottom is null)
             {
-                _lastBracket = opener.Previous;
-                _pos = initialPos;
-                return Text("]", start, _pos);
+                while (_runsHead is not null) RemoveRun(_runsHead);
             }
-
-            var inl = Make(isImage ? InlineType.Image : InlineType.Link, opener.Inl.Start, _pos);
-            inl.Destination = url;
-            inl.Title = title;
-            inl.Style = style;
-            inl.Label = label;
-            for (var tmp = opener.Inl.Next; tmp is not null;)
+            else
             {
-                var next = tmp.Next;
-                tmp.Unlink();
-                inl.Append(tmp);
-                tmp = next;
-            }
-            parent.Append(inl);
-            opener.Inl.Unlink();
-
-            ProcessEmphasis(opener.Position);
-            _lastBracket = opener.Previous;
-            if (!isImage)
-                _inactiveUpTo = _bracketSeq; // no links inside links: every earlier link opener is now inactive
-            return null;
-        }
-
-        // ---- GFM extended autolinks (www. and scheme://) ----
-
-        private InlineNode? WwwMatch()
-        {
-            int maxRewind = _pos;
-            if (maxRewind > 0)
-            {
-                char p = _s[maxRewind - 1];
-                if ("*_~(".IndexOf(p) < 0 && !ExtendedAutolinks.IsCSpace(p)) return null;
-            }
-            int size = _s.Length - _pos;
-            if (size < 4 || string.CompareOrdinal(_s, _pos, "www.", 0, 4) != 0) return null;
-            int linkEnd = ExtendedAutolinks.CheckDomain(_s, _pos, size, false);
-            if (linkEnd == 0) return null;
-            while (linkEnd < size && !ExtendedAutolinks.IsCSpace(_s[_pos + linkEnd]) && _s[_pos + linkEnd] != '<') linkEnd++;
-            linkEnd = ExtendedAutolinks.AutolinkDelim(_s, _pos, linkEnd);
-            if (linkEnd == 0) return null;
-            int start = _pos;
-            string text = _s.Substring(_pos, linkEnd);
-            _pos += linkEnd;
-            var link = Make(InlineType.Link, start, _pos);
-            link.Destination = "http://" + text;
-            link.Style = LinkStyle.ExtendedAutolink;
-            link.Append(Text(text, start, _pos));
-            return link;
-        }
-
-        private InlineNode? UrlMatch(InlineNode parent)
-        {
-            int maxRewind = _pos;
-            int size = _s.Length - _pos;
-            if (size < 4 || _s[_pos + 1] != '/' || _s[_pos + 2] != '/') return null;
-            int rewind = 0;
-            while (rewind < maxRewind && CharUtil.IsAsciiAlpha(_s[_pos - rewind - 1])) rewind++;
-            if (!ExtendedAutolinks.IsSafeScheme(_s, _pos - rewind, size + rewind)) return null;
-            int linkEnd = 3;
-            int domainLen = ExtendedAutolinks.CheckDomain(_s, _pos + linkEnd, size - linkEnd, true);
-            if (domainLen == 0) return null;
-            linkEnd += domainLen;
-            while (linkEnd < size && !ExtendedAutolinks.IsCSpace(_s[_pos + linkEnd]) && _s[_pos + linkEnd] != '<') linkEnd++;
-            linkEnd = ExtendedAutolinks.AutolinkDelim(_s, _pos, linkEnd);
-            if (linkEnd == 0) return null;
-            Unput(parent, rewind);
-            int start = _pos - rewind;
-            _pos += linkEnd;
-            string url = _s.Substring(start, _pos - start);
-            var link = Make(InlineType.Link, start, _pos);
-            link.Destination = url;
-            link.Style = LinkStyle.ExtendedAutolink;
-            link.Append(Text(url, start, _pos));
-            return link;
-        }
-
-        private static void Unput(InlineNode parent, int n)
-        {
-            var node = parent.Last;
-            while (n > 0 && node is not null && node.Type == InlineType.Text)
-            {
-                if (node.Literal.Length < n)
-                {
-                    n -= node.Literal.Length;
-                    node.Literal = string.Empty;
-                }
-                else
-                {
-                    node.Literal = node.Literal.Substring(0, node.Literal.Length - n);
-                    node.End -= n;
-                    n = 0;
-                }
-                node = node.Prev;
+                while (bottom.Next is not null) RemoveRun(bottom.Next);
             }
         }
     }

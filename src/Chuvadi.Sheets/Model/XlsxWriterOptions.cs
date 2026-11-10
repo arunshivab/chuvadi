@@ -22,8 +22,10 @@ public sealed class XlsxWriterOptions
 
     /// <summary>
     /// Directory where temporary per-sheet files are created during streaming write. Defaults
-    /// to <see cref="Path.GetTempPath"/>. Temp files are named <c>chuvadi_sheets_*.tmp</c> and
-    /// deleted when the writer is disposed (or, on crash, eventually by the OS).
+    /// to <see cref="Path.GetTempPath"/>. Temp files are named <c>chuvadi_sheets_*.tmp</c>; since
+    /// 2.0.1 each is opened exclusively, owner-only on Unix (mode 600) and deleted on close, so the
+    /// operating system removes it even if the process dies. (A path save's own temporary file goes
+    /// beside the target, not here.)
     /// </summary>
     public string? TempDirectory { get; set; }
 
@@ -31,8 +33,9 @@ public sealed class XlsxWriterOptions
     /// When set, <see cref="XlsxWriter.Save"/> produces a password-encrypted xlsx
     /// (OOXML agile encryption, AES-256). The package is assembled into a temp file and
     /// encrypted in 4096-byte segments, so even very large streamed exports can be
-    /// encrypted without holding the plaintext workbook in memory. Null (default) = no
-    /// encryption.
+    /// encrypted without holding the plaintext workbook in memory. Since 2.0.1 that temp file
+    /// and the per-sheet temp files are themselves encrypted (AES-256-CTR, a one-time key held
+    /// only in memory), so no plaintext reaches the disk. Null (default) = no encryption.
     /// </summary>
     public EncryptionOptions? Encryption { get; set; }
 

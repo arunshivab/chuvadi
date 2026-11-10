@@ -103,7 +103,7 @@ namespace Chuvadi.Print.Remote
             if (File.Exists(_path))
             {
                 List<AgentTokenRecord>? records =
-                    JsonSerializer.Deserialize<List<AgentTokenRecord>>(File.ReadAllBytes(_path), RemoteProtocol.Json);
+                    JsonSerializer.Deserialize(File.ReadAllBytes(_path), RemoteProtocol.Json.ListAgentTokenRecord);
                 foreach (AgentTokenRecord r in records ?? new List<AgentTokenRecord>())
                     if (!string.IsNullOrEmpty(r.AgentId)) _records[r.AgentId] = r;
             }
@@ -141,7 +141,7 @@ namespace Chuvadi.Print.Remote
         private void Save()
         {
             byte[] json = JsonSerializer.SerializeToUtf8Bytes(
-                _records.Values.OrderBy(r => r.AgentId, StringComparer.Ordinal).ToList(), RemoteProtocol.Json);
+                _records.Values.OrderBy(r => r.AgentId, StringComparer.Ordinal).ToList(), RemoteProtocol.Json.ListAgentTokenRecord);
             AtomicFile.Write(_path, json);
         }
     }

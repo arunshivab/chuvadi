@@ -383,7 +383,8 @@ internal static class DrawingReader
     /// <summary>Resolves a relationship target relative to its source part ("../media/image1.png" from "/xl/drawings/drawing1.xml").</summary>
     internal static string ResolveTarget(string sourceUri, string target)
     {
-        if (target.StartsWith("/", StringComparison.Ordinal)) return target;
+        // Absolute: from the package root, dot segments removed (2.0.2, G1; see PartUri).
+        if (target.StartsWith("/", StringComparison.Ordinal)) return PartUri.Normalize(target);
         var parts = new List<string>(sourceUri.Substring(0, sourceUri.LastIndexOf('/')).Split('/', StringSplitOptions.RemoveEmptyEntries));
         foreach (var seg in target.Split('/'))
         {

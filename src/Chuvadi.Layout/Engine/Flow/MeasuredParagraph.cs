@@ -266,8 +266,8 @@ namespace Chuvadi.Layout.Engine.Flow
                             clusterEnd++;
                         }
                         int cp = GraphemeClusters.Decode(text, i, out _);
-                        FontSlot slot = SlotOf(cp);
-                        if (slot == FontSlot.Ascii && cp is ' ' or '\u00A0' && BetweenComplex(text, i))
+                        FontSlot slot = SlotOf(cp, piece.Format.ComplexScriptRun);
+                        if (piece.Format.ComplexScriptRun is null && slot == FontSlot.Ascii && cp is ' ' or '\u00A0' && BetweenComplex(text, i))
                         {
                             // A space between two complex-script words takes the complex-script font and size, as the
                             // words around it do (reference corpus d04: LibreOffice spaces Tamil words by the Tamil font).
@@ -570,6 +570,22 @@ namespace Chuvadi.Layout.Engine.Flow
             HighAnsi,
             EastAsian,
             Complex,
+        }
+
+        /// <summary>The font slot of a character under a run's <see cref="CharacterFormat.ComplexScriptRun"/> (R3).</summary>
+        internal static FontSlot SlotOf(int cp, bool? complexRun)
+        {
+            if (complexRun == true)
+            {
+                return FontSlot.Complex;
+            }
+            FontSlot s0 = SlotOf(cp);
+            if (complexRun == false && s0 == FontSlot.Complex)
+            {
+                UnicodeScript sc = UnicodeScripts.GetScript(cp);
+                return sc is UnicodeScript.Hebrew or UnicodeScript.Arabic or UnicodeScript.Syriac or UnicodeScript.Thaana ? FontSlot.Ascii : FontSlot.HighAnsi;
+            }
+            return s0;
         }
 
         internal static FontSlot SlotOf(int cp)

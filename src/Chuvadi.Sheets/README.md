@@ -177,8 +177,16 @@ foreach (var run in book.Sheets[0].FindCell(1, 1)?.RichText?.Runs ?? Array.Empty
   shorten it: a 3,000,000-spin file took about 13 s to open the first time on a test machine,
   then 9 ms once the scan result was cached. Both limits apply in full to the library's own
   work, and to streams that are already open or held in memory.
-- Wrapped in a Compound File Binary (CFB) container — same format Excel uses.
-  The reader supports DIFAT-extended containers (large encrypted files).
+- Wrapped in a Compound File Binary (CFB) container — same format Excel uses. Above about
+  7 MB the container is extended with DIFAT sectors ([MS-CFB] §2.5); the reader supports them too.
+  **Before 2.0.1 the writer did not write DIFAT sectors:** an encrypted file larger than about
+  7 MB was saved without an error but could not be opened by any reader. Save such files again.
+- An encrypted save to a stream writes from the stream's current position (bytes already in it
+  are kept), works on a non-seekable stream, and leaves the stream open (2.0.1).
+- Reading an encrypted file decrypts the whole package into memory before it is read, so memory
+  grows with the file size, and on a server with the number of encrypted files open at once.
+  `XlsxReaderOptions.MaxTotalUncompressedBytes` caps the encrypted file's size before it is
+  decrypted (`ForUntrustedInput()` sets 1 GiB); use it for untrusted input.
 - Wrong password and missing password both throw `XlsxPasswordRequiredException`. A damaged
   container or a failed integrity check throws `XlsxFormatException` (see Errors below).
 - Encryption is available on both the `Workbook` model and the streaming `XlsxWriter`
@@ -196,9 +204,18 @@ open-password (`EncryptionOptions`).
 ### Security notes for integrators
 
 - The streaming writer spools sheet XML to temp files (`chuvadi_sheets_*.tmp` under
-  the OS temp directory, or `XlsxWriterOptions.TempDirectory`); they are deleted on
-  dispose. Encrypted saves stage the plaintext package in a temp file that is deleted
-  after the encryption pass. Consider both if you handle highly sensitive data.
+  the OS temp directory, or `XlsxWriterOptions.TempDirectory`). Since 2.0.1 every temp file is
+  opened exclusively, readable by the current user only on Linux and macOS (mode 600), and
+  deleted when closed, including by the operating system if the process dies.
+- Since 2.0.1 an encrypted save (`Workbook.SaveTo(path, EncryptionOptions)` or
+  `XlsxWriterOptions.Encryption`) writes no plaintext to disk: the package spool and the sheet
+  spools are encrypted with AES-256-CTR under a one-time key held only in memory. (Before 2.0.1
+  the package was staged in plaintext and could survive a crash.)
+- Since 2.0.1 a save to a path writes `.<name>.<8 hex>.tmp` beside the target and replaces the
+  target only when the save succeeds; a failed or cancelled save, or a writer disposed without
+  `Save`, leaves an existing file untouched. A replaced file keeps its permissions (and on Windows
+  its attributes and security settings); a symbolic link is kept. A save to a stream leaves the
+  stream open.
 - Decompression caps for untrusted input are opt-in: `XlsxReaderOptions.MaxPartBytes` and
   the other read limits (`XlsxReaderOptions.ForUntrustedInput()`) for reading xlsx. Set them whenever
   the input source is not fully trusted. Defaults are unlimited for compatibility.
@@ -214,13 +231,13 @@ readers throw is one of these:
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part, a damaged relationship (`.rels`) entry, a truncated part, or (with a password given) a damaged encrypted container or a failed integrity check. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, ...). |
+| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, whether or not `[Content_Types].xml` declares it; since 2.0.2 also when it does not), a damaged relationship (`.rels`) entry, a truncated part, a text cell whose shared-string reference does not exist (2.0.2), or (with a password given) a damaged encrypted container or a failed integrity check. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, `FileNotFoundException`, ...), when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. Without a password the encrypted container is not read, so damage to it is found only once a password is supplied. |
 | `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. |
 | `InvalidDataException` | `MaxPartBytes` was exceeded (a limit, as in 1.x; not a malformed file). |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 | `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |
-| I/O exceptions (`FileNotFoundException`, `UnauthorizedAccessException`, ...) | Opening a path failed. |
+| I/O exceptions (`FileNotFoundException`, `UnauthorizedAccessException`, ...) | Opening a path failed (the file itself is missing or cannot be read). A part missing inside the package is `XlsxFormatException`. |
 
 This applies to `XlsxReader.Open`, `Workbook.Load`, row enumeration, `ReadLayout`,
 `ReadDrawings`, `ReadComments`, `ReadHeaderFooterPictures`, `ReadChartSheet`,

@@ -9,7 +9,8 @@ namespace Chuvadi.Layout.Documents
     /// <summary>
     /// One entry point for a file of unknown kind: the format is detected and the file goes to Chuvadi.Layout.Docs
     /// (.docx), Chuvadi.Layout.Sheets (.xlsx) or the engine (plain text). With <see cref="LayoutOptions.Password"/> an
-    /// encrypted Office file is decrypted and laid out as whichever it is. This is what the engine's
+    /// encrypted Office file is decrypted and laid out as whichever it is; without it, or with a wrong one,
+    /// <see cref="LayoutPasswordRequiredException"/> is thrown. This is what the engine's
     /// <see cref="DocumentLayout.Open(Stream, LayoutSourceFormat, LayoutOptions?, CancellationToken)"/> did before the
     /// importers became their own packages (D-115). Works in memory; writes nothing to disk; never touches the network.
     /// </summary>
@@ -21,7 +22,8 @@ namespace Chuvadi.Layout.Documents
         /// .docx documents go to <see cref="DocsLayout"/>, .xlsx workbooks to <see cref="SheetsLayout"/> (encrypted ones
         /// too, when <see cref="LayoutOptions.Password"/> is set), anything else is read as plain text.
         /// </summary>
-        /// <exception cref="LayoutFormatException">Not readable, the password is missing or wrong, or the format is not supported here (Markdown and HTML: Chuvadi.Layout.Markup).</exception>
+        /// <exception cref="LayoutPasswordRequiredException">An encrypted file and the password is missing (<see cref="LayoutPasswordRequiredException.PasswordGiven"/> false) or wrong (true).</exception>
+        /// <exception cref="LayoutFormatException">Not readable (a legacy .doc or .xls too: "The file could not be read: …", naming the old format), or the format is not supported here (Markdown and HTML: Chuvadi.Layout.Markup).</exception>
         /// <exception cref="LayoutLimitExceededException">The input exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static LaidOutDocument Open(Stream source, LayoutSourceFormat format = LayoutSourceFormat.Auto, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -33,7 +35,8 @@ namespace Chuvadi.Layout.Documents
         }
 
         /// <summary>Lays out a document held in memory (the array is read, never modified). As <see cref="Open(Stream, LayoutSourceFormat, LayoutOptions?, CancellationToken)"/>.</summary>
-        /// <exception cref="LayoutFormatException">Not readable, the password is missing or wrong, or the format is not supported here.</exception>
+        /// <exception cref="LayoutPasswordRequiredException">An encrypted file and the password is missing or wrong.</exception>
+        /// <exception cref="LayoutFormatException">Not readable (a legacy .doc or .xls too), or the format is not supported here.</exception>
         /// <exception cref="LayoutLimitExceededException">The input exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static LaidOutDocument Open(byte[] source, LayoutSourceFormat format = LayoutSourceFormat.Auto, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -43,9 +46,11 @@ namespace Chuvadi.Layout.Documents
             Shared.Check(nameof(LayoutLimits.MaxSourceBytes), options.Limits.MaxSourceBytes, source.LongLength);
             if (format == LayoutSourceFormat.Auto)
             {
-                if (IsOleCompound(source) && options.Password is not null)
+                if (IsOleCompound(source))
                 {
-                    // An encrypted Office file: what is inside is known only after decryption.
+                    // An encrypted Office file: what is inside is known only after decryption. A missing or wrong password
+                    // is LayoutPasswordRequiredException (D-253). A legacy .doc or .xls is a format error naming the
+                    // old format (D-293), never a password prompt.
                     return OpenEncrypted(source, options, cancellationToken);
                 }
                 format = DocumentLayout.Sniff(source);
@@ -79,7 +84,16 @@ namespace Chuvadi.Layout.Documents
             {
                 // Not a Word document: a workbook, or nothing readable (Chuvadi.Sheets says which).
             }
-            return SheetsLayout.Open(bytes, null, options, ct);
+            try
+            {
+                return SheetsLayout.Open(bytes, null, options, ct);
+            }
+            catch (LayoutFormatException ex) when (ex.InnerException is Chuvadi.Sheets.Model.XlsxFormatException sheets)
+            {
+                // Neither a document nor a workbook. Since D-293 this is how a legacy .doc or .xls arrives (the Sheets
+                // message names the old format), so the message says "file", not "workbook" (D-301).
+                throw new LayoutFormatException("The file could not be read: " + sheets.Message, sheets);
+            }
         }
 
         private static bool IsOleCompound(ReadOnlySpan<byte> b) => b.Length >= 8 && b[0] == 0xD0 && b[1] == 0xCF && b[2] == 0x11 && b[3] == 0xE0;

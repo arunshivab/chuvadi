@@ -186,9 +186,35 @@ public class GridPaginationTests
         LayoutOptions o = Flow.Options();
         o.Limits.MaxCellsPerSheet = 10;
         Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.Open(Grid.Book(Grid.Filled(5, 5)), o));
+        // D-291: a workbook opens whatever its page count; building a page at or past MaxPages throws.
         LayoutOptions p = Flow.Options();
         p.Limits.MaxPages = 1;
-        Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.Open(Grid.Book(Grid.Filled(200, 2)), p));
+        using LaidOutDocument doc = DocumentLayout.Open(Grid.Book(Grid.Filled(200, 2)), p);
+        Assert.True(doc.PageCount > 1);
+        Assert.NotNull(doc.GetPage(0));
+        LayoutLimitExceededException ex = Assert.Throws<LayoutLimitExceededException>(() => doc.GetPage(1));
+        Assert.Equal(nameof(LayoutLimits.MaxPages), ex.LimitName);
+        Assert.Equal(1, ex.Limit);
+        Assert.Equal(doc.PageCount, ex.Actual);
+        Assert.StartsWith("Sheet1!A1:", ex.Location, StringComparison.Ordinal);
+        Assert.Throws<LayoutLimitExceededException>(() => doc.GetPages().ToList());
+    }
+
+    [Fact]
+    public void A_workbook_of_more_pages_than_an_index_holds_is_refused_at_open()
+    {
+        // D-291: one cell per page across the whole grid is 16,384 × 1,048,576 pages, more than int.MaxValue.
+        GridSheet s = new GridSheet("Sheet1")
+        {
+            PageSetup = new GridPageSetup { PaperWidth = 120, PaperHeight = 100, MarginLeft = 10, MarginRight = 10, MarginTop = 10, MarginBottom = 10, Scale = 400 },
+        };
+        s.Set(0, 0, "A1");
+        s.Set(1_048_575, 16_383, "XFD1048576");
+        LayoutLimitExceededException ex = Assert.Throws<LayoutLimitExceededException>(() => DocumentLayout.Open(Grid.Book(s), Flow.Options()));
+        Assert.Equal(nameof(LayoutLimits.MaxPages), ex.LimitName);
+        Assert.Equal(int.MaxValue, ex.Limit);
+        Assert.True(ex.Actual > int.MaxValue);
+        Assert.Equal("Sheet1!A1:XFD1048576", ex.Location);
     }
 }
 
@@ -248,6 +274,57 @@ public class GridCellRenderingTests
         LayoutBox a1 = Grid.Cells(p).Single(c => c.Path == "S!A1");
         Assert.True(a1.Rect.Height > 45, "auto-fitted height " + a1.Rect.Height);
         Assert.True(Flow.Runs(p).Count(r => r.Font.FamilyName == "Carlito") >= 4);
+    }
+
+    private static GridCellStyle Sized(double size, string family = "Calibri") =>
+        new GridCellStyle { Font = new CharacterFormat { FontFamily = family, FontSize = size } };
+
+    private static double RowOf(LaidOutPage p, string path) => Grid.Cells(p).Single(c => c.Path == path).Rect.Height;
+
+    [Fact]
+    public void A_large_font_grows_a_row_without_stored_height()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Title", style: Sized(16));
+        s.Set(1, 0, "below");
+        LaidOutPage p = One(s);
+        // Carlito 16 pt: line 1.2207 em = 26.04 px, + 2 px = 28 px = 21 pt.
+        Assert.Equal(21, RowOf(p, "S!A1"), 6);
+        Assert.Equal(15, RowOf(p, "S!A2"), 6);
+    }
+
+    [Fact]
+    public void A_font_whose_line_fits_the_default_row_leaves_the_row_alone()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Twelve", style: Sized(12)); // 19.53 px line in a 20 px row
+        GridSheet t = new GridSheet("T") { DefaultRowHeight = 12.75 };
+        t.Set(0, 0, "Ten", style: Sized(10)); // 16.28 px line in a 17 px row
+        Assert.Equal(15, RowOf(One(s), "S!A1"), 6);
+        Assert.Equal(12.75, RowOf(One(t), "T!A1"), 6);
+    }
+
+    [Fact]
+    public void A_stored_row_height_is_kept_whatever_the_font()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Big", style: Sized(24));
+        s.Rows[0] = new GridRow(15);
+        Assert.Equal(15, RowOf(One(s), "S!A1"), 6);
+    }
+
+    [Fact]
+    public void A_merge_within_one_row_grows_the_row_and_a_taller_merge_does_not()
+    {
+        GridSheet s = new GridSheet("S");
+        s.Set(0, 0, "Title", style: Sized(16));
+        s.MergedRanges.Add(CellRange.Parse("A1:C1"));
+        s.Set(2, 0, "Tall", style: Sized(16));
+        s.Set(2, 1, "b");
+        s.MergedRanges.Add(CellRange.Parse("A3:A4"));
+        LaidOutPage p = One(s);
+        Assert.Equal(21, RowOf(p, "S!A1"), 6);
+        Assert.Equal(15, RowOf(p, "S!B3"), 6);
     }
 
     [Fact]

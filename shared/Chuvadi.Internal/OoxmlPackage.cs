@@ -255,6 +255,18 @@ internal sealed class OoxmlPackage : IDisposable
     }
 
     /// <summary>
+    /// True if the zip holds an entry for the part name (matched as in <see cref="HasPart"/>).
+    /// A part can be declared in [Content_Types].xml (<see cref="HasPart"/> is true) and still have
+    /// no entry; <see cref="OpenPart"/> then throws. Lets a reader tell a missing part from one it
+    /// cannot open without matching exception text.
+    /// </summary>
+    public bool HasEntry(string uri)
+    {
+        EnsureReadMode();
+        return _entries!.ContainsKey(NormalizePartName(uri));
+    }
+
+    /// <summary>
     /// The part with the given name (matched as in <see cref="HasPart"/>), or null. Its
     /// <see cref="PackagePart.Uri"/> is the name as the package declares it, which may differ
     /// in case from <paramref name="uri"/>.

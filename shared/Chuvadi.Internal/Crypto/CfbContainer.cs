@@ -14,8 +14,9 @@ namespace Chuvadi.Internal.Crypto;
 /// - Nested storages (parent/child via Child + Left/Right siblings).
 /// - MiniFAT for small streams (under MiniStreamCutoff bytes, default 4096).
 /// - Regular FAT for large streams.
-/// - Multiple FAT sectors (DIFAT inline up to 109 entries → ~7 MB of content with 512-byte
-///   sectors; the reader additionally follows chained DIFAT sectors for larger files).
+/// - Multiple FAT sectors: the header lists the first 109 (about 7 MB of content with 512-byte
+///   sectors); beyond that, the writer adds chained DIFAT sectors (MS-CFB 2.5, 2.6.3) and the
+///   reader follows them.
 /// - Red-black-ish tree directory layout (we use balanced left/right pointers).
 ///
 /// Sector model: Version 3 (512-byte sectors, 64-byte mini sectors). This matches Excel's
@@ -80,6 +81,9 @@ internal static class CfbContainer
     /// Writes a CFB file with the given root-level nodes. The function constructs the directory
     /// tree, allocates sectors for streams (regular FAT or MiniFAT based on size), builds the
     /// FATs, and writes the file in one pass.
+    /// The file is written strictly sequentially, starting at the stream's current position: the
+    /// writer never seeks, so <paramref name="output"/> may hold data already (it is kept) and need
+    /// not be seekable.
     /// </summary>
     public static void Write(Stream output, IReadOnlyList<Node> rootChildren)
     {
@@ -134,17 +138,11 @@ internal static class CfbContainer
         int directoryStart = currentSector;
         currentSector += directorySectors;
 
-        // FAT sectors: 128 entries each. We need one entry per sector in the entire file.
-        int fatSectors = 0;
-        int totalSectors;
-        while (true)
-        {
-            int needed = (currentSector + fatSectors + 127) / 128;
-            if (needed == fatSectors) break;
-            fatSectors = needed;
-        }
+        // FAT sectors: 128 entries each. We need one entry per sector in the entire file,
+        // including the FAT sectors themselves and any DIFAT sectors (see SizeFat).
+        var (fatSectors, difatSectors) = SizeFat(currentSector);
         int fatStart = currentSector;
-        totalSectors = currentSector + fatSectors;
+        int totalSectors = currentSector + fatSectors + difatSectors;
 
         // 5. Set root entry's startSector to the mini-stream container.
         //    The mini-stream container is appended at the end of the regular stream content.
@@ -175,15 +173,9 @@ internal static class CfbContainer
             fatStart += delta;
             currentSector += delta;
             // Recompute FAT sector count with the new total.
-            fatSectors = 0;
-            while (true)
-            {
-                int needed = (currentSector + fatSectors + 127) / 128;
-                if (needed == fatSectors) break;
-                fatSectors = needed;
-            }
+            (fatSectors, difatSectors) = SizeFat(currentSector);
             fatStart = currentSector;
-            totalSectors = currentSector + fatSectors;
+            totalSectors = currentSector + fatSectors + difatSectors;
         }
 
         // Update root entry's startSector and size now that we know them.
@@ -231,8 +223,10 @@ internal static class CfbContainer
             fat[directoryStart + j] = last ? EndOfChain : (uint)(directoryStart + j + 1);
         }
 
-        // Mark FAT sectors themselves.
+        // Mark FAT sectors themselves, and the DIFAT sectors that follow them.
         for (int j = 0; j < fatSectors; j++) fat[fatStart + j] = FatSector;
+        int difatStart = fatStart + fatSectors;
+        for (int j = 0; j < difatSectors; j++) fat[difatStart + j] = DifatSectorMarker;
 
         // 7. Build the MiniFAT.
         var miniFat = new uint[miniFatSectors * 128];
@@ -248,17 +242,10 @@ internal static class CfbContainer
             }
         }
 
-        // 8. Write the file.
-        output.Position = 0;
+        // 8. Write the file, in order, from the stream's current position (never seeking).
+        //    The header is exactly one sector.
         WriteHeader(output, fatSectors, fatStart, directorySectors, directoryStart,
-            miniFatSectors, miniFatStart, miniContainerStartSector);
-
-        // Pad header to sector boundary.
-        if (output.Position < SectorSize)
-        {
-            var pad = new byte[SectorSize - (int)output.Position];
-            output.Write(pad, 0, pad.Length);
-        }
+            miniFatSectors, miniFatStart, miniContainerStartSector, difatSectors, difatStart);
 
         // Write content sectors (regular streams + mini-stream container, padded).
         var regularBytes = ctx.RegularStreamContent.ToArray();
@@ -287,6 +274,22 @@ internal static class CfbContainer
         for (int i = 0; i < fat.Length; i++)
             WriteUInt32(fatBytes, i * 4, fat[i]);
         output.Write(fatBytes, 0, fatBytes.Length);
+
+        // Write DIFAT sectors (only when there are more than 109 FAT sectors): each lists the
+        // next 127 FAT sector numbers, then the number of the next DIFAT sector.
+        if (difatSectors > 0)
+        {
+            var difatBytes = new byte[SectorSize];
+            int fatIndex = HeaderDifatEntries;
+            for (int d = 0; d < difatSectors; d++)
+            {
+                for (int i = 0; i < DifatEntriesPerSector; i++, fatIndex++)
+                    WriteUInt32(difatBytes, i * 4, fatIndex < fatSectors ? (uint)(fatStart + fatIndex) : Free);
+                WriteUInt32(difatBytes, DifatEntriesPerSector * 4,
+                    d == difatSectors - 1 ? EndOfChain : (uint)(difatStart + d + 1));
+                output.Write(difatBytes, 0, difatBytes.Length);
+            }
+        }
 
         output.Flush();
     }
@@ -511,9 +514,36 @@ internal static class CfbContainer
         WriteUInt64(dirBytes, 0 * DirectoryEntrySize + 120, size);
     }
 
+    /// <summary>FAT sector numbers held in the header (MS-CFB 2.2).</summary>
+    private const int HeaderDifatEntries = 109;
+
+    /// <summary>FAT sector numbers held in one DIFAT sector; its last entry links to the next.</summary>
+    private const int DifatEntriesPerSector = SectorSize / 4 - 1;
+
+    /// <summary>
+    /// FAT and DIFAT sector counts for a file whose other sectors number
+    /// <paramref name="otherSectors"/>. The FAT has an entry for every sector, its own and the
+    /// DIFAT sectors included; DIFAT sectors are needed only beyond the header's 109 entries.
+    /// Without DIFAT sectors this is exactly the earlier calculation, so such files are unchanged.
+    /// </summary>
+    private static (int Fat, int Difat) SizeFat(int otherSectors)
+    {
+        int fat = 0, difat = 0;
+        while (true)
+        {
+            int neededFat = (otherSectors + fat + difat + 127) / 128;
+            int neededDifat = neededFat > HeaderDifatEntries
+                ? (neededFat - HeaderDifatEntries + DifatEntriesPerSector - 1) / DifatEntriesPerSector
+                : 0;
+            if (neededFat == fat && neededDifat == difat) return (fat, difat);
+            fat = neededFat;
+            difat = neededDifat;
+        }
+    }
+
     private static void WriteHeader(Stream output, int numFatSectors, int firstFatSector,
         int numDirSectors, int firstDirSector, int numMiniFatSectors, int firstMiniFatSector,
-        uint firstMiniContainerSector)
+        uint firstMiniContainerSector, int numDifatSectors, int firstDifatSector)
     {
         // Reuse internal helpers to write header fields in one pass.
         var hdr = new byte[SectorSize];
@@ -532,12 +562,13 @@ internal static class CfbContainer
         WriteUInt32(hdr, 56, MiniStreamCutoff);
         WriteUInt32(hdr, 60, numMiniFatSectors > 0 ? (uint)firstMiniFatSector : EndOfChain);
         WriteUInt32(hdr, 64, (uint)numMiniFatSectors);
-        WriteUInt32(hdr, 68, EndOfChain);  // First DIFAT sector — none (we fit in header DIFAT)
-        WriteUInt32(hdr, 72, 0);  // DIFAT sector count
+        // First DIFAT sector and DIFAT sector count: none while the header's 109 entries suffice.
+        WriteUInt32(hdr, 68, numDifatSectors > 0 ? (uint)firstDifatSector : EndOfChain);
+        WriteUInt32(hdr, 72, (uint)numDifatSectors);
 
-        // DIFAT (109 entries starting at offset 76)
-        for (int i = 0; i < 109; i++) WriteUInt32(hdr, 76 + i * 4, Free);
-        for (int i = 0; i < numFatSectors && i < 109; i++)
+        // Header DIFAT (109 entries starting at offset 76); the rest are in DIFAT sectors.
+        for (int i = 0; i < HeaderDifatEntries; i++) WriteUInt32(hdr, 76 + i * 4, Free);
+        for (int i = 0; i < numFatSectors && i < HeaderDifatEntries; i++)
             WriteUInt32(hdr, 76 + i * 4, (uint)(firstFatSector + i));
 
         output.Write(hdr, 0, hdr.Length);
@@ -546,12 +577,13 @@ internal static class CfbContainer
     // ---- Reader -----------------------------------------------------------------
 
     /// <summary>
-    /// Reads a CFB file and returns a flat dictionary of stream name → bytes.
+    /// Reads the CFB header, the DIFAT, the FAT and the directory chain, and nothing else: no stream body is
+    /// loaded. Shared by <see cref="Read"/> and <see cref="ListStreamNames"/>.
     /// </summary>
-    public static Dictionary<string, byte[]> Read(Stream input)
+    private static void LoadFatAndDirectory(Stream input, out byte[] headerBytes, out List<uint> fat, out byte[] dirData)
     {
         input.Position = 0;
-        var headerBytes = new byte[SectorSize];
+        headerBytes = new byte[SectorSize];
         input.ReadExactly(headerBytes, 0, SectorSize);
 
         for (int i = 0; i < HeaderSignature.Length; i++)
@@ -559,8 +591,6 @@ internal static class CfbContainer
                 throw new InvalidDataException("Not a CFB file (signature mismatch).");
 
         uint firstDirSector = ReadUInt32(headerBytes, 48);
-        uint firstMiniFatSector = ReadUInt32(headerBytes, 60);
-        uint miniStreamCutoff = ReadUInt32(headerBytes, 56);
         uint firstDifatSector = ReadUInt32(headerBytes, 68);
         uint difatSectorCount = ReadUInt32(headerBytes, 72);
 
@@ -591,7 +621,7 @@ internal static class CfbContainer
         }
 
         // Read FAT.
-        var fat = new List<uint>();
+        fat = new List<uint>();
         foreach (var fatSectorIdx in difat)
         {
             input.Position = (long)SectorSize + (long)fatSectorIdx * SectorSize;
@@ -601,7 +631,101 @@ internal static class CfbContainer
         }
 
         // Read directory chain.
-        var dirData = ReadFatChain(input, fat, firstDirSector);
+        dirData = ReadFatChain(input, fat, firstDirSector);
+    }
+
+    private const int MaxListedDirectorySectors = 64;
+    private const int MaxListedDifatHops = 256;
+
+    /// <summary>
+    /// Returns the names of the streams in a CFB file, read from the directory only: no stream is loaded and the
+    /// FAT is not read in full. Only the header, the directory sectors and the few FAT sectors that the directory
+    /// chain passes through are read, so the cost is a handful of reads whatever the file size (the caller's
+    /// stream may be slow and this call has no cancellation check). Throws <see cref="InvalidDataException"/>
+    /// or <see cref="EndOfStreamException"/> when the file cannot be read this way, including when the directory
+    /// is longer than <see cref="MaxListedDirectorySectors"/> sectors.
+    /// </summary>
+    public static HashSet<string> ListStreamNames(Stream input)
+    {
+        input.Position = 0;
+        var header = new byte[SectorSize];
+        input.ReadExactly(header, 0, SectorSize);
+        for (int i = 0; i < HeaderSignature.Length; i++)
+            if (header[i] != HeaderSignature[i])
+                throw new InvalidDataException("Not a CFB file (signature mismatch).");
+
+        uint cur = ReadUInt32(header, 48);
+        uint nextDifat = ReadUInt32(header, 68);
+        var difatSectors = new List<byte[]>();          // DIFAT sectors loaded so far, in chain order
+        var fatSectors = new Dictionary<uint, byte[]>(); // FAT sector number -> its bytes
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var sector = new byte[SectorSize];
+
+        for (int hop = 0; cur < 0xFFFFFFF0; hop++)
+        {
+            if (hop >= MaxListedDirectorySectors)
+                throw new InvalidDataException("The CFB directory is too long to list.");
+
+            input.Position = (long)SectorSize + (long)cur * SectorSize;
+            input.ReadExactly(sector, 0, SectorSize);
+            for (int off = 0; off + DirectoryEntrySize <= SectorSize; off += DirectoryEntrySize)
+            {
+                if (sector[off + 66] != TypeStream) continue;
+                int nameLen = ReadUInt16(sector, off + 64);
+                if (nameLen <= 2 || nameLen > 64) continue;
+                names.Add(Encoding.Unicode.GetString(sector, off, nameLen - 2));
+            }
+
+            // Next directory sector: FAT entry 'cur', held in FAT sector cur / 128.
+            uint fatIndex = cur / (SectorSize / 4);
+            if (!fatSectors.TryGetValue(fatIndex, out var fatBuf))
+            {
+                uint fatSectorNumber;
+                if (fatIndex < HeaderDifatEntries)
+                {
+                    fatSectorNumber = ReadUInt32(header, 76 + (int)fatIndex * 4);
+                }
+                else
+                {
+                    // Entry fatIndex - 109 lives in DIFAT sector (that / 127), at slot (that % 127).
+                    uint rel = fatIndex - HeaderDifatEntries;
+                    int which = (int)(rel / (SectorSize / 4 - 1));
+                    int slot = (int)(rel % (SectorSize / 4 - 1));
+                    if (which >= MaxListedDifatHops)
+                        throw new InvalidDataException("The CFB DIFAT is too long to follow.");
+                    while (difatSectors.Count <= which)
+                    {
+                        if (nextDifat >= 0xFFFFFFF0)
+                            throw new InvalidDataException("The CFB DIFAT chain ends early.");
+                        var d = new byte[SectorSize];
+                        input.Position = (long)SectorSize + (long)nextDifat * SectorSize;
+                        input.ReadExactly(d, 0, SectorSize);
+                        difatSectors.Add(d);
+                        nextDifat = ReadUInt32(d, SectorSize - 4);
+                    }
+                    fatSectorNumber = ReadUInt32(difatSectors[which], slot * 4);
+                }
+                if (fatSectorNumber >= 0xFFFFFFF0)
+                    throw new InvalidDataException("The CFB FAT is incomplete.");
+                fatBuf = new byte[SectorSize];
+                input.Position = (long)SectorSize + (long)fatSectorNumber * SectorSize;
+                input.ReadExactly(fatBuf, 0, SectorSize);
+                fatSectors[fatIndex] = fatBuf;
+            }
+            cur = ReadUInt32(fatBuf, (int)(cur % (SectorSize / 4)) * 4);
+        }
+        return names;
+    }
+
+    /// <summary>
+    /// Reads a CFB file and returns a flat dictionary of stream name → bytes.
+    /// </summary>
+    public static Dictionary<string, byte[]> Read(Stream input)
+    {
+        LoadFatAndDirectory(input, out var headerBytes, out var fat, out var dirData);
+
+        uint firstMiniFatSector = ReadUInt32(headerBytes, 60);
+        uint miniStreamCutoff = ReadUInt32(headerBytes, 56);
 
         // Read MiniFAT (if present).
         var miniFat = new List<uint>();

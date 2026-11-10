@@ -230,14 +230,15 @@ public class SheetsImportTests
     {
         // Sample(), encrypted with password "secret" (Fixtures/encrypted/sample-secret.xlsx), read from memory only.
         byte[] enc = EncryptedFixtures.Open("sample-secret.xlsx").ToArray();
-        LayoutFormatException ex = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(enc), null, Options()));
+        LayoutPasswordRequiredException ex = Assert.Throws<LayoutPasswordRequiredException>(() => SheetsLayout.Open(new MemoryStream(enc), null, Options()));
         Assert.Contains("Password", ex.Message, StringComparison.Ordinal);
+        Assert.False(ex.PasswordGiven);
         LayoutOptions o = Options();
         o.Password = "secret";
         using LaidOutDocument doc = SheetsLayout.Open(new MemoryStream(enc), null, o);
         Assert.Contains("Schedule of Charges", doc.GetPage(0).GetText(), StringComparison.Ordinal);
         o.Password = "wrong";
-        Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(enc), null, o));
+        Assert.True(Assert.Throws<LayoutPasswordRequiredException>(() => SheetsLayout.Open(new MemoryStream(enc), null, o)).PasswordGiven);
     }
 
     [Fact]
@@ -290,8 +291,9 @@ public class SheetsImportTests
         Assert.IsType<XlsxFormatException>(ex.InnerException);
 
         // Without a password the container is not read: still the password message.
-        LayoutFormatException none = Assert.Throws<LayoutFormatException>(() => SheetsLayout.Open(new MemoryStream(cut), null, Options()));
-        Assert.Contains("Set LayoutOptions.Password", none.Message, StringComparison.Ordinal);
+        LayoutPasswordRequiredException none = Assert.Throws<LayoutPasswordRequiredException>(() => SheetsLayout.Open(new MemoryStream(cut), null, Options()));
+        Assert.Contains("set LayoutOptions.Password", none.Message, StringComparison.Ordinal);
+        Assert.False(none.PasswordGiven);
         Assert.IsType<XlsxPasswordRequiredException>(none.InnerException);
     }
 

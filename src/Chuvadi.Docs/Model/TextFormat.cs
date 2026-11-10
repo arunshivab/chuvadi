@@ -9,9 +9,11 @@ namespace Chuvadi.Docs.Model;
 ///
 /// <para><b>Scripts and font slots.</b> Word picks a font per character from four slots:
 /// <see cref="AsciiFont"/> (basic Latin), <see cref="HighAnsiFont"/> (other Latin/Greek/
-/// Cyrillic), <see cref="EastAsiaFont"/> (CJK) and <see cref="ComplexScriptFont"/> (Indic —
-/// Tamil, Devanagari, Malayalam… — plus Arabic, Hebrew, Thai). Complex-script text also takes
-/// its bold, italic and size from separate properties. <see cref="Font"/> sets the two Latin
+/// Cyrillic), <see cref="EastAsiaFont"/> (CJK) and <see cref="ComplexScriptFont"/>. Word uses
+/// <see cref="ComplexScriptFont"/> only for a run marked as complex script
+/// (<see cref="ComplexScript"/> = true, w:cs); for Indic text such as Tamil or Devanagari, either
+/// mark the run with <see cref="ComplexScript"/> or use <see cref="FontForAllScripts"/>, which sets
+/// every slot. Complex-script text also takes its bold, italic and size from separate properties. <see cref="Font"/> sets the two Latin
 /// slots, exactly like Word's Font box; <see cref="FontForAllScripts"/> sets all four.
 /// With <see cref="MirrorToComplexScript"/> (the default for formats you build),
 /// <see cref="Bold"/>, <see cref="Italic"/> and <see cref="SizePt"/> also apply to complex-script
@@ -99,8 +101,10 @@ public sealed class TextFormat
     public string? EastAsiaFont { get => _eastAsiaFont; init => _eastAsiaFont = value; }
 
     /// <summary>
-    /// Font for complex-script characters — Indic scripts (Tamil, Devanagari, Malayalam,
-    /// Telugu, Kannada, Bengali, Gujarati…), Arabic, Hebrew, Thai (w:rFonts/@w:cs). Null = inherit.
+    /// Font for complex-script text (w:rFonts/@w:cs). Word uses it only for a run marked as
+    /// complex script (<see cref="ComplexScript"/> = true, w:cs). To be sure Indic text such as
+    /// Tamil or Devanagari gets this font, set <see cref="ComplexScript"/> = true, or use
+    /// <see cref="FontForAllScripts"/>. Null = inherit.
     /// </summary>
     public string? ComplexScriptFont { get => _complexScriptFont; init => _complexScriptFont = value; }
 
@@ -138,7 +142,11 @@ public sealed class TextFormat
     /// <summary>Size in points for complex-script text (w:szCs). 0 = unset (mirrors <see cref="SizePt"/> when <see cref="MirrorToComplexScript"/>).</summary>
     public double SizeComplexScriptPt { get; init; }
 
-    /// <summary>Force the run to be treated as complex script (w:cs). Null = inherit.</summary>
+    /// <summary>
+    /// Force the run to be treated as complex script (w:cs). Word then uses
+    /// <see cref="ComplexScriptFont"/> and the complex-script bold, italic and size for it.
+    /// Null = inherit.
+    /// </summary>
     public bool? ComplexScript { get; init; }
 
     /// <summary>Right-to-left run (w:rtl), for Arabic/Hebrew text. Null = inherit.</summary>

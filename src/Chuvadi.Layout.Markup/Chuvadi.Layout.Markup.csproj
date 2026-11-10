@@ -9,6 +9,10 @@
     <AssemblyName>Chuvadi.Layout.Markup</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Markup</Product>
     <Description>Markdown (CommonMark + GFM) and HTML print and export for Chuvadi.Layout: turns Chuvadi.Markup's Markdown AST and sanitized HTML DOM (mail and pages, with inline CSS) into Chuvadi.Layout's flow document, so they paginate into the same page display list as docx and text (SVG, PNG and PDF through Chuvadi.Layout.Pdf). Pure BCL; an optional add-on so the core layout package does not depend on Chuvadi.Markup.</Description>

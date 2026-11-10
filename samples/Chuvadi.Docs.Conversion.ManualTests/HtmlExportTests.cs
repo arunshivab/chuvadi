@@ -67,7 +67,7 @@ public static class HtmlExportTests
             AssertNotContains(labels, "p9", "cut after max blocks");
         });
 
-        Check("html preview: self-contained and the Anjal sanitizer removes nothing from it", () =>
+        Check("html preview: self-contained and the default sanitizer policy removes nothing from it", () =>
         {
             var d = MarkdownExportTests.Sample();
             d.AddParagraph().Hyperlink("evil", "javascript:alert(1)");

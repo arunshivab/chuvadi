@@ -1,7 +1,26 @@
 # Chuvadi.Layout.Sheets — Changelog
 
-## 0.1.0 (unreleased)
+## Unreleased
 
+- An encrypted workbook opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a
+  `LayoutFormatException`; D-253), with `PasswordGiven` false or true. Messages: "The workbook is encrypted: set
+  LayoutOptions.Password. …" and "The password for this workbook is wrong: …", each followed by the Chuvadi.Sheets
+  message. Before, a plain `LayoutFormatException` ending "Set LayoutOptions.Password.". A damaged encrypted workbook
+  read with a password is still "The workbook could not be read: …" (D-167). A legacy .xls (or any OLE file without
+  the encryption streams) is never this exception: with the shared decryptor of D-293 it is "The workbook could not
+  be read: …", naming the old format, with or without a password.
+- README: large workbooks open at the cost of their page bands; `MaxPages` applies to pages built or exported; the
+  printed range follows Excel (D-291, engine change in Chuvadi.Layout). Tests: 25 Excel-measured sheets
+  (Fixtures/measured), the A1 + XFD1048576 workbook, and every corpus page against recorded hashes.
+
+## 0.1.0 (2026-11-09)
+
+- Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,
+  D-254).
+- On Chuvadi.Sheets 2.0.2 (B12, B13): a damaged workbook with a missing workbook or worksheet part (G2), or with a
+  shared-string reference that does not exist (F3), now raises `LayoutFormatException` ("The workbook could not be read:
+  …", `XlsxFormatException` inside). Before, it opened with blank cells or the index shown as text. No code change in
+  Layout.Sheets; the README says so.
 - First release as its own package (D-115): the xlsx importer of Chuvadi.Layout 0.1.0, on Chuvadi.Sheets 2.0.0.
   Names (D-121): `SheetsLayout.Open` (was `DocumentLayout.OpenXlsx` and
   `DocumentLayout.Open(Chuvadi.Sheets.Excel.Workbook, …)`), `SheetsImporter` (was `XlsxImporter`),

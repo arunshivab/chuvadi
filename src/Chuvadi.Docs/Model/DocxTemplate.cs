@@ -27,7 +27,7 @@ namespace Chuvadi.Docs.Model;
 ///
 /// // Text + images:
 /// DocxTemplate.Fill("template.docx", "out.docx",
-///     textValues:  new Dictionary&lt;string,string&gt; { ["Name"] = "Arun" },
+///     textValues:  new Dictionary&lt;string,string&gt; { ["Name"] = "Jane" },
 ///     imageValues: new Dictionary&lt;string,ImageSpec&gt;
 ///     {
 ///         ["Logo"] = ImageSpec.FromFile("logo.png", widthPt: 80, heightPt: 40),
@@ -127,7 +127,7 @@ public static class DocxTemplate
         byte[] filled;
         using (var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             filled = FillToBytes(input, data, options, cancellationToken);
-        File.WriteAllBytes(outputPath, filled);
+        PathSave.Write(outputPath, stream => stream.Write(filled, 0, filled.Length));   // D-206: replace only on success
     }
 
     /// <summary>
@@ -280,8 +280,14 @@ public static class DocxTemplate
         public required int DrawingId { get; init; }
     }
 
-    /// <summary>Read limits and cancellation for one Fill call, threaded to every part read.</summary>
-    private sealed record FillLimits(DocxReaderOptions Options, System.Threading.CancellationToken Ct);
+    /// <summary>
+    /// Read limits, cancellation and the element count (MaxElements, D-281) for one template call, threaded to
+    /// every part read, so the parts of one call share one count.
+    /// </summary>
+    private sealed record FillLimits(DocxReaderOptions Options, System.Threading.CancellationToken Ct)
+    {
+        public ElementBudget? Budget { get; } = Options.NewBudget();
+    }
 
     private static void FillPackage(Stream packageIn, Stream packageOut, TemplateData data, TemplateOptions options, FillLimits lim)
     {
@@ -697,7 +703,7 @@ public static class DocxTemplate
         var xml = new XmlDocument { PreserveWhitespace = true };
         using var s = GuardedPartStream.Wrap(entry.Open(), lim.Options.MaxPartBytes, lim.Ct, entry.FullName);
         // Whitespace and comments are preserved: rewritten parts must keep everything else intact.
-        using var reader = GuardedXmlReader.Create(s, lim.Options.MaxXmlDepth, lim.Ct, entry.FullName,
+        using var reader = GuardedXmlReader.Create(s, lim.Options.MaxXmlDepth, lim.Budget, lim.Ct, entry.FullName,
             ignoreWhitespace: false, ignoreComments: false);
         xml.Load(reader);
         return xml;

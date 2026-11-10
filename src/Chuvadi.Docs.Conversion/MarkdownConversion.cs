@@ -13,8 +13,8 @@ namespace Chuvadi.Docs.Conversion;
 
 /// <summary>
 /// Markdown (CommonMark with GFM tables, task lists, strikethrough and autolinks) to and from a
-/// <see cref="Document"/>. Parsing and writing use Chuvadi.Markup, so the Markdown is read exactly
-/// as cmark-gfm reads it, and what is written parses back to the same structure.
+/// <see cref="Document"/>. Parsing and writing use Chuvadi.Markup, so the Markdown is read as the
+/// CommonMark 0.31.2 and GFM 0.29 specifications describe, and what is written parses back to the same structure.
 /// <code>
 /// var doc = MarkdownConversion.Import(File.ReadAllText("README.md"));
 /// doc.SaveTo("README.docx");

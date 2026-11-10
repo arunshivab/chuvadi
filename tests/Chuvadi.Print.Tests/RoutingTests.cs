@@ -127,6 +127,32 @@ public class PrintRouterTests
     }
 
     [Fact]
+    public void Missing_appearances_keep_the_pdf_from_going_as_is()
+    {
+        using var printer = new FakeIppPrinter();
+        using PrintRouter router = IppRoutes.CreateRouter(printer.Uri);
+        var sink = new MemoryAuditSink();
+        PrintJob job = Job(sink);
+        job.Options.DocumentFonts = FontEmbedding.NeedsGeneratedAppearances;
+        PrintRouteResult result = router.Print(job);
+        Assert.Equal(PrintRouteKind.Raster, result.Route);
+        Assert.Equal(FontEmbedding.NeedsGeneratedAppearances, result.Decision.Fonts);
+        Assert.Equal("Raster (fallback: PdfAsIs: form fields or comments need appearances generated)", sink.Events[0].Route);
+    }
+
+    [Fact]
+    public void An_inspector_reporting_missing_appearances_keeps_the_pdf_from_going_as_is()
+    {
+        using var printer = new FakeIppPrinter();
+        using PrintRouter router = IppRoutes.CreateRouter(printer.Uri);
+        router.FontInspector = new FixedInspector(FontEmbedding.NeedsGeneratedAppearances);
+        PrintRouteResult result = router.Print(Job(new MemoryAuditSink()));
+        Assert.Equal(PrintRouteKind.Raster, result.Route);
+        Assert.Equal(3, (int)FontEmbedding.NeedsGeneratedAppearances); // a new value; the existing three keep theirs
+        Assert.Equal((0, 1, 2), ((int)FontEmbedding.Unknown, (int)FontEmbedding.AllEmbedded, (int)FontEmbedding.NotAllEmbedded));
+    }
+
+    [Fact]
     public void Only_an_explicit_application_pdf_counts()
     {
         using var printer = new FakeIppPrinter(a => a.Set("document-format-supported",
@@ -240,8 +266,9 @@ public class PrintRouterTests
     [Fact]
     public void Unreachable_ipp_printer_is_a_skip_reason_not_a_crash()
     {
-        int port;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0)) { probe.Start(); port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop(); }
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
+        using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
+        int port = closed.Port;
         using PrintRouter router = IppRoutes.CreateRouter("ipp://127.0.0.1:" + port + "/ipp/print", new IppClientOptions { Timeout = TimeSpan.FromSeconds(5) });
         PrintRouteResult result = router.Print(Job(new MemoryAuditSink()).WithFontsEmbedded());
         Assert.Equal(PrintJobStatus.Failed, result.Result.Status);
@@ -357,8 +384,9 @@ public class IppCapabilityCacheTests
     [Fact]
     public void A_failed_read_is_not_cached()
     {
-        int port;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0)) { probe.Start(); port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop(); }
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
+        using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
+        int port = closed.Port;
         var cache = new IppCapabilityCache();
         using var client = new IppClient("ipp://127.0.0.1:" + port + "/ipp/print", new IppClientOptions { Timeout = TimeSpan.FromSeconds(5) });
         Assert.Throws<IppException>(() => cache.Get(client));
@@ -447,8 +475,9 @@ public class RawTargetTests
     [Fact]
     public void Refused_connection_is_an_io_exception()
     {
-        int port;
-        using (var probe = new TcpListener(IPAddress.Loopback, 0)) { probe.Start(); port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop(); }
+        // Closed (a connection is refused at once), and no fake in this test run is given it meanwhile.
+        using ReservedPort closed = LoopbackPorts.ReserveClosedTcpPort();
+        int port = closed.Port;
         var target = new RawSocketTarget("127.0.0.1", port);
         IOException ex = Assert.Throws<IOException>(() => target.Send(new byte[] { 1, 2, 3 }, null, CancellationToken.None));
         Assert.Contains("socket://127.0.0.1:" + port, ex.Message);

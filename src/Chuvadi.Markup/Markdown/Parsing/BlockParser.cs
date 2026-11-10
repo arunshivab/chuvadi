@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -7,1044 +6,532 @@ using Chuvadi.Markup.Internal;
 namespace Chuvadi.Markup.Markdown.Parsing
 {
     /// <summary>
-    /// CommonMark block structure parser (the two-phase line algorithm of the reference implementation)
-    /// with the GFM table and task list extensions.
+    /// Phase 1 of parsing: reads the input line by line and builds the block structure
+    /// (CommonMark "Appendix: A parsing strategy", "Phase 1: block structure").
     /// </summary>
-    internal sealed class BlockParser
+    internal sealed partial class BlockParser
     {
-        private const int TabStop = 4;
-        private const int CodeIndent = 4;
-
+        private readonly string _src;
+        private readonly MarkdownDocument _document;
         private readonly MarkdownOptions _options;
-        private readonly MarkupLimits _limits;
-        private readonly NodeBudget _budget;
-        private CancellationPoll _poll;
-        private readonly Dictionary<string, LinkReferenceDefinition> _refs;
-        private int _tableCells;
+        private readonly LineCursor _line = new LineCursor();
+        private readonly OpenBlock _root;
+        private readonly NodeBudget _nodes;
+        private readonly DefinitionBudget _definitions;
+        private readonly int _maxDepth;
+        private readonly CancellationToken _cancel;
 
-        private readonly BlockNode _root;
-        private BlockNode _current;
+        /// <summary>Raw inline content of every kept paragraph and heading, for the inline phase.</summary>
+        public List<(MarkdownBlock Block, InlineContent Content)> InlineBlocks { get; } = new();
 
-        private string _line = string.Empty;
-        private int _lineStart;
-        private int _lineNumber;
-        private int _offset, _column, _firstNonspace, _firstNonspaceColumn, _indent;
-        private bool _blank, _partiallyConsumedTab;
-        private int _thematicBreakKillPos;
-
-        public BlockParser(MarkdownOptions options, NodeBudget budget, CancellationToken ct, Dictionary<string, LinkReferenceDefinition> refs)
+        public BlockParser(string source, MarkdownOptions options, MarkdownDocument document, CancellationToken cancel)
         {
+            _src = source;
             _options = options;
-            _limits = options.Limits;
-            _budget = budget;
-            _poll = new CancellationPoll(ct);
-            _refs = refs;
-            _root = new BlockNode(BlockType.Document, null, 0, 1);
-            _current = _root;
+            _document = document;
+            _cancel = cancel;
+            _nodes = new NodeBudget(options.Limits.MaxNodes);
+            _definitions = new DefinitionBudget(options.Limits.MaxLinkReferenceDefinitions);
+            _maxDepth = options.Limits.MaxNestingDepth;
+            _root = new OpenBlock(BlockKind.Document, document, null);
         }
 
-        public BlockNode Parse(string text)
+        public NodeBudget Nodes => _nodes;
+
+        public void Run()
         {
-            int pos = 0;
-            int len = text.Length;
-            while (pos < len)
+            var poll = new CancellationPoll(_cancel);
+            int start = 0;
+            int lineNumber = 0;
+            // TRACE R-MD-0047
+            while (start < _src.Length)
             {
-                _poll.Check();
-                int eol = pos;
-                while (eol < len && text[eol] != '\n' && text[eol] != '\r') eol++;
-                string line = text.Substring(pos, eol - pos);
-                if (line.IndexOf('\0') >= 0) line = line.Replace('\0', '�');
-                ProcessLine(line, pos);
-                pos = eol;
-                if (pos < len && text[pos] == '\r') pos++;
-                if (pos < len && text[pos] == '\n') pos++;
+                poll.Tick();
+                _line.Load(_src, start, lineNumber);
+                ProcessLine();
+                start = _line.NextLineStart;
+                lineNumber++;
             }
-            while (_current is not null && _current != _root) _current = Finalize(_current)!;
-            Finalize(_root);
-            return _root;
+            // TRACE R-MD-0048
+            CloseBelow(_root);
         }
 
-        // ---- line state ----
-
-        private char Peek(int i) => i < _line.Length ? _line[i] : '\0';
-
-        private static bool IsSpaceOrTab(char c) => c == ' ' || c == '\t';
-
-        private bool IsLineEnd(int i) => i >= _line.Length;
-
-        private void FindFirstNonspace()
+        private static OpenBlock Deepest(OpenBlock b)
         {
-            int charsToTab = TabStop - (_column % TabStop);
-            if (_firstNonspace > _offset)
+            while (b.OpenChild is not null) b = b.OpenChild;
+            return b;
+        }
+
+        // ---------------------------------------------------------------- one line
+
+        /// <summary>The last block the current line continued: new blocks of the line open below it.</summary>
+        private OpenBlock _lineStart = null!;
+
+        private enum Continuation { Matched, NotMatched, LineConsumed }
+
+        private void ProcessLine()
+        {
+            // step 1: walk the open blocks and consume their continuation markers
+            OpenBlock lastMatched = _root;
+            OpenBlock? firstUnmatched = null;
+            for (var b = _root.OpenChild; b is not null; b = b.OpenChild)
             {
-                // still valid: only spaces/tabs lie between offset and the cached first non-space
-                _indent = _firstNonspaceColumn - _column;
-                _blank = IsLineEnd(_firstNonspace);
-                return;
-            }
-            _firstNonspace = _offset;
-            _firstNonspaceColumn = _column;
-            while (_firstNonspace < _line.Length)
-            {
-                char c = _line[_firstNonspace];
-                if (c == ' ')
+                var result = Continue(b);
+                if (result == Continuation.LineConsumed)
                 {
-                    _firstNonspace++;
-                    _firstNonspaceColumn++;
-                    if (--charsToTab == 0) charsToTab = TabStop;
+                    FinishNonBlankLine(b);
+                    return;
                 }
-                else if (c == '\t')
+                if (result == Continuation.NotMatched)
                 {
-                    _firstNonspace++;
-                    _firstNonspaceColumn += charsToTab;
-                    charsToTab = TabStop;
+                    firstUnmatched = b;
+                    break;
                 }
-                else break;
+                lastMatched = b;
             }
-            _indent = _firstNonspaceColumn - _column;
-            _blank = IsLineEnd(_firstNonspace);
-        }
 
-        private void AdvanceOffset(int count, bool columns)
-        {
-            while (count > 0 && _offset < _line.Length)
-            {
-                char c = _line[_offset];
-                if (c == '\t')
-                {
-                    int charsToTab = TabStop - (_column % TabStop);
-                    if (columns)
-                    {
-                        _partiallyConsumedTab = charsToTab > count;
-                        int charsToAdvance = Math.Min(count, charsToTab);
-                        _column += charsToAdvance;
-                        _offset += _partiallyConsumedTab ? 0 : 1;
-                        count -= charsToAdvance;
-                    }
-                    else
-                    {
-                        _partiallyConsumedTab = false;
-                        _column += charsToTab;
-                        _offset++;
-                        count--;
-                    }
-                }
-                else
-                {
-                    _partiallyConsumedTab = false;
-                    _offset++;
-                    _column++;
-                    count--;
-                }
-            }
-        }
-
-        private void AddLine(BlockNode node)
-        {
-            var sb = new StringBuilder();
-            if (_partiallyConsumedTab)
-            {
-                _offset++;
-                int charsToTab = TabStop - (_column % TabStop);
-                sb.Append(' ', charsToTab);
-            }
-            int src = _lineStart + Math.Min(_offset, _line.Length);
-            if (_offset < _line.Length) sb.Append(_line, _offset, _line.Length - _offset);
-            sb.Append('\n');
-            node.AddContentLine(sb.ToString(), src);
-            node.EndOffset = _lineStart + _line.Length;
-        }
-
-        // ---- per line ----
-
-        private void ProcessLine(string line, int lineStart)
-        {
-            _line = line;
-            _lineStart = lineStart;
-            _lineNumber++;
-            _offset = 0;
-            _column = 0;
-            _firstNonspace = 0;
-            _firstNonspaceColumn = 0;
-            _indent = 0;
-            _blank = false;
-            _partiallyConsumedTab = false;
-            _thematicBreakKillPos = 0;
-
-            var lastMatched = CheckOpenBlocks(out bool allMatched);
-            if (lastMatched is null) return;
+            var deepestOpenBlock = Deepest(_root);
             var container = lastMatched;
-            OpenNewBlocks(ref container, allMatched);
-            AddTextToContainer(container, lastMatched);
-        }
+            _lineStart = lastMatched;
+            bool opened = false;
 
-        private BlockNode? CheckOpenBlocks(out bool allMatched)
-        {
-            allMatched = true;
-            var container = _root;
-            while (container.LastChild is { Open: true } child)
+            // step 2: look for new block starts
+            // TRACE R-MD-0049
+            if (!IsLiteral(lastMatched.Kind))
             {
-                container = child;
-                FindFirstNonspace();
-                bool ok;
-                switch (container.Type)
+                while (true)
                 {
-                    case BlockType.BlockQuote:
-                        ok = ParseBlockQuotePrefix();
-                        break;
-                    case BlockType.Item:
-                        ok = ParseItemPrefix(container);
-                        break;
-                    case BlockType.CodeBlock:
-                        ok = ParseCodeBlockPrefix(container, out bool closed);
-                        if (closed) return null;
-                        break;
-                    case BlockType.HtmlBlock:
-                        ok = container.HtmlType <= 5 || !_blank;
-                        break;
-                    case BlockType.Paragraph:
-                        ok = !_blank;
-                        break;
-                    case BlockType.Table:
-                        ok = !_blank && RowFromString(_line, _firstNonspace) is { Count: > 0 };
-                        break;
-                    case BlockType.Heading:
-                    case BlockType.TableRow:
-                        ok = false;
-                        break;
-                    default:
-                        ok = true; // lists (items decide) and thematic breaks, as in cmark
-                        break;
-                }
-                if (!ok)
-                {
-                    allMatched = false;
-                    container = container.Parent!;
-                    break;
-                }
-                if (!_blank) container.EndOffset = _lineStart + _line.Length;
-            }
-            return container;
-        }
+                    bool paragraphContext = !opened && deepestOpenBlock.Kind == BlockKind.Paragraph;
+                    int indent = _line.Indent;
+                    bool blank = _line.RestIsBlank;
+                    if (blank) break;
+                    int first = _line.FirstNonSpace;
 
-        private bool ParseBlockQuotePrefix()
-        {
-            if (_indent <= 3 && Peek(_firstNonspace) == '>')
-            {
-                AdvanceOffset(_indent + 1, true);
-                if (IsSpaceOrTab(Peek(_offset))) AdvanceOffset(1, true);
-                return true;
-            }
-            return false;
-        }
-
-        private bool ParseItemPrefix(BlockNode item)
-        {
-            if (_indent >= item.MarkerOffset + item.Padding)
-            {
-                AdvanceOffset(item.MarkerOffset + item.Padding, true);
-                return true;
-            }
-            if (_blank && item.Children.Count > 0)
-            {
-                AdvanceOffset(_firstNonspace - _offset, false);
-                return true;
-            }
-            return false;
-        }
-
-        private bool ParseCodeBlockPrefix(BlockNode code, out bool closed)
-        {
-            closed = false;
-            if (!code.Fenced)
-            {
-                if (_indent >= CodeIndent)
-                {
-                    AdvanceOffset(CodeIndent, true);
-                    return true;
-                }
-                if (_blank)
-                {
-                    AdvanceOffset(_firstNonspace - _offset, false);
-                    return true;
-                }
-                return false;
-            }
-            int matched = -1;
-            if (_indent <= 3 && Peek(_firstNonspace) == code.FenceChar)
-                matched = Scanners.CloseCodeFence(_line, _firstNonspace, code.FenceChar, code.FenceLength);
-            if (matched >= code.FenceLength)
-            {
-                code.EndOffset = _lineStart + _line.Length;
-                AdvanceOffset(matched, false);
-                _current = Finalize(code)!;
-                closed = true;
-                return false;
-            }
-            int i = code.FenceOffset;
-            while (i > 0 && IsSpaceOrTab(Peek(_offset)))
-            {
-                AdvanceOffset(1, true);
-                i--;
-            }
-            return true;
-        }
-
-        private void OpenNewBlocks(ref BlockNode container, bool allMatched)
-        {
-            bool maybeLazy = _current.Type == BlockType.Paragraph;
-            var contType = container.Type;
-            int maxDepth = _limits.MaxNestingDepth;
-
-            while (contType != BlockType.CodeBlock && contType != BlockType.HtmlBlock)
-            {
-                FindFirstNonspace();
-                bool indented = _indent >= CodeIndent;
-                bool canNest = container.Depth + 2 <= maxDepth;
-                char fc = Peek(_firstNonspace);
-
-                if (!indented && fc == '>' && canNest)
-                {
-                    int startPos = _firstNonspace;
-                    AdvanceOffset(_firstNonspace + 1 - _offset, false);
-                    if (IsSpaceOrTab(Peek(_offset))) AdvanceOffset(1, true);
-                    container = AddChild(container, BlockType.BlockQuote, startPos);
-                }
-                else if (!indented && fc == '#' && Scanners.AtxHeadingStart(_line, _firstNonspace, out int level) >= 0)
-                {
-                    int startPos = _firstNonspace;
-                    int matched = Scanners.AtxHeadingStart(_line, _firstNonspace, out _);
-                    AdvanceOffset(matched - _offset, false);
-                    container = AddChild(container, BlockType.Heading, startPos);
-                    container.Level = level;
-                    container.Setext = false;
-                }
-                else if (!indented && (fc == '`' || fc == '~') && Scanners.OpenCodeFence(_line, _firstNonspace, out char fenceChar, out int fenceLength) >= 0)
-                {
-                    int startPos = _firstNonspace;
-                    container = AddChild(container, BlockType.CodeBlock, startPos);
-                    container.Fenced = true;
-                    container.FenceChar = fenceChar;
-                    container.FenceLength = fenceLength;
-                    container.FenceOffset = _firstNonspace - _offset;
-                    string info = _line.Substring(_firstNonspace + fenceLength).Trim(' ', '\t');
-                    container.Info = Scanners.Unescape(info);
-                    AdvanceOffset(_line.Length - _offset, false);
-                }
-                else if (!indented && fc == '<' && HtmlStart(contType) is int htmlType && htmlType > 0)
-                {
-                    container = AddChild(container, BlockType.HtmlBlock, _firstNonspace);
-                    container.HtmlType = htmlType;
-                }
-                else if (!indented && contType == BlockType.Paragraph && Scanners.SetextHeadingLine(_line, _firstNonspace) is int lev && lev > 0)
-                {
-                    bool hasContent = ResolveReferenceDefinitions(container);
-                    if (hasContent)
+                    // TRACE R-MD-0050
+                    if (indent >= 4)
                     {
-                        container.Type = BlockType.Heading;
-                        container.Level = lev;
-                        container.Setext = true;
-                        container.EndOffset = _lineStart + _line.Length;
-                        AdvanceOffset(_line.Length - _offset, false);
+                        if (paragraphContext) break;
+                        _line.SkipColumns(4);
+                        container = Open(BlockKind.IndentedCode, container, ref opened, firstUnmatched, _line.Pos);
+                        container.Literal = new StringBuilder();
+                        break;
                     }
-                }
-                else if (!indented && !(contType == BlockType.Paragraph && !allMatched)
-                    && _thematicBreakKillPos <= _firstNonspace && ScanThematicBreak(_firstNonspace, out char marker))
-                {
-                    container = AddChild(container, BlockType.ThematicBreak, _firstNonspace);
-                    container.Marker = marker;
-                    container.EndOffset = _lineStart + _line.Length;
-                    AdvanceOffset(_line.Length - _offset, false);
-                }
-                else if ((!indented || contType == BlockType.List) && _indent < 4 && canNest
-                    && ParseListMarker(_firstNonspace, container.Type == BlockType.Paragraph, out var data, out int markerLen))
-                {
-                    AdvanceOffset(_firstNonspace + markerLen - _offset, false);
-                    bool saveTab = _partiallyConsumedTab;
-                    int saveOffset = _offset, saveColumn = _column;
-                    while (_column - saveColumn <= 5 && IsSpaceOrTab(Peek(_offset)))
-                        AdvanceOffset(1, true);
-                    int i = _column - saveColumn;
-                    if (i >= 5 || i < 1 || IsLineEnd(_offset))
+
+                    char c = _src[first];
+                    if (c == '>' && HasRoom(container, BlockKind.BlockQuote, 1))
                     {
-                        data.Padding = markerLen + 1;
-                        _offset = saveOffset;
-                        _column = saveColumn;
-                        _partiallyConsumedTab = saveTab;
-                        if (i > 0) AdvanceOffset(1, true);
+                        // TRACE R-MD-0051
+                        _line.SkipSpacesThenAdvance(1);
+                        if (_line.At(_line.Pos) == ' ' || _line.At(_line.Pos) == '\t') _line.SkipColumns(1);
+                        container = Open(BlockKind.BlockQuote, container, ref opened, firstUnmatched, first);
+                        container.End = _line.LineEnd;
+                        continue;
                     }
-                    else
+
+                    if (c == '#' && TryAtxHeading(first, ref container, ref opened, firstUnmatched)) return;
+
+                    if ((c == '`' || c == '~') && TryFenceOpening(first, indent, ref container, ref opened, firstUnmatched)) return;
+
+                    if (c == '<')
                     {
-                        data.Padding = markerLen + i;
-                    }
-                    data.MarkerOffset = _indent;
-
-                    if (contType != BlockType.List || !ListsMatch(container, data))
-                    {
-                        container = AddChild(container, BlockType.List, _firstNonspace);
-                        CopyListData(data, container);
-                    }
-                    container = AddChild(container, BlockType.Item, _firstNonspace);
-                    CopyListData(data, container);
-                }
-                else if (indented && !maybeLazy && !_blank)
-                {
-                    AdvanceOffset(CodeIndent, true);
-                    container = AddChild(container, BlockType.CodeBlock, _offset);
-                    container.Fenced = false;
-                }
-                else if (_options.Tables && !indented && contType == BlockType.Paragraph && TryOpenTableHeader(container))
-                {
-                    container.Type = BlockType.Table;
-                }
-                else if (_options.Tables && !indented && contType == BlockType.Table && TryOpenTableRow(container))
-                {
-                    // row added; offset advanced to end of line
-                }
-                else
-                {
-                    break;
-                }
-
-                if (AcceptsLines(container.Type)) break;
-                contType = container.Type;
-                maybeLazy = false;
-            }
-        }
-
-        private int HtmlStart(BlockType contType)
-        {
-            int t = Scanners.HtmlBlockStart(_line, _firstNonspace);
-            if (t > 0) return t;
-            if (contType != BlockType.Paragraph && Scanners.HtmlBlockStart7(_line, _firstNonspace)) return 7;
-            return 0;
-        }
-
-        private bool ScanThematicBreak(int i, out char marker)
-        {
-            marker = Peek(i);
-            if (marker != '*' && marker != '-' && marker != '_')
-            {
-                _thematicBreakKillPos = i + 1;
-                return false;
-            }
-            int count = 0;
-            int j = i;
-            for (; j < _line.Length; j++)
-            {
-                char c = _line[j];
-                if (c == marker) count++;
-                else if (!IsSpaceOrTab(c))
-                {
-                    _thematicBreakKillPos = j;
-                    return false;
-                }
-            }
-            if (count >= 3) return true;
-            _thematicBreakKillPos = j;
-            return false;
-        }
-
-        private static bool AcceptsLines(BlockType t) => t == BlockType.Paragraph || t == BlockType.Heading || t == BlockType.CodeBlock;
-
-        private sealed class ListData
-        {
-            public ListKind Kind;
-            public char Bullet;
-            public int Start;
-            public char Delim;
-            public int MarkerOffset;
-            public int Padding;
-        }
-
-        private static void CopyListData(ListData d, BlockNode n)
-        {
-            n.ListKind = d.Kind;
-            n.BulletChar = d.Bullet;
-            n.ListStart = d.Start;
-            n.ListDelimiter = d.Delim;
-            n.MarkerOffset = d.MarkerOffset;
-            n.Padding = d.Padding;
-            n.Tight = true;
-        }
-
-        private static bool ListsMatch(BlockNode list, ListData d)
-            => list.ListKind == d.Kind && list.ListDelimiter == d.Delim && list.BulletChar == d.Bullet;
-
-        private bool ParseListMarker(int pos, bool interruptsParagraph, out ListData data, out int length)
-        {
-            data = new ListData();
-            length = 0;
-            char c = Peek(pos);
-            int startPos = pos;
-            if (c == '*' || c == '-' || c == '+')
-            {
-                pos++;
-                if (!IsLineEnd(pos) && !IsSpaceOrTab(Peek(pos))) return false;
-                if (interruptsParagraph)
-                {
-                    int i = pos;
-                    while (IsSpaceOrTab(Peek(i))) i++;
-                    if (IsLineEnd(i)) return false;
-                }
-                data.Kind = ListKind.Bullet;
-                data.Bullet = c;
-                data.Delim = '\0';
-                data.Start = 0;
-            }
-            else if (CharUtil.IsAsciiDigit(c))
-            {
-                int start = 0;
-                int digits = 0;
-                do
-                {
-                    start = 10 * start + (Peek(pos) - '0');
-                    pos++;
-                    digits++;
-                } while (digits < 9 && CharUtil.IsAsciiDigit(Peek(pos)));
-                if (interruptsParagraph && start != 1) return false;
-                c = Peek(pos);
-                if (c != '.' && c != ')') return false;
-                pos++;
-                if (!IsLineEnd(pos) && !IsSpaceOrTab(Peek(pos))) return false;
-                if (interruptsParagraph)
-                {
-                    int i = pos;
-                    while (IsSpaceOrTab(Peek(i))) i++;
-                    if (IsLineEnd(i)) return false;
-                }
-                data.Kind = ListKind.Ordered;
-                data.Bullet = '\0';
-                data.Delim = c;
-                data.Start = start;
-            }
-            else
-            {
-                return false;
-            }
-            length = pos - startPos;
-            return true;
-        }
-
-        private BlockNode AddChild(BlockNode parent, BlockType type, int linePos)
-        {
-            while (!CanContain(parent.Type, type)) parent = Finalize(parent)!;
-            _budget.Take();
-            var child = new BlockNode(type, parent, _lineStart + Math.Min(linePos, _line.Length), _lineNumber)
-            {
-                Depth = parent.Depth + 1,
-            };
-            child.EndOffset = _lineStart + _line.Length;
-            parent.Children.Add(child);
-            return child;
-        }
-
-        private static bool CanContain(BlockType parent, BlockType child)
-        {
-            switch (parent)
-            {
-                case BlockType.Document:
-                case BlockType.BlockQuote:
-                case BlockType.Item:
-                    return child != BlockType.Item && child != BlockType.TableRow;
-                case BlockType.List:
-                    return child == BlockType.Item;
-                case BlockType.Table:
-                    return child == BlockType.TableRow;
-                default:
-                    return false;
-            }
-        }
-
-        private void AddTextToContainer(BlockNode container, BlockNode lastMatched)
-        {
-            FindFirstNonspace();
-            if (_blank && container.LastChild is not null)
-                container.LastChild.LastLineBlank = true;
-
-            var ctype = container.Type;
-            bool lastLineBlank = _blank
-                && ctype != BlockType.BlockQuote
-                && ctype != BlockType.Heading
-                && ctype != BlockType.ThematicBreak
-                && !(ctype == BlockType.CodeBlock && container.Fenced)
-                && !(ctype == BlockType.Item && container.Children.Count == 0 && container.StartLine == _lineNumber);
-            container.LastLineBlank = lastLineBlank;
-            for (var tmp = container; tmp.Parent is not null; tmp = tmp.Parent)
-                tmp.Parent.LastLineBlank = false;
-
-            if (_current != lastMatched && container == lastMatched && !_blank && _current.Type == BlockType.Paragraph)
-            {
-                // lazy continuation line
-                AddLine(_current);
-                return;
-            }
-
-            while (_current != lastMatched)
-                _current = Finalize(_current)!;
-
-            if (container.Type == BlockType.CodeBlock)
-            {
-                // the opening fence line carries the info string, not content
-                if (!(container.Fenced && container.StartLine == _lineNumber && container.Content is null))
-                    AddLine(container);
-            }
-            else if (container.Type == BlockType.HtmlBlock)
-            {
-                AddLine(container);
-                if (Scanners.HtmlBlockEnd(container.HtmlType, _line, _firstNonspace))
-                    container = Finalize(container)!;
-            }
-            else if (_blank)
-            {
-                // nothing
-            }
-            else if (AcceptsLines(container.Type))
-            {
-                if (container.Type == BlockType.Heading && !container.Setext)
-                    ChopTrailingHashes();
-                AdvanceOffset(_firstNonspace - _offset, false);
-                AddLine(container);
-            }
-            else
-            {
-                container = AddChild(container, BlockType.Paragraph, _firstNonspace);
-                AdvanceOffset(_firstNonspace - _offset, false);
-                AddLine(container);
-            }
-            _current = container;
-        }
-
-        private void ChopTrailingHashes()
-        {
-            int len = _line.Length;
-            while (len > 0 && char.IsWhiteSpace(_line[len - 1]) && _line[len - 1] <= ' ') len--;
-            int n = len - 1;
-            int orig = n;
-            while (n >= 0 && _line[n] == '#') n--;
-            if (n != orig && n >= 0 && IsSpaceOrTab(_line[n]))
-            {
-                len = n;
-                while (len > 0 && IsSpaceOrTab(_line[len - 1])) len--;
-            }
-            if (len < _line.Length) _line = _line.Substring(0, len);
-        }
-
-        // ---- finalization ----
-
-        private BlockNode? Finalize(BlockNode b)
-        {
-            var parent = b.Parent;
-            b.Open = false;
-            switch (b.Type)
-            {
-                case BlockType.Paragraph:
-                {
-                    bool hasContent = ResolveReferenceDefinitions(b);
-                    if (!hasContent) parent?.Children.Remove(b);
-                    break;
-                }
-                case BlockType.CodeBlock:
-                    if (!b.Fenced) RemoveTrailingBlankLines(b);
-                    break;
-                case BlockType.List:
-                {
-                    b.Tight = true;
-                    for (int i = 0; i < b.Children.Count; i++)
-                    {
-                        var item = b.Children[i];
-                        bool hasNext = i + 1 < b.Children.Count;
-                        if (item.LastLineBlank && hasNext)
+                        // TRACE R-MD-0105
+                        bool type7Allowed = opened || container.Kind != BlockKind.Paragraph;
+                        int type = HtmlSyntax.BlockStart(_src, first, _line.LineEnd, mayBeType7: type7Allowed);
+                        if (type > 0)
                         {
-                            b.Tight = false;
+                            container = Open(BlockKind.HtmlBlock, container, ref opened, firstUnmatched, first);
+                            container.HtmlType = type;
+                            container.Literal = new StringBuilder();
                             break;
                         }
-                        for (int j = 0; j < item.Children.Count; j++)
-                        {
-                            var sub = item.Children[j];
-                            if ((hasNext || j + 1 < item.Children.Count) && EndsWithBlankLine(sub))
-                            {
-                                b.Tight = false;
-                                break;
-                            }
-                        }
-                        if (!b.Tight) break;
                     }
+
+                    // TRACE R-MD-0052
+                    if (!opened && container.Kind == BlockKind.Paragraph && (c == '=' || c == '-') && IsSetextUnderline(first))
+                    {
+                        if (TurnIntoSetextHeading(container, c == '=' ? 1 : 2)) return;
+                    }
+
+                    // TRACE R-MD-0192
+                    if (_options.Tables && !opened && container.Kind == BlockKind.Paragraph && (c == '|' || c == ':' || c == '-' || c == '\v' || c == '\f')
+                        && !StartsListItemWithContent(first) && TryTable(container)) return;
+
+                    if ((c == '*' || c == '-' || c == '_') && IsThematicBreak(first))
+                    {
+                        // TRACE R-MD-0053
+                        container = Open(BlockKind.ThematicBreak, container, ref opened, firstUnmatched, first);
+                        ((ThematicBreak)container.Node).Marker = c;
+                        container.End = _line.LineEnd;
+                        TouchAncestors(container, _line.LineEnd);
+                        ClearBlankFlags(container);
+                        return;
+                    }
+
+                    // TRACE R-MD-0102
+                    bool interruptsParagraph = !opened && container.Kind == BlockKind.Paragraph;
+                    if (TryListItem(first, interruptsParagraph, ref container, ref opened, firstUnmatched)) continue;
+
                     break;
                 }
             }
-            return parent;
-        }
 
-        private static bool EndsWithBlankLine(BlockNode node)
-        {
-            for (var n = node; n is not null;)
+            // step 3: the rest of the line
+            bool restBlank = _line.RestIsBlank;
+            // TRACE R-MD-0054
+            if (!opened && firstUnmatched is not null && deepestOpenBlock.Kind == BlockKind.Paragraph && !restBlank)
             {
-                if (n.LastLineBlank) return true;
-                if (n.Type == BlockType.List || n.Type == BlockType.Item) n = n.LastChild;
-                else return false;
-            }
-            return false;
-        }
-
-        private static void RemoveTrailingBlankLines(BlockNode b)
-        {
-            if (b.Content is null) return;
-            string s = b.Content.ToString();
-            int i = s.Length - 1;
-            while (i >= 0 && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) i--;
-            if (i < 0)
-            {
-                b.Content.Clear();
+                AddParagraphLine(deepestOpenBlock, lazy: true);
+                // TRACE R-MD-0267
+                // a lazy line extends the unmatched blocks around its paragraph only once the paragraph is known to
+                // stay (it is not all link reference definitions): see FinishParagraph (D-232, N3)
+                ClearBlankFlags(deepestOpenBlock);
+                deepestOpenBlock.HasLazyEnd = true;
+                // the blocks this line did continue (the last matched one and those around it) do take in its end
+                for (var m = lastMatched; m.Kind != BlockKind.Document; m = m.Parent!)
+                {
+                    if (_line.LineEnd > m.End) m.End = _line.LineEnd;
+                    if (m.Kind == BlockKind.List) m.LazyLineEnd = _line.LineEnd;
+                }
                 return;
             }
-            int nl = s.IndexOf('\n', i);
-            if (nl >= 0) b.Content.Length = nl + 1;
+
+            if (!opened && firstUnmatched is not null)
+            {
+                CloseFrom(firstUnmatched);
+                // closed once: opening a block below must not close them again
+                firstUnmatched = null;
+            }
+
+            if (restBlank)
+            {
+                // TRACE R-MD-0055
+                // TRACE R-MD-0270
+                // a blank line inside an open fenced code block is part of the code and loosens no list
+                // ("- ~~~\n\n-" is tight; D-232, C2)
+                if (!opened && container.Kind != BlockKind.FencedCode)
+                    for (var b = container; b is not null && b.Kind != BlockKind.BlockQuote; b = b.Parent) b.EndsWithBlank = true;
+                // TRACE R-MD-0265
+                // a block opened on this line (with nothing after its marker) still extends the blocks around it to the
+                // end of the line: "*\n\t>" gives the item the span 0+4 (D-232, C1)
+                else TouchAncestors(container, _line.LineEnd);
+                if (container.Kind == BlockKind.IndentedCode || container.Kind == BlockKind.FencedCode || container.Kind == BlockKind.HtmlBlock)
+                {
+                    AddLiteralLine(container, blank: true);
+                    // TRACE R-MD-0104
+                    TouchAncestors(container, _line.LineEnd);
+                }
+                return;
+            }
+
+            switch (container.Kind)
+            {
+                case BlockKind.Paragraph:
+                    AddParagraphLine(container);
+                    break;
+                case BlockKind.IndentedCode:
+                case BlockKind.FencedCode:
+                    AddLiteralLine(container, blank: false);
+                    break;
+                case BlockKind.HtmlBlock:
+                    AddLiteralLine(container, blank: false);
+                    // TRACE R-MD-0056
+                    if (container.HtmlType <= 5 && HtmlSyntax.BlockEnds(container.HtmlType, _src, _line.Pos, _line.LineEnd))
+                    {
+                        FinishNonBlankLine(container);
+                        Close(container, displaced: false);
+                        return;
+                    }
+                    break;
+                case BlockKind.Table when TryAddBodyRow(container):
+                    break;
+                default:
+                    // TRACE R-MD-0057
+                    container = Open(BlockKind.Paragraph, container, ref opened, firstUnmatched, _line.FirstNonSpace);
+                    container.Lines = new List<ContentLine>();
+                    AddParagraphLine(container);
+                    break;
+            }
+            FinishNonBlankLine(container);
+        }
+
+        private static bool IsLiteral(BlockKind kind)
+            => kind == BlockKind.IndentedCode || kind == BlockKind.FencedCode || kind == BlockKind.HtmlBlock;
+
+        /// <summary>After a non-blank line reached <paramref name="target"/>: update container ends and blank flags.</summary>
+        private void FinishNonBlankLine(OpenBlock target)
+        {
+            TouchAncestors(target, _line.LineEnd);
+            ClearBlankFlags(target);
+        }
+
+        // TRACE R-MD-0058
+        private static void ClearBlankFlags(OpenBlock target)
+        {
+            for (var b = target; b is not null; b = b.Parent) b.EndsWithBlank = false;
+        }
+
+        // TRACE R-MD-0059
+        private void TouchAncestors(OpenBlock target, int end)
+        {
+            for (var b = target.Parent; b is not null && b.Kind != BlockKind.Document; b = b.Parent)
+                if (end > b.End) b.End = end;
+        }
+
+        // ---------------------------------------------------------------- continuation (step 1)
+
+        private Continuation Continue(OpenBlock b)
+        {
+            switch (b.Kind)
+            {
+                case BlockKind.BlockQuote:
+                    {
+                        // TRACE R-MD-0060
+                        if (_line.Indent > 3) return Continuation.NotMatched;
+                        int first = _line.FirstNonSpace;
+                        if (_line.At(first) != '>') return Continuation.NotMatched;
+                        _line.SkipSpacesThenAdvance(1);
+                        if (_line.At(_line.Pos) == ' ' || _line.At(_line.Pos) == '\t') _line.SkipColumns(1);
+                        b.End = _line.LineEnd;
+                        TouchAncestors(b, _line.LineEnd);
+                        return Continuation.Matched;
+                    }
+                case BlockKind.List:
+                    // TRACE R-MD-0061
+                    return Continuation.Matched;
+                case BlockKind.ListItem:
+                    {
+                        if (_line.RestIsBlank)
+                        {
+                            // TRACE R-MD-0062
+                            if (b.ChildCount == 0) return Continuation.NotMatched;
+                            int skip = _line.Indent;
+                            _line.SkipColumns(skip < b.ItemContentIndent ? skip : b.ItemContentIndent);
+                            return Continuation.Matched;
+                        }
+                        // TRACE R-MD-0063
+                        if (_line.Indent >= b.ItemContentIndent)
+                        {
+                            _line.SkipColumns(b.ItemContentIndent);
+                            return Continuation.Matched;
+                        }
+                        return Continuation.NotMatched;
+                    }
+                case BlockKind.Paragraph:
+                    // TRACE R-MD-0064
+                    return _line.RestIsBlank ? Continuation.NotMatched : Continuation.Matched;
+                case BlockKind.IndentedCode:
+                    {
+                        // TRACE R-MD-0065
+                        int indent = _line.Indent;
+                        if (indent >= 4)
+                        {
+                            _line.SkipColumns(4);
+                            return Continuation.Matched;
+                        }
+                        if (_line.RestIsBlank)
+                        {
+                            _line.SkipColumns(indent);
+                            return Continuation.Matched;
+                        }
+                        return Continuation.NotMatched;
+                    }
+                case BlockKind.FencedCode:
+                    {
+                        int indent = _line.Indent;
+                        // TRACE R-MD-0066
+                        if (indent <= 3 && IsClosingFence(b, _line.FirstNonSpace))
+                        {
+                            b.End = _line.LineEnd;
+                            Close(b, displaced: false);
+                            return Continuation.LineConsumed;
+                        }
+                        // TRACE R-MD-0067
+                        _line.SkipColumns(indent < b.FenceIndent ? indent : b.FenceIndent);
+                        return Continuation.Matched;
+                    }
+                case BlockKind.HtmlBlock:
+                    // TRACE R-MD-0068
+                    if (b.HtmlType >= 6 && _line.RestIsBlank) return Continuation.NotMatched;
+                    return Continuation.Matched;
+                case BlockKind.ThematicBreak:
+                    // TRACE R-MD-0069
+                    return Continuation.Matched;
+                case BlockKind.Table:
+                    // TRACE R-MD-0193
+                    if (_line.RestIsBlank) return Continuation.NotMatched;
+                    // TRACE R-MD-0261
+                    // a row of only pipes (and spaces, tabs, U+000B, U+000C) ends the table (D-232, N9)
+                    return OnlyPipes(_line.FirstNonSpace, _line.LineEnd) ? Continuation.NotMatched : Continuation.Matched;
+                default:
+                    return Continuation.NotMatched;
+            }
+        }
+
+        // ---------------------------------------------------------------- opening and closing
+
+        // TRACE R-MD-0070
+        private static bool CanContain(BlockKind parent, BlockKind child) => parent switch
+        {
+            BlockKind.Document or BlockKind.BlockQuote or BlockKind.ListItem => child != BlockKind.ListItem,
+            BlockKind.List => child == BlockKind.ListItem,
+            _ => false,
+        };
+
+        /// <summary>
+        /// Opens a new block of <paramref name="kind"/> as a child of <paramref name="container"/> (or of the
+        /// nearest ancestor that can hold it). On the first block opened for a line, the open blocks that the
+        /// line did not continue are closed first.
+        /// </summary>
+        private OpenBlock Open(BlockKind kind, OpenBlock container, ref bool opened, OpenBlock? firstUnmatched, int start)
+        {
+            if (!opened)
+            {
+                if (firstUnmatched is not null) CloseFrom(firstUnmatched);
+                opened = true;
+            }
+            // TRACE R-MD-0071
+            while (!CanContain(container.Kind, kind))
+            {
+                var parent = container.Parent!;
+                Close(container, displaced: true);
+                container = parent;
+            }
+            // TRACE R-MD-0072
+            if (container.ChildCount > 0 && container.EndsWithBlank)
+            {
+                if (container.Kind == BlockKind.ListItem) ((ListBlock)container.Parent!.Node).IsTight = false;
+                else if (container.Kind == BlockKind.List) ((ListBlock)container.Node).IsTight = false;
+            }
+            var node = NewNode(kind);
+            var block = new OpenBlock(kind, node, container) { Start = start, End = _line.LineEnd };
+            block.FirstInItem = container.Kind == BlockKind.ListItem && container.ChildCount == 0;
+            container.Node.AppendChildUnchecked(node);
+            container.ChildCount++;
+            container.OpenChild = block;
+            return block;
+        }
+
+        private static MarkdownBlock NewNode(BlockKind kind) => kind switch
+        {
+            BlockKind.BlockQuote => new BlockQuote(),
+            BlockKind.List => new ListBlock(),
+            BlockKind.ListItem => new ListItem(),
+            BlockKind.Paragraph => new Paragraph(),
+            BlockKind.AtxHeading or BlockKind.SetextHeading => new Heading(),
+            BlockKind.ThematicBreak => new ThematicBreak(),
+            BlockKind.IndentedCode or BlockKind.FencedCode => new CodeBlock(),
+            BlockKind.HtmlBlock => new HtmlBlock(),
+            BlockKind.Table => new Table(),
+            _ => throw new System.InvalidOperationException(),
+        };
+
+        /// <summary>Closes <paramref name="from"/> and every open block below it.</summary>
+        private void CloseFrom(OpenBlock from)
+        {
+            CloseBelow(from);
+            Close(from, displaced: false);
+        }
+
+        // TRACE R-MD-0242
+        /// <summary>
+        /// Closes every open block below <paramref name="b"/>, deepest first, walking up once from the deepest
+        /// open block so that closing a chain of n blocks takes n steps.
+        /// </summary>
+        private void CloseBelow(OpenBlock b)
+        {
+            var x = Deepest(b);
+            while (!ReferenceEquals(x, b))
+            {
+                var up = x.Parent!;
+                Close(x, displaced: false);
+                x = up;
+            }
         }
 
         /// <summary>
-        /// Consumes link reference definitions at the start of a paragraph. Returns true if any content remains.
+        /// Closes a block whose children are already closed. A block that the current line continued but
+        /// that has to give way to a new block (<paramref name="displaced"/>) ends at the end of this line.
         /// </summary>
-        private bool ResolveReferenceDefinitions(BlockNode para)
+        private void Close(OpenBlock b, bool displaced)
         {
-            if (para.Content is null) return false;
-            string s = para.Content.ToString();
-            int pos = 0;
-            while (pos < s.Length && s[pos] == '[')
+            if (b.OpenChild is not null) CloseBelow(b);
+            // TRACE R-MD-0073
+            if (displaced) b.End = _line.LineEnd;
+            var parent = b.Parent!;
+            parent.OpenChild = null;
+            bool keep = true;
+            switch (b.Kind)
             {
-                int e = ParseReferenceDefinition(s, pos, para);
-                if (e <= pos) break;
-                pos = e;
-            }
-            if (pos > 0) RemoveContentPrefix(para, pos);
-            string rest = para.Content.ToString();
-            for (int i = 0; i < rest.Length; i++)
-                if (!char.IsWhiteSpace(rest[i])) return true;
-            return false;
-        }
-
-        private static void RemoveContentPrefix(BlockNode para, int n)
-        {
-            para.Content!.Remove(0, n);
-            var mc = para.MapContent!;
-            var ms = para.MapSource!;
-            int keepFrom = 0;
-            for (int i = 0; i < mc.Count; i++)
-                if (mc[i] <= n) keepFrom = i;
-            int delta = n - mc[keepFrom];
-            mc.RemoveRange(0, keepFrom);
-            ms.RemoveRange(0, keepFrom);
-            if (mc.Count > 0)
-            {
-                ms[0] += delta;
-                for (int i = 0; i < mc.Count; i++) mc[i] = Math.Max(0, mc[i] - n);
-            }
-        }
-
-        private int ParseReferenceDefinition(string s, int pos, BlockNode para)
-        {
-            // label
-            int j = pos + 1;
-            int length = 0;
-            bool nonWs = false;
-            while (j < s.Length)
-            {
-                char c = s[j];
-                if (c == '[') return -1;
-                if (c == ']') break;
-                if (c == '\\' && j + 1 < s.Length && CharUtil.IsAsciiPunctuation(s[j + 1]))
-                {
-                    j += 2;
-                    length += 2;
-                    nonWs = true;
-                }
-                else
-                {
-                    if (!char.IsWhiteSpace(c)) nonWs = true;
-                    j++;
-                    length++;
-                }
-                if (length > 999) return -1;
-            }
-            if (j >= s.Length || !nonWs) return -1;
-            string label = s.Substring(pos + 1, j - pos - 1);
-            j++;
-            if (j >= s.Length || s[j] != ':') return -1;
-            j++;
-            j = Scanners.SpaceNewlineSpace(s, j);
-            int d = Scanners.LinkDestination(s, j, out string rawDest);
-            if (d < 0) return -1;
-            int beforeTitle = d;
-            int t = Scanners.SpaceNewlineSpace(s, d);
-            string? title = null;
-            int afterTitle = -1;
-            if (t != beforeTitle)
-            {
-                int te = Scanners.LinkTitle(s, t, out string rawTitle);
-                if (te >= 0)
-                {
-                    title = rawTitle;
-                    afterTitle = te;
-                }
-            }
-            int end = -1;
-            if (afterTitle >= 0)
-            {
-                end = SkipToLineEnd(s, afterTitle);
-                if (end < 0) title = null;
-            }
-            if (end < 0)
-            {
-                end = SkipToLineEnd(s, beforeTitle);
-                if (end < 0) return -1;
-            }
-            string normalized = LinkReferenceDefinition.NormalizeLabel(label);
-            if (normalized.Length > 0 && !_refs.ContainsKey(normalized))
-            {
-                if (_refs.Count >= _limits.MaxLinkReferenceDefinitions) return -1;
-                int srcStart = MapToSource(para, pos);
-                _refs[normalized] = new LinkReferenceDefinition(label, Scanners.Unescape(rawDest), title is null ? null : Scanners.Unescape(title))
-                {
-                    Span = new SourceSpan(srcStart, Math.Max(0, MapToSource(para, end) - srcStart)),
-                };
-            }
-            return end;
-        }
-
-        private static int SkipToLineEnd(string s, int i)
-        {
-            while (i < s.Length && (s[i] == ' ' || s[i] == '\t')) i++;
-            if (i >= s.Length) return i;
-            if (s[i] == '\n') return i + 1;
-            if (s[i] == '\r') return i + 1 < s.Length && s[i + 1] == '\n' ? i + 2 : i + 1;
-            return -1;
-        }
-
-        internal static int MapToSource(BlockNode b, int contentIndex)
-        {
-            var mc = b.MapContent;
-            var ms = b.MapSource;
-            if (mc is null || ms is null || mc.Count == 0) return b.StartOffset;
-            int lo = 0, hi = mc.Count - 1, idx = 0;
-            while (lo <= hi)
-            {
-                int mid = (lo + hi) >> 1;
-                if (mc[mid] <= contentIndex) { idx = mid; lo = mid + 1; }
-                else hi = mid - 1;
-            }
-            return ms[idx] + (contentIndex - mc[idx]);
-        }
-
-        // ---- GFM tables ----
-
-        private static bool IsTableSpace(char c) => c == ' ' || c == '\t' || c == '\v' || c == '\f';
-
-        private static int CellEnd(string s, int i)
-        {
-            if (i >= s.Length || s[i] != '|') return 0;
-            int j = i + 1;
-            while (j < s.Length && IsTableSpace(s[j])) j++;
-            return j - i;
-        }
-
-        private static bool IsTableEscapable(char c) => "|!\"#$%&'()*+,./:;<=>?@[\\]^_`{}~-".IndexOf(c) >= 0;
-
-        private static int CellContent(string s, int i)
-        {
-            int j = i;
-            while (j < s.Length)
-            {
-                char c = s[j];
-                if (c == '\\' && j + 1 < s.Length && IsTableEscapable(s[j + 1])) { j += 2; continue; }
-                if (c == '|' || c == '\n' || c == '\r') break;
-                j++;
-            }
-            return j - i;
-        }
-
-        /// <summary>Parses one row from s[start..]; returns cells (text, offset in s) or null.</summary>
-        private static List<(string Text, int Offset)>? RowFromString(string s, int start)
-        {
-            var cells = new List<(string, int)>();
-            int offset = start + CellEnd(s, start);
-            bool expectMore = true;
-            int len = s.Length;
-            while (offset < len && expectMore)
-            {
-                int cellMatched = CellContent(s, offset);
-                int pipeMatched = CellEnd(s, offset + cellMatched);
-                if (cellMatched > 0 || pipeMatched > 0)
-                {
-                    string raw = s.Substring(offset, cellMatched);
-                    string text = raw.Replace("\\|", "|").Trim(' ', '\t', '\n', '\r', '\f');
-                    int lead = 0;
-                    while (lead < raw.Length && (raw[lead] == ' ' || raw[lead] == '\t')) lead++;
-                    cells.Add((text, offset + lead));
-                    if (cells.Count > ushort.MaxValue) return null;
-                }
-                offset += cellMatched + pipeMatched;
-                if (pipeMatched > 0)
-                {
-                    expectMore = true;
-                }
-                else
-                {
-                    while (offset < len && IsTableSpace(s[offset])) offset++;
-                    expectMore = false;
-                }
-            }
-            if (offset != len || cells.Count == 0) return null;
-            return cells;
-        }
-
-        private static bool ScanTableStart(string s, int i)
-        {
-            // [|]? table_marker ([|] table_marker)* [|]? spacechar* EOL ; table_marker = sp* :? -+ :? sp*
-            int j = i;
-            if (j < s.Length && s[j] == '|') j++;
-            int markers = 0;
-            while (true)
-            {
-                int k = j;
-                while (k < s.Length && IsTableSpace(s[k])) k++;
-                if (k < s.Length && s[k] == ':') k++;
-                int dashStart = k;
-                while (k < s.Length && s[k] == '-') k++;
-                if (k == dashStart) break;
-                if (k < s.Length && s[k] == ':') k++;
-                while (k < s.Length && IsTableSpace(s[k])) k++;
-                markers++;
-                j = k;
-                if (j < s.Length && s[j] == '|')
-                {
-                    // either a separator before another marker, or the optional trailing pipe
-                    int save = j;
-                    j++;
-                    int k2 = j;
-                    while (k2 < s.Length && IsTableSpace(s[k2])) k2++;
-                    if (k2 < s.Length && (s[k2] == ':' || s[k2] == '-')) continue;
-                    j = save + 1;
+                case BlockKind.Paragraph:
+                    keep = FinishParagraph(b);
                     break;
-                }
-                break;
+                case BlockKind.IndentedCode:
+                    {
+                        // TRACE R-MD-0074
+                        var code = (CodeBlock)b.Node;
+                        code.IsFenced = false;
+                        code.Code = CharacterReferences.Safe(b.Literal!.ToString(0, b.LiteralKeep));
+                        break;
+                    }
+                case BlockKind.FencedCode:
+                    ((CodeBlock)b.Node).Code = CharacterReferences.Safe(b.Literal!.ToString());
+                    break;
+                case BlockKind.HtmlBlock:
+                    {
+                        var html = (HtmlBlock)b.Node;
+                        html.BlockType = b.HtmlType;
+                        html.Html = CharacterReferences.Safe(b.Literal!.ToString());
+                        break;
+                    }
+                case BlockKind.AtxHeading:
+                case BlockKind.SetextHeading:
+                    // TRACE R-MD-0100
+                    InlineBlocks.Add((b.Node, BuildContent(b.Lines!)));
+                    break;
+                case BlockKind.List:
+                    {
+                        // TRACE R-MD-0075
+                        var kids = b.Node.Children;
+                        if (kids.Count > 0)
+                        {
+                            b.Start = kids[0].Span.Start;
+                            if (!displaced)
+                            {
+                                int last = kids[kids.Count - 1].Span.End;
+                                // TRACE R-MD-0267
+                                // a lazy line the list was continued on counts even when its item does not take it in
+                                b.End = b.LazyLineEnd > last ? b.LazyLineEnd : last;
+                            }
+                        }
+                        break;
+                    }
             }
-            if (markers == 0) return false;
-            while (j < s.Length && IsTableSpace(s[j])) j++;
-            return j == s.Length;
+            if (!keep)
+            {
+                parent.Node.RemoveChild(b.Node);
+                parent.ChildCount--;
+                return;
+            }
+            b.Node.Span = new SourceSpan(b.Start, b.End > b.Start ? b.End - b.Start : 0);
+            _nodes.Take();
         }
 
-        private bool TryOpenTableHeader(BlockNode para)
+        // TRACE R-MD-0076
+        /// <summary>
+        /// Whether <paramref name="levels"/> new container levels of <paramref name="kind"/> fit below the block
+        /// that would hold them: a container is opened only while its depth (the document is 0) stays below
+        /// <see cref="MarkupLimits.MaxNestingDepth"/>, so its content can still sit at that depth.
+        /// </summary>
+        private bool HasRoom(OpenBlock container, BlockKind kind, int levels)
         {
-            if (para.TableVisited || para.Content is null) return false;
-            if (!ScanTableStart(_line, _firstNonspace)) return false;
-            var delimiter = RowFromString(_line, _firstNonspace);
-            if (delimiter is null) return false;
-
-            string content = para.Content.ToString();
-            int lastStart = content.Length > 0 ? content.LastIndexOf('\n', content.Length - 2) + 1 : 0;
-            if (content.Length < 2) lastStart = 0;
-            string lastLine = content.Substring(lastStart).TrimEnd('\n', '\r');
-            var header = RowFromString(lastLine, 0);
-            if (header is null || header.Count != delimiter.Count || header.Count > _limits.MaxTableColumns)
-            {
-                para.TableVisited = true;
-                return false;
-            }
-            if (_tableCells + header.Count > _limits.MaxTableCells)
-            {
-                para.TableVisited = true;
-                return false;
-            }
-
-            var alignments = new List<TableAlignment>(delimiter.Count);
-            foreach (var (text, _) in delimiter)
-            {
-                bool left = text.Length > 0 && text[0] == ':';
-                bool right = text.Length > 0 && text[text.Length - 1] == ':';
-                alignments.Add(left && right ? TableAlignment.Center : left ? TableAlignment.Left : right ? TableAlignment.Right : TableAlignment.None);
-            }
-
-            int headerSource = MapToSource(para, lastStart);
-            if (lastStart > 0)
-            {
-                // the lines before the header row stay a paragraph, inserted before the table
-                _budget.Take();
-                var before = new BlockNode(BlockType.Paragraph, para.Parent, para.StartOffset, para.StartLine) { Depth = para.Depth, Open = false };
-                before.AddContentLine(content.Substring(0, lastStart), para.StartOffset);
-                before.MapContent!.Clear();
-                before.MapSource!.Clear();
-                for (int i = 0; i < para.MapContent!.Count; i++)
-                {
-                    if (para.MapContent[i] >= lastStart) break;
-                    before.MapContent.Add(para.MapContent[i]);
-                    before.MapSource.Add(para.MapSource![i]);
-                }
-                before.EndOffset = headerSource;
-                var parent = para.Parent!;
-                parent.Children.Insert(parent.Children.IndexOf(para), before);
-                if (!ResolveReferenceDefinitions(before)) parent.Children.Remove(before);
-                para.StartOffset = headerSource;
-            }
-
-            para.Content = null;
-            para.MapContent = null;
-            para.MapSource = null;
-            para.Alignments = alignments;
-            _budget.Take();
-            var row = new BlockNode(BlockType.TableRow, para, headerSource, _lineNumber - 1)
-            {
-                Depth = para.Depth + 1,
-                Open = false,
-                IsHeaderRow = true,
-                Cells = new List<CellData>(header.Count),
-                EndOffset = headerSource + lastLine.Length,
-            };
-            foreach (var (text, off) in header)
-            {
-                _budget.Take();
-                row.Cells.Add(new CellData { Text = text, SourceOffset = headerSource + off });
-            }
-            para.Children.Add(row);
-            para.TableRows = 1;
-            para.TableNonEmptyCells = header.Count;
-            _tableCells += header.Count;
-            para.EndOffset = _lineStart + _line.Length;
-            AdvanceOffset(_line.Length - _offset, false);
-            return true;
-        }
-
-        private bool TryOpenTableRow(BlockNode table)
-        {
-            if (_blank) return false;
-            int columns = table.Alignments!.Count;
-            if (_tableCells + columns > _limits.MaxTableCells) return false;
-            var cells = RowFromString(_line, _firstNonspace);
-            if (cells is null) return false;
-            _budget.Take();
-            var row = new BlockNode(BlockType.TableRow, table, _lineStart + _firstNonspace, _lineNumber)
-            {
-                Depth = table.Depth + 1,
-                Open = false,
-                Cells = new List<CellData>(columns),
-                EndOffset = _lineStart + _line.Length,
-            };
-            int i = 0;
-            for (; i < cells.Count && i < columns; i++)
-            {
-                _budget.Take();
-                row.Cells.Add(new CellData { Text = cells[i].Text, SourceOffset = _lineStart + cells[i].Offset });
-            }
-            for (; i < columns; i++)
-            {
-                _budget.Take();
-                row.Cells.Add(new CellData { Text = string.Empty, SourceOffset = _lineStart + _line.Length });
-            }
-            table.Children.Add(row);
-            table.TableRows++;
-            _tableCells += columns;
-            table.EndOffset = _lineStart + _line.Length;
-            AdvanceOffset(_line.Length - _offset, false);
-            return true;
+            var parent = container;
+            while (!CanContain(parent.Kind, kind)) parent = parent.Parent!;
+            // TRACE R-MD-0238
+            // a list or list item: its first new level must stay below the limit, counted from the deeper of its
+            // parent and the last block this line continued (so a paragraph it would interrupt counts)
+            if (kind != BlockKind.BlockQuote)
+                return (parent.Depth > _lineStart.Depth ? parent.Depth : _lineStart.Depth) + 1 < _maxDepth;
+            return parent.Depth + levels < _maxDepth;
         }
     }
 }

@@ -514,7 +514,7 @@ public sealed partial class ZipReader : IDisposable
             }
 
             if (entry.RawMethod == 8) data = new DeflateStream(data, CompressionMode.Decompress);
-            return new EntryReadStream(data, entry, this, aes, checkCrc);
+            return new EntryReadStream(data, entry, this, aes, checkCrc, entry.Encryption == ZipEncryption.ZipCrypto);
         }
         catch
         {

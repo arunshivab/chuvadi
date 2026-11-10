@@ -16,6 +16,10 @@
     <AssemblyName>Chuvadi.Layout.Pdf</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Pdf</Product>
     <Description>PDF, SVG and PNG output for Chuvadi.Layout pages (whole documents or one page at a time, memory-only), and PdfShaper: complex-script (Indic) shaping through Chuvadi.Pdf.Text.Shaping as a Chuvadi.Layout IShaper. Pure BCL; built on chuvadi-pdf.</Description>
@@ -32,12 +36,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Chuvadi.Layout\Chuvadi.Layout.csproj" />
-    <PackageReference Include="Chuvadi.Pdf.Authoring" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Documents" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Graphics" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Svg" Version="[$(ChuvadiPdfVersion)]" />
-    <PackageReference Include="Chuvadi.Pdf.Text.Shaping" Version="[$(ChuvadiPdfVersion)]" />
+    <PackageReference Include="Chuvadi.Pdf.Authoring" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Documents" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Graphics" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Svg" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Text.Shaping" Version="$(ChuvadiPdfRange)" />
   </ItemGroup>
 
   <ItemGroup>

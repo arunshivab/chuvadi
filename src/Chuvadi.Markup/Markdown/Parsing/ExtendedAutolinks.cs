@@ -1,278 +1,204 @@
 using System;
-using System.Globalization;
 using Chuvadi.Markup.Internal;
 
 namespace Chuvadi.Markup.Markdown.Parsing
 {
-    /// <summary>GFM extended autolinks (behaviour of cmark-gfm's autolink extension).</summary>
+    /// <summary>
+    /// Scanners for GFM extended autolinks (GFM 0.29 "Autolinks (extension)"): www., http://, https:// and
+    /// ftp:// links, mailto: and xmpp: addresses and bare email addresses, read on the raw content text.
+    /// </summary>
     internal static class ExtendedAutolinks
     {
-        public static bool IsCSpace(char c) => c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r'; // cmark_isspace (no VT)
+        public static bool Starts(string s, int i, string word)
+            => s.Length - i >= word.Length && string.CompareOrdinal(s, i, word, 0, word.Length) == 0;
 
-        private static bool IsAsciiPunct(char c) => c < 128 && CharUtil.IsAsciiPunctuation(c);
+        private static bool StartsIgnoreCase(string s, int i, string word)
+            => s.Length - i >= word.Length && string.Compare(s, i, word, 0, word.Length, StringComparison.OrdinalIgnoreCase) == 0;
 
-        private static bool IsValidHostChar(string s, int i)
+        // TRACE R-MD-0249
+        /// <summary>
+        /// The length of an http://, https:// or ftp:// scheme at <paramref name="i"/>, in any case of its letters
+        /// (D-232, N1: "HTTP://a" links), or 0.
+        /// </summary>
+        public static int SchemeLength(string s, int i)
         {
-            int cp = CharUtil.CodePointAt(s, i);
-            if (CharUtil.IsUnicodeWhitespace(cp)) return false;
-            if (cp < 128) return !CharUtil.IsAsciiPunctuation((char)cp);
-            switch (CharUnicodeInfo.GetUnicodeCategory(cp))
-            {
-                case UnicodeCategory.ConnectorPunctuation:
-                case UnicodeCategory.DashPunctuation:
-                case UnicodeCategory.OpenPunctuation:
-                case UnicodeCategory.ClosePunctuation:
-                case UnicodeCategory.InitialQuotePunctuation:
-                case UnicodeCategory.FinalQuotePunctuation:
-                case UnicodeCategory.OtherPunctuation:
-                    return false;
-                default:
-                    return true;
-            }
+            if (StartsIgnoreCase(s, i, "http://")) return 7;
+            if (StartsIgnoreCase(s, i, "https://")) return 8;
+            if (StartsIgnoreCase(s, i, "ftp://")) return 6;
+            return 0;
         }
 
-        public static bool IsSafeScheme(string s, int start, int len)
+        // TRACE R-MD-0205
+        /// <summary>A char that may be part of a domain: not whitespace or a control char, not ASCII punctuation other than - _ .</summary>
+        private static bool IsDomainChar(char c)
         {
-            foreach (var scheme in new[] { "http://", "https://", "ftp://" })
-            {
-                if (len > scheme.Length && string.Compare(s, start, scheme, 0, scheme.Length, StringComparison.OrdinalIgnoreCase) == 0
-                    && IsValidHostChar(s, start + scheme.Length))
-                    return true;
-            }
-            return false;
+            if (c <= ' ' || c == '\u007f') return false;
+            if (c < 128 && CharUtil.IsAsciiPunctuation(c)) return c == '-' || c == '_' || c == '.';
+            // TRACE R-MD-0250
+            // a space separator (U+00A0 and the other Zs chars) is whitespace, not part of a domain (D-232, G2);
+            // U+2028 (a line separator) stays a domain char, as the frozen output keeps it
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.SpaceSeparator) return false;
+            return true;
         }
 
-        /// <summary>Returns the domain length (0 if invalid). data = s[start..start+size).</summary>
-        public static int CheckDomain(string s, int start, int size, bool allowShort)
+        // TRACE R-MD-0252
+        /// <summary>
+        /// End of the run of domain chars from <paramref name="i"/>. A backslash before '-', '_' or '.' that follows a
+        /// letter, digit or period counts with the char it escapes, so "www.a.b\_" has the domain "a.b\_" and its
+        /// underscore is seen (D-232, G3), while "http://-\_" has the domain "-" (D-242).
+        /// </summary>
+        private static int DomainEnd(string s, int i)
         {
-            int i, np = 0, uscore1 = 0, uscore2 = 0;
-            for (i = 1; i < size - 1; i++)
+            while (i < s.Length)
             {
-                if (s[start + i] == '\\' && i < size - 2) i++;
-                char c = s[start + i];
-                if (c == '_') uscore2++;
-                else if (c == '.')
+                if (IsDomainChar(s[i])) i++;
+                else if (s[i] == '\\' && i + 1 < s.Length && (s[i + 1] == '-' || s[i + 1] == '_' || s[i + 1] == '.')
+                    && i > 0 && (char.IsLetterOrDigit(s[i - 1]) || s[i - 1] == '.')) i += 2;
+                else break;
+            }
+            return i;
+        }
+
+        /// <summary>A char that may be the first of a domain: not ASCII punctuation, except '_' and '-'.</summary>
+        private static bool MayStartDomain(char c) => !(c < 128 && CharUtil.IsAsciiPunctuation(c)) || c == '_' || c == '-';
+
+        // TRACE R-MD-0206
+        /// <summary>A valid domain: non-empty, with no underscore in its last two dot-separated segments.</summary>
+        private static bool ValidDomain(string s, int start, int end, bool needsPeriod)
+        {
+            // TRACE R-MD-0251
+            // the domain must start right after www. or the scheme with a domain char; ASCII punctuation other
+            // than '_' and '-' (so '.' or an escape) is not allowed first (D-232, G2; "www._xxx.yyy.zzz" links)
+            if (end <= start || !MayStartDomain(s[start])) return false;
+            // a domain ends for this check before a period that follows another ("_..x1c.d" is checked as "_")
+            int doubled = s.IndexOf("..", start, end - start, StringComparison.Ordinal);
+            if (doubled >= 0) end = doubled;
+            while (end > start && s[end - 1] == '.') end--;
+            if (end <= start) return false;
+            int lastDot = s.LastIndexOf('.', end - 1, end - start);
+            if (needsPeriod && lastDot < 0) return false;
+            int secondDot = lastDot > start ? s.LastIndexOf('.', lastDot - 1, lastDot - start) : -1;
+            int checkFrom = secondDot >= 0 ? secondDot + 1 : start;
+            return s.IndexOf('_', checkFrom, end - checkFrom) < 0;
+        }
+
+        // TRACE R-MD-0207
+        /// <summary>End of the run from <paramref name="i"/> that stops at a space, tab, line ending, form feed or '&lt;'.</summary>
+        private static int PathEnd(string s, int i)
+        {
+            while (i < s.Length && s[i] != '<' && s[i] != ' ' && s[i] != '\t' && s[i] != '\n' && s[i] != '\r' && s[i] != '\f') i++;
+            return i;
+        }
+
+        /// <summary>End of a www. autolink at <paramref name="k"/>, or -1.</summary>
+        public static int WwwLink(string s, int k)
+        {
+            // TRACE R-MD-0251
+            if (k + 4 >= s.Length || !MayStartDomain(s[k + 4])) return -1;
+            int domainEnd = DomainEnd(s, k);
+            int end = Trim(s, k, PathEnd(s, k));
+            if (end <= k + 4) return -1;
+            // TRACE R-MD-0222
+            return ValidDomain(s, k, domainEnd, needsPeriod: true) ? end : -1;
+        }
+
+        /// <summary>End of a scheme autolink at <paramref name="k"/>, or -1.</summary>
+        public static int UrlLink(string s, int k, int schemeLength)
+        {
+            int domainStart = k + schemeLength;
+            int domainEnd = DomainEnd(s, domainStart);
+            if (domainEnd == domainStart) return -1;
+            int end = Trim(s, k, PathEnd(s, k));
+            if (end <= domainStart) return -1;
+            return ValidDomain(s, domainStart, domainEnd, needsPeriod: false) ? end : -1;
+        }
+
+        // TRACE R-MD-0209
+        /// <summary>A char of the local part of an email address.</summary>
+        public static bool IsLocalChar(char c) => CharUtil.IsAsciiAlnum(c) || c == '.' || c == '-' || c == '_' || c == '+';
+
+        // TRACE R-MD-0253
+        /// <summary>
+        /// End of an email domain at <paramref name="i"/>: alphanumeric, - and _ in segments separated by periods,
+        /// at least one period, not ending in - or _; a final period is left out.
+        /// </summary>
+        public static int EmailDomain(string s, int i) => ScanEmailDomain(s, i, out int end) ? end : -1;
+
+        /// <summary>
+        /// Scans an email domain at <paramref name="i"/>; <paramref name="end"/> is where the scan stopped (after
+        /// the label chars read), whether or not the domain is valid.
+        /// </summary>
+        public static bool ScanEmailDomain(string s, int i, out int end)
+        {
+            end = i;
+            // TRACE R-MD-0253
+            // labels of letters, digits, - and _ joined by single periods; the domain ends before a period
+            // that does not start another label ("c.dwww..com" gives "c.dwww"); it may not start with a period
+            // (D-232, N6)
+            if (i >= s.Length || !IsLabelChar(s[i])) return false;
+            int j = i;
+            while (j < s.Length)
+            {
+                if (IsLabelChar(s[j])) j++;
+                else if (s[j] == '.' && j + 1 < s.Length && IsLabelChar(s[j + 1])) j++;
+                else break;
+            }
+            end = j;
+            if (s.IndexOf('.', i, j - i) < 0) return false;
+            char last = s[j - 1];
+            return last != '-' && last != '_';
+        }
+
+        private static bool IsLabelChar(char c) => CharUtil.IsAsciiAlnum(c) || c == '-' || c == '_';
+
+        // TRACE R-MD-0211
+        /// <summary>
+        /// Extended autolink path validation on [start, end): stop at '&lt;'; then repeatedly drop trailing
+        /// ? ! . , : * _ ~, a trailing ')' without a matching '(', and an entity-like "&amp;name;" ending.
+        /// </summary>
+        public static int Trim(string s, int start, int end)
+        {
+            int lt = s.IndexOf('<', start, end - start);
+            if (lt >= 0) end = lt;
+            int open = 0, close = 0;
+            for (int i = start; i < end; i++)
+            {
+                if (s[i] == '(') open++;
+                else if (s[i] == ')') close++;
+            }
+            while (end > start)
+            {
+                char last = s[end - 1];
+                // TRACE R-MD-0221
+                if ("?!.,:*_~\"'".IndexOf(last) >= 0)
                 {
-                    uscore1 = uscore2;
-                    uscore2 = 0;
-                    np++;
-                }
-                else if (!IsValidHostChar(s, start + i) && c != '-') break;
-            }
-            if ((uscore1 > 0 || uscore2 > 0) && np <= 10) return 0;
-            if (allowShort) return i;
-            return np > 0 ? i : 0;
-        }
-
-        /// <summary>Trims trailing punctuation from a candidate link of length linkEnd starting at start.</summary>
-        public static int AutolinkDelim(string s, int start, int linkEnd)
-        {
-            int closing = 0, opening = 0;
-            for (int i = 0; i < linkEnd; i++)
-            {
-                char c = s[start + i];
-                if (c == '<') { linkEnd = i; break; }
-                if (c == '(') opening++;
-                else if (c == ')') closing++;
-            }
-            while (linkEnd > 0)
-            {
-                char c = s[start + linkEnd - 1];
-                switch (c)
-                {
-                    case ')':
-                        if (closing <= opening) return linkEnd;
-                        closing--;
-                        linkEnd--;
-                        break;
-                    case '?':
-                    case '!':
-                    case '.':
-                    case ',':
-                    case ':':
-                    case '*':
-                    case '_':
-                    case '~':
-                    case '\'':
-                    case '"':
-                        linkEnd--;
-                        break;
-                    case ';':
-                    {
-                        int newEnd = linkEnd - 2;
-                        while (newEnd > 0 && CharUtil.IsAsciiAlpha(s[start + newEnd])) newEnd--;
-                        if (newEnd < linkEnd - 2 && newEnd >= 0 && s[start + newEnd] == '&') linkEnd = newEnd;
-                        else linkEnd--;
-                        break;
-                    }
-                    default:
-                        return linkEnd;
-                }
-            }
-            return linkEnd;
-        }
-
-        private static bool ValidateProtocol(string protocol, string data, int at, int rewind, int maxRewind)
-        {
-            int len = protocol.Length;
-            if (len > maxRewind - rewind) return false;
-            int pstart = at - rewind - len;
-            if (string.CompareOrdinal(data, pstart, protocol, 0, len) != 0) return false;
-            if (len == maxRewind - rewind) return true;
-            char prev = data[pstart - 1];
-            return !CharUtil.IsAsciiAlnum(prev);
-        }
-
-        /// <summary>Links bare email addresses in text nodes that are not inside links.</summary>
-        public static void ProcessEmails(InlineNode root, NodeBudget budget)
-        {
-            Consolidate(root);
-            Walk(root, budget);
-        }
-
-        private static void Walk(InlineNode node, NodeBudget budget)
-        {
-            // iterative pre-order walk; skips link subtrees
-            var stack = new System.Collections.Generic.Stack<InlineNode>();
-            for (var c = node.Last; c is not null; c = c.Prev) stack.Push(c);
-            while (stack.Count > 0)
-            {
-                var n = stack.Pop();
-                if (n.Type == InlineType.Link) continue;
-                if (n.Type == InlineType.Text)
-                {
-                    ProcessText(n, budget);
+                    end--;
                     continue;
                 }
-                for (var c = n.Last; c is not null; c = c.Prev) stack.Push(c);
-            }
-        }
-
-        private static void Consolidate(InlineNode node)
-        {
-            var stack = new System.Collections.Generic.Stack<InlineNode>();
-            stack.Push(node);
-            while (stack.Count > 0)
-            {
-                var n = stack.Pop();
-                for (var c = n.First; c is not null; c = c.Next)
+                if (last == ')' && close > open)
                 {
-                    if (c.Type == InlineType.Text && c.Next is not null && c.Next.Type == InlineType.Text)
-                    {
-                        var sb = new System.Text.StringBuilder(c.Literal);
-                        while (c.Next is not null && c.Next.Type == InlineType.Text)
-                        {
-                            var nx = c.Next;
-                            sb.Append(nx.Literal);
-                            c.End = nx.End;
-                            nx.Unlink();
-                        }
-                        c.Literal = sb.ToString();
-                    }
-                    else if (c.First is not null)
-                    {
-                        stack.Push(c);
-                    }
-                }
-            }
-        }
-
-        private static void ProcessText(InlineNode text, NodeBudget budget)
-        {
-            string data = text.Literal;
-            int baseStart = text.Start;
-            int start = 0, offset = 0, remaining = data.Length;
-            while (true)
-            {
-                if (offset >= remaining) break;
-                int at = data.IndexOf('@', start + offset, remaining - offset);
-                if (at < 0) break;
-                int maxRewind = at - (start + offset);
-                bool autoMailto = true, isXmpp = false;
-                int rewind;
-                found_at:
-                for (rewind = 0; rewind < maxRewind; ++rewind)
-                {
-                    char c = data[start + offset + maxRewind - rewind - 1];
-                    if (CharUtil.IsAsciiAlnum(c)) continue;
-                    if (".+-_".IndexOf(c) >= 0) continue;
-                    if (c == ':')
-                    {
-                        if (ValidateProtocol("mailto:", data, start + offset + maxRewind, rewind, maxRewind)) { autoMailto = false; continue; }
-                        if (ValidateProtocol("xmpp:", data, start + offset + maxRewind, rewind, maxRewind)) { autoMailto = false; isXmpp = true; continue; }
-                    }
-                    break;
-                }
-                if (rewind == 0)
-                {
-                    offset += maxRewind + 1;
+                    end--;
+                    close--;
                     continue;
                 }
-                int linkEnd, np = 0;
-                bool restart = false;
-                for (linkEnd = 1; linkEnd < remaining - offset - maxRewind; ++linkEnd)
+                if (last == ';')
                 {
-                    char c = data[start + offset + maxRewind + linkEnd];
-                    if (CharUtil.IsAsciiAlnum(c)) continue;
-                    if (c == '@')
+                    int j = end - 2;
+                    while (j >= start && CharUtil.IsAsciiAlnum(s[j])) j--;
+                    // TRACE R-MD-0248
+                    // entity-like: '&', then an ASCII letter and more letters or digits; "&0;" is not (D-232, N4)
+                    if (j >= start && j < end - 2 && s[j] == '&' && CharUtil.IsAsciiAlpha(s[j + 1]))
                     {
-                        offset += maxRewind + 1;
-                        maxRewind = linkEnd - 1;
-                        restart = true;
-                        break;
-                    }
-                    if (c == '.' && linkEnd < remaining - offset - maxRewind - 1 && CharUtil.IsAsciiAlnum(data[start + offset + maxRewind + linkEnd + 1]))
-                        np++;
-                    else if (c == '/' && isXmpp)
+                        end = j;
                         continue;
-                    else if (c != '-' && c != '_')
-                        break;
-                }
-                if (restart) goto found_at;
-                char last = data[start + offset + maxRewind + linkEnd - 1];
-                if (linkEnd < 2 || np == 0 || (!CharUtil.IsAsciiAlpha(last) && last != '.'))
-                {
-                    offset += maxRewind + linkEnd;
+                    }
+                    // TRACE R-MD-0212
+                    end--;
                     continue;
                 }
-                linkEnd = AutolinkDelim(data, start + offset + maxRewind, linkEnd);
-                if (linkEnd == 0)
-                {
-                    offset += maxRewind + 1;
-                    continue;
-                }
-                int emailStart = start + offset + maxRewind - rewind;
-                int emailLen = linkEnd + rewind;
-                string email = data.Substring(emailStart, emailLen);
-                budget.Take();
-                budget.Take();
-                budget.Take();
-                var link = new InlineNode(InlineType.Link)
-                {
-                    Destination = (autoMailto ? "mailto:" : string.Empty) + email,
-                    Style = LinkStyle.ExtendedAutolink,
-                    IsEmail = true,
-                    Start = baseStart + emailStart,
-                    End = baseStart + emailStart + emailLen,
-                };
-                link.Append(new InlineNode(InlineType.Text) { Literal = email, Start = link.Start, End = link.End });
-                int postStart = emailStart + emailLen;
-                var post = new InlineNode(InlineType.Text)
-                {
-                    Literal = data.Substring(postStart),
-                    Start = baseStart + postStart,
-                    End = text.End,
-                };
-                text.InsertAfter(link);
-                link.InsertAfter(post);
-                text.Literal = data.Substring(start, emailStart - start);
-                text.End = baseStart + emailStart;
-                text = post;
-                int consumed = offset + maxRewind + linkEnd;
-                start += consumed;
-                remaining -= consumed;
-                offset = 0;
+                break;
             }
+            return end;
         }
     }
 }

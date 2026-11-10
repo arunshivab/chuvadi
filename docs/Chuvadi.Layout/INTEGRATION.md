@@ -22,7 +22,7 @@ dotnet run -c Release --project staging\samples\Chuvadi.Layout.Viewer -- upload.
 | Chuvadi.Layout.Sheets | `SheetsLayout`: Excel workbooks through Chuvadi.Sheets | both |
 | Chuvadi.Layout.Documents | `AutoDetectLayout`: one call for docx, xlsx (encrypted too) and text, format detected | both |
 | Chuvadi.Fonts | `FontPack`: the LiPi Sans files (Latin and nine Indic scripts); Layout uses them as its built-in fonts | both |
-| Chuvadi.Layout.Fonts | `BundledFontSource`: OFL metric-compatible faces for the Office fonts | both |
+| Chuvadi.Layout.Fonts | `SubstituteFontPack`: OFL metric-compatible substitute faces, a pure data pack (add with `FontPackSource.For(SubstituteFontPack.Instance)`) | both |
 | Chuvadi.Layout.Markup | `MarkdownLayout` and `HtmlLayout`: Markdown, and sanitized HTML (mail, pages), into the same `LaidOutDocument` | both |
 | Chuvadi.Layout.Pdf | `PdfShaper` (Indic shaping), `ToPng`, `ToPdf`, `ToSvg` (delegates to `LayoutSvg`). Source in `staging/src/Chuvadi.Layout.Pdf` (D-37): it takes chuvadi-pdf as pinned packages, so it is built outside `Chuvadi.slnx` and CI until chuvadi-pdf joins the monorepo | both |
 
@@ -37,17 +37,20 @@ var options = new LayoutOptions
     Culture = CultureInfo.CurrentCulture,   // decides Letter or A4 when the file states no paper (D-30)
     Shaper = new PdfShaper(),               // Tamil, Devanagari and other complex scripts
 };
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 using LaidOutDocument doc = AutoDetectLayout.Open(stream, LayoutSourceFormat.Auto, options, ct);   // Chuvadi.Layout.Documents
 LaidOutPage page = doc.GetPage(0, ct);
 ```
 
-Indic text: `PdfShaper` runs on Chuvadi.Pdf 3.30.2 (the shaping of 3.26), whose shaping matches HarfBuzz 15.0.0 glyph for glyph on all nine
+Indic text: `PdfShaper` runs on Chuvadi.Pdf 3.31.2 or any later 3.x (the shaping of 3.26), whose shaping matches HarfBuzz 15.0.0 glyph for glyph on all nine
 LiPi Indic scripts (19,641 syllables in the Pdf library's conformance corpus). Indic pages are no longer provisional.
 
 The format is detected from the content, not from the file name:
 - an OOXML package whose main part is `word/document.xml` is a docx, and one with `xl/workbook.xml` is an xlsx;
-- an encrypted OLE file with `Password` set is decrypted and opened as a workbook if it holds one, else as a document;
+- an encrypted OLE file with `Password` set is decrypted and opened as a document if it holds one, else as a workbook;
+  without `Password`, or with a wrong one, it is `LayoutPasswordRequiredException` (D-253);
+- a legacy .doc or .xls (an OLE file without the encryption streams) is `LayoutFormatException` "The file could not be
+  read: …", naming the old format (D-293, D-301);
 - anything else is text.
 
 Fixed-layout formats (PDF, scans) do not go through Layout.
@@ -56,12 +59,17 @@ Fixed-layout formats (PDF, scans) do not go through Layout.
 
 | What | How it arrives |
 |---|---|
-| Unreadable or unsupported file, wrong password | `LayoutFormatException` (a `LayoutException`) |
-| A `LayoutLimits` value exceeded | `LayoutLimitExceededException` (`LimitName`, `Limit`, `Actual`) |
+| Encrypted file, password missing or wrong | `LayoutPasswordRequiredException` (a `LayoutFormatException`): `PasswordGiven` is false when no password was set, true when the one set is wrong (D-253). Never raised for a legacy .doc or .xls (D-293) |
+| Unreadable or unsupported file, including a legacy .doc or .xls (the message names the old format) | `LayoutFormatException` (a `LayoutException`) |
+| A `LayoutLimits` value exceeded | `LayoutLimitExceededException` (`LimitName`, `Limit`, `Actual`, and `Location` where known). A workbook opens whatever its page count; `MaxPages` is raised when a page at or past it is built, exported or printed, with `Actual` = the workbook's page count and `Location` = the sheet and printed range, for example "Sheet1!A1:XFD1048576" (D-291) |
 | Cancelled or timed out | `OperationCanceledException` |
 | Fidelity notes (font substituted, chart drawn as a placeholder, …) | `doc.Warnings`, `doc.FontSubstitutions`; output notes through `LayoutPdfOptions.Warning` / `LayoutSvgOptions.Warning` |
 
 Warnings never stop layout. Their codes are stable, and DESIGN.md lists them.
+
+A damaged workbook whose workbook or worksheet part is missing, or whose cells point at shared strings that do not
+exist, raises `LayoutFormatException` ("The workbook could not be read: ..."). Chuvadi.Sheets 2.0.2 rejects these files;
+earlier versions opened them with blank cells or the index shown as text. Treat it like any unreadable file.
 
 ---
 
@@ -86,7 +94,9 @@ the page is laid out.
 
 1. **Open on a background thread.** `AutoDetectLayout.Open(stream, Auto, options, ct)` (Chuvadi.Layout.Documents):
    - give it the document's file stream, or bytes the app already holds;
-   - set `AllowSystemFonts = true` so the user's installed fonts are used, and keep `BundledFontSource` as the fallback;
+   - set `AllowSystemFonts = true` so the user's installed fonts are used, and keep the substitute pack (`FontPackSource.For(SubstituteFontPack.Instance)`) as the fallback;
+   - the font folders are scanned once per process (`SystemFontSource.Shared`) and each font is loaded once; when the
+     user installs a font while the app runs, call `SystemFontSource.Shared.Refresh()` and the next document sees it;
    - set `UseEmbeddedFonts = true` (the default).
 2. **Show the first page at once.**
    - Call `GetPage(0)`, then `ToSvg()`, and navigate the WebView2 to the result.
@@ -155,7 +165,7 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
         Shaper = new PdfShaper(),
         Now = DateTimeOffset.UtcNow,                               // or the message date, for DATE fields
     };
-    options.FontSources.Add(BundledFontSource.Instance);
+    options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 
     using var input = new MemoryStream(upload, writable: false);
     using LaidOutDocument doc = AutoDetectLayout.Open(input, LayoutSourceFormat.Auto, options, cts.Token);
@@ -216,7 +226,8 @@ Tighten them further with `Clone()` and set the values you need. Compressed pack
     to the stream you give them.
   - Dispose the `LaidOutDocument` as soon as the PNGs are made.
 - **Passwords.** An encrypted docx or xlsx needs `LayoutOptions.Password`. Without one it fails fast with
-  `LayoutFormatException`; show "protected file".
+  `LayoutPasswordRequiredException`: show a password prompt when `PasswordGiven` is false and "wrong password" when it
+  is true. No need to read `InnerException` or the message.
 - **Read the file before the clock starts (D-44).** On Windows, Microsoft Defender scans an encrypted docx/xlsx when
   it is opened from disk by trying the default password, which can take seconds inside the OS before any library code
   runs. Read the attachment into a `MemoryStream` first, then start the timeout, so "took too long" measures the
@@ -260,7 +271,7 @@ policy.ResourceResolver = new DelegateResourceResolver(r =>
 SanitizeResult mail = HtmlSanitizer.Sanitize(htmlPartBytes, policy, mimeCharsetEncoding, ct);
 
 var options = new LayoutOptions { Culture = userCulture, Limits = LayoutLimits.ForUntrustedInput() };
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 options.Shaper = new PdfShaper();                          // Indic mail
 using LaidOutDocument doc = HtmlLayout.Open(mail, new HtmlImportOptions { Title = subject }, options, ct);
 using var pdf = new MemoryStream();

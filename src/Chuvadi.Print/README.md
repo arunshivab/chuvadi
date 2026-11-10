@@ -11,12 +11,13 @@ What v1.0 gives you:
 - **`PrintRouter`**: chooses how each job reaches a printer (the PDF as-is, CUPS, or rendered pages), in a fixed
   order, and writes the route and any fallback to the audit trail.
 - **`PrinterRegistry`**: the printers an application has set up, with their last-read capabilities, saved as JSON.
+- **`VectorPage`**: a page as vector content (paths, glyph runs, images, groups) for vector print routes; Chuvadi.Print.Windows writes it as XPS.
 
 Devices and transports are separate packages, so an application takes only what it uses:
 
 | Package | What it adds |
 |---|---|
-| [Chuvadi.Print.Windows](../Chuvadi.Print.Windows/README.md) | Windows printers through the GDI spooler |
+| [Chuvadi.Print.Windows](../Chuvadi.Print.Windows/README.md) | Windows printers through the GDI spooler, and the XPS writer |
 | [Chuvadi.Print.Ipp](../Chuvadi.Print.Ipp/README.md) | Driverless IPP printing on any OS |
 | [Chuvadi.Print.Remote](../Chuvadi.Print.Remote/README.md) | An embeddable print hub and dial-out print agents |
 

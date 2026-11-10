@@ -31,4 +31,10 @@
     <None Include="Conformance\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- D-194: the frozen clean-room gate (Gate/). Its data: expected outputs frozen from the library under the approved
+       rules, the public API listing, spec scores and rule-5 rules; see Gate/Data/NOTICE.txt. Dev-time only, never packed. -->
+  <ItemGroup>
+    <None Include="Gate\Data\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

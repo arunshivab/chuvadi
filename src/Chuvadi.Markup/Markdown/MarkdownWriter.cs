@@ -554,7 +554,7 @@ namespace Chuvadi.Markup.Markdown
                 if (link.Style == LinkStyle.ExtendedAutolink && link.Children.Count == 1 && link.Children[0] is TextInline et)
                 {
                     string d = link.Destination;
-                    if (d == et.Text && Scanners_IsAutolinkSafe(d))
+                    if (d == et.Text && IsAutolinkSafe(d))
                     {
                         sb.Append('<').Append(d).Append('>');
                         atLineStart = false;
@@ -586,8 +586,8 @@ namespace Chuvadi.Markup.Markdown
                 sb.Append(')');
             }
 
-            private static bool Scanners_IsAutolinkSafe(string d)
-                => d.IndexOfAny(new[] { '<', '>', ' ', '\n', '\r', '\t' }) < 0 && Parsing.Scanners.AutolinkUri(d + ">", 0) == d.Length + 1;
+            private static bool IsAutolinkSafe(string d)
+                => d.IndexOfAny(new[] { '<', '>', ' ', '\n', '\r', '\t' }) < 0 && Parsing.MarkdownSyntax.IsUriAutolinkBody(d);
 
             private static string EscapeLabel(string label)
             {

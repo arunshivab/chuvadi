@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="ChuvadiPdf.props" />
+
   <!--
     Chuvadi.Print.Pdf.Raster: the adapter between Chuvadi.Print and Chuvadi.Pdf (BASELINE P01/P02, decisions D-14, D-28, D-29).
 
@@ -8,7 +10,7 @@
     chuvadi-pdf source clone. The CI pure-BCL grep covers
     src/ and shared/; these first-party PackageReferences stay out of its scope until the move.
 
-    ChuvadiPdfVersion pins the Chuvadi.Pdf packages. Bump it when a newer Chuvadi.Pdf is packed into the feed.
+    ChuvadiPdf.props sets the Chuvadi.Pdf range the package references, [3.31.2, 4.0.0) (D-235, D-258).
   -->
 
   <PropertyGroup>
@@ -21,24 +23,24 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <Product>Chuvadi.Print.Pdf.Raster</Product>
-    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages for any Chuvadi.Print target (Windows printers, IPP, PNG preview).</Description>
+    <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages (the crop box, as ISO 32000 says) for any Chuvadi.Print target (Windows printers, IPP, PNG preview), and PdfFontInspector tells a PrintRouter when a PDF can be sent to the printer as it is.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
     <Version>0.1.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- NU5104: 0.1.0 depends on Chuvadi.Print 1.0.0-rc.3, a pre-release (D-235 L1.5: tagged after print-v1.0.0-rc.3).
+         NuGet allows it; the warning is turned off on purpose until Chuvadi.Print 1.0.0. -->
+    <NoWarn>$(NoWarn);CS1591;NU5104</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;pdf;rasterizer</PackageTags>
-
-    <ChuvadiPdfVersion>3.22.1</ChuvadiPdfVersion>
+    <PackageTags>print;printing;pdf;rasterizer;fonts</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
-    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="$(ChuvadiPdfVersion)" />
-    <PackageReference Include="Chuvadi.Pdf.Operations" Version="$(ChuvadiPdfVersion)" />
+    <PackageReference Include="Chuvadi.Pdf.Rendering" Version="$(ChuvadiPdfRange)" />
+    <PackageReference Include="Chuvadi.Pdf.Operations" Version="$(ChuvadiPdfRange)" />
   </ItemGroup>
 
   <ItemGroup>

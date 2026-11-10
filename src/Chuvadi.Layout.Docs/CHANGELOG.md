@@ -1,6 +1,23 @@
 # Chuvadi.Layout.Docs — Changelog
 
-## 0.1.0 (unreleased)
+## Unreleased
+
+- An encrypted document opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a
+  `LayoutFormatException`; D-253), with `PasswordGiven` false or true. Messages: "The document is encrypted: set
+  LayoutOptions.Password. …" and "The password for this document is wrong: …", each followed by the Chuvadi.Docs
+  message. Before, a plain `LayoutFormatException` ending "Set LayoutOptions.Password.".
+- A legacy .doc (or any OLE file without the encryption streams) is never this exception: with the shared decryptor of
+  D-293 it is "The document could not be read: …", naming the old format, with or without a password.
+
+## 0.1.0 (2026-11-09)
+
+- Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,
+  D-254).
+- Tamil and other complex-script text (R3, D-191): a run takes the complex-script font, size and bold only with
+  `w:cs` or `w:rtl` (ECMA-376 17.3.2.26 step 2a). Otherwise Hebrew, Arabic, Syriac and Thaana take the ASCII font, as
+  the standard's table says, and Tamil and the other Indic scripts the High ANSI font, size and bold (standard silent;
+  follows Word 2021, measured with calib-tamil-slots). The language tag and `w:hint="cs"` do not change this. Where the
+  font has no Tamil letters Layout draws LiPi Sans Tamil; Word draws Vijaya (docs/DIFFERENCES.md, L-4).
 
 - Cell margins (F3, D-181): when neither the table, its style nor Table Normal states them, 115 twips (5.75 pt) left
   and right, as ECMA-376 17.4.34 and 17.4.11 give (was 5.4 pt, Word's Table Normal value). Word uses about 0 pt in

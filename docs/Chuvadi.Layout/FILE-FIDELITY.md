@@ -43,7 +43,9 @@ Sources:
 | Workbook font missing (Cambria) | MDW of the font the file names | Real Cambria: MDW 8 at 11 pt | Columns sized with real Cambria's digits (554/1000 em, from Word's PDF); the text drawn in Caladea |
 | Number-format fill (`*x`) | x is repeated to fill the cell | Same | Same, for any character |
 | Text overflowing to the right past the last used column | Standard silent (printing) | Printed in full, adding pages across; a filled neighbour stops it (A7 sheet Overflow) | Same (standard silent; follows Excel): the printed range widens to where the text ends, and the text continues on the page it runs onto |
+| Printed range without a print area | Standard silent (printing) | From A1 to the last value, fill or border; every page printed, blank ones too; bold, number format, alignment and other invisible formats on empty cells don't count (D-287, three Excel exports) | Same (D-291) |
 | Row height | The stored height | Prints about 14.5 pt for a stored 15 pt | The stored height |
+| Row with no stored height | Standard silent | Fits the row to its fonts when it opens the file, using its own font heights (Calibri 16: 28 px; Arial 13 bold: 22 px), never below the default | Same idea, with the font Layout draws: the default while the line fits it, otherwise line height + 2 px to the nearest pixel. Equal to Excel for Calibri; up to a few px apart where the font or its substitute differs (X3) |
 
 ## Fonts
 
@@ -53,6 +55,17 @@ Sources:
 | Cambria | Caladea | **No:** real Cambria is 6.5% wider and its lines are shorter (measured against Word 2021's embedded Cambria); a `NonMetricFontSubstitution` warning says breaks may move |
 
 Layout uses the real font whenever it is installed and the application turns on `AllowSystemFonts`.
+
+## Tamil and other complex-script text (.docx)
+
+| Point | The standard | Word 2021 (measured, calib-tamil-slots and d04, 5 Nov 2026) | Layout |
+|---|---|---|---|
+| A run with `<w:cs/>` or `<w:rtl/>` | Every character takes the complex-script font, size and bold (§17.3.2.26 step 2a) | Same | Same |
+| A run without them: Tamil and other Indic letters | Not in the table of §17.3.2.26: standard silent | The ordinary (High ANSI) font, size (`w:sz`) and bold; the language tag and `w:hint="cs"` change nothing | Same (standard silent; follows Word) |
+| A run without them: Hebrew, Arabic, Syriac, Thaana | The ASCII font (§17.3.2.26 table) | Not measured | The ASCII font (the standard) |
+| Spaces between Tamil words | As the characters' slot | The ordinary font | Same |
+| The slot's font has no Tamil letters | Standard silent | Vijaya, even with Nirmala UI and Latha installed | **LiPi Sans Tamil, the same on every machine** (D-191; docs/DIFFERENCES.md L-4) |
+| The theme's Tamil font (`a:font script="Taml"`) | Not said for WordprocessingML text | Never used (18 cases) | Not used |
 
 ## Floating tables (`w:tblpPr`, §17.4.57; `w:tblOverlap`, §17.4.56)
 
@@ -73,7 +86,7 @@ A table with `w:tblpPr` floats. Layout places it at the position the file states
 | Page- or margin-anchored table above its paragraph | Standard silent | Placed where stated; the text above its paragraph reflows around it (T3) | Same (standard silent; follows Word) |
 | Page- or margin-anchored table reaching past the bottom margin | Placed where stated | Moves the table to the next page and splits it after row 1, leaving the page before almost empty (T2) | **Placed exactly where the file says, whole**: never moved or split (decision A, 3 Nov 2026) |
 | `w:tblOverlap` not stated | Other tables may overlap it | Same | Same |
-| `w:tblOverlap="never"` | Tables are adjusted so they do not overlap; how is not said | Not reached in Word's PDF of T4: the two tables never meet there. On screen, Word moved the table sideways (see "Screen and print") | **The table placed later moves down** until it is clear (decision B, 3 Nov 2026). Standard silent on the direction; Word's print behaviour is not yet measured |
+| `w:tblOverlap="never"` | Tables are adjusted so they do not overlap; how is not said | Measured (calib-overlap, 5 Nov 2026): no single rule. Two narrow margin-anchored tables at one spot are drawn on top of each other (O1, O3, against the standard); wide ones, the second moves down to the upper table's distance from text (O2); page-anchored ones, the second moves sideways (O4) | **The table placed later moves down** to the upper table's `bottomFromText` below it (decision B, 3 Nov; distance N5, D-191). See docs/DIFFERENCES.md L-5 |
 
 ### Screen and print
 

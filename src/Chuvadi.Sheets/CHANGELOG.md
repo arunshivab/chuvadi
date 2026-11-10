@@ -1,5 +1,170 @@
 # Changelog
 
+## 2.0.4 (2026-11-10)
+
+DataTable column names now match Excel's table names exactly (D-292). The public API is unchanged.
+
+### Bug fixes
+
+- **`ReadXlsx` (DataSet) and `ReadXlsxSheet` (DataTable) named repeated and empty headers differently from
+  Excel.** D-285 asked for Excel's naming. Arun's Excel check (Insert > Table on 22 header rows) showed that Excel
+  works differently from 2.0.3:
+  - every typed header name is reserved, ignoring case, wherever it is in the row;
+  - each repeat and each empty header then gets a made-up name from **one shared counter** starting at 1. An empty
+    header is `Column` + the counter. A repeat is its name + the counter, but never 1. A name already used moves
+    the number on, and the counter continues from the number used plus 1.
+
+  Changed names (2.0.3 → 2.0.4):
+  - `Name, (empty), Town`: `Column2` → `Column1`;
+  - `Name, (empty), (empty)`: `Column2, Column3` → `Column1, Column2`;
+  - `Column3, Name, (empty)`: `Column32` → `Column1`;
+  - `Qty, Qty, Qty2`: `Qty2, Qty22` → `Qty3, Qty2`;
+  - `Qty, Qty, Town, Town`: `Town2` → `Town3`;
+  - `Qty, Qty, (empty), Qty`: `Qty3` → `Qty4`.
+
+  Data columns wider than the header row are named as empty headers. Unchanged: `Qty, Qty2, Qty3`; `qty, Qty2`;
+  `Name, Town, Town2`; number, date and boolean headers; header-only sheets; tables with unique headers; values;
+  by-name access (`row["Qty"]`, `ReadXlsx<T>`).
+
+  Not observed in Excel, inferred: after a skip, the counter continues from the number used (no observed case
+  separates this from continuing from the counter plus 1).
+
+### Tests
+
+- The `datatables` group adds the 22 header rows from Arun's Excel check, with Excel's names as the expected
+  result (43 checks).
+- Layout17's timing checks no longer depend on a fixed wall-clock limit (D-292):
+  - the cancellation checks (key derivation in `Workbook.Load`, `XlsxReader.Open` and `SaveAsync`) allow the
+    larger of 1,500 ms and half of a full, uncancelled derivation measured on the same machine;
+  - the spin-count cap check proves the order instead of timing it: a wrong password still gets
+    `XlsxLimitExceededException`.
+
+## 2.0.3 (2026-11-09)
+
+A bug fix in the one-line DataSet and DataTable readers (SH-10, D-283, D-285, D-286). The public API is
+unchanged.
+
+### Bug fixes
+
+- **`ReadXlsx` (DataSet) and `ReadXlsxSheet` (DataTable) failed on some header rows** (SH-10). A header
+  row with a repeated name (`Qty, Qty`, compared ignoring case), an empty header cell, or a number, date
+  or boolean as a header threw `IndexOutOfRangeException`, so nothing was read; a repeat only in the last
+  column was named `ColumnN`. The columns are now built by position, one per header cell:
+  - a text header keeps its text exactly;
+  - a number, date, boolean or error header is named by its display text (the cell's number format and
+    `XlsxReaderOptions.DisplayCulture`), for example `2024`;
+  - an empty header is `ColumnN`, N being the column's position, as extra columns already were;
+  - a name already used, ignoring case, gets the smallest number from 2 up that makes it unique, as
+    Excel numbers repeated table headers: `Qty, Qty, Qty` becomes `Qty, Qty2, Qty3`.
+  Cell values are unchanged; the values under the second `Qty` are in `Qty2`.
+  **Changed output:** `Name, Town, Town` gave the columns `Name, Town, Column3` and now gives
+  `Name, Town, Town2`. Tables whose header names are unique text are unchanged.
+- **A sheet with a header row and no data rows gave a DataTable with no columns** (A2). It now has the
+  header row's columns, by the same rule, and no rows. A completely empty sheet still has no columns.
+- Unchanged: `RowReader` access by header name, `GetDisplayString(name)` and `ReadXlsx<T>`, where the
+  first occurrence of a name wins and only text headers have names (as documented in 2.0.1).
+
+### Tests
+
+- New manual-test group `datatables` (21 checks): every naming case, header-only and empty sheets,
+  DataSet and DataTable overloads, an encrypted file, and by-name access unchanged.
+- The manual-test groups' summary exceptions now name the first five failed checks and their messages,
+  so a CI log shows which check failed (D-286).
+
+## 2.0.2 (2026-11-07)
+
+Bug fixes in how the readers follow references inside the package (D-211, D-219). The public API is
+unchanged, and every well-formed file reads exactly as in 2.0.1.
+
+### Bug fixes
+
+- **Relationship targets with dot segments did not resolve** (G1). A target such as
+  `./worksheets/sheet1.xml`, `/xl/../xl/worksheets/sheet1.xml` or `./xl/workbook.xml` was looked
+  up literally, so the file did not open, although Excel opens it. Targets are now resolved as
+  OPC Part 2 §9.3 and RFC 3986 §5.2.4 say, at the root, workbook and sheet level: a leading "/"
+  is relative to the package root, any other target to the source part's folder, then "." and
+  ".." segments are removed (a ".." above the root stops at the root). A target without dot
+  segments resolves to the same part as before.
+- **A missing workbook or worksheet part was reported as a missing file** (G2). When the
+  workbook part or a worksheet part was neither in the zip nor declared in
+  `[Content_Types].xml`, `Workbook.Load`, `XlsxReader.Open`, the `SheetReader` reads
+  (`Rows`, `ReadLayout`, `ReadDrawings`, `ReadComments`, `ReadHeaderFooterPictures`) and the
+  `ReadXlsx` extensions threw a bare `FileNotFoundException`, against the 2.0.0 error contract.
+  They now throw `XlsxFormatException` with the `FileNotFoundException` as `InnerException`.
+  Opening a path that does not exist is still `FileNotFoundException`; a declared but missing
+  part is still `XlsxFormatException` with an `InvalidDataException` inside; missing optional
+  parts are still skipped.
+- **A text cell whose shared string did not exist showed its index as text** (F3). For a
+  shared-string cell (`t="s"`) with an index past the end of the table, a negative index, a
+  value that is not a number, or no shared-string table at all, the readers returned the raw
+  value ("99") as the cell's text, and load → save wrote it back. Such a file is now a damaged
+  file: `XlsxFormatException` "… cell A3 on sheet 'Data' refers to shared string 99, but the
+  workbook has 1." (the message never repeats cell content). `Workbook.Load` and `ReadXlsx`
+  throw while loading; `SheetReader.Rows` throws at the row that holds the cell, after the rows
+  before it. A text cell with no value or an empty value still reads as an empty cell.
+
+### Documentation
+
+- README and guide: the errors table names the two missing-part cases and unresolvable
+  shared-string references; encrypted reads hold the decrypted package in memory (D-217, PR-4).
+- The guide has a section 4.6 for 2.0.2.
+
+## 2.0.1 (2026-11-05)
+
+Bug fixes for saving (D-183, D-185, D-187). The public API is unchanged; `ZipFormatException` is now
+marked obsolete. Unencrypted saved bytes are unchanged; encrypted containers up to about 7 MB are
+byte-identical for the same encrypted package (the encryption itself is random per save, as before).
+
+### Bug fixes
+
+- **Encrypted files larger than about 7 MB could not be opened** (D-185). The shared compound-file
+  writer listed at most 109 FAT sectors and wrote no DIFAT sectors, so any container larger than
+  7,143,424 bytes was saved without an error but was unreadable: our reader reported a missing
+  EncryptionInfo stream, other tools an out-of-range directory. It now writes DIFAT sectors
+  ([MS-CFB] §2.5, §2.6.3) after the FAT sectors; files that need 109 FAT sectors or fewer are
+  byte-identical to 2.0.0. Present in every release since encryption was added; files saved
+  before must be saved again. The same fix reaches Chuvadi.Docs through the shared writer.
+- **Saving to a stream closed it** although documented as left open: `Workbook.SaveTo(Stream)`,
+  `XlsxWriter.Create(Stream)` with `Save`/`SaveAsync`, `ToXlsx(..., Stream)` and
+  `new XlsxExport(Stream)`. The stream is now flushed and left open, positioned after the written
+  bytes. Same in every 1.x release.
+- **An encrypted save to a stream overwrote it from the start and failed on a non-seekable
+  stream** (`NotSupportedException`). The compound-file writer no longer seeks: it writes from the
+  stream's current position and works on any writable stream.
+- **A path save emptied the target before the save succeeded.** `XlsxWriter.Create(path)`
+  truncated the file at once (a writer disposed without `Save`, or an app that failed before
+  `Save`, left 0 bytes), and `Workbook.SaveTo(path, EncryptionOptions)` truncated it before key
+  derivation. Every path save (`Workbook.SaveTo(path)`, `Workbook.SaveTo(path, EncryptionOptions)`,
+  `XlsxWriter.Create(path)`, `ToXlsx(path)`, `new XlsxExport(path)`) now writes
+  `.<name>.<8 hex>.tmp` beside the target and replaces the target only when the save succeeds.
+  A failed or cancelled save, or `Dispose` without `Save`, keeps an existing file and removes the
+  temporary file. Unchanged: a missing folder, a read-only or locked target, or a folder of that
+  name fails at `Create` (or `SaveTo`) with the same exception and message; a replaced file keeps
+  its permission bits on Unix and its attributes and security settings on Windows; a symbolic
+  link is kept and the file it points to is written. New: the file appears only at `Save`.
+- **Encrypted saves left plaintext on disk.** The package was staged in a plaintext temporary
+  file (`chuvadi_sheets_pkg_*.tmp`) that survived a crash, and the streaming writer's sheet spools
+  held the sheet XML in plaintext. For an encrypted save every temporary file is now encrypted
+  (AES-256-CTR, a one-time key and nonce held only in memory; the D-47/D-155 design, now shared
+  with Chuvadi.Docs as `Chuvadi.Internal.Crypto.EncryptedSpool`).
+- **Temporary files were readable by other users** on Linux and macOS with the usual umask. Every
+  spool is now created owner-only (mode 600), opened exclusively and deleted on close, so the
+  operating system removes it even if the process dies.
+
+### Obsolete
+
+- `Chuvadi.Sheets.Zip.ZipFormatException` is marked `[Obsolete]` with the same message as the
+  rest of `Chuvadi.Sheets.Zip` (warning CS0618). It was left unmarked in 2.0.0 only because
+  Chuvadi.Layout.Sheets still named it.
+
+### Documentation
+
+- Header names (`row["Name"]` and the named getters): matching rules, what an unknown name
+  returns, and the error with headers off (XML docs, guide 16.3).
+- `SetColumnWidth`/`SetColumns`: spans are written as given; applications differ on overlapping
+  spans (Excel and `Workbook.Load` apply the later span, LibreOffice the earlier), so do not overlap them.
+- The guide is updated for 2.0.1 (sections 4.3, 4.5, 6.4, 7.3, 7.6, 16.3, 25.1, 30, 33).
+
 ## 2.0.0 (2026-11-05)
 
 A major version: the public namespace is renamed, and every error caused by a malformed file now

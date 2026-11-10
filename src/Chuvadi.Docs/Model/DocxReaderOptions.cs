@@ -125,6 +125,67 @@ public sealed class DocxReaderOptions
     /// </summary>
     public int? MaxSpinCount { get; set; } = DefaultMaxSpinCount;
 
+    /// <summary>
+    /// Maximum number of XML elements read in one operation: one <see cref="Document.Load(System.IO.Stream, string?)"/>,
+    /// one template call (<c>DocxTemplate.Fill</c>,
+    /// <c>GetPlaceholders</c>,
+    /// <c>CheckTemplate</c>), or one <see cref="DocxReader"/> read call (each enumeration of
+    /// <see cref="DocxReader.Paragraphs()"/> or <see cref="DocxReader.Tables()"/>, each call of
+    /// <see cref="DocxReader.ExtractText()"/>, <see cref="DocxReader.Images()"/>,
+    /// <see cref="DocxReader.SaveImages(string)"/> or <see cref="DocxReader.GetActiveContent()"/>), counted over
+    /// every part it reads (body, headers, footers, notes, comments, styles, numbering, settings, drawings).
+    /// <para>The memory a loaded document takes follows its number of elements, not its size in bytes: a few
+    /// hundred bytes per element (measured up to about 520 for empty paragraphs), so an 18 KB file of two
+    /// million empty paragraphs takes about 1.1 GB to load, though it passes every byte limit. Breaches throw
+    /// <see cref="DocxSecurityLimitException"/> with <see cref="DocxLimit.Elements"/> while reading, before most
+    /// of the memory is used.</para>
+    /// <para>Default null (no limit). <see cref="ForUntrustedInput"/> sets 1,000,000.</para>
+    /// </summary>
+    public int? MaxElements { get; set; }
+
+    /// <summary>
+    /// Limits suitable for files from untrusted sources (uploads, e-mail attachments, a shared server):
+    /// 50 MB package, 256 MB uncompressed in total, 64 MB per part, compression ratio 200:1 (for entries of
+    /// 1 MB or more), 10,000 zip entries, XML depth 128, spin count 500,000 and 1,000,000 XML elements per
+    /// operation (<see cref="MaxElements"/>). Measured worst case about 600 MB and a few seconds per load; a
+    /// Word document of about 23,000 paragraphs (roughly 900–1,000 pages) still loads. Returns a new instance
+    /// on every call; adjust as needed. The same name as Chuvadi.Sheets' and Chuvadi.Layout's presets.
+    /// </summary>
+    public static DocxReaderOptions ForUntrustedInput() => new()
+    {
+        MaxPackageBytes = 50L * 1024 * 1024,
+        MaxTotalUncompressedBytes = 256L * 1024 * 1024,
+        MaxPartBytes = 64L * 1024 * 1024,
+        MaxCompressionRatio = 200,
+        MaxEntries = 10_000,
+        MaxXmlDepth = 128,
+        MaxSpinCount = 500_000,
+        MaxElements = 1_000_000,
+    };
+
+    /// <summary>
+    /// The element count of the operation these options were copied for (see <see cref="ForOperation"/>);
+    /// null on the caller's own options, which are never changed.
+    /// </summary>
+    internal Chuvadi.Docs.Internal.ElementBudget? OperationBudget { get; private set; }
+
+    /// <summary>
+    /// A copy of these options for one operation, carrying a fresh element count when
+    /// <see cref="MaxElements"/> is set, so the parts of one operation share one count and the caller's
+    /// options (which may be shared between threads) are never written to.
+    /// </summary>
+    internal DocxReaderOptions ForOperation()
+    {
+        if (MaxElements is null) return this;
+        var copy = (DocxReaderOptions)MemberwiseClone();
+        copy.OperationBudget = new Chuvadi.Docs.Internal.ElementBudget(MaxElements.Value);
+        return copy;
+    }
+
+    /// <summary>A new element count for one operation, or null when <see cref="MaxElements"/> is not set.</summary>
+    internal Chuvadi.Docs.Internal.ElementBudget? NewBudget()
+        => MaxElements is int max ? new Chuvadi.Docs.Internal.ElementBudget(max) : null;
+
     /// <summary>Creates options with every security limit disabled (trusted input only).</summary>
     public static DocxReaderOptions CreateUnrestricted() => new()
     {
@@ -135,6 +196,7 @@ public sealed class DocxReaderOptions
         MaxCompressionRatio = null,
         MaxXmlDepth = null,
         MaxSpinCount = null,
+        MaxElements = null,
     };
 }
 
@@ -155,6 +217,8 @@ public enum DocxLimit
     PartBytes,
     /// <summary><see cref="DocxReaderOptions.MaxPackageBytes"/>.</summary>
     PackageBytes,
+    /// <summary><see cref="DocxReaderOptions.MaxElements"/> (since 2.1.0).</summary>
+    Elements,
 }
 
 /// <summary>
@@ -168,7 +232,7 @@ public sealed class DocxSecurityLimitException : DocxFormatException
     /// <summary>The limit that was exceeded.</summary>
     public DocxLimit Limit { get; }
 
-    /// <summary>The value observed in the file (count, bytes, ratio, depth or spin count).</summary>
+    /// <summary>The value observed in the file (count, bytes, ratio, depth, spin count or elements read).</summary>
     public long Actual { get; }
 
     /// <summary>The configured maximum.</summary>
@@ -198,6 +262,7 @@ public sealed class DocxSecurityLimitException : DocxFormatException
             DocxLimit.SpinCount => $"Encrypted document declares a key-derivation spin count of {actual:N0}; the limit is {allowed:N0}.",
             DocxLimit.PartBytes => $"Part{where} decompresses to more than {allowed:N0} bytes (read {actual:N0}).",
             DocxLimit.PackageBytes => $"Input is {actual:N0} bytes; the limit is {allowed:N0}.",
+            DocxLimit.Elements => $"Document has more than {allowed:N0} XML elements (the limit was passed{where}).",
             _ => $"Document exceeds a security limit ({limit}): {actual:N0} > {allowed:N0}{where}.",
         };
     }

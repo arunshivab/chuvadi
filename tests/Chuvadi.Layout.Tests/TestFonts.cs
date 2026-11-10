@@ -6,11 +6,11 @@ namespace Chuvadi.Layout.Tests;
 /// <summary>Font helpers for tests: pack faces by file name (LiPi from Chuvadi.Fonts, the rest from Layout.Fonts) and a TrueType-collection builder.</summary>
 internal static class TestFonts
 {
-    public static byte[] Bytes(string file) => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : BundledFontSource.ReadResource(file);
+    public static byte[] Bytes(string file) => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : SubstituteFontPack.ReadAllBytes(file);
 
     public static FontFace Face(string file) => FontFace.Load(Bytes(file), 0, FontOrigin.Bundled, file);
 
-    public static FontResolver BundledResolver() => new FontResolver(new IFontSource[] { BundledFontSource.Instance, BuiltInFontSource.Instance });
+    public static FontResolver BundledResolver() => new FontResolver(new IFontSource[] { FontPackSource.For(SubstituteFontPack.Instance), FontPackSource.For(Chuvadi.Fonts.FontPack.Instance) });
 
     /// <summary>Builds a .ttc from single-face fonts by copying each font and rebasing its table offsets.</summary>
     public static byte[] BuildCollection(params byte[][] fonts)

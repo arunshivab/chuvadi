@@ -18,7 +18,8 @@ namespace Chuvadi.Layout.Sheets
         /// and left open). Encrypted workbooks need <see cref="LayoutOptions.Password"/>. Import warnings are reported in
         /// <see cref="LaidOutDocument.Warnings"/>.
         /// </summary>
-        /// <exception cref="LayoutFormatException">Not a readable workbook, or the password is missing or wrong.</exception>
+        /// <exception cref="LayoutPasswordRequiredException">The workbook is encrypted and the password is missing (<see cref="LayoutPasswordRequiredException.PasswordGiven"/> false) or wrong (true).</exception>
+        /// <exception cref="LayoutFormatException">Not a readable workbook.</exception>
         /// <exception cref="LayoutLimitExceededException">The workbook exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static LaidOutDocument Open(Stream source, SheetsImportOptions? importOptions = null, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -30,7 +31,8 @@ namespace Chuvadi.Layout.Sheets
         }
 
         /// <summary>Lays out an .xlsx workbook held in memory (the array is read, never modified). As <see cref="Open(Stream, SheetsImportOptions?, LayoutOptions?, CancellationToken)"/>.</summary>
-        /// <exception cref="LayoutFormatException">Not a readable workbook, or the password is missing or wrong.</exception>
+        /// <exception cref="LayoutPasswordRequiredException">The workbook is encrypted and the password is missing (<see cref="LayoutPasswordRequiredException.PasswordGiven"/> false) or wrong (true).</exception>
+        /// <exception cref="LayoutFormatException">Not a readable workbook.</exception>
         /// <exception cref="LayoutLimitExceededException">The workbook exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static LaidOutDocument Open(byte[] source, SheetsImportOptions? importOptions = null, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)

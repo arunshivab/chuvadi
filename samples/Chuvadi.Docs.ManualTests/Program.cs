@@ -44,6 +44,14 @@ public static class Program
             ("CommentsRevisions", CommentsRevisionsTests.Run),
             ("ErrorContract", ErrorContractTests.Run),
             ("EncryptedSave", EncryptedSaveTests.Run),
+            ("EncryptedLarge", EncryptedLargeTests.Run),
+            ("SkippedParts", SkippedPartsTests.Run),
+            ("PathSave", PathSaveTests.Run),
+            ("UntrustedInput", UntrustedInputTests.Run),
+            ("Settings", SettingsTests.Run),
+            ("Theme", ThemeTests.Run),
+            ("DamagedEncrypted", DamagedEncryptedTests.Run),
+            ("LoadSkippedParts", LoadSkippedPartsTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

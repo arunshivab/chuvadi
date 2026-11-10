@@ -333,7 +333,7 @@ public sealed class XlsxReader : IDisposable
             {
                 if (rel.Type.EndsWith("/officeDocument", StringComparison.Ordinal))
                 {
-                    workbookUri = "/" + rel.Target.TrimStart('/');
+                    workbookUri = PartUri.Normalize("/" + rel.Target.TrimStart('/'));
                     break;
                 }
             }
@@ -405,7 +405,18 @@ public sealed class XlsxReader : IDisposable
 
     /// <summary>Opens the sheet part's XML stream, counted against the configured limits. Caller disposes.</summary>
     internal Stream OpenSheetPart(SheetInfo info)
-        => Limit(_package.OpenPart(info.PartUri), info.PartUri, _options, _budget);
+        => Limit(OpenRequiredPart(_package, info.PartUri), info.PartUri, _options, _budget);
+
+    /// <summary>
+    /// Opens a part the workbook cannot do without (the workbook part, a worksheet part). A part
+    /// that is neither in the zip nor declared is a malformed file (2.0.2, G2): XlsxFormatException
+    /// with the package's FileNotFoundException inside, as for every other malformed input.
+    /// </summary>
+    private static Stream OpenRequiredPart(OoxmlPackage pkg, string partUri)
+    {
+        try { return pkg.OpenPart(partUri); }
+        catch (FileNotFoundException ex) { throw MalformedInput.Wrap(ex); }
+    }
 
     /// <summary>Opens any part, counted against the configured limits. Caller disposes.</summary>
     internal Stream OpenPartLimited(string partUri) => Limit(_package.OpenPart(partUri), partUri, _options, _budget);
@@ -496,18 +507,14 @@ public sealed class XlsxReader : IDisposable
     /// <summary>
     /// Resolves a relationship target from workbook.xml's .rels to an absolute part URI.
     /// Relative targets are relative to the workbook part's directory ("worksheets/sheet1.xml"
-    /// → "/xl/worksheets/sheet1.xml"); "../" climbs one level; a leading '/' is already absolute.
+    /// → "/xl/worksheets/sheet1.xml"); a leading '/' is relative to the package root. Dot segments
+    /// ("./", "../", also in absolute targets) are removed (2.0.2, G1; see <see cref="PartUri"/>).
     /// </summary>
     private static string ResolveWorkbookTarget(string workbookUri, string target)
     {
-        if (target.StartsWith("/", StringComparison.Ordinal)) return target;
+        if (target.StartsWith("/", StringComparison.Ordinal)) return PartUri.Normalize(target);
         var workbookDir = workbookUri.Substring(0, workbookUri.LastIndexOf('/'));  // "/xl"
-        if (target.StartsWith("../", StringComparison.Ordinal))
-        {
-            var parentDir = workbookDir.Substring(0, workbookDir.LastIndexOf('/'));
-            return parentDir + "/" + target.Substring(3);
-        }
-        return workbookDir + "/" + target;
+        return PartUri.Normalize(workbookDir + "/" + target);
     }
 
     private sealed class WorkbookPartInfo
@@ -535,7 +542,7 @@ public sealed class XlsxReader : IDisposable
 
         var info = new WorkbookPartInfo();
         int sheetPosition = 0;   // position among ALL <sheet> elements (localSheetId refers to this)
-        using (var s = Limit(pkg.OpenPart(workbookUri), workbookUri, options, budget))
+        using (var s = Limit(OpenRequiredPart(pkg, workbookUri), workbookUri, options, budget))
         using (var r = XmlReader.Create(s, new XmlReaderSettings { IgnoreWhitespace = true, IgnoreComments = true, CloseInput = false, DtdProcessing = DtdProcessing.Prohibit }))
         {
             while (r.Read())
@@ -873,6 +880,21 @@ public sealed class SheetReader
 
     internal void SetHeaderIndex(Dictionary<string, int> headers) => _headerIndex = headers;
 
+    /// <summary>
+    /// The header row's cell values and style indices by column, up to its last non-empty cell
+    /// (null before the header row is read, or when the sheet has no rows). Used to name
+    /// DataTable columns; <see cref="HeaderIndex"/> is unchanged.
+    /// </summary>
+    internal object?[]? HeaderValues { get; private set; }
+
+    internal int[]? HeaderStyles { get; private set; }
+
+    internal void SetHeaderRow(object?[] values, int[] styles)
+    {
+        HeaderValues = values;
+        HeaderStyles = styles;
+    }
+
     internal XlsxReader Book => _book;
     internal SheetInfo Info => _info;
 }
@@ -919,6 +941,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
     private readonly Dictionary<int, SharedFormulaMaster> _sharedMasters = new();
     private int _maxColumnSeen;
     private int _currentRowNumber;
+    private int _currentCellColumn;                     // column of the cell being read (for error messages)
     private bool _hasCurrent;
     private bool _headersConsumed;
 
@@ -1074,6 +1097,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
             // Read the cell's contents.
             _pending = default;
             _pendingRich = null;
+            _currentCellColumn = col;
             var value = ReadCellValue(t, styleIndex);
 
             // Store in buffer; grow if needed.
@@ -1191,6 +1215,13 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         return first ?? string.Empty;
     }
 
+    /// <summary>
+    /// A text cell whose shared-string reference cannot be resolved (2.0.2, F3): the file is damaged.
+    /// The message names the cell, the sheet, the index and the table size, never cell content.
+    /// </summary>
+    private XlsxFormatException SharedStringError(string what)
+        => new($"The file is not a valid xlsx workbook: cell {CellAddress.ToA1(_currentRowNumber, _currentCellColumn)} on sheet '{_sheet.Name}' {what}");
+
     private object? InterpretRawValue(string? cellType, string rawValue, int styleIndex, bool isFormula)
     {
         // OOXML cell type semantics:
@@ -1208,16 +1239,20 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
         {
             case "s":
             {
+                var arr = _book.SharedStrings;
                 if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var idx))
                 {
-                    var arr = _book.SharedStrings;
                     if (idx >= 0 && idx < arr.Length)
                     {
                         if (_book.SharedRichText is { } rich) _pendingRich = rich[idx];
                         return arr[idx];
                     }
+                    throw SharedStringError($"refers to shared string {idx}, but the workbook has {arr.Length}.");
                 }
-                return rawValue;  // malformed — return raw as fallback
+                // No value (<v></v>, or only white space) reads as an empty cell, as before (D-239 Q1).
+                if (string.IsNullOrWhiteSpace(rawValue)) return rawValue;
+                // 2.0.2, F3: an index that is not a number is a damaged file; never show it as text.
+                throw SharedStringError("has a shared-string reference that is not a number.");
             }
             case "str":
                 return rawValue;
@@ -1342,6 +1377,14 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 map.TryAdd(s, i);   // first occurrence wins
         }
         _sheet.SetHeaderIndex(map);
+
+        int width = _maxColumnSeen;
+        while (width > 0 && (_cellValues[width - 1] is null || _cellValues[width - 1] is string { Length: 0 })) width--;
+        var values = new object?[width];
+        var styles = new int[width];
+        Array.Copy(_cellValues, values, width);
+        Array.Copy(_cellStyles, styles, width);
+        _sheet.SetHeaderRow(values, styles);
     }
 
     public void Reset() => throw new NotSupportedException("Sheet rows are forward-only.");
@@ -1540,7 +1583,15 @@ public readonly struct RowReader
     public object? this[int column0Based]
         => column0Based >= 0 && column0Based < _count ? _buffer[column0Based] : null;
 
-    /// <summary>Raw value access by header name (requires TreatFirstRowAsHeaders).</summary>
+    /// <summary>
+    /// Raw value access by header name (requires TreatFirstRowAsHeaders). Header names are the
+    /// text cells of the first row, as written (not trimmed), matched ordinally ignoring case; when
+    /// names repeat, the first (leftmost) column wins. A name that is not a header returns null,
+    /// like a missing cell: the named typed getters then throw InvalidOperationException
+    /// ("Cell 'X' is null or missing."), GetDateTime throws InvalidCastException, TryGet returns
+    /// false, GetDisplayString returns an empty string. With headers off, every name-based member
+    /// throws InvalidOperationException ("Header index not built; enable TreatFirstRowAsHeaders.").
+    /// </summary>
     public object? this[string columnName]
     {
         get

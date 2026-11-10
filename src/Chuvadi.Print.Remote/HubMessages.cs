@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Chuvadi.Print.Remote
 {
@@ -75,16 +76,16 @@ namespace Chuvadi.Print.Remote
 
         private long _streamLength;
 
-        internal static HubResponse Json<T>(int status, T value)
+        internal static HubResponse Json<T>(int status, T value, JsonTypeInfo<T> typeInfo)
         {
             return new HubResponse(status)
             {
                 ContentType = RemoteProtocol.JsonContentType,
-                Body = JsonSerializer.SerializeToUtf8Bytes(value, RemoteProtocol.Json)
+                Body = JsonSerializer.SerializeToUtf8Bytes(value, typeInfo)
             };
         }
 
-        internal static HubResponse Error(int status, string message) => Json(status, new ErrorResponse { Error = message });
+        internal static HubResponse Error(int status, string message) => Json(status, new ErrorResponse { Error = message }, RemoteProtocol.Json.ErrorResponse);
 
         internal static HubResponse Stream(int status, Stream body, long length, string contentType)
         {

@@ -378,7 +378,7 @@ namespace Chuvadi.Markup.Text
                 int end = best + kind!.Length;
                 while (end < s.Length && !char.IsWhiteSpace(s[end]) && s[end] != '<' && s[end] != '>' && s[end] != '"' && s[end] != '\uFFFD')
                     end++;
-                int len = ExtendedAutolinks.AutolinkDelim(s, best, end - best);
+                int len = MarkdownSyntax.TrimExtendedAutolink(s, best, end - best);
                 if (len <= kind.Length)
                 {
                     i = best + kind.Length;

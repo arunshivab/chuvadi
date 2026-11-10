@@ -191,13 +191,17 @@ internal sealed class EntryReadStream : Stream
     private readonly ZipReader _owner;
     private readonly AesDecryptStream? _aes;
     private readonly bool _checkCrc;
+    private readonly bool _zipCrypto;
     private long _count;
     private uint _crc;
     private bool _done;
 
-    public EntryReadStream(Stream decompressed, ZipEntryInfo entry, ZipReader owner, AesDecryptStream? aes, bool checkCrc)
+    // zipCrypto: true for a ZipCrypto entry whose one-byte password check has passed. That check lets a wrong password through
+    // about 1 time in 256 (1 in 128 with a data descriptor), so a failed integrity check on such an entry may mean a wrong
+    // password; Read reports it as one.
+    public EntryReadStream(Stream decompressed, ZipEntryInfo entry, ZipReader owner, AesDecryptStream? aes, bool checkCrc, bool zipCrypto = false)
     {
-        _src = decompressed; _entry = entry; _owner = owner; _aes = aes; _checkCrc = checkCrc;
+        _src = decompressed; _entry = entry; _owner = owner; _aes = aes; _checkCrc = checkCrc; _zipCrypto = zipCrypto;
     }
 
     public override bool CanRead => true;
@@ -209,6 +213,20 @@ internal sealed class EntryReadStream : Stream
     public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
 
     public override int Read(Span<byte> buffer)
+    {
+        if (!_zipCrypto) return ReadCore(buffer);
+        try { return ReadCore(buffer); }
+        catch (ZipIntegrityException ex)
+        {
+            // ZipCrypto's check is one byte, so a wrong password gets through it about 1 time in 256 and then shows up here
+            // as a CRC-32 or decompression failure. It cannot be told apart from a damaged entry, so say both.
+            throw new ZipPasswordRequiredException(
+                $"Wrong password for entry '{_entry.Name}', or the entry is damaged: the ZipCrypto password check passed, but the data then failed its integrity check.",
+                true, _entry.Name, ex);
+        }
+    }
+
+    private int ReadCore(Span<byte> buffer)
     {
         if (_done || buffer.Length == 0) return 0;
         long declared = _entry.Size;

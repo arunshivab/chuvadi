@@ -14,7 +14,7 @@ Chuvadi.Print.Ipp and Chuvadi.Print.Remote each need only the core, Chuvadi.Prin
 | A3 | `Chuvadi.Print.Windows` | Windows printers through the GDI spooler (P/Invoke only) | 0.3.0 |
 | A4 | `Chuvadi.Print.Ipp` | Driverless IPP printing on any OS: PWG Raster or PDF passthrough | 0.4.0 |
 | A6 | `Chuvadi.Print.Remote` | An embeddable print hub and dial-out print agents | 0.5.0 |
-| A5 | package **Chuvadi.Print.Pdf.Raster** (`staging/`) | PDF rendering (`PdfPageRasterizer`) over Chuvadi.Pdf | 0.1.0 |
+| A5 | package **Chuvadi.Print.Pdf.Raster** (`staging/`) | PDF rendering (`PdfPageRasterizer`) and the font check (`PdfFontInspector`) over Chuvadi.Pdf | 0.1.0 |
 
 The architectural invariants (P01–P09) are in [BASELINE.md](BASELINE.md). How Docs/Sheets reports get printed is
 in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
@@ -137,6 +137,15 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
   operation, plus raw `Send`), `IppPrinterCapabilities`, and a PWG Raster writer and reader.
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
+- **Spool**: `IppPrinterTarget` holds the PWG Raster job until it is sent as one Print-Job.
+  - The default, `IppSpoolMode.TemporaryFile`, is a file in `TemporaryFolder` (or the system temp folder),
+    deleted when the job ends.
+  - `IppSpoolMode.Memory` keeps it in memory, for machines without a writable temp folder:
+    `target.WithSpool(IppSpoolMode.Memory)`.
+  - `MemorySpoolLimit` caps it (default 256 MB; `WithSpool(IppSpoolMode.Memory, limit)` sets both). A job that grows
+    past the limit fails before anything is sent, with an `IppException`; it does not switch to a file.
+  - The memory is released as soon as the job is sent or fails. A colour A4 page at 300 dpi is about 25 MB before
+    PWG Raster's run-length coding, which usually shrinks it a great deal.
 
 ## 4a. Choosing a route, and raw delivery (Phase 1)
 
@@ -147,7 +156,7 @@ print the job, and uses the first that can:
    accepting jobs, and it lists `application/pdf` itself (`application/octet-stream` does not count).
 2. `PageDescription`: PostScript or PCL XL made here (later phases).
 3. `Cups`: the PDF to a CUPS queue (Linux, macOS), under the same font rule.
-4. `WindowsQueue`: a Windows queue with vector output (a later phase).
+4. `WindowsQueue`: a Windows queue with vector output, through XPS (`WindowsQueueRoute`, section 4b).
 5. `Raster`: pages rendered here (PWG Raster, the GDI spooler, PNG).
 
 ```csharp
@@ -159,7 +168,10 @@ PrintRouteResult r = router.Print(job.WithFontsEmbedded());   // the app made th
 
 - **Fonts**: `PrintJobOptions.DocumentFonts` (or `WithFontsEmbedded`) says what the application knows. When it is
   `Unknown`, the router asks its `FontInspector`; with none, the PDF is not sent as-is. A Chuvadi.Pdf inspector
-  comes with the Pdf chat's font access (0.3b).
+  comes with Chuvadi.Print.Pdf.Raster. `NeedsGeneratedAppearances` means every font is embedded but some form
+  fields or comments have no stored appearance; such a PDF is not sent as-is either (the audit says
+  "form fields or comments need appearances generated"), because our own rendering draws those appearances
+  and the printer would not.
 - **Overrides**: `router.ForcedRoute` and `router.DisabledRoutes` for a site, `router.Print(job, PrintRouteKind.Raster)`
   for one job (wins over both). `router.Choose(job)` tells you the decision without printing.
 - **Audit**: every job records its route as the last column of the audit line: `Raster` for `PrintTo`,
@@ -206,16 +218,103 @@ foreach (CupsQueue q in CupsQueues.List()) Console.WriteLine(q.Name + " " + q.Ur
   `IppRoutes.CreateCupsRouter`.
 - **Duplex backs** for PWG Raster follow PWG 5102.4 Table 9 (`pwg-raster-document-sheet-back`).
 
+## 4b. Vector pages and XPS (Phase 4, `Chuvadi.Print.Windows`)
+
+`VectorPage` (core) describes a page as vector content: paths, glyph runs, images and groups. Sizes and
+coordinates are in points, with the origin at the top left and y running down. Every element has its own
+`Transform` (into its parent's space), `Clip` (in its own space), `Opacity` and `BlendMode`.
+
+```csharp
+var page = new VectorPage(595.28, 841.89);                       // A4
+var font = new VectorFont(File.ReadAllBytes(@"C:\Windows\Fonts\arial.ttf"), "Arial");
+var run = new VectorGlyphRun(font, 12, new VectorSolidBrush(VectorColor.Black));
+run.Glyphs.Add(new VectorGlyph(glyphId: 43, x: 72, y: 100, advance: 8.67, text: "H"));   // id and advance from the font's cmap and hmtx
+page.Elements.Add(run);
+page.Elements.Add(new VectorImageElement(VectorImage.FromJpeg(File.ReadAllBytes("logo.jpg")), 72, 120, 144, 72));
+
+if (!XpsWriter.CanWrite(new[] { page }, out string? reason)) Console.WriteLine(reason);   // send to raster instead
+else XpsWriter.Write(new[] { page }, @"C:\out\report.xps");
+```
+
+- **Fonts** are TrueType files (the bytes of the .ttf, or a subset). Each is stored once, obfuscated as ECMA-388
+  requires. Glyph ids are the font's own; put the glyph's characters in `VectorGlyph.Text` so the document can
+  be searched and copied. Glyphs on different baselines become separate XPS Glyphs elements.
+- **Images** are PNG or JPEG files, stored once each; PNG transparency is kept. `VectorImage.FromPixels`
+  encodes grey, RGB, grey with alpha or RGB with alpha pixels as PNG. An image fills the unit square of its own space; the four-number `VectorImageElement` constructor places
+  it as a rectangle. How a viewer smooths a scaled image is its own choice (XPS has no PDF /Interpolate).
+- **Groups** are written as nested Canvas elements; their opacity applies to the group as a whole.
+- **Soft masks**: an alpha `VectorSoftMask` on a group is written as the group's opacity mask, a VisualBrush that
+  draws the mask content in the group's own coordinates. Where the content is transparent, the group is hidden.
+  A luminosity soft mask has no XPS equivalent (an opacity mask uses alpha only), so `CanWrite` refuses it.
+- **Refused content**: `CanWrite` names the first page and item XPS cannot express. Such pages go to raster;
+  the writer never approximates them. The list is in the CHANGELOG (Phase 4 part 1).
+- **Colour** is sRGB, 8 bits per channel with alpha. Gradients interpolate in sRGB and always extend (pad).
+
+### Printing vector pages to a Windows queue (Phase 4 part 3)
+
+`WindowsXpsPrinterTarget` sends vector pages to an installed Windows printer as XPS, through the Print Document
+Package API (Windows 8 and later). The driver draws vectors: text and lines stay sharp at any resolution, and the
+spool file is small. Pages come from an `IVectorPageSource` (core), the vector counterpart of `IPageRasterizer`.
+The PDF converter (Phase 4 part d) will be one; an application can also print pages it drew itself.
+
+```csharp
+var target = new WindowsXpsPrinterTarget("Ward-3 Laser");
+var settings = new PrintSettings { Paper = PaperSize.A4, Duplex = Duplex.Vertical, Copies = 2 };
+if (target.CanPrint(pages, settings, out string? why))
+    target.PrintPages(pages, settings, "Discharge summary");      // waits for the job status (StatusTimeout)
+Console.WriteLine(target.LastJobStatus);                          // job 42: Completed, 4 pages processed, ...
+
+// In a router, after the IPP routes and before raster (D-96 position 4):
+using var router = new PrintRouter(
+    new WindowsQueueRoute(new WindowsXpsPrinterTarget("Ward-3 Laser", pdfVectorSource)),
+    new RasterRoute(new WindowsPrinterTarget("Ward-3 Laser")));
+PrintRouteResult result = router.Print(job);   // a page XPS cannot express falls back to raster, with the reason in the audit
+```
+
+- **Same layout as raster.** Pages are placed with `PageLayout`, the same as the raster routes: page selection,
+  scale mode, alignment, margins, orientation and auto-rotate. `VectorLayout.Place` does the placement and is
+  public for other vector writers. Software copies and duplex blank backs come from the same `PrintPlan`.
+- **Same settings as GDI.** The settings become the DEVMODE that `WindowsPrinterTarget` builds: paper,
+  orientation, duplex, colour, copies, collation, tray, media and resolution. Windows turns it into the job's
+  PrintTicket. `CreatePrintTicket(settings)` returns that ticket without printing.
+- **Grey and black-and-white** output is made by the driver; `PrintJobOptions.Monochrome` applies to rendered pages only.
+- **Copies** (`CopyHandling`):
+  - `Auto` (the default) puts the copies in the PrintTicket when the driver can make them, and repeats the sheets otherwise.
+  - `Software` always repeats the sheets.
+- **Status**: after the last page, the target waits for the print system to report the job finished.
+  - The wait is `StatusTimeout`: two minutes by default; null means do not wait.
+  - Failed or cancelled jobs fail.
+  - No report in time fails too; the message says the job may still be printing.
+  - `LastJobStatus`, `LastSpoolJobId` and `LastPrintTicket` describe the latest job.
+- **Errors**: printing failures are `WindowsPrintException`; pages XPS cannot express are
+  `NotSupportedException`. In a router these give a Failed result, and no other route is tried.
+- **Threads**: the submission runs on a thread of its own in COM's multithreaded apartment, so calling from a
+  UI thread is safe (it blocks that thread until the job is submitted; call it from a worker for a responsive UI).
+- **Saving instead of printing**: `SaveXps(document, settings, stream)` writes the exact package the target would
+  send.
+
 ## 5. PDF rendering (A5, package Chuvadi.Print.Pdf.Raster)
 
-- **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs. The page's `/Rotate` is applied, and pages are
-  rendered at the resolution and pixel format the job asks for. Annotations and form fields are printed by
-  flattening them first. All the renderer's options are exposed: `SuperSample`, `GammaCorrect`, `Hinting`,
-  `FlatnessTolerance`, `IgnoreOptionalContent`, `LayerVisibility`, `Password` and `MaxRenderDpi`.
+- **`PdfPageRasterizer`** is the `IPageRasterizer` for PDFs.
+  - Pages are rendered at the resolution and pixel format the job asks for, with the page's `/Rotate` applied.
+  - The printed area is the **crop box** (D-235 L1.3a): the page as a viewer shows it, as ISO 32000 says.
+    `PageBox` picks another box (`MediaBox`, `BleedBox`, `TrimBox`, `ArtBox`); the box is clipped to the media box.
+  - Annotations and form fields are printed by flattening them first. With Chuvadi.Pdf 3.31, fields and comments
+    without a stored appearance get one generated, so they print where they printed blank before.
+  - All the renderer's options are exposed: `SuperSample`, `GammaCorrect`, `Hinting`, `FlatnessTolerance`,
+    `IgnoreOptionalContent`, `LayerVisibility`, `Password` and `MaxRenderDpi`.
+- **`PdfFontInspector`** is the `IPdfFontInspector` for `PrintRouter.FontInspector` (D-235 L2). It answers
+  `AllEmbedded`, `NeedsGeneratedAppearances`, `NotAllEmbedded` or `Unknown` from Chuvadi.Pdf's font report.
+  `LastReport` lists each font that is not embedded with its page; `Password` opens encrypted PDFs; `LastError`
+  says why an answer is `Unknown`. With it set, a PDF whose fonts are all embedded goes as-is to IPP and CUPS
+  printers that take PDF.
 - **Saving as PDF** is not a print target: use the Chuvadi.Pdf writer or Chuvadi.Layout's PDF output.
-- **Building**: it lives in `staging/` and consumes the version-pinned Chuvadi.Pdf packages (3.22.1) from
-  the local feed set in `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and
-  CI until Chuvadi.Pdf joins the monorepo or nuget.org (D-28). Building and packing are described in its README.
+- **Chuvadi.Pdf version**: the package references `[3.31.2, 4.0.0)` (D-235, D-258). NuGet uses the lowest version a
+  range allows, so an application that wants a newer Chuvadi.Pdf references it directly. The floor is 3.31.2 because
+  3.31.1 leaves pages whose media box does not start at 0,0 blank.
+- **Building**: it lives in `staging/` and consumes the Chuvadi.Pdf packages from the local feed set in
+  `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and CI until Chuvadi.Pdf joins
+  the monorepo or nuget.org (D-28). Building, testing and packing are described in its README.
 
 ## 6. Remote printing (A6, `Chuvadi.Print.Remote`)
 
@@ -287,3 +386,52 @@ await agent.RunAsync(stoppingToken);
   - `--windows-raw-printer "<queue>" [--windows-raw-file <port file>]`: a RAW job to a Windows queue.
 - **Chuvadi.Print.Pdf.Raster**: `dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests` (needs the Chuvadi.Pdf packages in the local feed).
 - **Windows**: everything only Windows can prove is in [WINDOWS-VERIFICATION.md](WINDOWS-VERIFICATION.md).
+
+## 8. Thread safety
+
+Checked against the code for rc.3. "Shareable" means one instance can be used from several threads at once;
+everything else is meant for one caller at a time.
+
+**Shareable** (internal locks, or no state):
+- `PrinterRegistry`: every read and change takes a lock; reads return copies. `SaveTo` writes a snapshot to a
+  temporary file and then replaces the target file. Two processes saving the same file are not coordinated.
+- `IppCapabilityCache`: share one between routers for the same printers.
+- `IppClient`: an `HttpClient` underneath and an atomic request id, no other state. Concurrent requests are fine.
+- `PrintHub`, `InMemoryJobStore` and `FileJobStore` (within one process).
+- `FileAuditSink` (writes one line at a time under a lock), `NullAuditSink`.
+- `XpsWriter` and the other static helpers (`PageLayout`, `VectorLayout`, `WindowsPrinters`, `CupsQueues`,
+  `NetworkPrinterDiscovery`): no shared state.
+
+**One per job, or one per caller**:
+- `PrintJob`, `PrintSettings` and `PrintJobOptions` are mutable: build one per job.
+- Every target holds the state of the job in progress and its `Last...` results:
+  - `WindowsPrinterTarget`, `WindowsXpsPrinterTarget`, `WindowsRawPrinterTarget`;
+  - `IppPrinterTarget`, `IppDocumentTarget`, `RawSocketTarget`;
+  - the image file targets.
+
+  Use one per thread, or serialise jobs on it. Several targets for the same printer are fine.
+- Routes and `PrintRouter` hold targets, so they follow the same rule.
+- `PrintAgent`: one per agent process.
+
+**No static mutable state** anywhere in the Print packages. Two jobs on two threads, each with its own job and
+target, never touch each other. `WindowsXpsPrinterTarget` does its submission on a thread of its own in COM's
+multithreaded apartment, so the caller's apartment does not matter.
+
+## 9. Android
+
+Chuvadi.Print targets `net10.0` and is pure managed code, so an Android app can reference it. It is not yet in
+CI's Android smoke build (`tests/Chuvadi.AndroidSmoke`, which checks Zip and Fonts today). Its network routes need
+only what any networked Android app needs. Print does not wrap Android's own print dialog; that stays with the app.
+
+- **IPP, IPPS, raw TCP 9100 and the remote agent** need the `android.permission.INTERNET` permission in the
+  app's manifest.
+- **Plain `ipp://` is cleartext HTTP.** Apps targeting Android 9 (API level 28) or later have cleartext traffic
+  disabled by default. Either use `ipps://`, or allow cleartext for the printers' addresses in the app's network
+  security configuration (`cleartextTrafficPermitted="true"` on a `domain-config` for those hosts).
+- **`NetworkPrinterDiscovery.Browse`** uses multicast DNS. Android's Wi-Fi stack filters out multicast packets
+  unless the app holds a `WifiManager.MulticastLock`, which needs the `android.permission.CHANGE_WIFI_MULTICAST_STATE`
+  permission. Acquire the lock just before browsing and release it right after: Android notes that the extra packets
+  cost battery.
+- **Windows-only parts** (`Chuvadi.Print.Windows`) are not used on Android: guard calls with
+  `OperatingSystem.IsWindows()`, as the platform analyzer asks.
+- **Spooling**: if the app has no convenient writable folder, use `IppSpoolMode.Memory` (section 4).

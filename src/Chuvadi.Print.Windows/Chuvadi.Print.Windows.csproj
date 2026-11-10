@@ -8,19 +8,24 @@
     <RootNamespace>Chuvadi.Print.Windows</RootNamespace>
     <AssemblyName>Chuvadi.Print.Windows</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- D-217: trimming- and NativeAOT-safe; the analyzers run on every build (warnings are errors). -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- D-217: the source-generated P/Invoke marshalling (LibraryImport) uses pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- Package metadata -->
     <Product>Chuvadi.Print.Windows</Product>
-    <Description>Windows printing for Chuvadi.Print: printer discovery, driver capabilities (papers, trays, media types, resolutions, quality presets), DEVMODE mapping with all three paper-matching modes, WindowsPrinterTarget printing through the GDI spooler, and WindowsRawPrinterTarget sending bytes unchanged with the RAW datatype. P/Invoke to operating-system DLLs only; no native binaries. Builds on any OS, runs on Windows. No NuGet dependencies.</Description>
+    <Description>Windows printing for Chuvadi.Print: printer discovery, driver capabilities (papers, trays, media types, resolutions, quality presets), DEVMODE mapping with all three paper-matching modes, WindowsPrinterTarget printing through the GDI spooler, WindowsRawPrinterTarget sending bytes unchanged with the RAW datatype, XpsWriter writing vector pages as XPS (ECMA-388) with embedded TrueType fonts, and WindowsXpsPrinterTarget printing vector pages as XPS through the Print Document Package API with the job PrintTicket made from the same driver settings. P/Invoke to operating-system DLLs only; no native binaries. Builds on any OS, runs on Windows. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0-rc.2</Version>
+    <Version>1.0.0-rc.3</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>print;printing;windows;gdi;spooler;printer;devmode;raw</PackageTags>
+    <PackageTags>print;printing;windows;gdi;spooler;printer;devmode;raw;xps</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

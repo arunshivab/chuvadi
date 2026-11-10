@@ -119,7 +119,7 @@ public class FontResolverTests
     {
         MemoryFontSource supplied = new MemoryFontSource();
         supplied.Add(TestFonts.Bytes("Caladea-Regular.ttf"), "my-caladea.ttf");
-        FontResolver r = new FontResolver(new IFontSource[] { supplied, BundledFontSource.Instance });
+        FontResolver r = new FontResolver(new IFontSource[] { supplied, FontPackSource.For(SubstituteFontPack.Instance) });
         FontResolution res = r.Resolve(new FontRequest("Caladea"));
         Assert.Equal(FontOrigin.Supplied, res.Face.Origin);
         Assert.Equal("my-caladea.ttf", res.Face.SourceName);
@@ -159,6 +159,56 @@ public class FontResolverTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public void Directory_source_parses_a_face_once_and_Refresh_rescans()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "chuvadi-layout-fonts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "a.ttf"), TestFonts.Bytes("Carlito-Bold.ttf"));
+            DirectoryFontSource src = new DirectoryFontSource(dir);
+            FontFaceDescriptor bold = Assert.Single(src.GetFaces());
+            FontFace first = src.LoadFace(bold);
+            Assert.Same(first, src.LoadFace(bold));
+
+            File.WriteAllBytes(Path.Combine(dir, "b.ttf"), TestFonts.Bytes("Caladea-Regular.ttf"));
+            Assert.Single(src.GetFaces()); // the scan is kept until Refresh
+            src.Refresh();
+            Assert.Equal(2, src.GetFaces().Count);
+            FontFace again = src.LoadFace(src.GetFaces().Single(f => f.FamilyName == "Carlito"));
+            Assert.NotSame(first, again); // loaded faces were released
+            Assert.Equal("Carlito", first.FamilyName); // a face already handed out stays usable
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void Layout_options_use_one_shared_system_font_source()
+    {
+        Assert.Same(SystemFontSource.Shared, SystemFontSource.Shared);
+        LayoutOptions o = new LayoutOptions { AllowSystemFonts = true };
+        IFontSource a = o.CreateFontResolver().Sources.Single(s => s.Name == "System fonts");
+        IFontSource b = new LayoutOptions { AllowSystemFonts = true }.CreateFontResolver().Sources.Single(s => s.Name == "System fonts");
+        Assert.Same(SystemFontSource.Shared, a);
+        Assert.Same(a, b);
+        o.PreferBundledFonts = true;
+        Assert.Same(SystemFontSource.Shared, o.CreateFontResolver().Sources.Single(s => s.Name == "System fonts"));
+    }
+
+    [Fact]
+    public void System_font_folders_per_os_include_Android()
+    {
+        Assert.Equal(new[] { "/system/fonts", "/product/fonts" }, SystemFontSource.DirectoriesFor("android"));
+        Assert.Contains("/System/Library/Fonts", SystemFontSource.DirectoriesFor("macos"));
+        Assert.Contains("/usr/share/fonts", SystemFontSource.DirectoriesFor("other"));
+        Assert.DoesNotContain("/system/fonts", SystemFontSource.DirectoriesFor("other"));
+        Assert.All(SystemFontSource.DirectoriesFor("windows"), d => Assert.EndsWith("Fonts", d));
+    }
 }
 
 /// <summary>D-116: installed fonts before the pack, the option to prefer the pack, and embedded subset fonts.</summary>
@@ -170,13 +220,13 @@ public class FontSearchOrderTests
     public void Installed_fonts_come_before_the_pack_unless_the_pack_is_preferred()
     {
         LayoutOptions o = new LayoutOptions { AllowSystemFonts = true };
-        o.FontSources.Add(BundledFontSource.Instance);
+        o.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         Assert.Equal(new[] { "Embedded fonts", "System fonts", "Chuvadi.Layout.Fonts", "Chuvadi.Fonts" }, Names(o));
         o.PreferBundledFonts = true;
         Assert.Equal(new[] { "Embedded fonts", "Chuvadi.Layout.Fonts", "Chuvadi.Fonts", "System fonts" }, Names(o));
         // Without installed fonts the option changes nothing.
         LayoutOptions off = new LayoutOptions();
-        off.FontSources.Add(BundledFontSource.Instance);
+        off.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
         List<string> plain = Names(off);
         off.PreferBundledFonts = true;
         Assert.Equal(plain, Names(off));
@@ -189,9 +239,9 @@ public class FontSearchOrderTests
         // Two copies of the same family in search order: the first source's copy is used (here the "installed" one).
         MemoryFontSource installed = new MemoryFontSource("Installed", FontOrigin.System);
         installed.Add(TestFonts.Bytes("Carlito-Regular.ttf"), "carlito-installed.ttf");
-        FontResolver r = new FontResolver(new IFontSource[] { installed, BundledFontSource.Instance });
+        FontResolver r = new FontResolver(new IFontSource[] { installed, FontPackSource.For(SubstituteFontPack.Instance) });
         Assert.Equal(FontOrigin.System, r.Resolve(new FontRequest("Carlito")).Face.Origin);
-        FontResolver packFirst = new FontResolver(new IFontSource[] { BundledFontSource.Instance, installed });
+        FontResolver packFirst = new FontResolver(new IFontSource[] { FontPackSource.For(SubstituteFontPack.Instance), installed });
         Assert.Equal(FontOrigin.Bundled, packFirst.Resolve(new FontRequest("Carlito")).Face.Origin);
     }
 

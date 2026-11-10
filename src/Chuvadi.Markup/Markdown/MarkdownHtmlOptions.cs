@@ -25,7 +25,7 @@ namespace Chuvadi.Markup.Markdown
     /// <summary>How table column alignment is written.</summary>
     public enum TableAlignmentStyle
     {
-        /// <summary><c>align="left"</c> (cmark-gfm default).</summary>
+        /// <summary><c>align="left"</c>, as in the GFM spec examples. Default.</summary>
         AlignAttribute,
         /// <summary><c>style="text-align: left"</c>.</summary>
         StyleAttribute,
@@ -36,7 +36,7 @@ namespace Chuvadi.Markup.Markdown
     {
         /// <summary>
         /// Replace with an empty URL. Dangerous: <c>javascript:</c>, <c>vbscript:</c>, <c>file:</c> and
-        /// <c>data:</c> other than <c>data:image/png|gif|jpeg|webp</c> (the cmark rule). Default.
+        /// <c>data:</c> other than <c>data:image/png|gif|jpeg|webp</c>. Default.
         /// </summary>
         Remove,
         /// <summary>Emit URLs unchanged.</summary>
@@ -76,7 +76,7 @@ namespace Chuvadi.Markup.Markdown
         /// <summary>Write void elements XHTML style (<c>&lt;br /&gt;</c>) instead of <c>&lt;br&gt;</c>. Default true.</summary>
         public bool XhtmlVoidElements { get; set; } = true;
 
-        /// <summary>Add <c>data-sourcepos="line:col-line:col"</c> to block elements (cmark format). Default false.</summary>
+        /// <summary>Add <c>data-sourcepos="line:col-line:col"</c> to block elements (one-based start and end line and column). Default false.</summary>
         public bool SourcePositions { get; set; }
 
         /// <summary>Output limits (<see cref="MarkupLimits.MaxOutputChars"/>). Default <c>new MarkupLimits()</c>.</summary>

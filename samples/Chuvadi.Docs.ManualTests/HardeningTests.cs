@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -11,7 +12,7 @@ using static Chuvadi.Docs.ManualTests.Program;
 namespace Chuvadi.Docs.ManualTests;
 
 /// <summary>
-/// Untrusted-input hardening (Anjal Mail asks B1–B3):
+/// Untrusted-input hardening: B1–B3:
 /// B1 — macro / active-content detection (detect only, never execute);
 /// B2 — zip-bomb, entry-count, nesting-depth and spin-count guards with
 ///      <see cref="DocxSecurityLimitException"/>;
@@ -176,14 +177,25 @@ public static class HardeningTests
             var img = Path.Combine(outDir, "hard-partbytes.docx");
             var d = new Document();
             d.AddParagraph("small");
-            d.AddImage(ImageSpec.FromBytes(ImageTests.SampleJpeg100x50()));
+            d.AddImage(ImageSpec.FromBytes(NoisePng(64, 64)));   // incompressible, larger than the main part
             d.SaveTo(img);
-            var opts = new DocxReaderOptions { MaxPartBytes = 600 };
+            // The limit sits just above the main part, so the picture is the part over it. (Since 2.0,
+            // D-206, Open reads the whole main part once: a main part over the limit fails at Open.)
+            long mainBytes, imageBytes;
+            using (var zip = System.IO.Compression.ZipFile.OpenRead(img))
+            {
+                mainBytes = zip.GetEntry("word/document.xml")!.Length;
+                imageBytes = zip.Entries.First(e => e.FullName.StartsWith("word/media/", StringComparison.Ordinal)).Length;
+            }
+            AssertTrue(imageBytes > mainBytes + 1, $"fixture: picture {imageBytes} bytes, main part {mainBytes}");
+            var opts = new DocxReaderOptions { MaxPartBytes = mainBytes + 1 };
             using (var r = DocxReader.Open(img, null, opts))
             {
                 var ex = Catch<DocxSecurityLimitException>(() => r.Images());
                 AssertTrue(ex.Limit == DocxLimit.PartBytes, $"Images: {ex.Limit}");
             }
+            var oex = Catch<DocxSecurityLimitException>(() => DocxReader.Open(img, null, new DocxReaderOptions { MaxPartBytes = 600 }).Dispose());
+            AssertTrue(oex.Limit == DocxLimit.PartBytes, $"Open (main part over the limit): {oex.Limit}");
             var lex = Catch<DocxSecurityLimitException>(() => Document.Load(img, null, opts));
             AssertTrue(lex.Limit == DocxLimit.PartBytes, $"Load: {lex.Limit}");
         });
@@ -349,33 +361,52 @@ public static class HardeningTests
         // password, which runs the full key derivation at the file's spin count (about 13 s for
         // 3,000,000 spins on the first open). That happens before library code runs, so neither
         // MaxSpinCount nor the CancellationToken can shorten it; these checks time the library's work.
+        //
+        // D-302: the derivation must provably outlast the cancel, on whatever machine runs this. The file is
+        // saved with a small spin count (fast), then its EncryptionInfo is rewritten to a spin count measured
+        // here to take at least 20 s. The cancel comes after 150–200 ms from a dedicated thread, so it always
+        // lands inside the derivation; if the library stopped polling the token, the check would fail after
+        // about 20 s instead of passing by luck. The password no longer matches the rewritten spin count,
+        // which never matters: the derivation is cancelled before any key is checked.
         var slowPath = Path.Combine(outDir, "hard-spin-slow.docx");
         var slowDoc = new Document();
         slowDoc.AddParagraph("slow");
-        slowDoc.SaveTo(slowPath, new EncryptionOptions { Password = "pw", SpinCount = 3_000_000 });
-        var slowBytes = File.ReadAllBytes(slowPath);
+        var fastStream = new MemoryStream();
+        slowDoc.SaveTo(fastStream, new EncryptionOptions { Password = "pw", SpinCount = 1_000 });
+        var fastBytes = fastStream.ToArray();
+        int slowSpins = SpinsLasting(fastBytes, TimeSpan.FromSeconds(20));
+        var slowBytes = WithSpinCount(fastBytes, slowSpins);
+        File.WriteAllBytes(slowPath, slowBytes);
+
+        Check($"D-302: the slow fixture's key derivation is measured to outlast the cancel ({slowSpins:N0} spins, at least 20 s here)", () =>
+        {
+            AssertTrue(slowSpins >= 3_000_000, "at least the old 3,000,000 spins: " + slowSpins);
+            var info = Chuvadi.Internal.Crypto.CfbContainer.Read(new MemoryStream(slowBytes))["EncryptionInfo"];
+            AssertContains(System.Text.Encoding.UTF8.GetString(info, 8, info.Length - 8), $"spinCount=\"{slowSpins}\"", "rewritten EncryptionInfo");
+        });
 
         Check("shared crypto: key derivation observes cancellation within ~1 s, never reported as a wrong password", () =>
         {
             var opts = new DocxReaderOptions { MaxSpinCount = null };
             using var cts = new CancellationTokenSource();
-            var sw = new Stopwatch();
-            using var timer = new Timer(_ => { sw.Start(); cts.Cancel(); }, null, 150, Timeout.Infinite);
             var total = Stopwatch.StartNew();
+            using var cancel = CancelLater.After(cts, 150);
             AssertThrows<OperationCanceledException>(() => DocxReader.Open(new MemoryStream(slowBytes), "pw", opts, cts.Token).Dispose(), "Open during KDF");
-            sw.Stop();
-            AssertTrue(sw.ElapsedMilliseconds < 1_000, $"KDF cancellation latency {sw.ElapsedMilliseconds} ms");
+            long latency = cancel.MillisecondsSinceFired();
+            AssertTrue(latency < 1_000, $"KDF cancellation latency {latency} ms after the token fired");
             AssertTrue(total.ElapsedMilliseconds < 5_000, $"Open ran {total.ElapsedMilliseconds} ms before stopping");
         });
         Check("shared crypto: cancellation also stops Document.Load and DocxTemplate.Fill key derivation", () =>
         {
             var opts = new DocxReaderOptions { MaxSpinCount = null };
-            using var cts = new CancellationTokenSource(200);
-            AssertThrows<OperationCanceledException>(() => Document.Load(new MemoryStream(slowBytes), "pw", opts, cts.Token), "Load during KDF");
-            using var cts2 = new CancellationTokenSource(200);
+            using var cts = new CancellationTokenSource();
+            using (var cancel = CancelLater.After(cts, 200))
+                cancel.Expect(() => Document.Load(new MemoryStream(slowBytes), "pw", opts, cts.Token), "Load during KDF");
+            using var cts2 = new CancellationTokenSource();
             var filled = new MemoryStream();
-            AssertThrows<OperationCanceledException>(() => DocxTemplate.Fill(new MemoryStream(slowBytes), filled, new TemplateData(),
-                new TemplateOptions { Password = "pw", ReadOptions = opts }, cts2.Token), "Fill during KDF");
+            using (var cancel2 = CancelLater.After(cts2, 200))
+                cancel2.Expect(() => DocxTemplate.Fill(new MemoryStream(slowBytes), filled, new TemplateData(),
+                    new TemplateOptions { Password = "pw", ReadOptions = opts }, cts2.Token), "Fill during KDF");
             AssertTrue(filled.Length == 0, "a cancelled fill writes nothing");
         });
     }
@@ -433,8 +464,7 @@ public static class HardeningTests
         {
             using var r = DocxReader.Open(big);
             using var cts = new CancellationTokenSource();
-            var sw = new Stopwatch();
-            using var timer = new Timer(_ => { sw.Start(); cts.Cancel(); }, null, 5, Timeout.Infinite);
+            using var cancel = CancelLater.After(cts, 5);
             bool cancelled = false;
             try
             {
@@ -444,13 +474,118 @@ public static class HardeningTests
             {
                 cancelled = true;
             }
-            sw.Stop();
+            long latency = cancel.MillisecondsSinceFired();
             AssertTrue(cancelled, "ExtractText never observed cancellation");
-            AssertTrue(sw.ElapsedMilliseconds < 1_000, $"cancellation latency {sw.ElapsedMilliseconds} ms");
+            AssertTrue(latency < 1_000, $"cancellation latency {latency} ms after the token fired");
         });
     }
 
     // ---- Helpers -------------------------------------------------------------------
+
+    /// <summary>The same encrypted file with every spinCount in its EncryptionInfo set to <paramref name="spins"/>.</summary>
+    private static byte[] WithSpinCount(byte[] encrypted, int spins)
+    {
+        var streams = Chuvadi.Internal.Crypto.CfbContainer.Read(new MemoryStream(encrypted));
+        var info = streams["EncryptionInfo"];
+        string xml = System.Text.Encoding.UTF8.GetString(info, 8, info.Length - 8);
+        string patched = System.Text.RegularExpressions.Regex.Replace(xml, "spinCount=\"[0-9]+\"", $"spinCount=\"{spins}\"");
+        var bytes = new byte[8 + System.Text.Encoding.UTF8.GetByteCount(patched)];
+        Array.Copy(info, bytes, 8);
+        System.Text.Encoding.UTF8.GetBytes(patched, 0, patched.Length, bytes, 8);
+        var ms = new MemoryStream();
+        Chuvadi.Internal.Crypto.CfbContainer.Write(ms, new List<Chuvadi.Internal.Crypto.CfbContainer.Node>
+        {
+            new() { Name = "EncryptionInfo", Type = Chuvadi.Internal.Crypto.CfbContainer.TypeStream, Data = bytes },
+            new() { Name = "EncryptedPackage", Type = Chuvadi.Internal.Crypto.CfbContainer.TypeStream, Data = streams["EncryptedPackage"] },
+        });
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// A spin count whose key derivation takes at least <paramref name="target"/> on this machine now:
+    /// the derivation of a 300,000-spin copy is timed (the faster of two runs, so the estimate errs
+    /// long), scaled up, and never below the old fixed 3,000,000 (D-302).
+    /// </summary>
+    private static int SpinsLasting(byte[] encrypted, TimeSpan target)
+    {
+        const int probeSpins = 300_000;
+        var probe = WithSpinCount(encrypted, probeSpins);
+        var opts = new DocxReaderOptions { MaxSpinCount = null };
+        double best = double.MaxValue;
+        for (int i = 0; i < 2; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            try { DocxReader.Open(new MemoryStream(probe), "pw", opts).Dispose(); }
+            catch (DocxPasswordRequiredException) { } // the rewritten spin count no longer matches the password
+            best = Math.Min(best, sw.Elapsed.TotalSeconds);
+        }
+        double spins = probeSpins * (target.TotalSeconds / Math.Max(best, 1e-3));
+        return (int)Math.Clamp(spins, 3_000_000, int.MaxValue);
+    }
+
+    /// <summary>
+    /// Cancels a token after a delay from a dedicated thread (D-296 R4). A timer callback, or
+    /// CancellationTokenSource(ms), runs on the thread pool, and on a busy CI runner the pool can be
+    /// saturated long enough that the work finishes before the cancel ever runs; a dedicated thread is
+    /// scheduled by the operating system within milliseconds. It also records when the token actually
+    /// fired, so latency is measured from that moment and a cancel that came too late is reported as such.
+    /// </summary>
+    private sealed class CancelLater : IDisposable
+    {
+        private readonly Stopwatch _clock = Stopwatch.StartNew();
+        private readonly Thread _thread;
+        private readonly CancellationTokenRegistration _registration;
+        private long _firedAt = -1;
+
+        private CancelLater(CancellationTokenSource cts, int delayMs)
+        {
+            _registration = cts.Token.Register(() => Interlocked.CompareExchange(ref _firedAt, _clock.ElapsedMilliseconds, -1));
+            _thread = new Thread(() =>
+            {
+                Thread.Sleep(delayMs);
+                try { cts.Cancel(); } catch (ObjectDisposedException) { }
+            }) { IsBackground = true, Name = "test cancel" };
+            _thread.Start();
+        }
+
+        public static CancelLater After(CancellationTokenSource cts, int delayMs) => new(cts, delayMs);
+
+        /// <summary>Milliseconds from the moment the token fired until now; fails if it has not fired.</summary>
+        public long MillisecondsSinceFired()
+        {
+            long now = _clock.ElapsedMilliseconds;
+            // The work can see the cancel before Cancel() has run the callback that records the moment;
+            // wait for the cancelling thread (it ends right after Cancel) before reading it.
+            _thread.Join(TimeSpan.FromSeconds(30));
+            long fired = Interlocked.Read(ref _firedAt);
+            AssertTrue(fired >= 0, $"the token had not fired after {_clock.ElapsedMilliseconds} ms");
+            return now - fired;
+        }
+
+        /// <summary>
+        /// Runs the work and requires OperationCanceledException within 1 s of the token firing; if it
+        /// completed instead, says whether the token had fired.
+        /// </summary>
+        public void Expect(Action work, string what)
+        {
+            Exception? caught = null;
+            try { work(); } catch (Exception e) { caught = e; }
+            long end = _clock.ElapsedMilliseconds;
+            if (caught is OperationCanceledException) _thread.Join(TimeSpan.FromSeconds(30)); // see MillisecondsSinceFired
+            long fired = Interlocked.Read(ref _firedAt);
+            AssertTrue(caught is OperationCanceledException,
+                caught is null
+                    ? $"{what}: completed after {end} ms without OperationCanceledException; " + (fired >= 0 ? $"the token fired at {fired} ms" : "the token had not fired yet")
+                    : $"{what}: expected OperationCanceledException, got {caught.GetType().Name}: {caught.Message}");
+            AssertTrue(fired >= 0 && end - fired < 1_000, $"{what}: stopped {end - fired} ms after the token fired (at {fired} ms)");
+        }
+
+        public void Dispose()
+        {
+            _thread.Join();
+            _registration.Dispose();
+        }
+    }
 
     private static string BaseDoc(string outDir, string name, bool withHyperlink)
     {
@@ -521,6 +656,44 @@ public static class HardeningTests
             return ex;
         }
         throw new InvalidOperationException($"expected {typeof(T).Name}, nothing was thrown.");
+    }
+
+    /// <summary>A valid RGB PNG of random pixels (does not compress), for size-limit tests.</summary>
+    internal static byte[] NoisePng(int width, int height)
+    {
+        var raw = new byte[height * (1 + width * 3)];
+        new Random(width * 31 + height).NextBytes(raw);
+        for (int y = 0; y < height; y++) raw[y * (1 + width * 3)] = 0;   // filter byte: none
+        var idat = new MemoryStream();
+        using (var z = new ZLibStream(idat, CompressionLevel.Optimal, leaveOpen: true)) z.Write(raw);
+        var png = new MemoryStream();
+        png.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+        var ihdr = new byte[13];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(ihdr, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(ihdr.AsSpan(4), height);
+        ihdr[8] = 8; ihdr[9] = 2;   // 8-bit, RGB
+        Chunk(png, "IHDR", ihdr);
+        Chunk(png, "IDAT", idat.ToArray());
+        Chunk(png, "IEND", Array.Empty<byte>());
+        return png.ToArray();
+    }
+
+    private static void Chunk(Stream png, string type, byte[] data)
+    {
+        var head = new byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(head, data.Length);
+        Encoding.ASCII.GetBytes(type, 0, 4, head, 4);
+        png.Write(head);
+        png.Write(data);
+        uint crc = 0xFFFFFFFF;
+        foreach (var b in head.AsSpan(4).ToArray().Concat(data))
+        {
+            crc ^= b;
+            for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+        }
+        var tail = new byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(tail, ~crc);
+        png.Write(tail);
     }
 }
 

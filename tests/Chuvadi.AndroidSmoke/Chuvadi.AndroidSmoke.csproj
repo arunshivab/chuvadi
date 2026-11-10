@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Android build check (D-217 item 3). A class library for net10.0-android that references the shipped libraries and calls
+    their public API, so CI proves they can be referenced and compiled for the Android target framework. It is not packed
+    or shipped and not in Chuvadi.slnx; CI builds it in its own job ("android-build", see ci.yml). It does not run any code:
+    running on a device or emulator is not checked here.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Zip\Chuvadi.Zip.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Ipp\Chuvadi.Print.Ipp.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Remote\Chuvadi.Print.Remote.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Windows\Chuvadi.Print.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

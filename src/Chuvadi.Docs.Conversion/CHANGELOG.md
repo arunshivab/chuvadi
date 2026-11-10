@@ -1,8 +1,28 @@
 # Chuvadi.Docs.Conversion — Changelog
 
-## 1.6.0 (2026-10-28)
+## 2.1.0 (2026-11-10)
 
-First release, versioned with Chuvadi.Docs 1.6.0 (decision D-15). Depends on Chuvadi.Docs 1.6.0 and Chuvadi.Markup 1.0.0.
+Versioned with Chuvadi.Docs 2.1.0 (D-15, D-45): depends on Chuvadi.Docs 2.1.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.1.0:
+- **The documents it creates are saved in compatibility mode 15** (Word 2013 and later). Their `word/settings.xml` holds one `w:compat` element, so Word no longer opens them as "[Compatibility Mode]" (D-299). Nothing else in the output changes; set `doc.Compatibility.Mode = null` on the returned `Document` before saving for the 2.0.0 output. Importing into a `Document` you pass keeps that document's own settings.
+- **The new Docs 2.1.0 API works on the `Document` it returns:** settings, theme lookups, `TempStorage` and `SkippedParts`. See the Chuvadi.Docs CHANGELOG.
+
+## 2.0.0 (2026-11-09)
+
+The first release. It is versioned with Chuvadi.Docs 2.0.0 (D-15, D-45) and depends on Chuvadi.Docs 2.0.0 and Chuvadi.Markup 1.1.0. Everything listed under 1.6.0 below is part of it; 1.6.0 was never released (D-135).
+
+Changes since the 1.6.0 notes:
+- **Namespace:** the Docs types it takes and returns are in `Chuvadi.Docs.Model` (was `Chuvadi.Docs.Word`).
+- **Limits are reported as `DocxLimitExceededException`** (an `IOException`, from Chuvadi.Docs, with `LimitName`, `Limit` and `Actual`), from all 16 public import methods.
+  - Markdown and HTML: Markup's own limit values, with Markup's `MarkupLimitExceededException` as `InnerException`. It was Markup's exception before.
+  - Text: `MaxInputChars`. It was an `InvalidDataException` before.
+  - The call produces no partial result. Callers no longer need a reference to Chuvadi.Markup to catch it.
+- **Documentation:** Markdown is described as read "as the CommonMark 0.31.2 and GFM 0.29 specifications describe". It used to say "as cmark-gfm reads it", naming another implementation (D-196).
+- **Trim and NativeAOT:** the package is marked `IsTrimmable` and `IsAotCompatible`, and the analyzers run on every build (D-217).
+- Documentation: the README names Markup's default `SanitizerPolicy` (the `Anjal()` method the old text referred to no longer exists), and has a platforms and threads note.
+
+## 1.6.0 (never released; ships in 2.0.0)
+
+Planned as the first release, versioned with Chuvadi.Docs 1.6.0 (decision D-15), on Chuvadi.Docs 1.6.0 and Chuvadi.Markup 1.0.0.
 
 - **Plain text** (`TextConversion`):
   - **Import:**
@@ -38,4 +58,4 @@ First release, versioned with Chuvadi.Docs 1.6.0 (decision D-15). Depends on Chu
     - A full page or a fragment, with semantic or inline formatting and semantic or label lists.
     - Notes with back links, pictures, and a cut after a number of blocks.
     - Unsafe link schemes are never written.
-  - **Preview:** `ExportPreview` / `HtmlExportOptions.Preview()` gives a self-contained fragment that Markup's `Anjal()` policy removes nothing from.
+  - **Preview:** `ExportPreview` / `HtmlExportOptions.Preview()` gives a self-contained fragment that Markup's default sanitizer policy removes nothing from.

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -285,7 +286,7 @@ namespace Chuvadi.Print.Remote
 
         private HubResponse Hello(HubRequest request, string agentId)
         {
-            HelloRequest hello = Read<HelloRequest>(request) ?? new HelloRequest();
+            HelloRequest hello = Read(request, RemoteProtocol.Json.HelloRequest) ?? new HelloRequest();
             lock (_gate)
             {
                 AgentInfo info = _agents[agentId];
@@ -298,12 +299,12 @@ namespace Chuvadi.Print.Remote
                 PollWaitSeconds = _options.PollWaitSeconds,
                 LeaseSeconds = _options.LeaseSeconds,
                 ServerTime = _time.GetUtcNow()
-            });
+            }, RemoteProtocol.Json.HelloResponse);
         }
 
         private async Task<HubResponse> PollAsync(HubRequest request, string agentId, CancellationToken ct)
         {
-            PollRequest poll = Read<PollRequest>(request) ?? new PollRequest();
+            PollRequest poll = Read(request, RemoteProtocol.Json.PollRequest) ?? new PollRequest();
             var wait = TimeSpan.FromSeconds(Math.Clamp(poll.WaitSeconds, 0, _options.PollWaitSeconds));
             var clock = Stopwatch.StartNew();
             while (true)
@@ -318,7 +319,7 @@ namespace Chuvadi.Print.Remote
                     signal = SignalFor(agentId).Task;
                 }
                 Publish(finished);
-                if (lease is not null) return HubResponse.Json(200, lease);
+                if (lease is not null) return HubResponse.Json(200, lease, RemoteProtocol.Json.JobLease);
 
                 TimeSpan remaining = wait - clock.Elapsed;
                 if (remaining <= TimeSpan.Zero) return new HubResponse(204);
@@ -371,7 +372,7 @@ namespace Chuvadi.Print.Remote
 
         private HubResponse Status(HubRequest request, string agentId, Guid jobId)
         {
-            StatusReport? report = Read<StatusReport>(request);
+            StatusReport? report = Read(request, RemoteProtocol.Json.StatusReport);
             if (report is null) return HubResponse.Error(400, "A status report is required.");
             bool reportIsFinal = report.State is HubJobState.Printed or HubJobState.Failed or HubJobState.Cancelled;
             if (!reportIsFinal && report.State is not (HubJobState.Accepted or HubJobState.Printing))
@@ -387,7 +388,7 @@ namespace Chuvadi.Print.Remote
 
                 if (job.IsFinal)
                 {
-                    response = HubResponse.Json(200, new StatusResponse { Final = true, CancelRequested = job.State == HubJobState.Cancelled });
+                    response = HubResponse.Json(200, new StatusResponse { Final = true, CancelRequested = job.State == HubJobState.Cancelled }, RemoteProtocol.Json.StatusResponse);
                 }
                 else if (reportIsFinal)
                 {
@@ -396,7 +397,7 @@ namespace Chuvadi.Print.Remote
                     job.ImpressionsPrinted = report.ImpressionsPrinted;
                     job.SheetsPrinted = report.SheetsPrinted;
                     FinishLocked(job, report.State, report.Error, report.Audit, finished);
-                    response = HubResponse.Json(200, new StatusResponse { Final = true });
+                    response = HubResponse.Json(200, new StatusResponse { Final = true }, RemoteProtocol.Json.StatusResponse);
                 }
                 else if (job.LeaseId != report.LeaseId || job.State == HubJobState.Queued)
                 {
@@ -414,7 +415,7 @@ namespace Chuvadi.Print.Remote
                     {
                         CancelRequested = job.CancelRequested,
                         LeaseSeconds = _options.LeaseSeconds
-                    });
+                    }, RemoteProtocol.Json.StatusResponse);
                 }
             }
             Publish(finished);
@@ -592,10 +593,10 @@ namespace Chuvadi.Print.Remote
             catch (Exception ex) { BackgroundError?.Invoke(this, ex); }
         }
 
-        private static T? Read<T>(HubRequest request) where T : class
+        private static T? Read<T>(HubRequest request, JsonTypeInfo<T> typeInfo) where T : class
         {
             if (request.Body is null || request.Body.Length == 0) return null;
-            return JsonSerializer.Deserialize<T>(request.Body, RemoteProtocol.Json);
+            return JsonSerializer.Deserialize(request.Body, typeInfo);
         }
 
         internal static bool TryParseRange(string header, long length, out long start, out long end)

@@ -18,7 +18,7 @@ internal static class Fixture
 {
     public const string Tamil = "LiPi-Sans-Tamil-Regular.ttf";
 
-    public static byte[] FontBytes(string file) => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : BundledFontSource.ReadResource(file);
+    public static byte[] FontBytes(string file) => file.StartsWith("LiPi-", StringComparison.Ordinal) ? Chuvadi.Fonts.FontPack.ReadAllBytes(file) : SubstituteFontPack.ReadAllBytes(file);
 
     public static FontFace Face(string file) => FontFace.Load(FontBytes(file), 0, FontOrigin.Supplied, file);
 

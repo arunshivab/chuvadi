@@ -1,6 +1,109 @@
 # Chuvadi.Print — Changelog
 
-## 1.0.0-rc.2 (unreleased)
+## 1.0.0-rc.3 (2026-11-07)
+
+All four packages move to 1.0.0-rc.3 (D-201 P-02). Phase 4 parts 1 to 3 (D-189, D-223, D-238): the vector page
+model, the XPS writer, and vector printing to Windows queues. New API only. One approved change to existing
+behaviour, in Chuvadi.Print.Remote:
+
+- **`PrintAgent.RunOnceAsync` cancellation** (D-189, error-type change): when the caller cancels while an exchange
+  with the hub is failing, `RunOnceAsync` now throws `OperationCanceledException` (the failure as its
+  `InnerException`) instead of the transport error, for example `RemotePrintException` "HTTP 502". Before, that
+  depended on timing. Failures without a cancellation keep their own types, `RunAsync` behaves as before, and a
+  journalled outcome is still delivered by the next cycle.
+
+- **Vector page model** (core): `VectorPage` (points, origin top left, y down) holding `VectorPath`,
+  `VectorGlyphRun`, `VectorImageElement` and `VectorGroup` elements, each with its own `Transform`, `Clip`,
+  `Opacity` and `BlendMode`. Brushes `VectorSolidBrush` (sRGB with alpha), `VectorLinearGradientBrush` and
+  `VectorRadialGradientBrush` (PDF type 2 and 3 geometry, with `ExtendStart`/`ExtendEnd` and a `Transform`).
+  `VectorStroke` (width, caps, joins, miter limit, dashes), `VectorGeometry` (move, line, cubic, close, fill rule),
+  `VectorFont` (the font file), `VectorImage` (PNG or JPEG, size, resolution and `HasAlpha` read from the file;
+  `FromPixels` encodes grey, RGB, grey with alpha or RGB with alpha as PNG), groups with `Isolated`, `Knockout` and `SoftMask`, and `VectorMatrix`.
+- **XPS writer** (Chuvadi.Print.Windows, runs on any OS): `XpsWriter.Write(pages, stream)` and
+  `Write(pages, path)` write an ECMA-388 package with System.IO.Compression's ZipArchive: TrueType fonts embedded
+  once each, obfuscated (ECMA-388 9.1.7.3); images once each, PNG transparency kept; groups as nested Canvas
+  elements; alpha soft masks as an OpacityMask holding a VisualBrush of the mask content; text as Glyphs
+  with Unicode where every glyph's text is known. Pages are written one at a time. The same pages give the same
+  bytes.
+- **What XPS cannot express is refused, not approximated**: `XpsWriter.CanWrite` names the first page and item.
+  Refused: blend modes other than Normal, knockout groups, luminosity soft masks (an XPS opacity mask uses alpha
+  only), gradients that do not extend,
+  radial gradients whose start circle is not a point inside the end circle, CFF fonts and font collections, fonts
+  whose OS/2 fsType forbids embedding (Restricted License, bitmap only), glyph ids past the font's glyph count,
+  CMYK JPEGs, strokes of zero width, all-zero dash patterns and values that are not finite. `Write` throws
+  `NotSupportedException` for such a page.
+- **Windows-only XPS tests** (D-189 item 14, D-202): new test project `tests/Chuvadi.Print.Xps.Tests`
+  (`net10.0-windows`, WPF; never packed). It opens the XPS sample with WPF's own XPS reader, checks the page count
+  and sizes, and checks rendered pixels at known points: shapes, group opacity, the checker image, text drawn
+  with the embedded font, the soft-mask fades and the transparent image. It builds on every OS and runs on
+  Windows. It joins Chuvadi.slnx and the Windows CI job through the shared-files change.
+- **Windows interop is source-generated** (D-217 item 2, D-223): the 26 winspool.drv and gdi32.dll entry points of
+  Chuvadi.Print.Windows are `LibraryImport` methods instead of classic `DllImport`. The marshalling code is now
+  generated at build time, which is trimming- and NativeAOT-safe. The calls, the UTF-16 strings, the Win32 BOOL
+  results and the last-error handling are the same, so behaviour, errors and output are unchanged. The project
+  sets `AllowUnsafeBlocks` (Chuvadi.Print.Windows only), because the generated code uses pointers.
+- **Trimming and NativeAOT** (D-217 item 1, D-223 step 3): the JSON in `PrinterRegistry` and in Chuvadi.Print.Remote
+  (hub and agent messages, the agent journal, the token file, the file job store) uses System.Text.Json source
+  generation instead of reflection, with enums written as names as before. The output is byte for byte the same
+  as 1.0.0-rc.2 (golden tests), and files and messages written by rc.2 read back unchanged, including numeric enums
+  and any letter case in property names. All four packages now set `IsTrimmable` and `IsAotCompatible`, so the
+  trimming and AOT analyzers run on every build. A trimmed app (TrimMode full) and a NativeAOT app using all four
+  packages publish with no warnings and work. No public API, behaviour or error changes.
+- **ManualTests**: two new groups (`XpsSampleIsACompletePackage`, `XpsRefusesWhatItCannotExpress`, total 61) and
+  `--xps-sample <file.xps>` (with `--xps-font`) to write a two-page sample for viewing. WINDOWS-VERIFICATION.md
+  gains section D3.
+- **Vector printing to Windows queues** (Phase 4 part 3, D-223 step 4, D-238; Chuvadi.Print.Windows, Windows 8
+  and later). New API:
+  - `WindowsXpsPrinterTarget` (an `IDocumentTarget`) prints vector pages as XPS through the Print Document
+    Package API. The job PrintTicket is made from the same driver-merged DEVMODE as `WindowsPrinterTarget`
+    (`PTConvertDevModeToPrintTicket`, job scope), so paper, orientation, duplex, colour, copies, collation, tray,
+    media and resolution behave alike. Pages are placed with `PageLayout` and planned with `PrintPlan`, as on the
+    raster routes.
+  - Its members:
+    - `Submit` (pages from `Source`) and `PrintPages` (the application's own pages);
+    - `CanPrint` (says which page and item XPS cannot express);
+    - `SaveXps` (the exact package, without printing) and `CreatePrintTicket`;
+    - the GDI target's `Bin`, `MediaType`, `Resolution`, `Quality`, `PaperMatching` and `StrictCapabilities`;
+    - `MarginReference`, `CopyHandling` and `StatusTimeout`;
+    - `LastSpoolJobId`, `LastJobStatus` (`XpsJobStatus`, `XpsJobCompletion`), `LastStatusEventsConnected`,
+      `LastPrintTicket` and `LastSheetCount`.
+  - New defaults: `StatusTimeout` two minutes (`DefaultStatusTimeout`; null = do not wait), `CopyHandling.Auto`,
+    `MarginReference.SheetEdge`, `PaperMatching.ExactOrCustom`, `StrictCapabilities` false.
+  - Errors (D-189 item 11): a job the print system reports failed or cancelled, or that reports nothing within the
+    timeout, raises `WindowsPrintException`. Through `PrintJob.SubmitTo` it becomes a Failed result; the router
+    never retries on another route.
+  - `WindowsQueueRoute` (`PrintRouteKind.WindowsQueue`, D-96 position 4) is used only where the application adds it
+    (D-189 item 5): existing code keeps printing through GDI raster. Its check skips to the next route, with the
+    reason in the audit, when there is no vector source, the queue cannot be opened, or a selected page holds
+    content XPS cannot express. The check converts the selected pages, and printing converts them again.
+  - Core: `IVectorPageSource` and `IVectorDocument`, the vector counterpart of `IPageRasterizer`. The PDF
+    converter of part d will implement them. `VectorLayout.Place` and `VectorLayout.PageToSheet` place a vector
+    page on its sheet with a `PagePlacement`.
+  - Output change (D-189 item 12, accepted): a job sent through this route is drawn by the driver as vectors.
+    Grey and black-and-white come from the driver; `PrintJobOptions.Monochrome` applies to rendered pages only.
+  - COM and PrintTicket interop is our own source-generated code (`GeneratedComInterface`, `LibraryImport`;
+    trimming- and AOT-safe). Method order and signatures were read from the public-domain mingw-w64 headers and
+    checked against Microsoft's documentation (D-238). The record is `docs/Chuvadi.Print/PROVENANCE-XPS-COM.md`.
+  - ManualTests: `--xps-ticket`, `--xps-queue` (with `--xps-queue-file`) and `--xps-route`, with
+    `--xps-orientation`, `--xps-copies`, `--xps-software-copies`, `--xps-duplex` and `--xps-status-seconds`.
+    WINDOWS-VERIFICATION.md gains section D4: two test queues whose port is a file, the PrintTicket, the sample
+    through the XPS and PDF drivers, settings, the route decision, and a real printer.
+
+- **In-memory PWG Raster spool** (D-217 item 4, D-223 step 5; Chuvadi.Print.Ipp). New API:
+  `IppPrinterTarget.Spool` (`IppSpoolMode.TemporaryFile`, the default and today's behaviour, or `Memory`), with
+  `MemorySpoolLimit` (default `DefaultMemorySpoolLimit`, 256 MB) and `WithSpool(mode, limit)`. A memory-spooled job
+  that grows past the limit fails before anything is sent, with an `IppException`; it never falls back to a file.
+  The memory is released when the job is sent or fails. Both spools send byte-identical jobs.
+- **`FontEmbedding.NeedsGeneratedAppearances`** (D-235 L2.3, core). This new value means every font is embedded
+  but some form fields or comments need appearances generated. The routes already require exactly
+  `AllEmbedded`, so such a PDF is never sent as-is. `IppPdfRoute` gives the specific reason "form fields or comments
+  need appearances generated". The existing values keep their numbers (0, 1, 2); the new one is 3. The Pdf font
+  inspector in Chuvadi.Print.Pdf.Raster (L2) will report it.
+- **GUIDE**: new sections on thread safety (D-217 item 3, audited against the code) and Android (D-217 item 5:
+  permissions, cleartext `ipp://` on Android 9 and later, the multicast lock for discovery). The IPP section
+  describes the spool, and the route list now names the WindowsQueue route.
+
+## 1.0.0-rc.2 (2026-11-04)
 
 Phase 1 of the vector and delivery plan (D-96, D-132, D-134). For all four packages.
 

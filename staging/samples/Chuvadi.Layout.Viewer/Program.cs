@@ -76,7 +76,7 @@ namespace Chuvadi.Layout.Viewer
                 Limits = s.Untrusted ? LayoutLimits.ForUntrustedInput() : new LayoutLimits(),
                 Shaper = new PdfShaper(), // Indic and other complex scripts
             };
-            options.FontSources.Add(BundledFontSource.Instance);
+            options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
             Directory.CreateDirectory(s.Out);
             string stem = Path.GetFileNameWithoutExtension(s.File);
 

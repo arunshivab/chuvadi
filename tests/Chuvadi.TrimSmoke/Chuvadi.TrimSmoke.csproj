@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Trim and NativeAOT smoke app (D-217 item 2). It uses the shipped libraries the way the Reader does, so that a trimmed
+    or NativeAOT publish proves they survive trimming. CI publishes it twice (see ci.yml, job "trim-aot"):
+      dotnet publish -c Release -r linux-x64 -p:PublishTrimmed=true -p:TrimMode=full   (warnings are errors)
+      dotnet publish -c Release -r linux-x64 -p:PublishAot=true                         (warnings are errors)
+    It is never packed or shipped, and it is not in Chuvadi.slnx, so a normal build does not publish it.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Chuvadi.Zip\Chuvadi.Zip.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Fonts\Chuvadi.Fonts.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print\Chuvadi.Print.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Ipp\Chuvadi.Print.Ipp.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Remote\Chuvadi.Print.Remote.csproj" />
+    <ProjectReference Include="..\..\src\Chuvadi.Print.Windows\Chuvadi.Print.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

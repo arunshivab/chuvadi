@@ -11,7 +11,7 @@ own packages, so an app takes only what it needs:
 | Chuvadi.Layout.Sheets | Excel workbooks (.xlsx), through Chuvadi.Sheets: `SheetsLayout.Open` |
 | Chuvadi.Layout.Documents | any of these, format detected: `AutoDetectLayout.Open` |
 | Chuvadi.Layout.Markup | Markdown and sanitized HTML, through Chuvadi.Markup |
-| Chuvadi.Layout.Fonts | the Office substitute fonts (metric-compatible Liberation and Carlito; Caladea for Cambria) |
+| Chuvadi.Layout.Fonts | the substitute fonts (metric-compatible Liberation and Carlito; Caladea for Cambria; Gelasio, Selawik), a pure data pack that Pdf and Print can use too; added with `FontPackSource.For(SubstituteFontPack.Instance)` |
 
 PDF, SVG and PNG output ships separately as Chuvadi.Layout.Pdf; SVG is also in this package (`LayoutSvg`).
 
@@ -26,7 +26,7 @@ using Chuvadi.Layout;
 using Chuvadi.Layout.Fonts;
 
 var options = new LayoutOptions();
-options.FontSources.Add(BundledFontSource.Instance);   // Chuvadi.Layout.Fonts package (OFL): Office substitutes
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));   // Chuvadi.Layout.Fonts package (OFL): metric-compatible substitutes
 // options.AllowSystemFonts = true;                   // desktop viewers: use real Office fonts when installed
 // LiPi Sans (Latin and nine Indic scripts) is built in (Chuvadi.Fonts); options.UseBuiltInFonts = false turns it off.
 
@@ -47,7 +47,7 @@ int mdw = r.Face.MaxDigitWidthPixels(11);   // Excel max digit width, 7 px for C
 using Chuvadi.Layout.Docs;
 
 var options = new LayoutOptions();                     // options.Password = "..." for encrypted documents
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 using LaidOutDocument doc = DocsLayout.Open(File.OpenRead("report.docx"), null, options);
 int pages = doc.ResolvePageCount();
 LaidOutPage first = doc.GetPage(0);                     // display list, boxes, text; SVG with LayoutSvg
@@ -65,7 +65,7 @@ or not yet laid out is reported in `doc.Warnings`.
 using Chuvadi.Layout.Sheets;
 
 var options = new LayoutOptions();                     // options.Password = "..." for encrypted workbooks
-options.FontSources.Add(BundledFontSource.Instance);
+options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 using LaidOutDocument doc = SheetsLayout.Open(File.OpenRead("charges.xlsx"),
     new SheetsImportOptions { DefaultPaperSizeCode = 9 }, options);   // A4 when the file states no paper
 foreach (LaidOutPage page in doc.GetPages())

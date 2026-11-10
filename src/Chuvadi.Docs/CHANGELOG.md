@@ -1,6 +1,108 @@
 # Chuvadi.Docs — Changelog
 
-## 1.6.0 (2026-10-28)
+## 2.1.0 (2026-11-10)
+
+Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284). The settings model, theme fonts and colours, and the in-memory spool for encrypted saves (D-296, D-299). Damaged encrypted containers and legacy binary files are format errors (D-293, D-300). `Document.SkippedParts` (D-310).
+
+### New
+
+- **`Document.SkippedParts`** (D-310, Layout's B11): the optional parts `Document.Load` left out, with the same `DocxSkippedPart` type as `DocxReader.SkippedParts` (`PartName`, `Reason`: `Missing`, `Unreadable` or `NotWellFormed`, `Error`). It covers a header, footer, picture, theme, styles, numbering, settings, font table or embedded font, footnotes, endnotes, comments and the document-properties parts, each listed once, in the order Load met them. Load behaves as before; it only records what it left out, so a caller (Chuvadi.Layout, for one) can report it without parsing the file a second time. Empty for a new document; edits do not change it.
+- **`DocxReaderOptions.MaxElements`:** the most XML elements one operation may read. One operation is one `Document.Load`, one template call (`Fill`, `GetPlaceholders`, `CheckTemplate`), or one `DocxReader` read call (each enumeration of `Paragraphs()` or `Tables()`, each call of `ExtractText`, `Images`, `SaveImages` or `GetActiveContent`).
+  - It counts every part the operation reads.
+  - A breach throws `DocxSecurityLimitException` with the new `DocxLimit.Elements`, while reading, before most of the memory is used.
+  - Off by default (null), so nothing changes unless you set it.
+  - **Why:** a loaded document's memory follows its number of elements, not its size in bytes. An 18 KB file of two million empty paragraphs took 1.1 GB to load and passed every byte limit.
+- **`DocxReaderOptions.ForUntrustedInput()`:** limits for uploads and attachments.
+  - 50 MB package, 256 MB uncompressed in total, 64 MB per part;
+  - compression ratio 200:1, 10,000 entries;
+  - XML depth 128, spin count 500,000;
+  - 1,000,000 elements.
+  
+  A Word document of roughly 900–1,000 pages still loads. The worst case measured was about 600 MB and a few seconds. The same name as Chuvadi.Sheets' and Chuvadi.Layout's presets.
+
+- **Settings model** (`word/settings.xml`), read by Load and written by Save:
+  - `Document.Compatibility` (`CompatibilityOptions`): the compatibility mode (`Mode`), the 65 legacy layout options of `w:compat` as `bool` properties named after their elements (`NoColumnBalance` is Word's "Don't balance columns"), and every other `w:compatSetting` in `OtherSettings` (`CompatibilitySetting`), kept as found.
+  - `ThemeFontLanguages`, `ColorSchemeMapping` (`ColorSchemeIndex`), `AutoHyphenation`, `ConsecutiveHyphenLimit`, `HyphenationZonePt`, `DoNotHyphenateCaps`, `CharacterSpacingControl` (enum), `NoPunctuationKerning`, `BookFoldPrinting`, `BookFoldReversePrinting`, `BookFoldPrintingSheets`, `DisplayBackgroundShape`, `DecimalSymbol` and `ListSeparator`.
+  - **Why:** before, load → save dropped all of these. A Word file's compatibility mode and layout options were lost on the first save, so Word laid it out by different rules.
+- **Theme fonts and colours:** `Document.Theme` (`DocumentTheme`, `ThemeFontScheme`: the Latin, East Asian and complex-script typefaces, the script fonts, the twelve colours), `Document.GetThemeFontName(ThemeFont)` (ECMA-376 §17.15.1.88, with the theme-font languages picking the script font) and `Document.GetThemeColorHex(ThemeColor, tint, shade)` (through the colour mapping). Without a theme part, the Office 2013–2022 defaults, the same as Chuvadi.Layout's.
+- **`EncryptionOptions.TempStorage`** (`TempStorage.File`, the default, or `TempStorage.Memory`): `Memory` builds the encrypted save's package in process memory, so no temporary file is created anywhere and `TempDirectory` is ignored (for read-only file systems). The same setting as Chuvadi.Sheets'.
+
+### Behaviour changes
+
+- **The token given to `DocxReader.Open` now also covers the reader's later reads.**
+  - `Paragraphs()`, `Tables()`, `ExtractText()`, `Images()`, `SaveImages(folder)` and `GetActiveContent()` observe it.
+  - The overloads that take their own token observe both.
+  - Before, the `Open` token was checked only while opening: a cancelled one was ignored by later reads, which ran to the end.
+  - **If you open with a short-lived token** (a timeout meant only for `Open`, or a request's token you keep using after the request), reads now throw `OperationCanceledException` once it is cancelled. Open with a token that lives as long as the reader.
+- **A new `Document` is saved in compatibility mode 15** (Word 2013 and later): settings.xml now holds `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>` (D-299).
+  - Before, the files stated no mode, so Word opened every one of them as "[Compatibility Mode]" (Word 2007 rules).
+  - Word may now lay some content out slightly differently, by its current rules (for example table cell padding).
+  - To write the 2.0.0 output, set `doc.Compatibility.Mode = null`. A loaded document keeps the file's own mode, or none.
+- **An old binary Office file is now a format error that names its format, not a password prompt** (D-253, D-293, the shared decryptor). A Word 97-2003 `.doc` (or an `.xls`, a `.ppt`, another OLE compound file) used to be taken for an encrypted file, because only its compound-file signature was checked: `DocxPasswordRequiredException` both without a password ("This file is encrypted; supply a password to read it.") and with one ("Encrypted file is missing the EncryptionInfo stream."). Now only a compound file with both an `EncryptionInfo` and an `EncryptedPackage` stream is treated as encrypted. Any other compound file is `DocxFormatException` in every entry point, with a message such as "This is a Word 97-2003 binary file (.doc), not an Office Open XML package, and it is not encrypted. Open it in Office and save it as .docx or .xlsx." (on the `InvalidDataException` inside, and in the outer message). A compound file with only one of the two streams is reported as a damaged encrypted file naming the missing stream. The check reads only the file's directory: a handful of reads, whatever the file's size.
+- **A damaged encrypted container opened with a password is now `DocxFormatException`** in `Document.Load`, `DocxReader.Open` and the template methods, as in Chuvadi.Sheets (D-300). That covers a compound file that cannot be parsed, or one without its `EncryptionInfo` or `EncryptedPackage` stream. Before, it was `DocxPasswordRequiredException`, as if the password were wrong. A missing or wrong password is still `DocxPasswordRequiredException`.
+- **`DocxReader.Open`'s format error now carries the cause:** "Could not open the file as a docx package: " followed by the inner exception's message (it was a fixed sentence). The cause stays the `InnerException`.
+
+### Tests
+
+- The cancellation checks in the Hardening group are deterministic (D-296 R4, D-302):
+  - They cancel from a dedicated thread and measure from when the token fires. Before, the cancel ran on the thread pool, and on a busy CI runner it could arrive only after the key derivation had finished (the macOS "Fill during KDF" and "Load during KDF" failures).
+  - The slow fixture's spin count is measured on the machine running the tests, so the derivation takes at least 20 s and always outlasts the cancel (it was a fixed 3,000,000 spins, about 1–2 s).
+  - The fixture is saved with 1,000 spins and its EncryptionInfo rewritten, which also saves the 2–3 s the old save took.
+
+### Documentation
+
+- README: **Errors** (the damaged encrypted container), **Theme fonts and colours**, **Document settings and compatibility mode**, and `TempStorage` under **Password protection** and **Platforms and threads**.
+- README, **Untrusted input:**
+  - the preset;
+  - a table with the defaults next to the preset values;
+  - what `MaxElements` counts, with measured memory per element;
+  - the `Open` token rule.
+
+## 2.0.0 (2026-11-09)
+
+A major version: the public namespace is renamed, and malformed files are reported one way. 2.0.0 also carries everything listed under 1.6.0 below, which was never released on its own (D-135). It is versioned together with Chuvadi.Docs.Conversion 2.0.0.
+
+### Migration from 1.5.1
+
+- **Namespace:** every public type moves from `Chuvadi.Docs.Word` to `Chuvadi.Docs.Model`. Change `using Chuvadi.Docs.Word;` to `using Chuvadi.Docs.Model;` and recompile; no type or member is renamed. This is a source and binary break (D-91).
+- **One error contract:** every failure to read a package is a `DocxFormatException`, with the original error (`XmlException`, `InvalidDataException`, or the `IOException` of the caller's own stream) as `InnerException`. This covers `Document.Load`, the `DocxReader` readers (`Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent`, `ContainsVbaProject` / `HasMacros`) and `DocxTemplate.Fill`, `GetPlaceholders` and `CheckTemplate`. The message starts "Not a valid docx package: " ("The template is not a valid docx package: " for the template methods).
+  - Catch `DocxFormatException` instead of `XmlException` or `InvalidDataException`. This replaces the 1.4.0 note "Load throws XmlException".
+  - Unchanged and never wrapped: `DocxSecurityLimitException` (still a `DocxFormatException`), `DocxPasswordRequiredException`, `DocxTemplateException`, `DocxLimitExceededException`, `OperationCanceledException`, `ObjectDisposedException`, argument errors, and file-system errors when opening or writing by path.
+- **Behaviour you may notice:**
+  - A missing or corrupt main part (`word/document.xml`) is a `DocxFormatException` everywhere: "The main document part '…' is missing from the package." or "… is corrupt and cannot be read.". Before, `DocxReader.Open`, the readers and the template methods accepted a missing one and returned nothing; `Fill` even wrote a file that `Load` rejected.
+  - `DocxReader.Open` now reads the main part once to check it: about 50 ms per 66 MB of XML, and no extra memory. A main part over `DocxReaderOptions.MaxPartBytes` is now reported at `Open` instead of at the first read.
+  - A header or footer that is not well-formed XML reads as blank in `ExtractText`, `Paragraphs`, `Tables`, `Images` and `SaveImages`, as `Document.Load` already did, and is listed in the new `DocxReader.SkippedParts`. Before, these readers threw, and the body text was lost with it. `GetActiveContent` and the template methods stay strict.
+  - `Fill`, `GetPlaceholders` and `CheckTemplate` check the package as `Load` and `Open` do: a missing or broken `[Content_Types].xml` or `_rels/.rels`, or a main part that is not a Word document, is a `DocxFormatException`, and nothing is written.
+  - Saving to a path where a folder exists now throws `UnauthorizedAccessException` (it was an `IOException`), as in Chuvadi.Sheets.
+
+### New
+
+- **`Document.SaveTo(Stream, EncryptionOptions)`:** an encrypted save to any writable stream, from its current position, seekable or not. The stream is flushed and left open, as with `SaveTo(Stream)` (D-47).
+- **`EncryptionOptions.TempDirectory`:** the folder for an encrypted save's temporary file. Null (the default) is the system temp folder, as before. The same setting as Chuvadi.Sheets' `XlsxWriterOptions.TempDirectory` (D-217).
+- **`DocxReader.SkippedParts`** (`DocxSkippedPart` with `PartName`, `Reason` and `Error`; `DocxSkippedPartReason`: `Missing`, `Unreadable`, `NotWellFormed`). Every part a reader skipped, once each, in the order met. That includes the skips that were already silent: a missing header or footer, a picture whose part is missing or can't be opened, and parts `GetActiveContent` couldn't open (D-194).
+- **`DocxLimitExceededException`** (an `IOException`, with `LimitName`, `Limit` and `Actual`, as Chuvadi.Sheets' `XlsxLimitExceededException`). Thrown by the Chuvadi.Docs.Conversion importers when an input is over a limit.
+- **Trim and NativeAOT:** the package is marked `IsTrimmable` and `IsAotCompatible`, and the analyzers run on every build. Nothing else in the package changes (D-217).
+
+### Bug fixes
+
+- **Encrypted files above about 7 MB could not be opened by anyone**, our reader included (every release since 1.0.0). The compound-file writer, shared with Chuvadi.Sheets, never wrote the extra sector-map (DIFAT) sectors that larger files need. Fixed in the shared writer (Chuvadi.Sheets 2.0.1); round trips at 6, 8, 12 and 50 MB are now tested.
+- **An encrypted save to a path no longer destroys the existing file when it fails:** it writes beside the target and replaces it only on success, as `SaveTo(path)` does.
+- **The encrypted save's temporary file is no longer the plaintext package.** It used to be readable by other users on Linux (mode 644) and survived a crash. It is now encrypted with a one-time key held only in memory, owner-only, opened exclusively and deleted on close.
+- **Saves to a path keep the target's identity** (parity with Chuvadi.Sheets 2.0.1, D-206): `SaveTo(path)`, `SaveTo(path, EncryptionOptions)` and `DocxTemplate.Fill(path, path)`.
+  - A replaced file keeps its permissions (Unix mode; attributes and security settings on Windows).
+  - A symbolic link stays a link, and the file it points to is written.
+  - A missing folder is reported with the target's name, not the temporary file's.
+  - A read-only target is refused and left unchanged.
+  - `Fill(path, path)` no longer leaves a truncated file when a write fails part-way.
+- `DocxTemplate.Fill` no longer writes an output that can't be opened when the template's package is broken (see the migration notes).
+
+### Documentation
+
+- `TextFormat.ComplexScriptFont`: Word uses it only for runs marked complex script (`ComplexScript = true`, `w:cs`). For Tamil and other Indic text, set `ComplexScript` or use `FontForAllScripts`. Before, the comment said it applied to Indic text by itself.
+- The README describes what survives a load-save round trip (fields, notes, comments and tracked changes do since 1.6.0) and what doesn't. It also has new sections on platforms and threads, path saves, `SkippedParts` and the error contract.
+- Fictional names and addresses in the README, comments and test data (D-60).
+
+## 1.6.0 (never released; ships in 2.0.0)
 
 Fields, notes, bookmarks, text boxes, embedded fonts, floating tables and document properties (Phase 8); comments and tracked changes with accept/reject (Phase 9); the Chuvadi.Docs.Conversion companion package (D-15).
 

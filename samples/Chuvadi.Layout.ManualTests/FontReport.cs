@@ -26,7 +26,7 @@ namespace Chuvadi.Layout.ManualTests
             w.WriteLine();
             w.WriteLine("== " + title);
             LayoutOptions options = new LayoutOptions { AllowSystemFonts = allowSystem };
-            options.FontSources.Add(BundledFontSource.Instance);
+            options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
             FontResolver resolver = options.CreateFontResolver();
             foreach (string family in Families)
             {

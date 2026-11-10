@@ -9,6 +9,10 @@
     <AssemblyName>Chuvadi.Layout.Docs</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
+    <!-- D-217, D-254: trim and NativeAOT analyzers on every build; marks the package trim- and AOT-compatible. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Package metadata -->
     <Product>Chuvadi.Layout.Docs</Product>
     <Description>Word document (.docx) importer for Chuvadi.Layout, on Chuvadi.Docs: lays out a document the way Word lays it out (sections, headers and footers, lists, paragraphs, runs, tables, pictures, watermarks, footnotes and endnotes, tracked changes as accepted, text boxes, floating tables, embedded fonts), encrypted documents included. Values are never altered. Pure BCL.</Description>

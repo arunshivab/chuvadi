@@ -18,7 +18,8 @@ namespace Chuvadi.Layout.Docs
         /// and left open). Encrypted documents need <see cref="LayoutOptions.Password"/>. Import warnings are reported in
         /// <see cref="LaidOutDocument.Warnings"/>.
         /// </summary>
-        /// <exception cref="LayoutFormatException">Not a readable document, or the password is missing or wrong.</exception>
+        /// <exception cref="LayoutPasswordRequiredException">The document is encrypted and the password is missing (<see cref="LayoutPasswordRequiredException.PasswordGiven"/> false) or wrong (true).</exception>
+        /// <exception cref="LayoutFormatException">Not a readable document.</exception>
         /// <exception cref="LayoutLimitExceededException">The document exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static LaidOutDocument Open(Stream source, DocsImportOptions? importOptions = null, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -30,7 +31,8 @@ namespace Chuvadi.Layout.Docs
         }
 
         /// <summary>Lays out a .docx document held in memory (the array is read, never modified). As <see cref="Open(Stream, DocsImportOptions?, LayoutOptions?, CancellationToken)"/>.</summary>
-        /// <exception cref="LayoutFormatException">Not a readable document, or the password is missing or wrong.</exception>
+        /// <exception cref="LayoutPasswordRequiredException">The document is encrypted and the password is missing (<see cref="LayoutPasswordRequiredException.PasswordGiven"/> false) or wrong (true).</exception>
+        /// <exception cref="LayoutFormatException">Not a readable document.</exception>
         /// <exception cref="LayoutLimitExceededException">The document exceeds a <see cref="LayoutLimits"/> limit.</exception>
         public static LaidOutDocument Open(byte[] source, DocsImportOptions? importOptions = null, LayoutOptions? options = null,
             CancellationToken cancellationToken = default)

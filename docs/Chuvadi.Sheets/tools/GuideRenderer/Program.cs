@@ -52,7 +52,7 @@ internal static class Program
             Shaper = new PdfShaper(),                       // complex scripts (the Tamil and Devanagari name on the title page)
             Culture = CultureInfo.InvariantCulture,
         };
-        options.FontSources.Add(BundledFontSource.Instance);
+        options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 
         var import = new MarkdownImportOptions
         {
@@ -98,7 +98,7 @@ internal static class Program
         {
             Title = Title,
             Author = Author,
-            Subject = "Chuvadi.Sheets 2.0.0: writing, reading, styling, protecting and encrypting xlsx files in pure .NET",
+            Subject = "Chuvadi.Sheets 2.0.4: writing, reading, styling, protecting and encrypting xlsx files in pure .NET",
             Warning = w => warnings.Add($"pdf: {w}"),
         };
 
