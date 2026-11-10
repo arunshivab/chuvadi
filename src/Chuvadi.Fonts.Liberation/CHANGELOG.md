@@ -1,6 +1,6 @@
 # Chuvadi.Fonts.Liberation — Changelog
 
-## 1.0.0 (unreleased, tag fonts-liberation-v1.0.0)
+## 1.0.0 (2026-11-10)
 
 First release: the Liberation fonts as one shared, separate package (D-302, D-307, D-311).
 
