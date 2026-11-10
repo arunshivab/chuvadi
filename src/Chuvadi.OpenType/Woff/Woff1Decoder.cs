@@ -10,7 +10,7 @@ namespace Chuvadi.OpenType.Woff;
 internal static class Woff1Decoder
 {
     // TRACE R-OT-0036
-    internal static byte[] Decode(ReadOnlySpan<byte> s)
+    internal static byte[] Decode(ReadOnlySpan<byte> s, long maxDecodedBytes)
     {
         if (s.Length < 44 || BigEndian.U32(s, 0) != 0x774F4646u)
         {
@@ -72,10 +72,16 @@ internal static class Woff1Decoder
             throw Invalid("totalSfntSize does not match the tables");
         }
 
-        // TRACE R-OT-0038
-        if (totalSfntSize > WoffLimits.MaxDecodedBytes)
+        // TRACE R-OT-0038 (superseded by R-OT-0057)
+        // TRACE R-OT-0057
+        if (totalSfntSize > maxDecodedBytes)
         {
-            throw new OpenTypeFormatException("The WOFF data would decode to more than " + WoffLimits.MaxDecodedBytes + " bytes.");
+            throw new OpenTypeFormatException("The WOFF data would decode to more than " + maxDecodedBytes + " bytes.");
+        }
+
+        if (totalSfntSize > (uint)Array.MaxLength)
+        {
+            throw new OpenTypeFormatException("The WOFF data would decode to more than the largest .NET array (" + Array.MaxLength + " bytes).");
         }
 
         // Tables keep their order in the file (the input font's order); the directory is sorted by tag;

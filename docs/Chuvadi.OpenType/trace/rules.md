@@ -213,9 +213,105 @@ Short names used below:
 ## R-OT-0038
 - Rule: A WOFF or WOFF2 file that declares more than 256 MiB of decoded font data is refused with OpenTypeFormatException before anything that size is allocated.
 - Source: decision (hostile-input guard; the specifications set no limit). The limit is internal; making it an option is listed for Arun.
+- Superseded by R-OT-0057 (D-205 P5(b)); the tag stays beside R-OT-0057 at the same places.
 - Code: src/Chuvadi.OpenType/Woff/WoffLimits.cs, src/Chuvadi.OpenType/Woff/Woff1Decoder.cs, src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
 
 ## R-OT-0039
 - Rule: A transformed WOFF2 'glyf' is paired with the next transformed 'loca' entry in the table directory, which need not come right after it; each transformed loca belongs to exactly one glyf, and in a collection each font's glyf and loca must be that pair.
 - Source: spec + decision. WOFF2 §4.1 requires encoders to put loca right after glyf and §5.3 requires loca's transformLength to be 0; the pack's LiPi Sans WOFF2 files have other tables between them (found by running the decoder on the pack fonts, 2026-11-05), so the decoder accepts the next transformed loca instead of rejecting the file.
 - Code: src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+
+## R-OT-0040
+- Rule: 'GSUB' and 'GPOS' are read as layout tables when they are at least 10 bytes long and their major version is 1; otherwise the property is null. Header: majorVersion, minorVersion, ScriptList, FeatureList and LookupList offsets (Offset16, from the table start), and for minor version 1 or later a FeatureVariations offset (Offset32; 0 when absent). Every view is lenient: a field read outside the table reads as 0, so damaged parts read as empty lists, never as an exception.
+- Source: spec. OpenType 1.9.1 GSUB "GSUB Header" (versions 1.0 and 1.1), GPOS "GPOS Header"; chapter2 "Script List Table and Script Record", "Feature List Table", "Lookup List Table". Lenient reading of damaged data: decision (design note v1, hostile input never throws from the views).
+- Code: src/Chuvadi.OpenType/OpenTypeFont.cs, src/Chuvadi.OpenType/Layout/LayoutTable.cs
+
+## R-OT-0041
+- Rule: Coverage format 1 is a sorted glyph array whose index is the coverage index; format 2 is sorted range records (startGlyphID, endGlyphID, startCoverageIndex) whose index is startCoverageIndex + glyph − startGlyphID. Both are looked up by binary search; a glyph outside 0..65535, an unknown format or a glyph not listed gives −1. GetGlyphs lists (glyph, coverage index) in table order.
+- Source: spec. OpenType 1.9.1 chapter2 "Coverage Table" (Coverage Format 1, Coverage Format 2).
+- Code: src/Chuvadi.OpenType/Layout/Common.cs
+
+## R-OT-0042
+- Rule: Class definition format 1: startGlyphID and a classValueArray for consecutive glyphs; format 2: sorted ClassRangeRecords (startGlyphID, endGlyphID, class) searched by binary search. A glyph not listed, or an absent or unknown table, is class 0.
+- Source: spec. OpenType 1.9.1 chapter2 "Class Definition Table" ("Any glyph not included in the range of covered glyph IDs automatically belongs to Class 0").
+- Code: src/Chuvadi.OpenType/Layout/Common.cs
+
+## R-OT-0043
+- Rule: A Device table (deltaFormat 1, 2 or 3: signed 2-, 4- or 8-bit deltas packed in uint16 words, most significant first) gives a pixel delta for ppem sizes startSize..endSize and 0 outside. deltaFormat 0x8000 is a VariationIndex table (outer and inner index); at the default instance its delta is 0 (D-194), so DefaultInstanceDelta is always 0.
+- Source: spec. OpenType 1.9.1 chapter2 "Device and VariationIndex Tables"; otvaroverview (deltas apply only away from the default instance). Default instance only: decision D-194.
+- Code: src/Chuvadi.OpenType/Layout/Common.cs
+
+## R-OT-0044
+- Rule: FeatureVariations (version 1.0 only) is evaluated once at the default instance, where every normalized axis coordinate is 0. Records are tried in order and the first that matches is used: a null ConditionSet offset matches; a condition of a format other than 1 makes its set not match; a format 1 condition whose axisIndex is not below the 'fvar' axis count makes the record be ignored; a format 1 condition matches when filterRangeMinValue ≤ 0 ≤ filterRangeMaxValue. A matching record whose FeatureTableSubstitution major version is not 1 is skipped and the next record is tried.
+- Source: spec. OpenType 1.9.1 chapter2 "FeatureVariations Table", "ConditionSet Table", "Condition Table Format 1: Font Variation Axis Range", "FeatureTableSubstitution Table"; otvaroverview "Coordinate Scales and Normalization" (default instance = 0). Default instance only: decision D-194.
+- Code: src/Chuvadi.OpenType/Layout/LayoutTable.cs
+
+## R-OT-0045
+- Rule: GetFeatureAtDefaultInstance(i) returns the alternate feature table that the chosen FeatureTableSubstitution lists for feature index i (records sorted by featureIndex; the alternate table offset is from the substitution table), keeping the feature's tag; with no chosen record, no entry for i or a null offset, it returns the FeatureList's own feature.
+- Source: spec. OpenType 1.9.1 chapter2 "FeatureTableSubstitution Table" ("substitutions … sorted in increasing order of featureIndex values"; the alternate table replaces the default feature table).
+- Code: src/Chuvadi.OpenType/Layout/LayoutTable.cs
+
+## R-OT-0046
+- Rule: A lookup's subtables are read from the lookup's offsets. An Extension subtable (GSUB type 7, GPOS type 9; format 1) is resolved to the subtable at its Offset32, with its extensionLookupType as the effective type; an extension whose format is not 1, whose type is the extension type itself, or whose offset is null gives an empty subtable. MarkFilteringSet is read only when lookupFlag bit 0x0010 is set (−1 otherwise).
+- Source: spec. OpenType 1.9.1 chapter2 "Lookup Table" (LookupFlag bit enumeration, markFilteringSet); GSUB "Lookup Type 7: Extension Substitution" and GPOS "Lookup Type 9: Extension Positioning" ("extensionLookupType … must be set to any lookup type other than 7/9").
+- Code: src/Chuvadi.OpenType/Layout/Lookup.cs
+
+## R-OT-0047
+- Rule: Substitution views. Single format 1 adds deltaGlyphID modulo 65536; format 2 reads substituteGlyphIDs by coverage index. Multiple and Alternate read the sequence or alternate set at the coverage index. Ligature reads the ligature set at the coverage index of the first component; each ligature has ligatureGlyph, componentCount and componentCount − 1 following components. Reverse chaining single (type 8) reads backtrack and lookahead coverages and substituteGlyphIDs by coverage index.
+- Source: spec. OpenType 1.9.1 GSUB "Lookup Type 1" ("Addition of deltaGlyphID is modulo 65536"), "Lookup Type 2", "Lookup Type 3", "Lookup Type 4", "Lookup Type 8".
+- Code: src/Chuvadi.OpenType/Layout/Substitution.cs
+
+## R-OT-0048
+- Rule: Contextual and chained contextual subtables (GSUB 5/6, GPOS 7/8), formats 1–3. Format 1 rule sets are indexed by coverage index and format 2 class sets by the input class of the first glyph; input sequences start at the second glyph (index 1). Format 3 lists one coverage per glyph. Each rule gives its backtrack, input and lookahead sequences and its (sequenceIndex, lookupListIndex) records. The GSUB and GPOS forms share this layout.
+- Source: spec. OpenType 1.9.1 chapter2 "Sequence Context Format 1/2/3", "Chained Sequence Context Format 1/2/3", "Sequence Lookup Record".
+- Code: src/Chuvadi.OpenType/Layout/Contextual.cs
+
+## R-OT-0049
+- Rule: A ValueRecord holds the fields its ValueFormat bits name, in bit order (xPlacement, yPlacement, xAdvance, yAdvance, then four Device/VariationIndex offsets), each 2 bytes. Device offsets are from the start of the parent table: the positioning subtable, or the PairSet for PairPos format 1. Anchor formats 1–3 give x and y; format 2 adds a contour point index; format 3 adds Device/VariationIndex offsets from the anchor.
+- Source: spec. OpenType 1.9.1 GPOS "Value Record" ("offsets … from beginning of the immediate parent table"), "Anchor Tables" formats 1–3.
+- Code: src/Chuvadi.OpenType/Layout/Positioning.cs
+
+## R-OT-0050
+- Rule: Single positioning format 1 applies one ValueRecord to every covered glyph, format 2 one per coverage index. Pair positioning format 1 finds the second glyph by binary search in the PairSet of the first glyph's coverage index; format 2 uses ClassDef1 of the first glyph and ClassDef2 of the second, and the first glyph must be covered.
+- Source: spec. OpenType 1.9.1 GPOS "Lookup Type 1: Single Adjustment", "Lookup Type 2: Pair Adjustment" (PairValueRecords "ordered by secondGlyph", class 0 for glyphs not in ClassDef2).
+- Code: src/Chuvadi.OpenType/Layout/Positioning.cs
+
+## R-OT-0051
+- Rule: Cursive attachment gives the entry and exit anchors of a covered glyph from its EntryExitRecord; a null anchor offset means no anchor.
+- Source: spec. OpenType 1.9.1 GPOS "Lookup Type 3: Cursive Attachment".
+- Code: src/Chuvadi.OpenType/Layout/Positioning.cs
+
+## R-OT-0052
+- Rule: Mark attachment (GPOS 4 mark-to-base, 5 mark-to-ligature, 6 mark-to-mark): the mark coverage and MarkArray give a mark's class and anchor; the target coverage gives the base, ligature or mark2 record, whose anchor for the mark class is read from the BaseArray, Mark2Array or the ligature's ComponentRecord for the chosen component. A class at or above markClassCount, a component out of range or a null anchor offset reads as no anchor.
+- Source: spec. OpenType 1.9.1 GPOS "Lookup Type 4", "Lookup Type 5", "Lookup Type 6", "Mark Array Table".
+- Code: src/Chuvadi.OpenType/Layout/Positioning.cs
+
+## R-OT-0053
+- Rule: 'GDEF' is read when at least 12 bytes long with major version 1: GlyphClassDef (classes 1 base, 2 ligature, 3 mark, 4 component; anything else unclassified), AttachList, LigCaretList, MarkAttachClassDef, MarkGlyphSetsDef from version 1.2 (format 1, Offset32 coverages), and the ItemVariationStore offset from version 1.3 (read, not applied: default instance). Ligature caret format 1 and 3 give a coordinate (format 3's Device delta is not applied), format 2 a contour point index.
+- Source: spec. OpenType 1.9.1 GDEF "GDEF Header" (versions 1.0, 1.2, 1.3), "Glyph Class Definition Table", "Attachment Point List Table", "Ligature Caret List Table", "Mark Attachment Class Definition Table", "Mark Glyph Sets Table". Default instance only: D-194.
+- Code: src/Chuvadi.OpenType/OpenTypeFont.cs, src/Chuvadi.OpenType/Layout/GdefTable.cs
+
+## R-OT-0054
+- Rule: FaceMetrics names: family = name ID 16, else 1; subfamily = 17, else 2; full name 4; PostScript name 6 (null when absent). WeightClass = OS/2 usWeightClass (0 without OS/2). IsBold and IsItalic from OS/2 fsSelection bits 5 and 0, or head macStyle bits 0 and 1 without OS/2. IsFixedPitch = post isFixedPitch ≠ 0. FontBounds = head xMin, yMin, xMax, yMax. Hhea, typographic and Windows values as stored (0 without the table).
+- Source: spec. OpenType 1.9.1 name "Name IDs" (16/17 typographic family and subfamily, preferred over 1/2 when present), OS/2 "usWeightClass", "fsSelection", head "macStyle", post "isFixedPitch", hhea. Member names: D-201/D-247 option A (FontFace's names).
+- Code: src/Chuvadi.OpenType/FaceMetrics.cs
+
+## R-OT-0055
+- Rule: UseTypoMetrics = OS/2 fsSelection bit 7. Ascender, Descender and LineGap are the OS/2 typographic values when it is set, else the hhea values.
+- Source: spec. OpenType 1.9.1 OS/2 "fsSelection" bit 7 USE_TYPO_METRICS ("If set, it is strongly recommended that applications use OS/2.sTypoAscender − OS/2.sTypoDescender + OS/2.sTypoLineGap as the default line spacing"). Falling back to hhea when clear: decision D-247 (matches FontFace's documented member).
+- Code: src/Chuvadi.OpenType/FaceMetrics.cs
+
+## R-OT-0056
+- Rule: CapHeight and XHeight are the OS/2 sCapHeight and sxHeight (version 2 or later); for an older or missing OS/2 table, the top (yMax) of the glyph mapped from 'H' or 'x', or 0 when there is none.
+- Source: spec. OpenType 1.9.1 OS/2 "sxHeight" and "sCapHeight" (version 2; the value of the top of the 'x' and 'H' glyphs). Fallback from the glyphs for older tables: decision D-247.
+- Code: src/Chuvadi.OpenType/FaceMetrics.cs
+
+## R-OT-0057
+- Rule: Supersedes R-OT-0038. The limit on decoded WOFF/WOFF2 data is FontLoadOptions.MaxDecodedBytes (default 256 MiB); a value ≤ 0 throws ArgumentOutOfRangeException. A file declaring more than the limit, or more than the largest .NET array, is refused with OpenTypeFormatException before the decoded data is allocated. Plain sfnt fonts and collections are not decoded, so the limit does not apply to them.
+- Source: decision P5(b), D-205 (Arun): the limit becomes a load option, 256 MiB default. The specifications set no limit.
+- Code: src/Chuvadi.OpenType/Woff/WoffLimits.cs, src/Chuvadi.OpenType/Woff/Woff1Decoder.cs, src/Chuvadi.OpenType/Woff/Woff2Decoder.cs
+
+## R-OT-0058
+- Rule: EnumerateVariationSequences lists the format 14 subtable's records in table order (by selector); for each, the default UVS ranges (startUnicodeValue and additionalCount, each code point given the base character's own glyph, 0 if unmapped) and then the non-default mappings (unicodeValue, glyphID). Counts are capped by the bytes present; code points above U+10FFFF are not listed. A sequence listed in both lists appears twice; the lookup methods decide which applies (R-OT-0024).
+- Source: spec. OpenType 1.9.1 cmap "Format 14: Unicode Variation Sequences" (VariationSelector records, Default UVS table, Non-Default UVS table).
+- Code: src/Chuvadi.OpenType/Tables/CharacterMap.cs

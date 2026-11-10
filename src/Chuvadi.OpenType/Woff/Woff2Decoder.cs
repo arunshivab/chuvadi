@@ -23,12 +23,12 @@ internal static class Woff2Decoder
 
     /// <summary>Decodes WOFF2 data.</summary>
     /// <exception cref="OpenTypeFormatException">The data is not valid WOFF2, or decodes to more than the limit.</exception>
-    internal static byte[] Decode(ReadOnlySpan<byte> input)
+    internal static byte[] Decode(ReadOnlySpan<byte> input, long maxDecodedBytes)
     {
         byte[] woff2 = input.ToArray();
         try
         {
-            return DecodeCore(woff2);
+            return DecodeCore(woff2, maxDecodedBytes);
         }
         catch (Exception e) when (e is OverflowException or IndexOutOfRangeException or ArgumentException or InvalidOperationException)
         {
@@ -37,7 +37,7 @@ internal static class Woff2Decoder
         }
     }
 
-    private static byte[] DecodeCore(byte[] woff2)
+    private static byte[] DecodeCore(byte[] woff2, long maxDecodedBytes)
     {
         Reader r = new Reader(woff2, 0);
         if (r.U32() != 0x774F4632u)
@@ -102,10 +102,16 @@ internal static class Woff2Decoder
             fonts.Add((flavor, all));
         }
 
-        // TRACE R-OT-0038
-        if (streamTotal > WoffLimits.MaxDecodedBytes)
+        // TRACE R-OT-0038 (superseded by R-OT-0057)
+        // TRACE R-OT-0057
+        if (streamTotal > maxDecodedBytes)
         {
-            throw new OpenTypeFormatException("The WOFF2 data would decode to more than " + WoffLimits.MaxDecodedBytes + " bytes.");
+            throw new OpenTypeFormatException("The WOFF2 data would decode to more than " + maxDecodedBytes + " bytes.");
+        }
+
+        if (streamTotal > Array.MaxLength)
+        {
+            throw new OpenTypeFormatException("The WOFF2 data would decode to more than the largest .NET array (" + Array.MaxLength + " bytes).");
         }
 
         byte[] stream = new byte[checked((int)streamTotal)];

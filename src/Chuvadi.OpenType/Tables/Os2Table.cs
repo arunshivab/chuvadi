@@ -120,6 +120,12 @@ public sealed class Os2Table
     /// <summary>Gets sFamilyClass.</summary>
     public int SFamilyClass { get; }
 
+    /// <summary>The family class ID: the high byte of sFamilyClass (for example 1 to 5 and 7 are serif classes).</summary>
+    public int FamilyClassId => (SFamilyClass >> 8) & 0xFF;
+
+    /// <summary>The family subclass ID: the low byte of sFamilyClass.</summary>
+    public int FamilySubclassId => SFamilyClass & 0xFF;
+
     /// <summary>Gets the ten PANOSE classification bytes.</summary>
     public ReadOnlySpan<byte> Panose => _panose;
 

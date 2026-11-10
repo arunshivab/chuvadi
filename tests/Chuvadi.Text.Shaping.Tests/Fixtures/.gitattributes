@@ -1,0 +1,2 @@
+# The d.6 fixture files must stay byte-exact: the tests check them against SHA-256.
+* -text

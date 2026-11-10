@@ -3,7 +3,9 @@
 // fallback positioning) are added in phases 3 to 6 of design note v1.
 
 using System;
+using System.Globalization;
 using Chuvadi.OpenType;
+using Chuvadi.OpenType.Layout;
 
 namespace Chuvadi.Text.Shaping;
 
@@ -38,6 +40,7 @@ public static class TextShaper
         OpenTypeFont f = font.Font;
         CharacterMap cmap = f.CharacterMap;
         output.Reset(f.UnitsPerEm, length);
+        CheckScript(f, options.Script, output);
         int end = start + length;
         int i = start;
         while (i < end)
@@ -46,6 +49,12 @@ public static class TextShaper
             int cp = NextCodePoint(text, ref i, end);
             // TRACE R-TS-0011
             int glyph = cmap.GetGlyph(cp);
+            if (glyph == 0 && !output.HasDiagnostic(ShapingDiagnosticKind.MissingGlyph))
+            {
+                // TRACE R-TS-0014
+                output.AddDiagnostic(ShapingDiagnosticKind.MissingGlyph, string.Create(CultureInfo.InvariantCulture, $"U+{cp:X4} at index {cluster} has no glyph in the font; glyph 0 (.notdef) was used."));
+            }
+
             output.Add(glyph, cluster, f.GetAdvanceWidth(glyph), 0, 0);
         }
     }
@@ -73,6 +82,28 @@ public static class TextShaper
         GlyphBuffer buffer = new GlyphBuffer(text.Length);
         Shape(font, text.AsSpan(), 0, text.Length, options, buffer);
         return buffer.ToShapedRun();
+    }
+
+    // TRACE R-TS-0015
+    private static void CheckScript(OpenTypeFont font, Script script, GlyphBuffer output)
+    {
+        ReadOnlySpan<Tag> tags = Layout.ScriptTags.For(script);
+        LayoutTable? gsub = font.Gsub;
+        LayoutTable? gpos = font.Gpos;
+        if (tags.IsEmpty || (gsub is null && gpos is null))
+        {
+            return;
+        }
+
+        foreach (Tag tag in tags)
+        {
+            if ((gsub is not null && gsub.Scripts.TryFind(tag, out _)) || (gpos is not null && gpos.Scripts.TryFind(tag, out _)))
+            {
+                return;
+            }
+        }
+
+        output.AddDiagnostic(ShapingDiagnosticKind.ScriptNotInFont, $"The font has no layout data for the script {script}; its default script system was used.");
     }
 
     // TRACE R-TS-0012

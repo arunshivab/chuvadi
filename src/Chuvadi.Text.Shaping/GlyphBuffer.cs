@@ -12,6 +12,7 @@ namespace Chuvadi.Text.Shaping;
 public sealed class GlyphBuffer
 {
     private int[] _glyphs;
+    private List<ShapingDiagnostic>? _diagnostics;
     private int[] _clusters;
     private int[] _advances;
     private int[] _xOffsets;
@@ -66,8 +67,18 @@ public sealed class GlyphBuffer
         }
     }
 
-    /// <summary>Removes all glyphs.</summary>
-    public void Clear() => Count = 0;
+    /// <summary>
+    /// The diagnostics of the last shaping call into this buffer (D-246), each kind at most once; empty when there were
+    /// none.
+    /// </summary>
+    public IReadOnlyList<ShapingDiagnostic> Diagnostics => (IReadOnlyList<ShapingDiagnostic>?)_diagnostics ?? Array.Empty<ShapingDiagnostic>();
+
+    /// <summary>Removes all glyphs and diagnostics.</summary>
+    public void Clear()
+    {
+        Count = 0;
+        _diagnostics?.Clear();
+    }
 
     /// <summary>Copies the glyphs into a new immutable run.</summary>
     /// <returns>The run.</returns>
@@ -79,12 +90,14 @@ public sealed class GlyphBuffer
             glyphs[i] = this[i];
         }
 
-        return new ShapedRun(glyphs, UnitsPerEm);
+        ShapingDiagnostic[] diagnostics = _diagnostics is { Count: > 0 } ? _diagnostics.ToArray() : Array.Empty<ShapingDiagnostic>();
+        return new ShapedRun(glyphs, UnitsPerEm, diagnostics);
     }
 
     internal void Reset(int unitsPerEm, int expected)
     {
         Count = 0;
+        _diagnostics?.Clear();
         UnitsPerEm = unitsPerEm;
         EnsureCapacity(expected);
     }
@@ -102,6 +115,33 @@ public sealed class GlyphBuffer
         _xOffsets[Count] = xOffset;
         _yOffsets[Count] = yOffset;
         Count++;
+    }
+
+    // TRACE R-TS-0014
+    internal bool HasDiagnostic(ShapingDiagnosticKind kind)
+    {
+        if (_diagnostics is null)
+        {
+            return false;
+        }
+
+        foreach (ShapingDiagnostic d in _diagnostics)
+        {
+            if (d.Kind == kind)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal void AddDiagnostic(ShapingDiagnosticKind kind, string message)
+    {
+        if (!HasDiagnostic(kind))
+        {
+            (_diagnostics ??= new List<ShapingDiagnostic>(2)).Add(new ShapingDiagnostic(kind, message));
+        }
     }
 
     private void EnsureCapacity(int capacity)
@@ -132,11 +172,15 @@ public sealed class ShapedRun : IReadOnlyList<PositionedGlyph>
 {
     private readonly PositionedGlyph[] _glyphs;
 
-    internal ShapedRun(PositionedGlyph[] glyphs, int unitsPerEm)
+    internal ShapedRun(PositionedGlyph[] glyphs, int unitsPerEm, ShapingDiagnostic[] diagnostics)
     {
         _glyphs = glyphs;
         UnitsPerEm = unitsPerEm;
+        Diagnostics = diagnostics;
     }
+
+    /// <summary>The diagnostics of the shaping call (D-246), each kind at most once; empty when there were none.</summary>
+    public IReadOnlyList<ShapingDiagnostic> Diagnostics { get; }
 
     /// <summary>Gets the units per em of the font (positions are in these units).</summary>
     public int UnitsPerEm { get; }

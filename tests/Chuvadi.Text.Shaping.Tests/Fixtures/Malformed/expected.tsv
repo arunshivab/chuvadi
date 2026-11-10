@@ -1,0 +1,14 @@
+# Expected outcome of each malformed-font fixture, one line each, from d6-EXPECTED.md (3.26.0 = 3.31.0), as data.
+# Columns: fixture (M3-* = all 180 M3 round variants) <TAB> script (ISO 15924) <TAB> input code points (hex) <TAB> expected:
+#   glyph:cluster:x-advance:x-offset:y-offset per glyph; 'glyphs' = some output and no exception; 'load-fails' = the font is refused on load.
+# The contract's own rule applies to every fixture: no exception, no hang, some output (well under 1 s).
+M1-recursive-context-lookup.ttf	Latn	0061 0061 0061 0061 0061 0061 0061 0061 0061 0061 0061 0061	45:0:981:0:0 45:1:981:0:0 45:2:981:0:0 45:3:981:0:0 45:4:981:0:0 45:5:981:0:0 45:6:981:0:0 45:7:981:0:0 45:8:981:0:0 45:9:981:0:0 45:10:981:0:0 45:11:981:0:0
+M2-tamil-gsub-renamed.ttf	Taml	0B95 0BC6	46:0:901:0:0 18:0:825:0:0
+M3-GSUB-round0.ttf	Taml	0B95 0BCA 0B9F 0BC1 0020 0BA4 0BAE 0BBF 0BB4 0BCD 0020 0061 0062 0063	46:0:901:0:0 18:0:825:0:0 41:0:625:0:0 116:2:1015:0:0 3:4:260:0:0 25:5:825:0:0 29:6:858:0:0 42:6:262:0:0 94:8:858:0:0 3:10:260:0:0 406:11:561:0:0 417:12:615:0:0 418:13:480:0:0
+M3-GPOS-round0.ttf	Taml	0B95 0BCA 0B9F 0BC1 0020 0BA4 0BAE 0BBF 0BB4 0BCD 0020 0061 0062 0063	46:0:901:0:0 18:0:825:0:0 41:0:625:0:0 116:2:1015:0:0 3:4:260:0:0 25:5:825:0:0 29:6:858:0:0 42:6:262:0:0 94:8:858:0:0 3:10:260:0:0 406:11:561:0:0 417:12:615:0:0 418:13:480:0:0
+M3-GDEF-round0.ttf	Taml	0B95 0BCA 0B9F 0BC1 0020 0BA4 0BAE 0BBF 0BB4 0BCD 0020 0061 0062 0063	46:0:901:0:0 18:0:825:0:0 41:0:625:0:0 116:2:1015:0:0 3:4:260:0:0 25:5:825:0:0 29:6:858:0:0 42:6:262:0:0 94:8:858:0:0 3:10:260:0:0 406:11:561:0:0 417:12:615:0:0 418:13:480:0:0
+M3-*	Taml	0B95 0BCA 0B9F 0BC1 0020 0BA4 0BAE 0BBF 0BB4 0BCD 0020 0061 0062 0063	glyphs
+M4-tamil-truncated-half.ttf	Taml	0B95 0BC6	46:0:901:0:0 18:0:825:0:0
+M5-tamil-gsub-past-eof.ttf	Taml	0B95 0BC6	46:0:901:0:0 18:0:825:0:0
+M6-tamil-gsub-zero-length.ttf	Taml	0B95 0BC6	46:0:901:0:0 18:0:825:0:0
+M7-tamil-first-64-bytes.ttf	Taml	0B95 0BC6	load-fails

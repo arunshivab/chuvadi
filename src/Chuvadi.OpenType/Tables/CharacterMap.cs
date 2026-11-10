@@ -140,6 +140,28 @@ public sealed class CharacterMap
         return Selected.GetGlyph(codePoint);
     }
 
+    /// <summary>Returns whether the font maps a code point to a glyph other than .notdef.</summary>
+    /// <param name="codePoint">The code point.</param>
+    /// <returns>True when the glyph is not 0.</returns>
+    public bool HasGlyph(int codePoint) => GetGlyph(codePoint) != 0;
+
+    /// <summary>True when the font has a Windows Symbol (3, 0) subtable.</summary>
+    public bool HasSymbolSubtable
+    {
+        get
+        {
+            foreach (CmapSubtable s in _subtables)
+            {
+                if (s.PlatformId == 3 && s.EncodingId == 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Gets the glyph for a Unicode code point.</summary>
     /// <param name="codePoint">The code point.</param>
     /// <param name="glyphId">The glyph index, or 0.</param>
@@ -207,6 +229,57 @@ public sealed class CharacterMap
         foreach (KeyValuePair<int, int> kv in sorted)
         {
             yield return kv;
+        }
+    }
+
+    /// <summary>
+    /// Enumerates every variation sequence the format 14 subtable lists, in table order: for each selector, its
+    /// default sequences (the base character's own glyph is used), then its sequences with a glyph of their own.
+    /// </summary>
+    /// <remarks>
+    /// A font may list the same sequence in both lists; it is then enumerated twice, once of each kind. Lookups
+    /// (<see cref="GetVariationKind"/>, <see cref="GetGlyph(int, int)"/>) give the sequence's own glyph (D-316, L3).
+    /// </remarks>
+    /// <returns>(base code point, selector, kind, glyph); for a default sequence the glyph is the base character's.</returns>
+    public IEnumerable<(int CodePoint, int VariationSelector, VariationSequenceKind Kind, int GlyphId)> EnumerateVariationSequences()
+    {
+        // TRACE R-OT-0058
+        if (_variation is null)
+        {
+            yield break;
+        }
+
+        ReadOnlyMemory<byte> table = _variation.Memory;
+        int records = (int)Math.Min(BigEndian.U32(table.Span, 6), (uint)Math.Max(0, (table.Length - 10) / 11));
+        for (int r = 0; r < records; r++)
+        {
+            int rec = 10 + (11 * r);
+            int vs = BigEndian.U24(table.Span, rec);
+            int defaultOffset = BigEndian.Offset32(table.Span, rec + 3);
+            int nonDefaultOffset = BigEndian.Offset32(table.Span, rec + 7);
+            if (defaultOffset > 0)
+            {
+                int ranges = (int)Math.Min(BigEndian.U32(table.Span, defaultOffset), (uint)Math.Max(0, (table.Length - defaultOffset - 4) / 4));
+                for (int i = 0; i < ranges; i++)
+                {
+                    int start = BigEndian.U24(table.Span, defaultOffset + 4 + (4 * i));
+                    int extra = BigEndian.U8(table.Span, defaultOffset + 4 + (4 * i) + 3);
+                    for (int cp = start; cp <= start + extra && cp <= 0x10FFFF; cp++)
+                    {
+                        yield return (cp, vs, VariationSequenceKind.DefaultGlyph, GetGlyph(cp));
+                    }
+                }
+            }
+
+            if (nonDefaultOffset > 0)
+            {
+                int count = (int)Math.Min(BigEndian.U32(table.Span, nonDefaultOffset), (uint)Math.Max(0, (table.Length - nonDefaultOffset - 4) / 5));
+                for (int i = 0; i < count; i++)
+                {
+                    int m = nonDefaultOffset + 4 + (5 * i);
+                    yield return (BigEndian.U24(table.Span, m), vs, VariationSequenceKind.OwnGlyph, BigEndian.U16(table.Span, m + 3));
+                }
+            }
         }
     }
 

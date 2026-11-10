@@ -95,6 +95,8 @@ public sealed class CmapSubtable
 
     internal ReadOnlySpan<byte> Span => BigEndian.SliceFrom(_table.Span, _offset);
 
+    internal ReadOnlyMemory<byte> Memory => _offset >= 0 && _offset < _table.Length ? _table.Slice(_offset) : ReadOnlyMemory<byte>.Empty;
+
     private IEnumerable<int> EnumerateCodes()
     {
         switch (Format)
