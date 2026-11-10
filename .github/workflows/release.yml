@@ -12,6 +12,7 @@ name: Release
 #   git tag -s layout-sheets-v0.1.0 -m "Chuvadi.Layout.Sheets 0.1.0" && git push origin layout-sheets-v0.1.0
 #   git tag -s layout-documents-v0.1.0 -m "Chuvadi.Layout.Documents 0.1.0" && git push origin layout-documents-v0.1.0
 #   git tag -s layout-fonts-v0.1.0  -m "Chuvadi.Layout.Fonts 0.1.0"  && git push origin layout-fonts-v0.1.0
+#   git tag -s fonts-liberation-v1.0.0 -m "Chuvadi.Fonts.Liberation 1.0.0" && git push origin fonts-liberation-v1.0.0
 #   git tag -s layout-markup-v0.1.0 -m "Chuvadi.Layout.Markup 0.1.0" && git push origin layout-markup-v0.1.0
 #   git tag -s opentype-v0.1.0      -m "Chuvadi.OpenType 0.1.0"      && git push origin opentype-v0.1.0
 #   git tag -s text-shaping-v0.1.0  -m "Chuvadi.Text.Shaping 0.1.0"  && git push origin text-shaping-v0.1.0
@@ -26,7 +27,7 @@ name: Release
 # Signed tags (-s) are strongly recommended — see RELEASING.md.
 on:
   push:
-    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*", "opentype-v*", "text-shaping-v*", "layout-pdf-v*", "print-pdf-raster-v*"]
+    tags: ["sheets-v*", "docs-v*", "print-v*", "zip-v*", "markup-v*", "fonts-v*", "fonts-liberation-v*", "layout-v*", "layout-docs-v*", "layout-sheets-v*", "layout-documents-v*", "layout-fonts-v*", "layout-markup-v*", "opentype-v*", "text-shaping-v*", "layout-pdf-v*", "print-pdf-raster-v*"]
 
 permissions:
   contents: write
@@ -53,6 +54,7 @@ jobs:
             zip-v*)    NAME="Chuvadi.Zip" ;;
             markup-v*) NAME="Chuvadi.Markup" ;;
             fonts-v*)  NAME="Chuvadi.Fonts" ;;
+            fonts-liberation-v*) NAME="Chuvadi.Fonts.Liberation" ;;
             opentype-v*)     NAME="Chuvadi.OpenType" ;;
             text-shaping-v*) NAME="Chuvadi.Text.Shaping" ;;
             layout-pdf-v*)    NAME="Chuvadi.Layout.Pdf"; DIRBASE="staging/src"; STAGED=true; TESTS="staging/tests/Chuvadi.Layout.Pdf.Tests" ;;
@@ -90,6 +92,7 @@ jobs:
           dotnet test tests/Chuvadi.Zip.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Markup.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Fonts.Tests -c Release --no-build
+          dotnet test tests/Chuvadi.Fonts.Liberation.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Docs.Tests -c Release --no-build
           dotnet test tests/Chuvadi.Layout.Sheets.Tests -c Release --no-build
@@ -125,8 +128,8 @@ jobs:
         if: ${{ steps.pkg.outputs.staged == 'true' }}
         run: dotnet test "${{ steps.pkg.outputs.tests }}" -c Release -p:RestoreConfigFile="${{ steps.pdf.outputs.config }}"
 
-      - name: Check the package versions match the tag (docs, print, opentype, text-shaping, staged)
-        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') || steps.pkg.outputs.staged == 'true' }}
+      - name: Check the package versions match the tag (docs, print, fonts-liberation, opentype, text-shaping, staged)
+        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'fonts-liberation-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') || steps.pkg.outputs.staged == 'true' }}
         shell: bash
         run: |
           TAGV="${GITHUB_REF_NAME#*-v}"
