@@ -48,6 +48,9 @@ public static class Program
             ("SkippedParts", SkippedPartsTests.Run),
             ("PathSave", PathSaveTests.Run),
             ("UntrustedInput", UntrustedInputTests.Run),
+            ("Settings", SettingsTests.Run),
+            ("Theme", ThemeTests.Run),
+            ("DamagedEncrypted", DamagedEncryptedTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

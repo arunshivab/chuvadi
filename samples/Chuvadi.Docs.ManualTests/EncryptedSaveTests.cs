@@ -28,6 +28,7 @@ public static class EncryptedSaveTests
         PathOverload(dir);
         Spool(dir);
         TempFolder(dir);
+        MemoryStorage(dir);
     }
 
     private static Document Sample()
@@ -297,6 +298,45 @@ public static class EncryptedSaveTests
                 new TemplateOptions { OutputEncryption = new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = missing } });
             AssertTrue(Document.Load(new MemoryStream(output.ToArray()), Pw).GetText().Contains("Hello Ada"), "filled and encrypted");
             AssertTrue(!Directory.Exists(missing), "no folder created");
+        });
+    }
+
+    /// <summary>EncryptionOptions.TempStorage (D-296 R3): the spool in process memory.</summary>
+    private static void MemoryStorage(string dir)
+    {
+        Check("EncryptionOptions.TempStorage is File by default; an undefined value is rejected", () =>
+        {
+            AssertTrue(new EncryptionOptions { Password = Pw }.TempStorage == TempStorage.File, "default File");
+            AssertThrows<ArgumentOutOfRangeException>(() => _ = new EncryptionOptions { Password = Pw, TempStorage = (TempStorage)7 }, "undefined");
+        });
+
+        Check("TempStorage.Memory: the stream save creates no file in TempDirectory while writing, and decrypts to exactly the File route's package", () =>
+        {
+            var folder = FreshFolder(dir, "tempstorage-memory");
+            var d = Sample();
+            var output = new ObservingStream(folder, "*");
+            d.SaveTo(output, new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = folder, TempStorage = TempStorage.Memory });
+            AssertTrue(output.Seen.Count == 0 && Directory.GetFileSystemEntries(folder).Length == 0, "no file in the folder: " + string.Join(", ", output.Seen));
+            var viaFile = new MemoryStream();
+            d.SaveTo(viaFile, new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = folder });
+            var mem = Decrypt(output.ToArray(), Pw);
+            AssertTrue(SamePackageExceptTimes(mem, Decrypt(viaFile.ToArray(), Pw)), "same package as the File route");
+            AssertTrue(SamePackageExceptTimes(mem, Plain(d)), "and as the plain save");
+            OutsideTools.CheckWithMsoffcrypto(output.ToArray(), Pw, Plain(d), "memory spool");
+        });
+
+        Check("TempStorage.Memory: a missing TempDirectory is not used, so both encrypted saves still work (stream and path)", () =>
+        {
+            var missing = Path.Combine(dir, "tempstorage-missing-" + Guid.NewGuid().ToString("N"));
+            var enc = new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = missing, TempStorage = TempStorage.Memory };
+            var d = Sample();
+            var output = new MemoryStream();
+            d.SaveTo(output, enc);
+            var path = Path.Combine(dir, "enc-memory.docx");
+            d.SaveTo(path, enc);
+            AssertTrue(!Directory.Exists(missing), "the folder was not created");
+            AssertTrue(Document.Load(new MemoryStream(output.ToArray()), Pw).GetText() == d.GetText() && Document.Load(path, Pw).GetText() == d.GetText(), "both open with the password");
+            AssertTrue(SamePackageExceptTimes(Decrypt(File.ReadAllBytes(path), Pw), Plain(d)), "the path save holds the plain package");
         });
     }
 

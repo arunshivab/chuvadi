@@ -191,7 +191,7 @@ public sealed partial class DocxReader : IDisposable
             if (ex is DocxFormatException or DocxSecurityLimitException or DocxPasswordRequiredException
                 or OperationCanceledException)
                 throw;
-            throw new DocxFormatException("Could not open the file as a docx package.", ex);
+            throw new DocxFormatException("Could not open the file as a docx package: " + ex.Message, ex);
         }
     }
 

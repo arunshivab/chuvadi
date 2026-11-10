@@ -59,7 +59,13 @@ public sealed partial class Document
     /// resolve against. Carried through unchanged from a loaded document so theme-based
     /// formatting survives load → save; null for new documents (none is written).
     /// </summary>
-    public byte[]? ThemeXml { get; set; }
+    public byte[]? ThemeXml
+    {
+        get => _themeXml;
+        set { _themeXml = value; _theme = null; }
+    }
+
+    private byte[]? _themeXml;
 
     /// <summary>
     /// The document's lists (numbering.xml): definitions and the list instances paragraphs use.
@@ -368,6 +374,93 @@ public sealed partial class Document
     /// <summary>The default tab stop spacing a paginator should use: <see cref="DefaultTabStopPt"/>, else 36pt.</summary>
     public double EffectiveDefaultTabStopPt => _defaultTabStop ?? 36;
 
+    // ---- Settings (settings.xml), D-296 ------------------------------------------------
+
+    /// <summary>
+    /// Compatibility settings (<c>w:compat</c>): the compatibility mode, the legacy layout flags and other
+    /// <c>w:compatSetting</c> entries. A new document starts in mode 15; a loaded one keeps the file's settings.
+    /// </summary>
+    public CompatibilityOptions Compatibility { get; private set; } = new() { Mode = 15 };
+
+    /// <summary>The languages that pick the theme's script-specific fonts (<c>w:themeFontLang</c>); see <see cref="GetThemeFontName(ThemeFont)"/>.</summary>
+    public ThemeFontLanguages ThemeFontLanguages { get; } = new();
+
+    /// <summary>Hyphenate the document automatically (<c>w:autoHyphenation</c>).</summary>
+    public bool AutoHyphenation { get; set; }
+
+    private int? _consecutiveHyphenLimit;
+
+    /// <summary>The most consecutive lines that may end with a hyphen (<c>w:consecutiveHyphenLimit</c>); 0 = no limit. Null = not stated.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    public int? ConsecutiveHyphenLimit
+    {
+        get => _consecutiveHyphenLimit;
+        set
+        {
+            if (value is int v && v < 0) throw new ArgumentOutOfRangeException(nameof(value), v, "The hyphen limit cannot be negative.");
+            _consecutiveHyphenLimit = value;
+        }
+    }
+
+    private double? _hyphenationZone;
+
+    /// <summary>The hyphenation zone in points (<c>w:hyphenationZone</c>): how far from the right margin a word may end before Word hyphenates it. Null = not stated (Word uses 18pt).</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not between 0 and 1584pt.</exception>
+    public double? HyphenationZonePt
+    {
+        get => _hyphenationZone;
+        set
+        {
+            if (value is double d && (!(d >= 0) || d > 1584))
+                throw new ArgumentOutOfRangeException(nameof(value), d, "The hyphenation zone must be between 0 and 1584pt.");
+            _hyphenationZone = value;
+        }
+    }
+
+    /// <summary>Do not hyphenate words in capital letters (<c>w:doNotHyphenateCaps</c>).</summary>
+    public bool DoNotHyphenateCaps { get; set; }
+
+    /// <summary>Character compression for East Asian text (<c>w:characterSpacingControl</c>). Null = not stated (Word uses <see cref="Model.CharacterSpacingControl.DoNotCompress"/>).</summary>
+    public CharacterSpacingControl? CharacterSpacingControl { get; set; }
+
+    /// <summary>Do not kern punctuation in East Asian text (<c>w:noPunctuationKerning</c>).</summary>
+    public bool NoPunctuationKerning { get; set; }
+
+    /// <summary>Print the document as a folded booklet (<c>w:bookFoldPrinting</c>).</summary>
+    public bool BookFoldPrinting { get; set; }
+
+    /// <summary>Print the booklet in reverse order, for right-to-left reading (<c>w:bookFoldRevPrinting</c>).</summary>
+    public bool BookFoldReversePrinting { get; set; }
+
+    private int? _bookFoldPrintingSheets;
+
+    /// <summary>Pages per booklet (<c>w:bookFoldPrintingSheets</c>); 0 = all pages in one booklet. Null = not stated.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    public int? BookFoldPrintingSheets
+    {
+        get => _bookFoldPrintingSheets;
+        set
+        {
+            if (value is int v && v < 0) throw new ArgumentOutOfRangeException(nameof(value), v, "The booklet size cannot be negative.");
+            _bookFoldPrintingSheets = value;
+        }
+    }
+
+    /// <summary>Show the document's background colour or fill in the print layout (<c>w:displayBackgroundShape</c>).</summary>
+    public bool DisplayBackgroundShape { get; set; }
+
+    /// <summary>Which colour-scheme slot each logical theme colour uses (<c>w:clrSchemeMapping</c>); used by <see cref="GetThemeColorHex(ThemeColor, byte?, byte?)"/>.</summary>
+    public ColorSchemeMapping ColorSchemeMapping { get; } = new();
+
+    /// <summary>The decimal symbol fields use to compute and format numbers (<c>w:decimalSymbol</c>). Null = not stated.</summary>
+    public string? DecimalSymbol { get; set; }
+
+    /// <summary>The list separator fields use between arguments (<c>w:listSeparator</c>). Null = not stated.</summary>
+    public string? ListSeparator { get; set; }
+
+    /// <summary>For Load: a loaded document starts with no compatibility settings, then takes the file's.</summary>
+    internal void ClearCompatibilityForLoad() => Compatibility = new CompatibilityOptions();
+
     internal bool EffectiveOddAndEven
     {
         get
@@ -558,8 +651,11 @@ public sealed partial class Document
         // one-time key held only in memory, owner-only, deleted on close. The shared writer writes
         // the encrypted file sequentially from the stream's current position, so any writable
         // stream works, seekable or not.
-        // The spool goes to EncryptionOptions.TempDirectory, or the system temp folder when null (D-217).
-        using var spool = new Chuvadi.Internal.Crypto.EncryptedSpool(directory: encryption.TempDirectory, fileNamePrefix: "chuvadi_docs_");
+        // The spool goes to EncryptionOptions.TempDirectory, or the system temp folder when null (D-217),
+        // or stays in memory with TempStorage.Memory (D-296).
+        using Stream spool = encryption.TempStorage == TempStorage.Memory
+            ? new MemoryStream()
+            : new Chuvadi.Internal.Crypto.EncryptedSpool(directory: encryption.TempDirectory, fileNamePrefix: "chuvadi_docs_");
         SaveTo(spool);
         spool.Position = 0;
         Chuvadi.Internal.Crypto.EncryptedPackageWriter.WriteEncrypted(

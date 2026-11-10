@@ -57,6 +57,7 @@ internal static class DocumentLoader
         string documentUri = FindMainDocument(pkg);
 
         var doc = new Document();
+        doc.ClearCompatibilityForLoad(); // a loaded document keeps the file's compatibility settings, or none (D-296)
 
         // Theme part (theme fonts/colours), carried through verbatim, within the part-size limit.
         foreach (var rel in pkg.GetRelationships(documentUri))
@@ -242,6 +243,99 @@ internal static class DocumentLoader
                     if (RunProperties.FromTwips(r.GetAttribute("val", W)) is double tab && tab > 0 && tab <= 1584)
                         doc.DefaultTabStopPt = tab;
                     break;
+                // D-296: compatibility, theme-font languages and the layout/field settings.
+                case "compat":
+                    if (!r.IsEmptyElement)
+                        using (var sub = r.ReadSubtree()) ReadCompat(sub, doc.Compatibility);
+                    continue;
+                case "themeFontLang":
+                    doc.ThemeFontLanguages.Latin = NonEmpty(r.GetAttribute("val", W));
+                    doc.ThemeFontLanguages.EastAsia = NonEmpty(r.GetAttribute("eastAsia", W));
+                    doc.ThemeFontLanguages.ComplexScript = NonEmpty(r.GetAttribute("bidi", W));
+                    break;
+                case "clrSchemeMapping":
+                    for (int i = 0; i < ColorSchemeMapping.Attributes.Length; i++)
+                        doc.ColorSchemeMapping.Set(i, ParseSchemeIndex(r.GetAttribute(ColorSchemeMapping.Attributes[i], W)));
+                    break;
+                case "autoHyphenation": doc.AutoHyphenation = RunProperties.OnOff(r) == true; break;
+                case "consecutiveHyphenLimit":
+                    if (int.TryParse(r.GetAttribute("val", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out int limit) && limit >= 0)
+                        doc.ConsecutiveHyphenLimit = limit;
+                    break;
+                case "hyphenationZone":
+                    if (RunProperties.FromTwips(r.GetAttribute("val", W)) is double zone && zone >= 0 && zone <= 1584)
+                        doc.HyphenationZonePt = zone;
+                    break;
+                case "doNotHyphenateCaps": doc.DoNotHyphenateCaps = RunProperties.OnOff(r) == true; break;
+                case "characterSpacingControl":
+                    doc.CharacterSpacingControl = r.GetAttribute("val", W) switch
+                    {
+                        "doNotCompress" => CharacterSpacingControl.DoNotCompress,
+                        "compressPunctuation" => CharacterSpacingControl.CompressPunctuation,
+                        "compressPunctuationAndJapaneseKana" => CharacterSpacingControl.CompressPunctuationAndJapaneseKana,
+                        _ => null,
+                    };
+                    break;
+                case "noPunctuationKerning": doc.NoPunctuationKerning = RunProperties.OnOff(r) == true; break;
+                case "bookFoldPrinting": doc.BookFoldPrinting = RunProperties.OnOff(r) == true; break;
+                case "bookFoldRevPrinting": doc.BookFoldReversePrinting = RunProperties.OnOff(r) == true; break;
+                case "bookFoldPrintingSheets":
+                    if (int.TryParse(r.GetAttribute("val", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sheets) && sheets >= 0)
+                        doc.BookFoldPrintingSheets = sheets;
+                    break;
+                case "displayBackgroundShape": doc.DisplayBackgroundShape = RunProperties.OnOff(r) == true; break;
+                case "decimalSymbol": doc.DecimalSymbol = r.GetAttribute("val", W); break;
+                case "listSeparator": doc.ListSeparator = r.GetAttribute("val", W); break;
+            }
+            if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+        }
+    }
+
+    private static string? NonEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;
+
+    private static ColorSchemeIndex? ParseSchemeIndex(string? v) => v switch
+    {
+        "dark1" => ColorSchemeIndex.Dark1,
+        "light1" => ColorSchemeIndex.Light1,
+        "dark2" => ColorSchemeIndex.Dark2,
+        "light2" => ColorSchemeIndex.Light2,
+        "accent1" => ColorSchemeIndex.Accent1,
+        "accent2" => ColorSchemeIndex.Accent2,
+        "accent3" => ColorSchemeIndex.Accent3,
+        "accent4" => ColorSchemeIndex.Accent4,
+        "accent5" => ColorSchemeIndex.Accent5,
+        "accent6" => ColorSchemeIndex.Accent6,
+        "hyperlink" => ColorSchemeIndex.Hyperlink,
+        "followedHyperlink" => ColorSchemeIndex.FollowedHyperlink,
+        _ => null,
+    };
+
+    /// <summary>Reads w:compat: the CT_Compat flags and the w:compatSetting entries (D-296).</summary>
+    private static void ReadCompat(XmlReader r, CompatibilityOptions compat)
+    {
+        if (!r.Read()) return;
+        r.MoveToContent();
+        if (r.IsEmptyElement) return;
+        int childDepth = r.Depth + 1;
+        while (r.Read())
+        {
+            if (r.NodeType != XmlNodeType.Element || r.Depth != childDepth || r.NamespaceURI != W) continue;
+            if (r.LocalName == "compatSetting")
+            {
+                string? name = r.GetAttribute("name", W), uri = r.GetAttribute("uri", W), val = r.GetAttribute("val", W);
+                if (name is not null)
+                {
+                    if (name == "compatibilityMode" && uri == CompatibilityOptions.WordSettingsUri
+                        && int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out int mode) && mode > 0 && compat.Mode is null)
+                        compat.Mode = mode;
+                    else
+                        compat.OtherSettings.Add(new CompatibilitySetting(name, uri ?? "", val ?? ""));
+                }
+            }
+            else
+            {
+                int index = Array.IndexOf(CompatibilityOptions.FlagElements, r.LocalName);
+                if (index >= 0) compat.SetFlag(index, RunProperties.OnOff(r) == true);
             }
             if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
         }

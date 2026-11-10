@@ -241,6 +241,48 @@ public sealed class EncryptionOptions
     /// which encrypts in memory. A path save's own temporary file always goes beside the target.</para>
     /// </summary>
     public string? TempDirectory { get; init; }
+
+    private readonly TempStorage _tempStorage = TempStorage.File;
+
+    /// <summary>
+    /// Where the encrypted saves build the package before encrypting it (D-217, D-296).
+    /// <see cref="Model.TempStorage.File"/>, the default, is the temporary file described under
+    /// <see cref="TempDirectory"/>. <see cref="Model.TempStorage.Memory"/> builds it in process memory
+    /// instead: no file is created anywhere and <see cref="TempDirectory"/> is ignored, so the save works
+    /// on a read-only file system.
+    /// <para>With <see cref="Model.TempStorage.Memory"/> the in-memory copy is not encrypted: it holds the
+    /// same text the document already holds in memory, and it is gone when the save returns. Memory use
+    /// grows by about two and a half times the package size at the peak, and a package over about 2 GB
+    /// fails with the system's <see cref="System.IO.IOException"/>. The decrypted package is the same
+    /// either way. The same setting, with the same values and meaning, as Chuvadi.Sheets'
+    /// <c>XlsxWriterOptions.TempStorage</c>.</para>
+    /// <para>Not used by <see cref="DocxTemplate"/> with <see cref="TemplateOptions.OutputEncryption"/>,
+    /// which always encrypts in memory.</para>
+    /// </summary>
+    /// <exception cref="System.ArgumentOutOfRangeException">The value is not a defined <see cref="Model.TempStorage"/>.</exception>
+    public TempStorage TempStorage
+    {
+        get => _tempStorage;
+        init
+        {
+            if (!System.Enum.IsDefined(value))
+                throw new System.ArgumentOutOfRangeException(nameof(value), value, "Not a defined TempStorage value.");
+            _tempStorage = value;
+        }
+    }
+}
+
+/// <summary>
+/// Where a save keeps its temporary working copy (<see cref="EncryptionOptions.TempStorage"/>).
+/// The same type, values and meaning as Chuvadi.Sheets' <c>TempStorage</c>.
+/// </summary>
+public enum TempStorage
+{
+    /// <summary>A temporary file, encrypted with a one-time key, owner-only and deleted on close (the default).</summary>
+    File = 0,
+
+    /// <summary>Process memory: no temporary file anywhere.</summary>
+    Memory = 1,
 }
 
 /// <summary>Thrown when reading an encrypted docx without a password, or with the wrong one.</summary>
