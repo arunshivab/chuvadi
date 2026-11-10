@@ -13,6 +13,14 @@
   The engine's own `DocumentLayout.Open(Stream)` is unchanged: it can't look inside an OLE file, so its message still
   names both readings ("an encrypted Office document … or a legacy .doc/.xls").
 
+Font comparison tooling (D-287, option 2):
+
+- Manual tests, `--compare-metrics` (D-287, font comparison option 2): every document character whose width differs is
+  listed after the table, with both widths (at most 40 per pair, then a count). A pair with the same vertical metrics
+  and at most 5 characters differing by more than 1/1000 em is "metric-compatible except U+…", naming them; on
+  Arun's Windows run that is Times New Roman / Liberation Serif (U+20AA) and Arial / Liberation Sans (U+20BF). New
+  check `M1_MetricVerdictNamesTheDifferingCharacters` (manual tests 29 → 30). Tooling only; no library change.
+
 Workbook pages built when asked for, and the printed range as Excel measures it (D-291; claude/layout-D282-options.md):
 
 - Pages of a workbook are computed from each print area's column and row bands when asked for; opening no longer makes

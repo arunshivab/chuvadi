@@ -15,6 +15,7 @@ namespace Chuvadi.Layout.ManualTests
             yield return L1_ExcelMaxDigitWidthReferencePoints;
             yield return L1_IndicScriptFallback;
             yield return L1_EmbeddedFontDeobfuscationRoundTrip;
+            yield return M1_MetricVerdictNamesTheDifferingCharacters;
             foreach (Action a in Later())
             {
                 yield return a;
