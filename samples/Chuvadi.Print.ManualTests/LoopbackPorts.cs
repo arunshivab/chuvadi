@@ -18,8 +18,9 @@ namespace Chuvadi.Print.ManualTests
     /// candidate port. If another socket took that port in the meantime, <c>Start</c> fails and it tries the next
     /// one. A port held by another live fake in this process is never handed out (HttpListener would otherwise
     /// let two fakes share a port, and the first one disposed takes it from the other); the fake gives it back
-    /// with <see cref="Release"/> when it is disposed. It returns only once a TCP connection to the port
-    /// succeeds.</para>
+    /// with <see cref="Release"/> when it is disposed. It returns only once a TCP connection to the prefix's host
+    /// and port succeeds, trying every address the host name resolves to, as the clients do: .NET's HttpListener
+    /// on Linux and macOS binds "localhost" to the first address it resolves to, which can be IPv6 (::1).</para>
     /// <para>A test that needs a port where nothing answers takes a <see cref="ReservedPort"/>: a socket bound
     /// to the port and never listening, so no other test can take the port while connections to it are refused
     /// (TCP) or never answered (UDP).</para>
@@ -46,10 +47,11 @@ namespace Chuvadi.Print.ManualTests
             for (int attempt = 0; attempt < Attempts; attempt++)
             {
                 int candidate = Candidate();
+                string prefix = prefixFor(candidate);
                 var listener = new HttpListener();
                 try
                 {
-                    listener.Prefixes.Add(prefixFor(candidate));
+                    listener.Prefixes.Add(prefix);
                     listener.Start();
                 }
                 catch (Exception ex) when (ex is HttpListenerException or SocketException)
@@ -62,7 +64,7 @@ namespace Chuvadi.Print.ManualTests
 
                 try
                 {
-                    WaitUntilAccepting(candidate, AcceptTimeout);
+                    WaitUntilAccepting(new Uri(prefix).Host, candidate, AcceptTimeout);
                 }
                 catch
                 {
@@ -82,16 +84,20 @@ namespace Chuvadi.Print.ManualTests
             lock (Gate) InUse.Remove(port);
         }
 
-        /// <summary>Waits until a TCP connection to the loopback port succeeds, then closes it.</summary>
-        public static void WaitUntilAccepting(int port, TimeSpan timeout)
+        /// <summary>
+        /// Waits until a TCP connection to <paramref name="host"/> and <paramref name="port"/> succeeds, then closes it.
+        /// Every address the host name resolves to is tried (IPv6 and IPv4), as an HTTP client does.
+        /// </summary>
+        public static void WaitUntilAccepting(string host, int port, TimeSpan timeout)
         {
+            ArgumentException.ThrowIfNullOrEmpty(host);
             var watch = Stopwatch.StartNew();
             while (true)
             {
                 try
                 {
-                    using var probe = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                    probe.Connect(new IPEndPoint(IPAddress.Loopback, port));
+                    using var probe = new TcpClient();
+                    probe.Connect(host, port);
                     return;
                 }
                 catch (SocketException) when (watch.Elapsed < timeout)
