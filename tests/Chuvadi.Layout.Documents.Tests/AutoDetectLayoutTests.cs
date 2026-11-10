@@ -28,14 +28,14 @@ public class AutoDetectLayoutTests
 
         // The same document, encrypted with password "pw" (Docs tests' Fixtures/encrypted/sniff-pw.docx).
         byte[] encrypted = EncryptedFixtures.Open("sniff-pw.docx").ToArray();
-        Assert.Throws<LayoutFormatException>(() => AutoDetectLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, Options()));
+        Assert.False(Assert.Throws<LayoutPasswordRequiredException>(() => AutoDetectLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, Options())).PasswordGiven);
         LayoutOptions withPassword = Options();
         withPassword.Password = "pw";
         using LaidOutDocument opened = AutoDetectLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, withPassword);
         Assert.Equal(LayoutSourceFormat.Docx, opened.Source.Format);
         LayoutOptions wrong = Options();
         wrong.Password = "nope";
-        Assert.Throws<LayoutFormatException>(() => AutoDetectLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, wrong));
+        Assert.True(Assert.Throws<LayoutPasswordRequiredException>(() => AutoDetectLayout.Open(new MemoryStream(encrypted), LayoutSourceFormat.Auto, wrong)).PasswordGiven);
 
         // An encrypted workbook with the same entry point still opens as a workbook.
         using LaidOutDocument book = AutoDetectLayout.Open(EncryptedFixtures.Open("sample-pw.xlsx"), LayoutSourceFormat.Auto, withPassword);

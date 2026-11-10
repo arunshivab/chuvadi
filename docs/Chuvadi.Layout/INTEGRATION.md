@@ -47,7 +47,10 @@ LiPi Indic scripts (19,641 syllables in the Pdf library's conformance corpus). I
 
 The format is detected from the content, not from the file name:
 - an OOXML package whose main part is `word/document.xml` is a docx, and one with `xl/workbook.xml` is an xlsx;
-- an encrypted OLE file with `Password` set is decrypted and opened as a workbook if it holds one, else as a document;
+- an encrypted OLE file with `Password` set is decrypted and opened as a document if it holds one, else as a workbook;
+  without `Password`, or with a wrong one, it is `LayoutPasswordRequiredException` (D-253);
+- a legacy .doc or .xls (an OLE file without the encryption streams) is `LayoutFormatException` "The file could not be
+  read: …", naming the old format (D-293, D-301);
 - anything else is text.
 
 Fixed-layout formats (PDF, scans) do not go through Layout.
@@ -56,7 +59,8 @@ Fixed-layout formats (PDF, scans) do not go through Layout.
 
 | What | How it arrives |
 |---|---|
-| Unreadable or unsupported file, wrong password | `LayoutFormatException` (a `LayoutException`) |
+| Encrypted file, password missing or wrong | `LayoutPasswordRequiredException` (a `LayoutFormatException`): `PasswordGiven` is false when no password was set, true when the one set is wrong (D-253). Never raised for a legacy .doc or .xls (D-293) |
+| Unreadable or unsupported file, including a legacy .doc or .xls (the message names the old format) | `LayoutFormatException` (a `LayoutException`) |
 | A `LayoutLimits` value exceeded | `LayoutLimitExceededException` (`LimitName`, `Limit`, `Actual`, and `Location` where known). A workbook opens whatever its page count; `MaxPages` is raised when a page at or past it is built, exported or printed, with `Actual` = the workbook's page count and `Location` = the sheet and printed range, for example "Sheet1!A1:XFD1048576" (D-291) |
 | Cancelled or timed out | `OperationCanceledException` |
 | Fidelity notes (font substituted, chart drawn as a placeholder, …) | `doc.Warnings`, `doc.FontSubstitutions`; output notes through `LayoutPdfOptions.Warning` / `LayoutSvgOptions.Warning` |
@@ -222,7 +226,8 @@ Tighten them further with `Clone()` and set the values you need. Compressed pack
     to the stream you give them.
   - Dispose the `LaidOutDocument` as soon as the PNGs are made.
 - **Passwords.** An encrypted docx or xlsx needs `LayoutOptions.Password`. Without one it fails fast with
-  `LayoutFormatException`; show "protected file".
+  `LayoutPasswordRequiredException`: show a password prompt when `PasswordGiven` is false and "wrong password" when it
+  is true. No need to read `InnerException` or the message.
 - **Read the file before the clock starts (D-44).** On Windows, Microsoft Defender scans an encrypted docx/xlsx when
   it is opened from disk by trying the default password, which can take seconds inside the OS before any library code
   runs. Read the attachment into a `MemoryStream` first, then start the timeout, so "took too long" measures the

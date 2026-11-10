@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- An encrypted workbook opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a
+  `LayoutFormatException`; D-253), with `PasswordGiven` false or true. Messages: "The workbook is encrypted: set
+  LayoutOptions.Password. …" and "The password for this workbook is wrong: …", each followed by the Chuvadi.Sheets
+  message. Before, a plain `LayoutFormatException` ending "Set LayoutOptions.Password.". A damaged encrypted workbook
+  read with a password is still "The workbook could not be read: …" (D-167). A legacy .xls (or any OLE file without
+  the encryption streams) is never this exception: with the shared decryptor of D-293 it is "The workbook could not
+  be read: …", naming the old format, with or without a password.
 - README: large workbooks open at the cost of their page bands; `MaxPages` applies to pages built or exported; the
   printed range follows Excel (D-291, engine change in Chuvadi.Layout). Tests: 25 Excel-measured sheets
   (Fixtures/measured), the A1 + XFD1048576 workbook, and every corpus page against recorded hashes.
