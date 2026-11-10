@@ -18,7 +18,7 @@
     <Description>Conversions for Chuvadi.Docs documents: plain text, Markdown (CommonMark with GFM tables, task lists and strikethrough) and HTML, both ways, plus a self-contained HTML preview. Markdown and HTML are parsed with Chuvadi.Markup; HTML input is sanitized with its allowlist sanitizer before it is mapped to the document model. Pure BCL; depends only on Chuvadi.Docs and Chuvadi.Markup.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
