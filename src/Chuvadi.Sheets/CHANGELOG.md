@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.5 (unreleased)
+## 2.0.5 (2026-11-10)
 
 A data fix: dates before 1 March 1900 were written one day late (SH-11, D-306). The public API is unchanged.
 
