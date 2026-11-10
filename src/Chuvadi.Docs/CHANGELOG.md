@@ -1,8 +1,8 @@
 # Chuvadi.Docs — Changelog
 
-## 2.1.0 (unreleased)
+## 2.1.0 (2026-11-10)
 
-Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284). The settings model, theme fonts and colours, and the in-memory spool for encrypted saves (D-296, D-299).
+Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284). The settings model, theme fonts and colours, and the in-memory spool for encrypted saves (D-296, D-299). Damaged encrypted containers and legacy binary files are format errors (D-293, D-300). `Document.SkippedParts` (D-310).
 
 ### New
 

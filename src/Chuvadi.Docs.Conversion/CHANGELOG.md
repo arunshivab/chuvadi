@@ -1,5 +1,11 @@
 # Chuvadi.Docs.Conversion — Changelog
 
+## 2.1.0 (2026-11-10)
+
+Versioned with Chuvadi.Docs 2.1.0 (D-15, D-45): depends on Chuvadi.Docs 2.1.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.1.0:
+- **The documents it creates are saved in compatibility mode 15** (Word 2013 and later). Their `word/settings.xml` holds one `w:compat` element, so Word no longer opens them as "[Compatibility Mode]" (D-299). Nothing else in the output changes; set `doc.Compatibility.Mode = null` on the returned `Document` before saving for the 2.0.0 output. Importing into a `Document` you pass keeps that document's own settings.
+- **The new Docs 2.1.0 API works on the `Document` it returns:** settings, theme lookups, `TempStorage` and `SkippedParts`. See the Chuvadi.Docs CHANGELOG.
+
 ## 2.0.0 (2026-11-09)
 
 The first release. It is versioned with Chuvadi.Docs 2.0.0 (D-15, D-45) and depends on Chuvadi.Docs 2.0.0 and Chuvadi.Markup 1.1.0. Everything listed under 1.6.0 below is part of it; 1.6.0 was never released (D-135).
