@@ -66,7 +66,7 @@ internal static class DocumentLoader
             var themeUri = rel.Target.StartsWith('/') ? rel.Target
                 : documentUri[..(documentUri.LastIndexOf('/') + 1)] + rel.Target;
             Stream? themeRaw = null;
-            try { themeRaw = pkg.OpenPart(themeUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            themeRaw = OpenOptional(pkg, themeUri, doc.SkippedPartsList);
             if (themeRaw is null) break;
             using var ts = GuardedPartStream.Wrap(themeRaw, options.MaxPartBytes, ct, themeUri);
             using var tm = new MemoryStream();
@@ -82,7 +82,7 @@ internal static class DocumentLoader
             var numberingUri = rel.Target.StartsWith('/') ? rel.Target
                 : documentUri[..(documentUri.LastIndexOf('/') + 1)] + rel.Target;
             Stream? numberingRaw = null;
-            try { numberingRaw = pkg.OpenPart(numberingUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            numberingRaw = OpenOptional(pkg, numberingUri, doc.SkippedPartsList);
             if (numberingRaw is null) break;
             using var ns = GuardedPartStream.Wrap(numberingRaw, options.MaxPartBytes, ct, numberingUri);
             using var nr = GuardedXmlReader.Create(ns, options.MaxXmlDepth, options.OperationBudget, ct, numberingUri);
@@ -98,7 +98,7 @@ internal static class DocumentLoader
                     if (doc.Numbering.RawPictureParts.Count >= 64) break;
                     var target = pr.Target.StartsWith('/') ? pr.Target : baseDir + pr.Target;
                     Stream? imgRaw = null;
-                    try { imgRaw = pkg.OpenPart(target); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+                    imgRaw = OpenOptional(pkg, target, doc.SkippedPartsList);
                     if (imgRaw is null) continue;
                     using var gs = GuardedPartStream.Wrap(imgRaw, options.MaxPartBytes, ct, target);
                     using var ms = new MemoryStream();
@@ -119,7 +119,7 @@ internal static class DocumentLoader
             var stylesUri = rel.Target.StartsWith('/') ? rel.Target
                 : documentUri[..(documentUri.LastIndexOf('/') + 1)] + rel.Target;
             Stream? stylesRaw = null;
-            try { stylesRaw = pkg.OpenPart(stylesUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            stylesRaw = OpenOptional(pkg, stylesUri, doc.SkippedPartsList);
             if (stylesRaw is null) break;
             using var ss = GuardedPartStream.Wrap(stylesRaw, options.MaxPartBytes, ct, stylesUri);
             using var sr = GuardedXmlReader.Create(ss, options.MaxXmlDepth, options.OperationBudget, ct, stylesUri);
@@ -134,7 +134,7 @@ internal static class DocumentLoader
             if (rel.IsExternal || !rel.Type.EndsWith("/settings", StringComparison.Ordinal)) continue;
             var settingsUri = Resolve(documentUri, rel.Target);
             Stream? settingsRaw = null;
-            try { settingsRaw = pkg.OpenPart(settingsUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            settingsRaw = OpenOptional(pkg, settingsUri, doc.SkippedPartsList);
             if (settingsRaw is null) break;
             using var gs = GuardedPartStream.Wrap(settingsRaw, options.MaxPartBytes, ct, settingsUri);
             using var gr = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, settingsUri);
@@ -143,9 +143,10 @@ internal static class DocumentLoader
                 ReadSettings(gr, doc);
                 EnsureWellFormed(gr, settingsUri);
             }
-            catch (XmlException)
+            catch (XmlException ex)
             {
                 // A malformed settings part only carries page flags; the document still loads.
+                Skip(doc.SkippedPartsList, settingsUri, DocxSkippedPartReason.NotWellFormed, ex);
             }
             break;
         }
@@ -159,8 +160,8 @@ internal static class DocumentLoader
         using var r = GuardedXmlReader.Create(s, options.MaxXmlDepth, options.OperationBudget, ct, documentUri);
         var mediaCache = new System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
         doc.LoadedMediaCache = mediaCache;
-        var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache);
-        var loadContext = new LoadContext();
+        var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache, doc.SkippedPartsList);
+        var loadContext = new LoadContext(doc.SkippedPartsList);
         LoadComments(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
         LoadNotes(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
         var body = new StoryContext(loadContext, bodyImages);
@@ -291,6 +292,31 @@ internal static class DocumentLoader
         }
     }
 
+    /// <summary>
+    /// Opens an optional part; a part the package refers to but cannot supply is recorded in
+    /// Document.SkippedParts (D-310) and gives null, as before.
+    /// </summary>
+    private static Stream? OpenOptional(OoxmlPackage pkg, string uri, System.Collections.Generic.List<DocxSkippedPart> skipped)
+    {
+        // The same rule as DocxReader: a part that is not declared, or declared but not in the zip, is Missing.
+        if (!pkg.HasPart(uri) || !pkg.HasEntry(uri))
+        {
+            Skip(skipped, uri, DocxSkippedPartReason.Missing, null);
+            return null;
+        }
+        try { return pkg.OpenPart(uri); }
+        catch (FileNotFoundException) { Skip(skipped, uri, DocxSkippedPartReason.Missing, null); }
+        catch (InvalidDataException ex) { Skip(skipped, uri, DocxSkippedPartReason.Unreadable, ex); }
+        return null;
+    }
+
+    /// <summary>Records a skipped part once (a part shared by several sections or pictures is listed once).</summary>
+    private static void Skip(System.Collections.Generic.List<DocxSkippedPart> skipped, string uri, DocxSkippedPartReason reason, Exception? error)
+    {
+        foreach (var s in skipped) if (string.Equals(s.PartName, uri, StringComparison.Ordinal)) return;
+        skipped.Add(new DocxSkippedPart(uri, reason, error));
+    }
+
     private static string? NonEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;
 
     private static ColorSchemeIndex? ParseSchemeIndex(string? v) => v switch
@@ -364,7 +390,11 @@ internal static class DocumentLoader
                 if (!parts.TryGetValue(uri, out var part))
                 {
                     try { part = LoadHeaderFooter(pkg, uri, options, ct, doc.LoadedMediaCache ?? new(), loadContext); }
-                    catch (XmlException) { part = (new HeaderFooterContent(), null); } // a malformed header/footer loads blank
+                    catch (XmlException ex)
+                    {
+                        part = (new HeaderFooterContent(), null); // a malformed header/footer loads blank
+                        Skip(doc.SkippedPartsList, uri, DocxSkippedPartReason.NotWellFormed, ex);
+                    }
                     parts[uri] = part;
                 }
                 // One object per part: sections referencing the same part share it (written once again).
@@ -404,7 +434,7 @@ internal static class DocumentLoader
             if (rel.IsExternal || !rel.Type.EndsWith("/fontTable", StringComparison.Ordinal)) continue;
             var uri = Resolve(documentUri, rel.Target);
             Stream? raw = null;
-            try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            raw = OpenOptional(pkg, uri, doc.SkippedPartsList);
             if (raw is null) return;
             var targets = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var fr in pkg.GetRelationships(uri))
@@ -413,7 +443,7 @@ internal static class DocumentLoader
             {
                 if (!targets.TryGetValue(relId, out var target)) return null;
                 Stream? fs = null;
-                try { fs = pkg.OpenPart(target); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+                fs = OpenOptional(pkg, target, doc.SkippedPartsList);
                 if (fs is null) return null;
                 using var gs = GuardedPartStream.Wrap(fs, options.MaxPartBytes, ct, target);
                 using var ms = new MemoryStream();
@@ -428,7 +458,11 @@ internal static class DocumentLoader
                 FontTableXml.Read(r, doc.Fonts, Embed);
                 EnsureWellFormed(r, uri);
             }
-            catch (XmlException) { doc.Fonts.Clear(); }
+            catch (XmlException ex)
+            {
+                doc.Fonts.Clear();
+                Skip(doc.SkippedPartsList, uri, DocxSkippedPartReason.NotWellFormed, ex);
+            }
             return;
         }
     }
@@ -446,7 +480,7 @@ internal static class DocumentLoader
             if (kind < 0) continue;
             var uri = "/" + rel.Target.TrimStart('/');
             Stream? raw = null;
-            try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            raw = OpenOptional(pkg, uri, doc.SkippedPartsList);
             if (raw is null) continue;
             try
             {
@@ -511,7 +545,7 @@ internal static class DocumentLoader
                         }
                 }
             }
-            catch (XmlException) { }
+            catch (XmlException ex) { Skip(doc.SkippedPartsList, uri, DocxSkippedPartReason.NotWellFormed, ex); }
         }
     }
 
@@ -535,18 +569,19 @@ internal static class DocumentLoader
             var byId = kind == NoteKind.Footnote ? loadContext.Footnotes : loadContext.Endnotes;
             if (byId.Count > 0) continue; // one part per kind
             Stream? raw = null;
-            try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+            raw = OpenOptional(pkg, uri, doc.SkippedPartsList);
             if (raw is null) continue;
             var collection = kind == NoteKind.Footnote ? doc.Footnotes : doc.Endnotes;
-            var images = new ImageSource(pkg, uri, options, ct, mediaCache);
+            var images = new ImageSource(pkg, uri, options, ct, mediaCache, doc.SkippedPartsList);
             string element = kind == NoteKind.Footnote ? "footnote" : "endnote";
             try
             {
                 ReadNotesPart(raw, uri, element, kind, collection, byId, loadContext, images, options, ct);
             }
-            catch (XmlException)
+            catch (XmlException ex)
             {
                 // A malformed notes part loses its notes (references to them are dropped), not the document.
+                Skip(doc.SkippedPartsList, uri, DocxSkippedPartReason.NotWellFormed, ex);
                 foreach (var n in byId.Values) collection.Remove(n);
                 byId.Clear();
             }
@@ -573,12 +608,12 @@ internal static class DocumentLoader
         }
         if (commentsUri is null) return;
         Stream? raw = null;
-        try { raw = pkg.OpenPart(commentsUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+        raw = OpenOptional(pkg, commentsUri, doc.SkippedPartsList);
         if (raw is null) return;
         var byParaId = new System.Collections.Generic.Dictionary<string, Comment>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var images = new ImageSource(pkg, commentsUri, options, ct, mediaCache);
+            var images = new ImageSource(pkg, commentsUri, options, ct, mediaCache, doc.SkippedPartsList);
             using var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, commentsUri);
             using var r = GuardedXmlReader.Create(gs, options.MaxXmlDepth, options.OperationBudget, ct, commentsUri);
             if (!r.Read()) return;
@@ -631,16 +666,17 @@ internal static class DocumentLoader
             }
             EnsureWellFormed(r, commentsUri);
         }
-        catch (XmlException)
+        catch (XmlException ex)
         {
             // A malformed comments part: no comment is kept (their anchors in the text are dropped with them).
+            Skip(doc.SkippedPartsList, commentsUri, DocxSkippedPartReason.NotWellFormed, ex);
             doc.Comments.Clear();
             loadContext.Comments.Clear();
             return;
         }
         if (extendedUri is null || byParaId.Count == 0) return;
         Stream? ext = null;
-        try { ext = pkg.OpenPart(extendedUri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+        ext = OpenOptional(pkg, extendedUri, doc.SkippedPartsList);
         if (ext is null) return;
         try
         {
@@ -661,7 +697,7 @@ internal static class DocumentLoader
                 }
             }
         }
-        catch (XmlException) { }
+        catch (XmlException ex) { Skip(doc.SkippedPartsList, extendedUri, DocxSkippedPartReason.NotWellFormed, ex); }
     }
 
     private static void ReadNotesPart(Stream raw, string uri, string element, NoteKind kind, NoteCollection collection,
@@ -729,7 +765,7 @@ internal static class DocumentLoader
     {
         var content = new HeaderFooterContent();
         Stream? raw = null;
-        try { raw = pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+        raw = OpenOptional(pkg, uri, loadContext.Skipped);
         if (raw is null) return (content, null);
         byte[] bytes;
         using (var gs = GuardedPartStream.Wrap(raw, options.MaxPartBytes, ct, uri))
@@ -744,7 +780,7 @@ internal static class DocumentLoader
             watermark = FindWatermark(wr);
             EnsureWellFormed(wr, uri);
         }
-        var images = new ImageSource(pkg, uri, options, ct, mediaCache);
+        var images = new ImageSource(pkg, uri, options, ct, mediaCache, loadContext.Skipped);
         var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
         using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, options.OperationBudget, ct, uri);
         if (!r.Read()) return (content, watermark);
@@ -909,6 +945,11 @@ internal static class DocumentLoader
     /// <summary>Document-wide load state: open bookmarks by file id, notes by file id.</summary>
     internal sealed class LoadContext
     {
+        public LoadContext(System.Collections.Generic.List<DocxSkippedPart> skipped) => Skipped = skipped;
+
+        /// <summary>The document's skipped-part list (Document.SkippedParts, D-310).</summary>
+        public readonly System.Collections.Generic.List<DocxSkippedPart> Skipped;
+
         public readonly System.Collections.Generic.Dictionary<int, Note> Footnotes = new();
         public readonly System.Collections.Generic.Dictionary<int, Note> Endnotes = new();
         public readonly System.Collections.Generic.Dictionary<int, Comment> Comments = new();
@@ -1801,12 +1842,15 @@ internal static class DocumentLoader
         private readonly System.Collections.Generic.Dictionary<string, string> _links = new(StringComparer.Ordinal);
         private readonly System.Collections.Generic.Dictionary<string, string> _hyperlinks = new(StringComparer.Ordinal);
         private readonly System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> _cache;
+        private readonly System.Collections.Generic.List<DocxSkippedPart> _skipped;
 
         /// <summary><paramref name="sharedCache"/> (by media part) lets every part reuse one byte array per media file.</summary>
         public ImageSource(OoxmlPackage pkg, string partUri, DocxReaderOptions options, CancellationToken ct,
-            System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> sharedCache)
+            System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> sharedCache,
+            System.Collections.Generic.List<DocxSkippedPart> skipped)
         {
             _cache = sharedCache;
+            _skipped = skipped;
             _pkg = pkg;
             _options = options;
             _ct = ct;
@@ -1836,7 +1880,7 @@ internal static class DocumentLoader
             (byte[], string)? result = null;
             {
                 Stream? raw = null;
-                try { raw = _pkg.OpenPart(uri); } catch (FileNotFoundException) { } catch (InvalidDataException) { }
+                raw = OpenOptional(_pkg, uri, _skipped);
                 if (raw is not null)
                 {
                     using var gs = GuardedPartStream.Wrap(raw, _options.MaxPartBytes, _ct, uri);

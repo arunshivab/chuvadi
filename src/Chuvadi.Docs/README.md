@@ -369,6 +369,8 @@ foreach (var skipped in r.SkippedParts)                    // parts the reader c
 
 A header or footer that is missing, cannot be opened or is not well-formed XML reads as blank, as in `Document.Load`; a picture whose part is missing or cannot be opened is left out of `Images()`. Nothing is dropped silently: each such part is listed once in `SkippedParts` (`PartName`, `Reason`: `Missing`, `Unreadable` or `NotWellFormed`, and the `Error`). The list grows as the lazy readers reach the parts. The main document part is never skipped: a problem there is a `DocxFormatException`. `GetActiveContent` and the template methods stay strict: a part they cannot read is an error.
 
+`Document.Load` keeps the same kind of list in `Document.SkippedParts`, with the same types. It covers every optional part Load left out: a header, footer, picture, theme, styles, numbering, settings, font table or embedded font, footnotes, endnotes, comments or a document-properties part that is missing, cannot be opened or is not well-formed XML. Load itself behaves as it always has (a broken header loads blank, a broken settings part leaves the defaults); the list only says what happened. It describes the load: edits don't change it, and saving doesn't use it.
+
 ## Untrusted input (mail attachments, uploads)
 
 For files from untrusted sources (uploads on a shared server, mail attachments), start from the preset:
@@ -431,7 +433,7 @@ Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers
 
 | Exception | When |
 |---|---|
-| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document, missing from the package or corrupt, or an encrypted container that is damaged (opened with a password). A broken header or footer is the exception for the readers and `Document.Load`: it reads as blank and `DocxReader` lists it in `SkippedParts` (see **Read documents**). The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
+| `DocxFormatException` | The input is not a readable docx package: not a zip, truncated, a part that is not well-formed XML, a missing or broken `[Content_Types].xml` or relationships part, a main part that is not a Word document, missing from the package or corrupt, or an encrypted container that is damaged (opened with a password). A broken header or footer is the exception for the readers and `Document.Load`: it reads as blank and both list it in their `SkippedParts` (see **Read documents**). The original error (`XmlException`, `InvalidDataException`, …) is the `InnerException`. A read failure of the caller's own stream is reported the same way, with the `IOException` inside. |
 | `DocxSecurityLimitException` (a `DocxFormatException`) | A resource limit was exceeded (see **Untrusted input**). Thrown as itself, never wrapped. |
 | `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. Without a password the container is not read, so a damaged encrypted file also asks for one. |
 | `DocxTemplateException` | A fill problem: a strict fill with missing values, or a template limit (`MaxGeneratedItems`, …). Lists every problem. |

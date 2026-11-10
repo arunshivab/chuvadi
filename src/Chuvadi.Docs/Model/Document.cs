@@ -458,6 +458,23 @@ public sealed partial class Document
     /// <summary>The list separator fields use between arguments (<c>w:listSeparator</c>). Null = not stated.</summary>
     public string? ListSeparator { get; set; }
 
+    /// <summary>
+    /// The optional parts <see cref="Load(Stream, string?)"/> could not use and left out (D-310, Layout's B11): a header,
+    /// footer, picture, theme, styles, numbering, settings, font table or embedded font, footnotes, endnotes, comments
+    /// or a document-properties part that the package refers to but that is missing (<see cref="DocxSkippedPartReason.Missing"/>),
+    /// cannot be opened (<see cref="DocxSkippedPartReason.Unreadable"/>) or is not well-formed XML
+    /// (<see cref="DocxSkippedPartReason.NotWellFormed"/>; a header or footer then loads blank, a settings part leaves
+    /// the defaults). Each part is listed once, in the order Load met it. The same <see cref="DocxSkippedPart"/> type as
+    /// <see cref="DocxReader.SkippedParts"/>.
+    /// <para>It describes the load: it is empty for a new document, edits do not change it, and saving does not use it.
+    /// The main document part is never listed; a problem there is a <see cref="DocxFormatException"/>.</para>
+    /// </summary>
+    public IReadOnlyList<DocxSkippedPart> SkippedParts => _skippedView ??= SkippedPartsList.AsReadOnly();
+
+    internal List<DocxSkippedPart> SkippedPartsList { get; } = new();
+
+    private System.Collections.ObjectModel.ReadOnlyCollection<DocxSkippedPart>? _skippedView;
+
     /// <summary>For Load: a loaded document starts with no compatibility settings, then takes the file's.</summary>
     internal void ClearCompatibilityForLoad() => Compatibility = new CompatibilityOptions();
 
