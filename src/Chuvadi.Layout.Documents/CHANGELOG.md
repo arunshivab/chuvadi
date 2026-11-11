@@ -1,6 +1,6 @@
 # Chuvadi.Layout.Documents — Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-12)
 
 - `AutoDetectLayout.Open` reports a missing or wrong password as `LayoutPasswordRequiredException` (D-253), with
   `PasswordGiven`. An OLE file without a password now goes to Chuvadi.Layout.Docs too, instead of the engine's

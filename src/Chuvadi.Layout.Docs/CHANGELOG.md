@@ -1,6 +1,6 @@
 # Chuvadi.Layout.Docs — Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-12)
 
 Chuvadi.Docs 2.1.0 wiring (D-317; rule 5 list claude/layout-0.2.0-rule5.md). Requires Chuvadi.Docs 2.1.0.
 

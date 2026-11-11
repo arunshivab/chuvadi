@@ -14,6 +14,13 @@ using var pdf = File.Create("out.pdf");
 doc.ToPdf(pdf);                               // Print / LiPi export / "convert to PDF, then edit"
 ```
 
+## Getting it
+
+Chuvadi.Layout.Pdf is released as `layout-pdf-v*` on this repository's GitHub releases (first: `layout-pdf-v0.1.0`,
+right after `layout-v0.2.0`). It needs the chuvadi-pdf packages, which are not part of that release: take them from
+the chuvadi-pdf release it names (`v3.31.2` or any later 3.x; see "Which chuvadi-pdf an application gets" below), and
+put both in your feed. Its other dependency, Chuvadi.Layout, comes from the `layout-v*` release.
+
 ## SVG
 
 `ToSvg` uses `Chuvadi.Layout.Drawing.LayoutSvg` (in the core library, pure BCL): every glyph is drawn from its

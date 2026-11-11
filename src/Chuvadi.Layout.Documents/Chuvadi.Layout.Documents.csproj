@@ -18,7 +18,7 @@
     <Description>Format detection for Chuvadi.Layout: one call (AutoDetectLayout.Open) lays out a .docx document, an .xlsx workbook, an encrypted one of either kind, or plain text from a stream, sending each to Chuvadi.Layout.Docs, Chuvadi.Layout.Sheets or the engine. Pure BCL.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
