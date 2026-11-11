@@ -1,5 +1,27 @@
 # Chuvadi.Print.Pdf.Raster — Changelog
 
+## 0.2.0 (2026-11-11)
+
+**Chuvadi.Pdf floor 3.32.0 (D-326 R1, D-259).** The package references Chuvadi.Pdf.Rendering and
+Chuvadi.Pdf.Operations at `[3.32.0, 4.0.0)` (`ChuvadiPdf.props`), instead of `[3.31.2, 4.0.0)`. It still brings
+Chuvadi.Fonts 1.0.0 or later. It depends on Chuvadi.Print 1.0.0-rc.3 or later, as before.
+
+- **Output change (rule 5): form XObjects are painted with the graphics state in effect where they are drawn.**
+  - That covers fill and stroke colour, line style, text state, constant alpha and blend mode.
+  - Before, a form that set no colour was painted black.
+  - Measured on the 91 PDFs and 174 pages of the L1 corpus at 150 dpi: **173 pages are pixel-identical**. One
+    changes, d39, the LibreOffice DRAFT watermark: its 75 % grey at half alpha now prints at 224, where it printed
+    at 128.
+- **The renderer's display box.** Chuvadi.Pdf 3.32.0 renders the crop box by default. The adapter sets
+  `RenderOptions.DisplayBox` to the media box, so `PageBox` (crop, media, bleed, trim or art box) works as in 0.1.0
+  and the printed area is unchanged.
+  - **0.1.0 with Chuvadi.Pdf 3.32.0 or later prints a page whose crop box differs from its media box enlarged and
+    cut.** Use 0.2.0 with 3.32.0 or later.
+- **Known limits (Chuvadi.Pdf ticket 42):** a pattern set before a form XObject is drawn is not passed into the form,
+  and a soft mask set before it isn't applied to the form's content.
+- **Tests:** 44, two of them new. A form XObject must paint in the inherited 75 % grey (about 191), and at half
+  alpha in about 223. Both fail on 3.31.2. All 44 pass on Chuvadi.Pdf 3.32.0.
+
 ## 0.1.0 (2026-11-10)
 
 Renamed from Chuvadi.Print.Pdf (D-107, D-125): package, assembly and namespace are now

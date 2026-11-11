@@ -33,11 +33,22 @@ PrintRouteResult result = router.Print(job);
 
 ## Chuvadi.Pdf version
 
-The package references Chuvadi.Pdf.Rendering and Chuvadi.Pdf.Operations at **`[3.31.2, 4.0.0)`**
-(`ChuvadiPdf.props`; D-235, D-258), which brings Chuvadi.Fonts 1.0.0 or later with it.
-- NuGet resolves a range to the **lowest** version it allows, so an application gets 3.31.2 unless it references a
+The package references Chuvadi.Pdf.Rendering and Chuvadi.Pdf.Operations at **`[3.32.0, 4.0.0)`**
+(`ChuvadiPdf.props`; D-235, D-258, D-326), which brings Chuvadi.Fonts 1.0.0 or later with it.
+- NuGet resolves a range to the **lowest** version it allows, so an application gets 3.32.0 unless it references a
   newer Chuvadi.Pdf directly.
-- The floor is 3.31.2 because 3.31.1 renders pages whose media box does not start at 0,0 blank (D-258).
+- The floor is 3.32.0 (0.2.0):
+  - 3.32.0 paints a form XObject with the graphics state in effect where it is drawn (fill and stroke colour, line
+    style, text state, constant alpha, blend mode). On 3.31.2 a form that set no colour was painted black, so
+    LibreOffice watermarks printed far too dark.
+  - 3.32.0 renders the crop box by default (`RenderOptions.DisplayBox`). This package renders the whole media box
+    and cuts out `PageBox` itself, so it sets that option, which exists only from 3.32.0.
+- **Chuvadi.Print.Pdf.Raster 0.1.0 must not be used with Chuvadi.Pdf 3.32.0 or later.** Its range allows them, but
+  it doesn't set `DisplayBox`, so a page whose crop box differs from its media box prints enlarged and cut. Use 0.2.0
+  with 3.32.0 or later, or keep 0.1.0 on 3.31.2 exactly.
+- **Known limits (Chuvadi.Pdf ticket 42):** a pattern set before a form XObject is drawn is not passed into the form,
+  and a soft mask set before it isn't applied to the form's content.
+- Earlier floors: 3.31.2 in 0.1.0, because 3.31.1 renders pages whose media box does not start at 0,0 blank (D-258).
 - Chuvadi.Pdf's dependencies add about 4.3 MB to an application: Annotations, Forms, Text.Shaping and Chuvadi.Fonts
   (D-170).
 - Trimming and NativeAOT: this package does not declare itself trimmable or AOT-compatible yet. That follows
@@ -53,7 +64,7 @@ packages of that release, each checked against the hashes pinned in `tools/chuva
 This project lives in `staging/` and is **not** in `Chuvadi.slnx` or the pull-request CI (D-28, D-29). It consumes the
 Chuvadi.Pdf packages from your local package folder (see `staging/README.md`), configured by `staging/nuget.config`
 for the projects under `staging/` only. It never references a chuvadi-pdf source clone. The tests run on one exact
-Chuvadi.Pdf version, 3.31.2 by default (`-p:ChuvadiPdfVersion=<version>` runs them on a later 3.x):
+Chuvadi.Pdf version, 3.32.0 by default (`-p:ChuvadiPdfVersion=<version>` runs them on a later 3.x):
 
 ```powershell
 dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release

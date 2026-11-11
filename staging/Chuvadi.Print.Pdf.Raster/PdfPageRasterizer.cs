@@ -153,6 +153,9 @@ namespace Chuvadi.Print.Pdf.Raster
                     ApplyPageRotation = true,
                     IgnoreOptionalContent = _owner.IgnoreOptionalContent,
                     LayerVisibility = _owner.LayerVisibility,
+                    // Chuvadi.Pdf 3.32.0 renders the crop box by default; this adapter renders the whole media box
+                    // and cuts out the box chosen by PageBox itself (crop, bleed, trim or art box).
+                    DisplayBox = PdfDisplayBox.MediaBox,
                 };
 
                 // The renderer draws the whole media box; the printed box is cut out of it afterwards.

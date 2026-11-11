@@ -201,6 +201,40 @@ public class PageBoxAndFontTests
     public void An_unknown_page_box_value_is_refused()
         => Assert.Throws<InvalidOperationException>(() => new PdfPageRasterizer { PageBox = (PdfPageBox)9 }.Open(Cropped()));
 
+    // ------------------------------------------------------------------ form XObjects (Chuvadi.Pdf 3.32.0, D-259, D-326 R1)
+
+    /// <summary>
+    /// 100 x 100 pt page. The page content runs <paramref name="before"/> (setting the fill colour and perhaps an
+    /// ExtGState), then draws form Fm0, which fills the square x 25..75, y 25..75 without setting a colour. ISO 32000-1
+    /// §8.10: a form XObject is painted with the graphics state in effect at its Do. LibreOffice watermarks are drawn
+    /// this way.
+    /// </summary>
+    private static byte[] FormAfter(string before)
+    {
+        const string form = "25 25 50 50 re f";
+        return Raw("/MediaBox [0 0 100 100] /Resources << /XObject << /Fm0 5 0 R >> /ExtGState << /Half 6 0 R >> >>",
+                   before + " /Fm0 Do", "",
+                   "<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Length " + form.Length + " >>\nstream\n" + form + "\nendstream",
+                   "<< /Type /ExtGState /ca 0.5 >>");
+    }
+
+    [Fact]
+    public void A_form_xobject_is_painted_in_the_inherited_fill_colour()
+    {
+        // Chuvadi.Pdf 3.31.2 painted it black (0); 3.32.0 uses the 75 % grey in effect at the Do.
+        using RasterPage page = Render(FormAfter("0.75 g"));
+        Assert.InRange(PdfPageRasterizerTests.Gray(page, 50, 50), 187, 195);
+        Assert.True(White(page, 10, 10), "outside the form's square stays white");
+    }
+
+    [Fact]
+    public void A_form_xobject_keeps_the_inherited_constant_alpha()
+    {
+        // 75 % grey at half alpha over white: about 223 (the LibreOffice DRAFT watermark). 3.31.2 gave 128.
+        using RasterPage page = Render(FormAfter("0.75 g /Half gs"));
+        Assert.InRange(PdfPageRasterizerTests.Gray(page, 50, 50), 218, 228);
+    }
+
     // ------------------------------------------------------------------ font inspector
 
     private static byte[] Built(Action<PdfDocumentBuilder, PageBuilder> draw, EncryptionOptions? encryption = null)

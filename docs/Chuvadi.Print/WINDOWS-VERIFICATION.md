@@ -21,17 +21,17 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    git log --oneline -3
    ```
    Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.3</Version>`.
-2. **Local feed.** Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf 3.31.2 (the floor of its range) from the local feed: the folder `local-nuget` next to the folder that holds your clones (see
+2. **Local feed.** Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf 3.32.0 (the floor of its range) from the local feed: the folder `local-nuget` next to the folder that holds your clones (see
    `staging/README.md`), for example `C:\Users\<you>\Documents\local-nuget`. Chuvadi.Fonts 1.0.0 or later must be
    there too.
    ```powershell
-   Get-ChildItem "$env:USERPROFILE\Documents\local-nuget" -Filter "Chuvadi.Pdf.Rendering.3.31.*.nupkg"
+   Get-ChildItem "$env:USERPROFILE\Documents\local-nuget" -Filter "Chuvadi.Pdf.Rendering.3.32.*.nupkg"
    ```
    ```powershell
    Get-ChildItem "$env:USERPROFILE\Documents\local-nuget" -Filter "Chuvadi.Fonts.*.nupkg"
    ```
-   Expected: `Chuvadi.Pdf.Rendering.3.31.2.nupkg` (3.31.2 has 34 Chuvadi.Pdf packages, Chuvadi.Cryptography
-   included), and a `Chuvadi.Fonts` package. If missing, they come from the chuvadi-pdf `v3.31.2` GitHub release;
+   Expected: `Chuvadi.Pdf.Rendering.3.32.0.nupkg` (3.32.0 has 34 Chuvadi.Pdf packages, Chuvadi.Cryptography
+   included), and a `Chuvadi.Fonts` package. If missing, they come from the chuvadi-pdf `v3.32.0` GitHub release;
    check every file against the release's `SHA256SUMS.txt` before copying it in.
 3. **Tools.** The .NET 10 SDK is installed (`dotnet --list-sdks` shows 10.x).
 4. **Printers.** Note which printers are available:
@@ -64,7 +64,7 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    ```powershell
    dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
    ```
-   Expected: 42 passed (Chuvadi.Pdf 3.31.2).
+   Expected: 44 passed (Chuvadi.Pdf 3.32.0).
 8. **Preview images.** Look at the two folders:
    ```powershell
    explorer artifacts\bin\Chuvadi.Print.Pdf.Raster.Tests\Release\net10.0\print-pdf-preview

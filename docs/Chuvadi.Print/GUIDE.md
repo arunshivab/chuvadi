@@ -309,13 +309,16 @@ PrintRouteResult result = router.Print(job);   // a page XPS cannot express fall
   says why an answer is `Unknown`. With it set, a PDF whose fonts are all embedded goes as-is to IPP and CUPS
   printers that take PDF.
 - **Saving as PDF** is not a print target: use the Chuvadi.Pdf writer or Chuvadi.Layout's PDF output.
-- **Chuvadi.Pdf version**: the package references `[3.31.2, 4.0.0)` (D-235, D-258). NuGet uses the lowest version a
-  range allows, so an application that wants a newer Chuvadi.Pdf references it directly. The floor is 3.31.2 because
-  3.31.1 leaves pages whose media box does not start at 0,0 blank.
+- **Chuvadi.Pdf version**: 0.2.0 references `[3.32.0, 4.0.0)` (D-235, D-258, D-326). NuGet uses the lowest version a
+  range allows, so an application that wants a newer Chuvadi.Pdf references it directly.
+  - The floor is 3.32.0 because 3.32.0 paints form XObjects with the inherited graphics state (LibreOffice
+    watermarks print in their real shade), and the adapter sets 3.32.0's `RenderOptions.DisplayBox`.
+  - Don't use 0.1.0 with Chuvadi.Pdf 3.32.0 or later: a page whose crop box differs from its media box prints
+    enlarged and cut. 0.1.0's floor was 3.31.2.
 - **Building**: it lives in `staging/` and consumes the Chuvadi.Pdf packages from the local feed set in
   `staging/nuget.config`, never a source clone (D-29). It is outside `Chuvadi.slnx` and the pull-request CI until
   Chuvadi.Pdf joins the monorepo or nuget.org (D-28). Building, testing and packing are described in its README.
-- **Releases**: GitHub releases tagged `print-pdf-raster-v*` (0.1.0 first), not nuget.org. The release job builds and
+- **Releases**: GitHub releases tagged `print-pdf-raster-v*` (0.1.0 first, then 0.2.0), not nuget.org. The release job builds and
   tests the package against the Chuvadi.Pdf packages of the chuvadi-pdf release, checked against hashes pinned in
   `tools/chuvadi-pdf/hashes/`. Take Chuvadi.Pdf from that chuvadi-pdf release.
 
