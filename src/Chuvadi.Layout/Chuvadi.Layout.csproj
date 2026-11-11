@@ -34,6 +34,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- D-317 U1: LayoutLimits.FromUntrustedPreset, read by Layout.Docs to start from Chuvadi.Docs' untrusted preset. -->
+    <InternalsVisibleTo Include="Chuvadi.Layout.Docs" />
     <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Docs.Tests" />

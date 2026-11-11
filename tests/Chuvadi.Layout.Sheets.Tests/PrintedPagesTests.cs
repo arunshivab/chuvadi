@@ -121,17 +121,24 @@ public class PrintedPagesTests
     [Fact]
     public void Every_corpus_page_matches_its_recorded_drawing()
     {
-        // Each workbook page's SVG hash, recorded on main bc1bfba (before D-291) and after it. The two records differ
-        // only on the pages listed in ChangedByD291; this test then checks today's output against the "after" record.
+        // Each workbook page's SVG hash, recorded on main bc1bfba (before D-291), after it, and after whole letters at
+        // page edges. Consecutive records differ only on the pages listed; today's output must match the last record.
         Dictionary<string, string> before = Read("printed-pages-before-d291.tsv");
         Dictionary<string, string> after = Read("printed-pages-after-d291.tsv");
         Assert.Equal(before.Keys.OrderBy(k => k, StringComparer.Ordinal), after.Keys.OrderBy(k => k, StringComparer.Ordinal));
         string[] changed = before.Keys.Where(k => before[k] != after[k]).OrderBy(k => k, StringComparer.Ordinal).ToArray();
         Assert.Equal(ChangedByD291.OrderBy(k => k, StringComparer.Ordinal), changed);
 
+        // Then whole letters at page edges (Arun's option B for x03): only the pages where overflowing text crosses a
+        // page edge change.
+        Dictionary<string, string> whole = Read("printed-pages-whole-letters.tsv");
+        Assert.Equal(after.Keys.OrderBy(k => k, StringComparer.Ordinal), whole.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        string[] changedByWholeLetters = after.Keys.Where(k => after[k] != whole[k]).OrderBy(k => k, StringComparer.Ordinal).ToArray();
+        Assert.Equal(ChangedByWholeLetters.OrderBy(k => k, StringComparer.Ordinal), changedByWholeLetters);
+
         Dictionary<string, string> now = Hashes();
-        Assert.Equal(after.Count, now.Count);
-        foreach ((string key, string hash) in after)
+        Assert.Equal(whole.Count, now.Count);
+        foreach ((string key, string hash) in whole)
         {
             Assert.True(now.TryGetValue(key, out string? h), "missing page " + key);
             Assert.True(h == hash, "page differs: " + key);
@@ -148,6 +155,16 @@ public class PrintedPagesTests
         "ConditionalFormattingSamples.xlsx p9", "ConditionalFormattingSamples.xlsx p14", "ConditionalFormattingSamples.xlsx p15",
         "ConditionalFormattingSamples.xlsx p27", "ConditionalFormattingSamples.xlsx p35", "ConditionalFormattingSamples.xlsx p36",
         "x05-borders.xlsx p1",
+    };
+
+    /// <summary>
+    /// The pages where text overflowing across a page edge now ends and starts with whole letters: x03 (Tamil), x22,
+    /// and ConditionalFormattingSamples page 1 (the "n" of "button") and page 9 (its clip moves; no pixel changes).
+    /// </summary>
+    private static readonly string[] ChangedByWholeLetters =
+    {
+        "ConditionalFormattingSamples.xlsx p1", "ConditionalFormattingSamples.xlsx p9",
+        "x03-fonts-alignment.xlsx p1", "x03-fonts-alignment.xlsx p2", "x22-overflow.xlsx p1", "x22-overflow.xlsx p2",
     };
 
     private static Dictionary<string, string> Read(string name)

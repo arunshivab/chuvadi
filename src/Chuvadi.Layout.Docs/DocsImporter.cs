@@ -74,15 +74,25 @@ namespace Chuvadi.Layout.Docs
             return new DocsImport(document, options ?? new DocsImportOptions(), layoutOptions ?? new LayoutOptions(), warning ?? (_ => { }), cancellationToken).Run();
         }
 
-        /// <summary>The Chuvadi.Docs reader limits for <paramref name="limits"/>.</summary>
-        internal static D.DocxReaderOptions ReaderOptions(LayoutLimits limits, bool headersAndFooters) => new D.DocxReaderOptions
+        /// <summary>
+        /// The Chuvadi.Docs reader limits for <paramref name="limits"/>: Docs' untrusted preset when the limits come from
+        /// <see cref="LayoutLimits.ForUntrustedInput"/> (D-317 U1), with Layout's own limits on top; and an element cap of
+        /// five per block (D-282 (b), D-317 E1).
+        /// </summary>
+        internal static D.DocxReaderOptions ReaderOptions(LayoutLimits limits, bool headersAndFooters)
         {
-            MaxPackageBytes = limits.MaxSourceBytes,
-            MaxPartBytes = limits.MaxSourceBytes,
-            MaxTotalUncompressedBytes = limits.MaxLayoutBytes,
-            MaxXmlDepth = Math.Max(64, limits.MaxNestingDepth * 16),
-            IncludeHeadersAndFooters = headersAndFooters,
-        };
+            D.DocxReaderOptions r = limits.FromUntrustedPreset ? D.DocxReaderOptions.ForUntrustedInput() : new D.DocxReaderOptions();
+            r.MaxPackageBytes = limits.MaxSourceBytes;
+            r.MaxPartBytes = limits.MaxSourceBytes;
+            r.MaxTotalUncompressedBytes = limits.MaxLayoutBytes;
+            r.MaxXmlDepth = Math.Max(64, limits.MaxNestingDepth * 16);
+            r.MaxElements = ElementsFor(limits.MaxBlocks);
+            r.IncludeHeadersAndFooters = headersAndFooters;
+            return r;
+        }
+
+        /// <summary>The element cap for a block limit: five elements per block, within 1 and <see cref="int.MaxValue"/>.</summary>
+        internal static int ElementsFor(long maxBlocks) => (int)Math.Clamp(maxBlocks * 5, 1, int.MaxValue);
 
         /// <summary>D-253: a missing or wrong password as <see cref="LayoutPasswordRequiredException"/>.</summary>
         internal static LayoutPasswordRequiredException PasswordError(string? password, Exception inner)

@@ -43,6 +43,7 @@ Sources:
 | Workbook font missing (Cambria) | MDW of the font the file names | Real Cambria: MDW 8 at 11 pt | Columns sized with real Cambria's digits (554/1000 em, from Word's PDF); the text drawn in Caladea |
 | Number-format fill (`*x`) | x is repeated to fill the cell | Same | Same, for any character |
 | Text overflowing to the right past the last used column | Standard silent (printing) | Printed in full, adding pages across; a filled neighbour stops it (A7 sheet Overflow) | Same (standard silent; follows Excel): the printed range widens to where the text ends, and the text continues on the page it runs onto |
+| Overflowing text at a page edge | Standard silent (printing) | Cuts through the letter at the edge, so each page can show half a letter (a half Tamil வ reads as ப; overflow-split.xlsx, Excel 2021) | **Differs from Excel (Arun's choice):** a letter (grapheme cluster) is drawn whole on the page where it starts, at most one letter past the last column, and the next page starts with the next letter |
 | Printed range without a print area | Standard silent (printing) | From A1 to the last value, fill or border; every page printed, blank ones too; bold, number format, alignment and other invisible formats on empty cells don't count (D-287, three Excel exports) | Same (D-291) |
 | Row height | The stored height | Prints about 14.5 pt for a stored 15 pt | The stored height |
 | Row with no stored height | Standard silent | Fits the row to its fonts when it opens the file, using its own font heights (Calibri 16: 28 px; Arial 13 bold: 22 px), never below the default | Same idea, with the font Layout draws: the default while the line fits it, otherwise line height + 2 px to the nearest pixel. Equal to Excel for Calibri; up to a few px apart where the font or its substitute differs (X3) |
@@ -113,7 +114,7 @@ same every time and never puts text over a table.
 | Separator line | Standard silent | Filled black, about 0.75 pt | 0.75 pt black (standard silent; follows Word) |
 | Separator height | Standard silent | From the top of the region to the bottom of the longest column's last line; none before an empty column | Same (standard silent; follows Word) |
 | Section ending at a next-page break | Standard silent | Not balanced | Not balanced |
-| Section ending at a continuous break | Standard silent | Balanced; only the region where the section ends | Same (standard silent; follows Word). `doNotBalanceTextColumns` is not read yet |
+| Section ending at a continuous break | Standard silent | Balanced; only the region where the section ends | Same (standard silent; follows Word). With `w:compat/w:noColumnBalance` (the file's document-wide setting): not balanced (D-317 W2) |
 | Last section of the document | Standard silent | Not balanced: all text in column 1, no separator | Same (standard silent; follows Word) |
 | Column break | The next text starts in the next column | Same; space before is kept at the top of the column | Same |
 | Section starting in the next column (`nextColumn`) | Starts in the next column | Same | Same |

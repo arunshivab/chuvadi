@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+Chuvadi.Docs 2.1.0 wiring (D-317), engine side:
+
+- New warning code `LayoutWarningCodes.DocxPartSkipped` (B11), raised by Chuvadi.Layout.Docs.
+- `LayoutLimits.MaxBlocks` also sets the .docx element cap (five per block); its XML doc gives the worst-case memory.
+  `LayoutLimits.ForUntrustedInput()` now also selects Chuvadi.Docs' untrusted preset; the choice is kept by `Clone()`
+  and when values are changed. No new public API (the marker is internal, shared with Chuvadi.Layout.Docs).
+
+Whole letters at page edges (x03; Arun's option B, claude/layout-overflow-split-rule5.md):
+
+- Text that overflows across a page edge (F11) is no longer cut through a letter. A letter (a Unicode grapheme
+  cluster: a base with its vowel signs and marks, such as Tamil டு, வை or ர்) is drawn whole on the page where it
+  starts, running at most one letter past the page's last column, and the next page starts with the next letter.
+  Before, the edge could cut a letter in two: in x03 the right half of வ started page 2 and read as ப ("பார்.").
+- Excel 2021 cuts through the letter (measured, `Fixtures/measured/overflow-split.xlsx`), so this differs from Excel
+  by design (FILE-FIDELITY.md). A filled neighbour still cuts text where it always did; wrapped and other cells are
+  unchanged.
+- Output: 6 of the 120 corpus workbook pages change, only where overflowing text crosses a page edge (x03 p1–2, x22
+  p1–2, ConditionalFormattingSamples p1 and p9); page counts are unchanged.
+
 `LayoutPasswordRequiredException` (D-253, D-215 option (a); claude/layout-D213-D215-rule5.md):
 
 - New `public sealed class LayoutPasswordRequiredException : LayoutFormatException`, so existing

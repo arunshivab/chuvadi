@@ -25,7 +25,15 @@ namespace Chuvadi.Layout
         /// <summary>Maximum number of populated cells per sheet that will be laid out. Default 5,000,000.</summary>
         public long MaxCellsPerSheet { get; set; } = 5_000_000;
 
-        /// <summary>Maximum number of blocks (paragraphs, tables, rows) in a flow document. Default 2,000,000.</summary>
+        /// <summary>
+        /// Maximum number of blocks (paragraphs, tables, rows) in a flow document. Default 2,000,000.
+        /// <para>For a .docx it also caps the XML elements Chuvadi.Docs reads, at five per block (D-282 (b), D-317 E1):
+        /// 10,000,000 by default and 1,000,000 under <see cref="ForUntrustedInput"/>, Chuvadi.Docs' own untrusted preset.
+        /// Real documents have about 6 to 8 elements per block, so a large document may reach the element cap before this
+        /// one. Worst case: Chuvadi.Docs measured up to about 520 bytes per element (a file of empty paragraphs), so the
+        /// default cap still allows a document model of about 5 GB; use <see cref="ForUntrustedInput"/> for files you do
+        /// not trust.</para>
+        /// </summary>
         public long MaxBlocks { get; set; } = 2_000_000;
 
         /// <summary>Maximum nesting depth of tables within tables. Default 32.</summary>
@@ -46,13 +54,22 @@ namespace Chuvadi.Layout
         /// <summary>Returns a copy.</summary>
         public LayoutLimits Clone() => (LayoutLimits)MemberwiseClone();
 
+        /// <summary>True for an instance made by <see cref="ForUntrustedInput"/> (or cloned from one): readers then start
+        /// from their own untrusted presets (D-317 U1).</summary>
+        internal bool FromUntrustedPreset { get; private init; }
+
         /// <summary>
         /// Tighter limits for documents from untrusted senders on a shared server: 2,000 pages, 50 MiB of
         /// source, 1,000,000 cells per sheet, 200,000 blocks, nesting depth 8, 16 MiB per image or font, 256 MiB of
         /// layout memory, 200,000 characters per paragraph or cell. Adjust as needed.
+        /// <para>A .docx is then read with Chuvadi.Docs' own untrusted preset (<c>DocxReaderOptions.ForUntrustedInput</c>:
+        /// compression ratio 200:1, 10,000 entries, spin count 500,000, 1,000,000 elements), with these limits applied on
+        /// top (D-282 (b), D-317 U1). The preset is remembered by this instance and its <see cref="Clone"/>, also after
+        /// values are changed.</para>
         /// </summary>
         public static LayoutLimits ForUntrustedInput() => new LayoutLimits
         {
+            FromUntrustedPreset = true,
             MaxPages = 2_000,
             MaxSourceBytes = 50L * 1024 * 1024,
             MaxCellsPerSheet = 1_000_000,

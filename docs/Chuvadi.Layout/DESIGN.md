@@ -254,6 +254,7 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 | Excel printed range (no print area) | from A1 to the last row and column holding a value (of any kind), a data bar or icon, a visible fill or border, a merge or a drawing; formats with nothing to see on an empty cell (font, colour, number format, alignment, wrap, indent, protection) do not extend it, and every page of the range is printed, blank ones included (Excel measured on 25 sheets; D-291) | yes (pages) |
 | Workbook pages | computed from each print area's column and row bands when asked for, so opening costs the bands, not the pages; `MaxPages` applies to pages built, exported or printed; more than `int.MaxValue` pages is refused at open (D-291) | no |
 | Excel text overflow past the used range | printed in full: the printed range widens to where the text ends, and text continues on the page it runs onto (Excel measured; F11) | yes (pages) |
+| Overflow text at a page edge | a letter (Unicode grapheme cluster: a consonant with its vowel signs and pulli in Tamil) is drawn whole on the page where it starts and left out of the next; Excel cuts through it (measured; Arun's option B, layout-overflow-split-rule5.md). Only page edges: a filled neighbour still cuts | no |
 | Excel border widths (print) | hair 0.25 pt; thin, dotted, dashed, dash-dot 0.5 pt; medium styles 1 pt; thick 1.5 pt; double = two 0.5 pt lines | no |
 | Excel pattern fills | foreground over background blended by ink coverage (darkGray 75%, mediumGray 50%, lightGray 25%, gray125 12.5%, gray0625 6.25%, dark lines 50%, light lines 25%); gradients as the average of their stops | no |
 | Data bars | inset 2 px; length = Sheets' LengthPercent of the cell width; negative bars from the right edge; drawn solid | no |
@@ -287,6 +288,7 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 | SvgImageFormat | (LayoutSvg) TIFF, EMF, WMF or an unknown image became a placeholder box. |
 | SvgLinkDropped | (LayoutSvg) A link with a disallowed scheme, or an internal link without an href, was dropped. |
 | TextWrapApproximated | Wrapping was approximated: through wrapping laid out as tight, or a table moved below a floating object instead of flowing beside it. |
+| DocxPartSkipped | A .docx part Chuvadi.Docs could not use was left out; Location is the part name. ContentLoss for a header, footer, notes or picture (it would have printed), Fidelity for styles, numbering, theme, settings or fonts (B11, D-317 W1). |
 
 ## 12. Known gaps in 1.0
 
@@ -369,8 +371,10 @@ the table draws no borders of its own), `GetListLabels`, and `doc.Sections`.
   the engine never inherits a second time. Odd/even headers apply when `DifferentOddAndEvenPages` is true, or unset
   with even content present (what Chuvadi.Docs writes). A watermark belongs to its section; a section whose headers
   are all linked shows the previous one.
-- **Theme.** Theme colours with tint and shade (HSL lightness, as Word) and theme fonts resolve against theme1.xml,
-  else the Office 2013–2022 theme. Automatic text colour is black, or white over a dark cell, paragraph or run
+- **Theme.** Theme colours with tint and shade (HSL lightness, as Word) and theme fonts come from Chuvadi.Docs
+  (`Document.GetThemeColorHex`, which also applies `w:clrSchemeMapping`, and the theme's major and minor font schemes),
+  else the Office 2013–2022 theme (D-317 T1). The theme's per-script fonts (`themeFontLang`) are not used, as Word does
+  not use them (D-191 R1). Automatic text colour is black, or white over a dark cell, paragraph or run
   background (perceived brightness below half; Word's threshold is not documented).
 - **Defaults.** A run with no font gets Times New Roman, and no size 10 pt (ECMA-376 defaults). Widow control is on
   unless the paragraph or a style turns it off (Word's behaviour). "Auto" paragraph spacing is 14 pt
@@ -379,8 +383,8 @@ the table draws no borders of its own), `GetListLabels`, and `doc.Sections`.
   regions, one per column set: text fills the columns left to right, a continuous break with another column set starts
   a region below, and a region ended that way is balanced (smallest height that still holds its content). Where
   ECMA-376 is silent the rules follow Word 2021 as measured with calib-columns.docx (balancing, separator extent and
-  width, the paragraph mark after a column break, footnotes in their column). `doNotBalanceTextColumns` is not read
-  yet (needs a Chuvadi.Docs settings model).
+  width, the paragraph mark after a column break, footnotes in their column). `w:compat/w:noColumnBalance` (Word's
+  "doNotBalanceTextColumns") turns balancing off in every section (D-317 W2).
 - **Floating tables.** `w:tblpPr` in the body becomes `FlowTable.Floating`: the table is placed at its anchor and offset
   (or relative position) and text flows on both sides, the stated distances away, from the outside of its right
   border. Omitted anchors are the page (the standard). Paragraph-anchored tables taller than the space left continue at

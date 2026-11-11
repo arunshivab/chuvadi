@@ -263,7 +263,7 @@ namespace Chuvadi.Layout.Docs
 
         private CharacterFormat Character(D.TextFormat f)
         {
-            string? Theme(D.ThemeFont? tf) => tf is D.ThemeFont t ? _theme.Font(t) : null;
+            string? Theme(D.ThemeFont? tf) => tf is D.ThemeFont t ? ThemeFont(t) : null;
             string ascii = Theme(f.AsciiThemeFont) ?? f.AsciiFont ?? f.HighAnsiFont ?? "Times New Roman";
             string? highAnsi = Theme(f.HighAnsiThemeFont) ?? f.HighAnsiFont;
             string? eastAsia = Theme(f.EastAsiaThemeFont) ?? f.EastAsiaFont;
@@ -272,7 +272,7 @@ namespace Chuvadi.Layout.Docs
             {
                 Warn(LayoutWarningCodes.UnsupportedFeature, LayoutWarningSeverity.Fidelity, "Outline, shadow, emboss and engrave text effects are drawn as plain text.");
             }
-            LayoutColor? background = Highlight(f.Highlight) ?? Shade(f.Shading) ?? (f.ShadingHex is string sh && DocsTheme.TryHex(sh, out LayoutColor shc) ? shc : null);
+            LayoutColor? background = Highlight(f.Highlight) ?? Shade(f.Shading) ?? (f.ShadingHex is string sh && DocsHex.TryHex(sh, out LayoutColor shc) ? shc : null);
             // Automatic colour ("auto" or none): black, or white over a dark background, as Word draws it.
             LayoutColor color = TextColor(f.ThemeColor, f.ThemeColorTint, f.ThemeColorShade, f.ColorHex)
                 ?? (IsDark(background ?? _behind) ? LayoutColor.White : LayoutColor.Black);
@@ -291,7 +291,7 @@ namespace Chuvadi.Layout.Docs
                 ComplexScriptBold = f.BoldComplexScript,
                 ComplexScriptItalic = f.ItalicComplexScript,
                 Underline = Underline(f.EffectiveUnderline),
-                UnderlineColor = f.UnderlineColorHex is string uc && DocsTheme.TryHex(uc, out LayoutColor ul) ? ul : null,
+                UnderlineColor = f.UnderlineColorHex is string uc && DocsHex.TryHex(uc, out LayoutColor ul) ? ul : null,
                 Strikethrough = f.Strikethrough,
                 DoubleStrikethrough = f.DoubleStrikethrough == true,
                 Color = color,
@@ -342,14 +342,40 @@ namespace Chuvadi.Layout.Docs
             _ => UnderlineStyle.Single,
         };
 
+        /// <summary>
+        /// A theme font slot from the document's theme scheme (Chuvadi.Docs <c>Document.Theme</c>; D-317 T1): the scheme's
+        /// latin font for the ASCII and High ANSI slots, its ea and cs fonts for the East Asian and complex-script slots,
+        /// null when the theme leaves them empty. The theme's per-script fonts (<c>themeFontLang</c>) are not used:
+        /// Word 2021 does not use them (D-191 R1, measured). Without a theme part: Calibri Light and Calibri.
+        /// </summary>
+        private string? ThemeFont(D.ThemeFont slot)
+        {
+            D.ThemeFontScheme scheme = slot is D.ThemeFont.MajorAscii or D.ThemeFont.MajorHAnsi or D.ThemeFont.MajorEastAsia or D.ThemeFont.MajorBidi
+                ? _doc.Theme.MajorFonts
+                : _doc.Theme.MinorFonts;
+            return slot switch
+            {
+                D.ThemeFont.MajorEastAsia or D.ThemeFont.MinorEastAsia => scheme.EastAsia,
+                D.ThemeFont.MajorBidi or D.ThemeFont.MinorBidi => scheme.ComplexScript,
+                _ => scheme.Latin,
+            };
+        }
+
+        /// <summary>
+        /// A theme colour with Word's tint and shade, through the document's colour-scheme mapping
+        /// (Chuvadi.Docs <c>Document.GetThemeColorHex</c>; D-317 T1).
+        /// </summary>
+        private LayoutColor ThemeColor(D.ThemeColor color, byte? tint, byte? shade) =>
+            DocsHex.TryHex(_doc.GetThemeColorHex(color, tint, shade).TrimStart('#'), out LayoutColor c) ? c : LayoutColor.Black;
+
         /// <summary>A text or line colour: the theme colour (with tint/shade) wins over the hex value; "auto" is null.</summary>
         private LayoutColor? TextColor(D.ThemeColor? theme, byte? tint, byte? shade, string? hex)
         {
             if (theme is D.ThemeColor t)
             {
-                return _theme.Color(t, tint, shade);
+                return ThemeColor(t, tint, shade);
             }
-            return hex is not null && DocsTheme.TryHex(hex, out LayoutColor c) ? c : null;
+            return hex is not null && DocsHex.TryHex(hex, out LayoutColor c) ? c : null;
         }
 
         private static LayoutColor? Highlight(string? name) => name switch
@@ -384,8 +410,8 @@ namespace Chuvadi.Layout.Docs
             {
                 return null;
             }
-            LayoutColor? fill = s.ThemeFill is D.ThemeColor tf ? _theme.Color(tf) : s.FillHex is string fh && DocsTheme.TryHex(fh, out LayoutColor f) ? f : null;
-            LayoutColor pattern = s.ColorHex is string ch && DocsTheme.TryHex(ch, out LayoutColor pc) ? pc : LayoutColor.Black;
+            LayoutColor? fill = s.ThemeFill is D.ThemeColor tf ? ThemeColor(tf, null, null) : s.FillHex is string fh && DocsHex.TryHex(fh, out LayoutColor f) ? f : null;
+            LayoutColor pattern = s.ColorHex is string ch && DocsHex.TryHex(ch, out LayoutColor pc) ? pc : LayoutColor.Black;
             double share;
             switch (s.Pattern)
             {

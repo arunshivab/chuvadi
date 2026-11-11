@@ -143,5 +143,12 @@ namespace Chuvadi.Layout.Engine
         /// source has the family, with the script fallback (D-116). Once per family.
         /// </summary>
         public const string EmbeddedFontMissingGlyphs = "EmbeddedFontMissingGlyphs";
+
+        /// <summary>
+        /// A part of a .docx that Chuvadi.Docs could not use was left out (B11): a header, footer, notes or picture
+        /// (ContentLoss: it would have printed) or styles, numbering, theme, settings or fonts (Fidelity). Location is the
+        /// part name, for example <c>/word/header1.xml</c>. One warning per part.
+        /// </summary>
+        public const string DocxPartSkipped = "DocxPartSkipped";
     }
 }

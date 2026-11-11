@@ -17,7 +17,6 @@ namespace Chuvadi.Layout.Docs
         private readonly Action<LayoutWarning> _warn;
         private readonly CancellationToken _ct;
         private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
-        private readonly DocsTheme _theme;
         private readonly IReadOnlyDictionary<D.Paragraph, D.ListLabel> _labels;
         private readonly Dictionary<D.Paragraph, FlowParagraph> _converted = new Dictionary<D.Paragraph, FlowParagraph>(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<D.HeaderFooterContent, IList<FlowBlock>> _stories = new Dictionary<D.HeaderFooterContent, IList<FlowBlock>>(ReferenceEqualityComparer.Instance);
@@ -35,7 +34,6 @@ namespace Chuvadi.Layout.Docs
             _lo = layoutOptions;
             _warn = warn;
             _ct = ct;
-            _theme = DocsTheme.Parse(doc.ThemeXml);
             _labels = doc.GetListLabels();
         }
 
@@ -44,6 +42,7 @@ namespace Chuvadi.Layout.Docs
             // Tabs beyond the last stop advance by the document's default tab stop (settings w:defaultTabStop; 36 pt).
             FlowDocument flow = new FlowDocument { Title = _lo.DocumentName, DefaultTabStop = _doc.EffectiveDefaultTabStopPt };
             flow.EmbeddedFonts = EmbeddedFonts(_doc, _warn);
+            WarnSkippedParts();
             ReadNoteReferences();
             if (_doc.FootnoteProperties.Position is D.NotePosition.BeneathText)
             {
@@ -112,6 +111,32 @@ namespace Chuvadi.Layout.Docs
             return n == 1 ? width : Math.Max(1, (width - (Math.Max(0, s.ColumnSpacing) * (n - 1))) / n);
         }
 
+        /// <summary>
+        /// B11 (D-317 W1): each optional part Chuvadi.Docs could not use (<c>Document.SkippedParts</c>) as a
+        /// <see cref="LayoutWarningCodes.DocxPartSkipped"/> warning, instead of a blank header or default styles without
+        /// a word. Content that would print (headers, footers, notes, pictures) is <see cref="LayoutWarningSeverity.ContentLoss"/>;
+        /// parts that only change the look (styles, numbering, theme, settings, fonts) are
+        /// <see cref="LayoutWarningSeverity.Fidelity"/>. Parts Layout never draws (comments, document properties) are not reported.
+        /// </summary>
+        private void WarnSkippedParts()
+        {
+            foreach (D.DocxSkippedPart part in _doc.SkippedParts)
+            {
+                string name = part.PartName.ToLowerInvariant();
+                string file = name[(name.LastIndexOf('/') + 1)..];
+                if (name.StartsWith("/docprops/", StringComparison.Ordinal) || file.StartsWith("comments", StringComparison.Ordinal)
+                    || file.StartsWith("people", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                bool prints = file.StartsWith("header", StringComparison.Ordinal) || file.StartsWith("footer", StringComparison.Ordinal)
+                    || file.StartsWith("footnotes", StringComparison.Ordinal) || file.StartsWith("endnotes", StringComparison.Ordinal)
+                    || name.Contains("/media/", StringComparison.Ordinal);
+                Warn(LayoutWarningCodes.DocxPartSkipped, prints ? LayoutWarningSeverity.ContentLoss : LayoutWarningSeverity.Fidelity,
+                    "Part not used: " + part, part.PartName);
+            }
+        }
+
         private void Warn(string code, LayoutWarningSeverity severity, string message, string? location = null)
         {
             if (_warned.Add(code + "\u0000" + message))
@@ -172,6 +197,8 @@ namespace Chuvadi.Layout.Docs
             FlowSection fs = new FlowSection
             {
                 Page = page,
+                // N3 (D-317 W2): w:compat/w:noColumnBalance, a document-wide setting, turns balancing off in every section.
+                BalanceColumns = !_doc.Compatibility.NoColumnBalance,
                 Start = s.Start switch
                 {
                     D.SectionStart.Continuous => SectionStart.Continuous,
@@ -295,7 +322,7 @@ namespace Chuvadi.Layout.Docs
         private FlowWatermark Watermark(D.TextWatermark wm) => new FlowWatermark(wm.Text)
         {
             FontFamily = string.IsNullOrWhiteSpace(wm.Font) ? "Calibri" : wm.Font,
-            Color = DocsTheme.TryHex(wm.ColorHex?.TrimStart('#'), out LayoutColor c) ? c : new LayoutColor(0xC0, 0xC0, 0xC0),
+            Color = DocsHex.TryHex(wm.ColorHex?.TrimStart('#'), out LayoutColor c) ? c : new LayoutColor(0xC0, 0xC0, 0xC0),
             Opacity = double.IsFinite(wm.Opacity) ? Math.Clamp(wm.Opacity, 0, 1) : 0.5,
             Diagonal = wm.Diagonal,
             Width = wm.WidthPt,
