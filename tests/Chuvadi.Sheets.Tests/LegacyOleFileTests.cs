@@ -75,6 +75,37 @@ public sealed class LegacyOleFileTests
         finally { File.Delete(path); }
     }
 
+    private sealed class Fictional { public string? Name { get; set; } }
+
+    /// <summary>
+    /// 2.1.0 (item O, gap 1 of the PR #109 review): the one-line readers, on a path and on 2.1.0's stream overloads,
+    /// give the same format error, with and without a password.
+    /// </summary>
+    [Fact]
+    public void LegacyExcel_TheOneLineReaders_PathAndStream_AreTheSameFormatError()
+    {
+        byte[] file = LegacyExcel();
+        string path = Path.Combine(Path.GetTempPath(), "chuvadi_legacy_" + Guid.NewGuid().ToString("N") + ".xls");
+        try
+        {
+            File.WriteAllBytes(path, file);
+            AssertLegacy(() => path.ReadXlsx(), ".xls");
+            AssertLegacy(() => path.ReadXlsx("pw", null), ".xls");
+            AssertLegacy(() => path.ReadXlsxSheet(), ".xls");
+            AssertLegacy(() => path.ReadXlsxSheet(null, "pw", null), ".xls");
+            AssertLegacy(() => path.ReadXlsx<Fictional>(), ".xls");
+            AssertLegacy(() => path.ReadXlsx<Fictional>(null, "pw", null), ".xls");
+        }
+        finally { File.Delete(path); }
+
+        AssertLegacy(() => new MemoryStream(file).ReadXlsx(), ".xls");
+        AssertLegacy(() => new MemoryStream(file).ReadXlsx("pw", null), ".xls");
+        AssertLegacy(() => new MemoryStream(file).ReadXlsxSheet(), ".xls");
+        AssertLegacy(() => new MemoryStream(file).ReadXlsxSheet(null, "pw", null), ".xls");
+        AssertLegacy(() => new MemoryStream(file).ReadXlsx<Fictional>(), ".xls");
+        AssertLegacy(() => new MemoryStream(file).ReadXlsx<Fictional>(null, "pw", null), ".xls");
+    }
+
     [Fact]
     public void Excel5Book_AndWordFile_NameTheirOwnFormat()
     {

@@ -83,6 +83,14 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     private readonly WorkbookWriteState _state;
     private readonly List<SheetWriter> _sheets = new();
     private readonly string _tempDir;
+    private readonly bool _inMemory;
+
+    /// <summary>
+    /// A working copy: a temporary file (TempStorage.File, encrypted when the workbook is), or, with
+    /// TempStorage.Memory (2.1.0), a MemoryStream, which is not encrypted and leaves no file anywhere.
+    /// </summary>
+    private Stream CreateSpool(string fileNamePrefix, bool encrypted)
+        => _inMemory ? new MemoryStream() : TempFiles.CreateSpool(_tempDir, fileNamePrefix, encrypted);
     private bool _saved;
     private bool _disposed;
 
@@ -105,7 +113,8 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     {
         _options = options;
         _state = new WorkbookWriteState(new SharedStringTable(), new StyleRegistry(), options);
-        _tempDir = options.TempDirectory ?? Path.GetTempPath();
+        _inMemory = options.TempStorage == TempStorage.Memory;
+        _tempDir = _inMemory ? "" : options.TempDirectory ?? Path.GetTempPath();
         _targetPath = targetPath;
         _targetTempPath = targetTempPath;
 
@@ -118,7 +127,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
             // on close; encrypt it into the real output at Save time.
             _finalOutputStream = outputStream;
             _ownsFinalOutputStream = ownsStream;
-            _outputStream = TempFiles.CreateSpool(_tempDir, "chuvadi_sheets_pkg_", encrypted: true);
+            _outputStream = CreateSpool("chuvadi_sheets_pkg_", encrypted: true);
             _ownsOutputStream = true;
         }
         else
@@ -180,6 +189,13 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
         return new XlsxWriter(output, ownsStream: false, options ?? new XlsxWriterOptions());
     }
 
+    /// <summary>
+    /// A stream writer. <paramref name="checkPassword"/> false matches Workbook.SaveTo(path, EncryptionOptions),
+    /// which leaves the password check to the encryption itself (Workbook.SaveTo(Stream, EncryptionOptions), 2.1.0).
+    /// </summary>
+    internal static XlsxWriter CreateForStream(Stream output, XlsxWriterOptions options, bool checkPassword)
+        => new(output, ownsStream: false, options, checkPassword: checkPassword);
+
     // ---- Sheet management ----------------------------------------------------------
 
     /// <summary>
@@ -199,7 +215,7 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
 
         var sheetIndex = _sheets.Count + 1;
         // The row spool: owner-only and deleted on close; encrypted when the workbook is (D-187).
-        var spool = TempFiles.CreateSpool(_tempDir, "chuvadi_sheets_", encrypted: _options.Encryption is not null);
+        var spool = CreateSpool("chuvadi_sheets_", encrypted: _options.Encryption is not null);
 
         SheetWriter sheet;
         try { sheet = new SheetWriter(_state, name, sheetIndex, spool); }

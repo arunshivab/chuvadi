@@ -1,5 +1,105 @@
 # Changelog
 
+## 2.1.0 (2026-11-12)
+
+A minor release (D-298, D-306, D-323, D-329): everything is additive, and existing calls compile and behave as before,
+apart from the display-text fixes below. Sheets folders, plus one page hash in each of Layout's three printed-page
+records (C1); no shared change.
+
+### New API
+
+- **`Workbook.SaveTo(Stream, EncryptionOptions)`** (D3): an encrypted model save straight to a stream, the same file as
+  `SaveTo(path, EncryptionOptions)`. The stream is written from its position, flushed and left open, and need not be
+  seekable. Null `encryption` throws `ArgumentNullException`, as the path version does.
+- **Writer options on every save** (B): `Workbook.SaveTo(path or stream, XlsxWriterOptions)`;
+  `ToXlsx<T>(path or stream, XlsxWriterOptions, configure)`; `ToXlsx(DataTable, path or stream, XlsxWriterOptions,
+  configure)`; `new XlsxExport(path or stream, XlsxWriterOptions)`. So every save can encrypt, choose its temp folder
+  or memory, and write inline strings. On a `Workbook` save the `Default…Format` options format the cells that
+  hold a date, time or `TimeSpan` without a style, as on `XlsxWriter`. Null options are the defaults.
+  - Also new: **`ToXlsx(DataTable, Stream)`** and `ToXlsx(DataTable, Stream, configure)`; a DataTable could only be
+    saved to a path.
+  - **A literal `null` binds as before.** The older overloads (`SaveTo(path, EncryptionOptions)`, the new
+    `SaveTo(stream, EncryptionOptions)`, and every `ToXlsx` overload taking a `configure` lambda) have
+    `[OverloadResolutionPriority(1)]`, so `wb.SaveTo(path, null)` and `list.ToXlsx(path, null)` compile and mean
+    what they meant, instead of becoming ambiguous (CS0121).
+- **`XlsxWriterOptions.TempStorage`** and the enum **`TempStorage { File = 0, Memory = 1 }`** (PR-2, D-299, the same
+  shape and meaning as Chuvadi.Docs 2.1.0). `File`, the default, is the existing behaviour. `Memory` keeps the
+  per-sheet spools and an encrypted save's package in memory: no file in the temp folder, `TempDirectory` ignored
+  (not checked), so saves work on a read-only file system. The in-memory copies are not encrypted; memory grows by
+  about 2.5 times the package at the peak, and a spool over about 2 GB fails with the system's `IOException`. A path
+  save still writes its output beside the target and replaces it only on success (D-306 Q-C1 (a)), so there is no
+  temporary file outside the target folder. The saved file is the same either way. An undefined value throws
+  `ArgumentOutOfRangeException`.
+- **Header check on the streaming reader** (SH-6, D-306 (a)): `RowReader.HasColumn(name)`, the same lookup as
+  `row[name]` (case ignored, text headers only; false without headers); `RowReader.HeaderNames` and
+  `SheetReader.HeaderNames`, the header row's raw text by position, null where empty or not text.
+  `SheetReader.HeaderNames` is filled once the header row is read, even when the sheet has no data rows.
+- **One-line reads from a stream** (PR-3): `ReadXlsx(Stream)` and `(Stream, password, options)` → DataSet;
+  `ReadXlsxSheet(Stream)`, `(Stream, sheetName)` and `(Stream, sheetName, password, options)` → DataTable;
+  `ReadXlsx<T>(Stream)`, `(Stream, sheetName)` and `(Stream, sheetName, password, options)` → `List<T>`. The same
+  results as the path versions; the stream is left open.
+- **Widths in screen units** (D-212): `Column.WidthInPixels(maxDigitWidth = 7)` and `WidthInPoints`, the same on
+  `ColumnRange` (its stored width; 0 when none), and `SheetFormat.DefaultWidthInPixels` / `DefaultWidthInPoints`.
+  ECMA-376 §18.3.1.13, the formula Chuvadi.Layout uses; screen units at 96 dpi, not printed width.
+- **`CellReference`** (D-212): `ColumnLetters(int)`, `ColumnIndex(string)` (new), `ToA1(row, column)` and
+  `ParseA1(address)`, the library's own conversions with the same results and exceptions. `ParseA1` rejects `$`,
+  lower case and ranges, and checks the shape, not the range.
+- **`XlsxLimitExceededException(limitName, limit, actual, detail, Exception innerException)`** (N1, D-329), the same
+  constructor as Chuvadi.Docs' `DocxLimitExceededException`.
+- **Trimming and NativeAOT** (PR-1, F1 and F2): `[DynamicallyAccessedMembers(PublicProperties)]` on `T` of
+  `ToXlsx<T>`, `XlsxExport.AddSheet<T>`, `XlsxExportConfig<T>` and `ReadXlsx<T>`, and the package now sets
+  `IsTrimmable` and `IsAotCompatible`, so the analyzers run on every build (0 warnings). Under NativeAOT,
+  `ToXlsx<T>` wrote empty cells and `ReadXlsx<T>` returned empty properties, silently; a NativeAOT publish now
+  round-trips them with the same values as JIT. Source and binary compatible; a generic method of yours that passes
+  its own `T` on gets IL2091 in a trim-analysed build until it carries the same attribute.
+
+### Bug fixes
+
+- **Times and dates below serial 1 showed `########`** (SH-9 C1). The reader returns serial 0.375 as 09:00 on
+  30 December 1899; `NumberFormatter.ToSerial` mapped that back to −0.625, a negative date. It now maps a DateTime on
+  1899-12-30 to its time of day, the writer's rule since 2.0.5: 0.375 under `hh:mm:ss` shows `09:00:00` and 0 under
+  `dd-mm-yyyy` shows `00-01-1900`, as Excel does. `NumberFormatter.ToSerial(new DateTime(1899, 12, 30, 9, 0, 0))`
+  returns 0.375 (was −0.625); every other date gives the same serial as before.
+- **An old binary .xls (Excel 97–2003), or another compound file that is not an encrypted xlsx, asked for a
+  password** (fixed in the 2.0.5 package, first listed here). `Workbook.Load`, `XlsxReader.Open` and the `ReadXlsx` readers threw `XlsxPasswordRequiredException`
+  ("This file is encrypted…"), or with a password a format error about a missing EncryptionInfo stream. They now
+  throw `XlsxFormatException` naming the old format, for example "This is an Excel 97-2003 binary file (.xls), not an
+  Office Open XML package, and it is not encrypted." Encrypted xlsx files still ask for their password. The change is
+  in the shared compound-file reader (D-253, D-293, PR #109), which reached Sheets with 2.0.5; the 2.0.5 notes did not
+  mention it.
+
+### Display text
+
+- **Built-in formats 14 and 22 follow the culture's short date** (SH-9 C2, D-306 (a)). They showed their ECMA codes
+  (`mm-dd-yy` → "05-18-03", `m/d/yy h:mm`), which no Excel shows: Excel marks both "respond to changes in regional
+  settings". They now use `DisplayCulture`'s `ShortDatePattern`, and 22 adds `h:mm`: invariant (the default)
+  "05/18/1903", en-US "5/18/1903", en-GB "18/05/1903", de-DE "18.05.1903", Windows set to dd-MM-yyyy "18-05-1903".
+  A code the file declares for id 14 or 22 still wins, and `Style.NumberFormat` still reports the stored code. This
+  changes `DisplayText` and `GetDisplayString` for every cell with id 14 or 22.
+
+### Package
+
+- Description "Pure-BCL spreadsheet (xlsx) library for .NET. No NuGet dependencies." and tags
+  `xlsx;excel;spreadsheet;ooxml;encryption`: "zip" is gone (SH-4). The obsolete `Chuvadi.Sheets.Zip` types stay until
+  3.0 (D-203).
+
+### Documentation
+
+- Guide 4.10 and the sections each item names; README "Platforms and threads" (PR-5); a cancellation example for a
+  slow open (N2, D-329). An encrypted read still decrypts the package in memory (PR-4, unchanged).
+
+### Tests
+
+- New manual-test groups, each also an xUnit fact (Sheets 36 → 44 with the test below): `saves` (A, B, C, 11
+  checks), `headers` (D, 5), `streamreads` (G, 5), `widths` (H1, 4), `cellref` (H2, 3), `displaytext` (C1, C2, 5),
+  `limits` (N1, 1). `LegacyOleFileTests` gains the one-line readers, on a path and a stream.
+- Layout17's cancellation limit is half the full key derivation with a 250 ms minimum (L, D-297), so a fast machine
+  catches an ignored cancellation too (the old 1,500 ms floor was above the whole derivation on Arun's PC).
+- ReadSafety's built-in-14 checks expect the invariant short date ("03/15/2023", was "03-15-23").
+- Layout's printed-page records (`tests/Chuvadi.Layout.Sheets.Tests/Data`, all three): the page
+  `x01-number-formats.xlsx` p1 has a new hash, because C1 now draws its serial 0 and 0.375 cells as Excel does
+  (`00/01/1900`, `09:00:00`). Every other page is unchanged; the Layout chat checked and agreed (D-346).
+
 ## 2.0.5 (2026-11-10)
 
 A data fix: dates before 1 March 1900 were written one day late (SH-11, D-306). The public API is unchanged.

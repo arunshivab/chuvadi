@@ -163,4 +163,16 @@ public sealed class XlsxLimitExceededException : System.IO.IOException
         Limit = limit;
         Actual = actual;
     }
+
+    /// <summary>
+    /// As the four-argument constructor, keeping the lower-level exception that detected the limit (since 2.1.0,
+    /// the same constructor as Chuvadi.Docs' <c>DocxLimitExceededException</c>).
+    /// </summary>
+    public XlsxLimitExceededException(string limitName, double limit, double actual, string detail, System.Exception innerException)
+        : base($"{limitName} exceeded ({actual} > {limit}): {detail}", innerException)
+    {
+        LimitName = limitName;
+        Limit = limit;
+        Actual = actual;
+    }
 }

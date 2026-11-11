@@ -51,6 +51,11 @@ internal static class NumberFormatEngine
     {
         if (date1904)
             return (value - new DateTime(1904, 1, 1)).TotalDays;
+        // 2.1.0 (SH-9 C1): a DateTime on 1899-12-30, the OLE base, is a time-only value: the reader returns
+        // serials 0 to 1 that way. It maps back to its time of day (09:00 → 0.375), as the writer does
+        // (SerialDate.FromDateTime, 2.0.5); before 2.1.0 it gave a negative serial, shown as "########".
+        if (value >= new DateTime(1899, 12, 30) && value < new DateTime(1899, 12, 31))
+            return SerialDate.FromDateTime(value);
         // Excel's 1900 system counts the fictitious 29-Feb-1900, so dates before 1-Mar-1900
         // are one less than the OLE Automation date.
         if (value < new DateTime(1900, 3, 1))

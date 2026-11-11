@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -12,7 +13,7 @@ namespace Chuvadi.Sheets.Internal;
 /// </summary>
 internal static class ExportEngine
 {
-    public static void WriteEnumerableSheet<T>(XlsxWriter writer, IEnumerable<T> source, XlsxExportConfig<T> cfg)
+    public static void WriteEnumerableSheet<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(XlsxWriter writer, IEnumerable<T> source, XlsxExportConfig<T> cfg)
     {
         // Build the effective column list by applying overrides + ignores to the type's
         // reflection-derived plans.
@@ -191,7 +192,7 @@ internal static class ExportEngine
 
     // ---- Helpers -------------------------------------------------------------------
 
-    private static int[] BuildIndexMap<T>(IList<ColumnPlan> outputColumns)
+    private static int[] BuildIndexMap<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IList<ColumnPlan> outputColumns)
     {
         var map = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int i = 0; i < outputColumns.Count; i++)
@@ -204,7 +205,7 @@ internal static class ExportEngine
         return result;
     }
 
-    private static int GetEstimatedRowCount<T>(IEnumerable<T> source, int headerCount)
+    private static int GetEstimatedRowCount<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> source, int headerCount)
         => source is ICollection<T> coll ? coll.Count + headerCount : -1;
 
     private static void ApplyTrailingFeatures(SheetWriter sheet, ExportConfigBase cfg, int totalRows, int columnCount)

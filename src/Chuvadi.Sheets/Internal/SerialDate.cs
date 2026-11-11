@@ -66,6 +66,58 @@ internal static class SerialDate
         }
     }
 
+    /// <summary>Built-in 14 (short date) and 22 (short date and time), which follow the regional settings.</summary>
+    public static bool IsRegionalDateId(int numFmtId) => numFmtId is 14 or 22;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> RegionalCodes = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The Excel code for built-in 14 or 22 under <paramref name="culture"/>: its short date pattern converted
+    /// to an Excel code, and for 22 a space and "h:mm", the time part of the ECMA code. Cached by pattern, so a
+    /// culture with user overrides (Windows regional settings) gets its own pattern.
+    /// </summary>
+    public static string RegionalDateCode(int numFmtId, System.Globalization.CultureInfo culture)
+    {
+        var pattern = (culture ?? System.Globalization.CultureInfo.InvariantCulture).DateTimeFormat.ShortDatePattern;
+        var date = RegionalCodes.GetOrAdd(pattern, ExcelCodeFromDotNetDatePattern);
+        return numFmtId == 22 ? date + " h:mm" : date;
+    }
+
+    /// <summary>
+    /// A .NET date pattern (d, dd, ddd, dddd, M…MMMM, y…yyyy, '/', quoted literals) as an Excel format code.
+    /// "/" stays "/", which displays the culture's date separator; any other character is written escaped.
+    /// </summary>
+    internal static string ExcelCodeFromDotNetDatePattern(string pattern)
+    {
+        var sb = new System.Text.StringBuilder(pattern.Length + 8);
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            char c = pattern[i];
+            int run = 1;
+            while (i + run < pattern.Length && pattern[i + run] == c && c is 'd' or 'M' or 'y' or 'g') run++;
+            switch (c)
+            {
+                case 'd': sb.Append('d', Math.Min(run, 4)); i += run - 1; break;
+                case 'M': sb.Append('m', Math.Min(run, 4)); i += run - 1; break;
+                case 'y': sb.Append(run <= 2 ? "yy" : "yyyy"); i += run - 1; break;
+                case 'g': i += run - 1; break;   // era: not shown in the Gregorian calendar
+                case '/': sb.Append('/'); break;
+                case '\\':
+                    if (i + 1 < pattern.Length) { sb.Append('\\').Append(pattern[++i]); }
+                    break;
+                case '\'':
+                case '"':
+                    int end = pattern.IndexOf(c, i + 1);
+                    if (end < 0) end = pattern.Length;
+                    for (int k = i + 1; k < end; k++) sb.Append('\\').Append(pattern[k]);
+                    i = end;
+                    break;
+                default: sb.Append('\\').Append(c); break;
+            }
+        }
+        return sb.ToString();
+    }
+
     private static DateTime RoundToMs(DateTime dt)
         => new(dt.Ticks - dt.Ticks % TimeSpan.TicksPerMillisecond + (dt.Ticks % TimeSpan.TicksPerMillisecond >= TimeSpan.TicksPerMillisecond / 2 ? TimeSpan.TicksPerMillisecond : 0), dt.Kind);
 
@@ -74,9 +126,14 @@ internal static class SerialDate
     /// ECMA built-in, else Excel en-US's code for the ids whose code depends on the UI language
     /// (5-8 currency, 41-44 accounting). Null means General.
     /// </summary>
-    public static string? DisplayCode(CellStyleTable table, int numFmtId)
+    public static string? DisplayCode(CellStyleTable table, int numFmtId, System.Globalization.CultureInfo culture)
     {
         if (numFmtId <= 0) return null;
+        // 2.1.0 (SH-9 C2): built-in 14 and 22 are the ids Excel marks "respond to changes in regional
+        // settings": they show the system's short date (22: plus h:mm), not their ECMA codes. A code the file
+        // itself declares for the id still wins.
+        if (IsRegionalDateId(numFmtId) && !table.CustomNumberFormats.ContainsKey(numFmtId))
+            return RegionalDateCode(numFmtId, culture);
         var code = table.GetNumberFormatCode(numFmtId);
         if (code is not null) return code;
         return numFmtId switch

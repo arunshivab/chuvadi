@@ -166,7 +166,7 @@ public sealed class XlsxReader : IDisposable
         var xfs = StyleTable.CellFormats;
         if (styleIndex < 0 || styleIndex >= xfs.Count) return null;
         _displayCodes ??= new string?[xfs.Count];
-        return _displayCodes[styleIndex] ??= SerialDate.DisplayCode(StyleTable, xfs[styleIndex].NumberFormatId) ?? string.Empty;
+        return _displayCodes[styleIndex] ??= SerialDate.DisplayCode(StyleTable, xfs[styleIndex].NumberFormatId, DisplayOptions.Culture) ?? string.Empty;
     }
 
     private XlsxReader(OoxmlPackage package, string[] sst, CellStyleTable styleTable, WorkbookPartInfo wb,
@@ -893,7 +893,26 @@ public sealed class SheetReader
     {
         HeaderValues = values;
         HeaderStyles = styles;
+        var names = new string?[values.Length];
+        for (int i = 0; i < values.Length; i++)
+            names[i] = values[i] is string { Length: > 0 } text ? text : null;
+        HeaderNames = Array.AsReadOnly(names);
     }
+
+    /// <summary>
+    /// The header row's text, one entry per column by position (0-based), up to the header row's last
+    /// non-empty cell (since 2.1.0). Each entry is the header cell's text exactly as written (not trimmed),
+    /// or null where the header cell is empty or holds something other than text (a number, a date, a
+    /// boolean). Null until the header row has been read, that is until the first <c>MoveNext</c> of
+    /// <see cref="Rows"/>, and always null when <see cref="XlsxReaderOptions.TreatFirstRowAsHeaders"/> is
+    /// false or the sheet has no rows. So a caller can check an upload's columns even when the sheet has only
+    /// its header row: <c>Rows</c> then yields no row, but this list is filled.
+    /// <para>These are the raw header texts. They can repeat or be missing; the name-based row members
+    /// use the first (leftmost) column of a repeated name and ignore case. The column names of
+    /// <c>ReadXlsxSheet</c>'s DataTable are made unique and filled in, as Excel names a table's columns, so
+    /// they can differ from this list.</para>
+    /// </summary>
+    public IReadOnlyList<string?>? HeaderNames { get; private set; }
 
     internal XlsxReader Book => _book;
     internal SheetInfo Info => _info;
@@ -1438,6 +1457,25 @@ public readonly struct RowReader
     /// (<see cref="Row.IsDefined"/> false; its height is the sheet's default row height).
     /// </summary>
     public Row Attributes => new(RowNumber, _extras.RowData, _sheet.Book.StyleTable);
+
+    /// <summary>
+    /// Whether the sheet has a header named <paramref name="name"/> (since 2.1.0): the same lookup as
+    /// <c>row[name]</c>, so it ignores case and finds only text headers. A name that is not a header returns
+    /// false (and <c>row[name]</c> null). Always false when
+    /// <see cref="XlsxReaderOptions.TreatFirstRowAsHeaders"/> is false, where the name-based members throw.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+    public bool HasColumn(string name)
+    {
+        if (name is null) throw new ArgumentNullException(nameof(name));
+        return _sheet.HeaderIndex is { } headers && headers.ContainsKey(name);
+    }
+
+    /// <summary>
+    /// The header row's text by column position, the same list as <see cref="SheetReader.HeaderNames"/>
+    /// (since 2.1.0). Empty when <see cref="XlsxReaderOptions.TreatFirstRowAsHeaders"/> is false.
+    /// </summary>
+    public IReadOnlyList<string?> HeaderNames => _sheet.HeaderNames ?? Array.Empty<string?>();
 
     /// <summary>
     /// True if the file has a &lt;c&gt; element for this 0-based column (with or without a value).

@@ -8,20 +8,23 @@
     <RootNamespace>Chuvadi.Sheets</RootNamespace>
     <AssemblyName>Chuvadi.Sheets</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- 2.1.0 (F2): the trim and AOT analyzers run on every build, so a new trim or AOT warning fails it. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
 
     <!-- Package metadata (used when publishing/copying the DLL) -->
     <Product>Chuvadi.Sheets</Product>
-    <Description>Pure-BCL spreadsheet (xlsx) and zip library for .NET. No NuGet dependencies.</Description>
+    <Description>Pure-BCL spreadsheet (xlsx) library for .NET. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>2.0.5</Version>
+    <Version>2.1.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Generate the XML doc file for IntelliSense without requiring 100% doc coverage. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/arunshivab/chuvadi</RepositoryUrl>
-    <PackageTags>xlsx;excel;spreadsheet;zip;ooxml;encryption</PackageTags>
+    <PackageTags>xlsx;excel;spreadsheet;ooxml;encryption</PackageTags>
   </PropertyGroup>
 
   <!-- Make internals visible to the test/sample assembly so manual tests can exercise the

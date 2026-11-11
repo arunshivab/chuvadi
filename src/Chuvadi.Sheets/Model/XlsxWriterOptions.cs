@@ -27,7 +27,40 @@ public sealed class XlsxWriterOptions
     /// operating system removes it even if the process dies. (A path save's own temporary file goes
     /// beside the target, not here.)
     /// </summary>
+    /// <remarks>Ignored (not checked) when <see cref="TempStorage"/> is <see cref="Model.TempStorage.Memory"/>.</remarks>
     public string? TempDirectory { get; set; }
+
+    private TempStorage _tempStorage = TempStorage.File;
+
+    /// <summary>
+    /// Where the save keeps its temporary working copies: one per sheet, and, for an encrypted save, the
+    /// package before it is encrypted (since 2.1.0).
+    /// <see cref="Model.TempStorage.File"/>, the default, is the temporary files described under
+    /// <see cref="TempDirectory"/>. <see cref="Model.TempStorage.Memory"/> builds them in process memory
+    /// instead: no file is created in the temp folder and <see cref="TempDirectory"/> is ignored, so the save
+    /// works on a read-only file system.
+    /// <para>With <see cref="Model.TempStorage.Memory"/> the in-memory copies are not encrypted: they hold the
+    /// same data the caller already holds in memory, and they are gone when the save returns. Memory use
+    /// grows by about two and a half times the package size at the peak, and a sheet or an encrypted package
+    /// over about 2 GB fails with the system's <see cref="System.IO.IOException"/>. The saved file is the same
+    /// either way. The same setting, with the same values and meaning, as Chuvadi.Docs'
+    /// <c>EncryptionOptions.TempStorage</c>.</para>
+    /// <para>A save to a path still writes its output to a temporary file beside the target
+    /// (".&lt;name&gt;.&lt;8 hex&gt;.tmp") and replaces the target only when the save succeeds, so with
+    /// <see cref="Model.TempStorage.Memory"/> there is no temporary file outside the target folder. A save to
+    /// a stream creates no file at all.</para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a defined <see cref="Model.TempStorage"/>.</exception>
+    public TempStorage TempStorage
+    {
+        get => _tempStorage;
+        set
+        {
+            if (!Enum.IsDefined(value))
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Not a defined TempStorage value.");
+            _tempStorage = value;
+        }
+    }
 
     /// <summary>
     /// When set, <see cref="XlsxWriter.Save"/> produces a password-encrypted xlsx
@@ -66,4 +99,20 @@ public sealed class XlsxWriterOptions
     /// (no &lt;calcPr&gt; is written, as before).
     /// </summary>
     public bool FullCalculationOnLoad { get; set; }
+}
+
+/// <summary>
+/// Where a save keeps its temporary working copies (<see cref="XlsxWriterOptions.TempStorage"/>, since 2.1.0).
+/// The same type, values and meaning as Chuvadi.Docs' <c>TempStorage</c>.
+/// </summary>
+public enum TempStorage
+{
+    /// <summary>
+    /// Temporary files in <see cref="XlsxWriterOptions.TempDirectory"/> (or the system temp folder), owner-only
+    /// and deleted on close, and encrypted with a one-time key when the workbook is encrypted (the default).
+    /// </summary>
+    File = 0,
+
+    /// <summary>Process memory: no temporary file in the temp folder.</summary>
+    Memory = 1,
 }

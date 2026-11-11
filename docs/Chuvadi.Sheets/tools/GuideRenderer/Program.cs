@@ -98,7 +98,7 @@ internal static class Program
         {
             Title = Title,
             Author = Author,
-            Subject = "Chuvadi.Sheets 2.0.5: writing, reading, styling, protecting and encrypting xlsx files in pure .NET",
+            Subject = "Chuvadi.Sheets 2.1.0: writing, reading, styling, protecting and encrypting xlsx files in pure .NET",
             Warning = w => warnings.Add($"pdf: {w}"),
         };
 

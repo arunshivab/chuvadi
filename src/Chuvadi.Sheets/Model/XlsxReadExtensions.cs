@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
@@ -28,6 +29,28 @@ public static class XlsxReadExtensions
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
         using var reader = XlsxReader.Open(path, password, WithHeaders(options));
+        return ReadDataSet(reader);
+    }
+
+    /// <summary>
+    /// Reads every sheet of an xlsx stream into a DataSet (since 2.1.0): the same result as
+    /// <see cref="ReadXlsx(string)"/> on the same bytes. The stream is not closed.
+    /// </summary>
+    public static DataSet ReadXlsx(this Stream input) => ReadXlsx(input, null, null);
+
+    /// <summary>
+    /// Reads every sheet of an xlsx stream into a DataSet, with a password and reader options (since 2.1.0;
+    /// see <see cref="ReadXlsx(string, string?, XlsxReaderOptions?)"/>). The stream is not closed.
+    /// </summary>
+    public static DataSet ReadXlsx(this Stream input, string? password, XlsxReaderOptions? options)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        using var reader = XlsxReader.Open(input, password, WithHeaders(options));
+        return ReadDataSet(reader);
+    }
+
+    private static DataSet ReadDataSet(XlsxReader reader)
+    {
         var ds = new DataSet();
         foreach (var sheet in reader.Sheets)
             ds.Tables.Add(ReadSheetIntoDataTable(reader.Sheet(sheet.Name), sheet.Name));
@@ -48,6 +71,35 @@ public static class XlsxReadExtensions
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
         using var reader = XlsxReader.Open(path, password, WithHeaders(options));
+        return ReadDataTable(reader, sheetName);
+    }
+
+    /// <summary>Reads the first sheet into a DataTable.</summary>
+    public static DataTable ReadXlsxSheet(this string path) => ReadXlsxSheet(path, null, null, null);
+
+    /// <summary>
+    /// Reads the first sheet of an xlsx stream into a DataTable (since 2.1.0). The stream is not closed.
+    /// </summary>
+    public static DataTable ReadXlsxSheet(this Stream input) => ReadXlsxSheet(input, null, null, null);
+
+    /// <summary>Reads a specific sheet of an xlsx stream into a DataTable (since 2.1.0). The stream is not closed.</summary>
+    public static DataTable ReadXlsxSheet(this Stream input, string sheetName)
+        => ReadXlsxSheet(input, sheetName, null, null);
+
+    /// <summary>
+    /// Reads a specific sheet (or the first when <paramref name="sheetName"/> is null) of an xlsx stream into
+    /// a DataTable, with a password and reader options (since 2.1.0; see
+    /// <see cref="ReadXlsxSheet(string, string?, string?, XlsxReaderOptions?)"/>). The stream is not closed.
+    /// </summary>
+    public static DataTable ReadXlsxSheet(this Stream input, string? sheetName, string? password, XlsxReaderOptions? options)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        using var reader = XlsxReader.Open(input, password, WithHeaders(options));
+        return ReadDataTable(reader, sheetName);
+    }
+
+    private static DataTable ReadDataTable(XlsxReader reader, string? sheetName)
+    {
         if (sheetName is null)
         {
             if (reader.Sheets.Count == 0) throw new XlsxFormatException("Workbook has no sheets.");
@@ -57,28 +109,52 @@ public static class XlsxReadExtensions
         return ReadSheetIntoDataTable(sheet, sheetName);
     }
 
-    /// <summary>Reads the first sheet into a DataTable.</summary>
-    public static DataTable ReadXlsxSheet(this string path) => ReadXlsxSheet(path, null, null, null);
-
     // ---- xlsx → IEnumerable<T> ----------------------------------------------------
 
     /// <summary>Reads the first sheet into a list of T, mapping by header name (case-insensitive) to public properties.</summary>
-    public static List<T> ReadXlsx<T>(this string path) where T : new()
+    public static List<T> ReadXlsx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(this string path) where T : new()
         => ReadXlsx<T>(path, sheetName: null);
 
     /// <summary>Reads a specific sheet into a list of T.</summary>
-    public static List<T> ReadXlsx<T>(this string path, string? sheetName) where T : new()
+    public static List<T> ReadXlsx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(this string path, string? sheetName) where T : new()
         => ReadXlsx<T>(path, sheetName, null, null);
 
     /// <summary>
     /// Reads a sheet (the first when <paramref name="sheetName"/> is null) into a list of T, with a
     /// password and reader options (limits, cancellation). The first row is always the header row.
     /// </summary>
-    public static List<T> ReadXlsx<T>(this string path, string? sheetName, string? password, XlsxReaderOptions? options) where T : new()
+    public static List<T> ReadXlsx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(this string path, string? sheetName, string? password, XlsxReaderOptions? options) where T : new()
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
 
         using var reader = XlsxReader.Open(path, password, WithHeaders(options));
+        return ReadList<T>(reader, sheetName);
+    }
+
+    /// <summary>
+    /// Reads the first sheet of an xlsx stream into a list of T (since 2.1.0). The stream is not closed.
+    /// </summary>
+    public static List<T> ReadXlsx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(this Stream input) where T : new()
+        => ReadXlsx<T>(input, sheetName: null);
+
+    /// <summary>Reads a specific sheet of an xlsx stream into a list of T (since 2.1.0). The stream is not closed.</summary>
+    public static List<T> ReadXlsx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(this Stream input, string? sheetName) where T : new()
+        => ReadXlsx<T>(input, sheetName, null, null);
+
+    /// <summary>
+    /// Reads a sheet (the first when <paramref name="sheetName"/> is null) of an xlsx stream into a list of T,
+    /// with a password and reader options (since 2.1.0; see
+    /// <see cref="ReadXlsx{T}(string, string?, string?, XlsxReaderOptions?)"/>). The stream is not closed.
+    /// </summary>
+    public static List<T> ReadXlsx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(this Stream input, string? sheetName, string? password, XlsxReaderOptions? options) where T : new()
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        using var reader = XlsxReader.Open(input, password, WithHeaders(options));
+        return ReadList<T>(reader, sheetName);
+    }
+
+    private static List<T> ReadList<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(XlsxReader reader, string? sheetName) where T : new()
+    {
         SheetReader sheet;
         if (sheetName is null)
         {
@@ -198,7 +274,7 @@ public static class XlsxReadExtensions
 
     private static string? NonEmpty(string s) => s.Length == 0 ? null : s;
 
-    private static List<T> MapSheetToList<T>(SheetReader sheet) where T : new()
+    private static List<T> MapSheetToList<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(SheetReader sheet) where T : new()
     {
         var result = new List<T>();
         var props = BuildPropertyMap<T>();
@@ -230,7 +306,7 @@ public static class XlsxReadExtensions
         return result;
     }
 
-    private static List<(string Header, PropertyInfo Prop)> BuildPropertyMap<T>()
+    private static List<(string Header, PropertyInfo Prop)> BuildPropertyMap<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>()
     {
         var list = new List<(string, PropertyInfo)>();
         foreach (var p in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))

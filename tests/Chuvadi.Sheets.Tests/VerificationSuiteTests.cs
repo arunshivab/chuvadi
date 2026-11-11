@@ -102,6 +102,14 @@ public sealed class VerificationSuiteTests : IDisposable
 
     [Fact]
     public void Dates1900() => Dates1900Test.Run(_dir);
+
+    [Fact] public void Saves() => SavesTest.Run(_dir);
+    [Fact] public void Headers() => HeadersTest.Run(_dir);
+    [Fact] public void StreamReads() => StreamReadsTest.Run(_dir);
+    [Fact] public void Widths() => Items210Test.RunWidths(_dir);
+    [Fact] public void CellRef() => Items210Test.RunCellRef(_dir);
+    [Fact] public void DisplayText() => Items210Test.RunDisplayText(_dir);
+    [Fact] public void Limits() => Items210Test.RunLimits(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

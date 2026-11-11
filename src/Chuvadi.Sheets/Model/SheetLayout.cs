@@ -99,6 +99,27 @@ public sealed class SheetFormat
         return Math.Truncate((double)px / mdw * 256) / 256;
     }
 
+    /// <summary>
+    /// <see cref="DefaultWidth"/> in screen pixels at 96 dpi (since 2.1.0), by ECMA-376 §18.3.1.13:
+    /// Truncate(((256 × width + Truncate(128 / MDW)) / 256) × MDW). <paramref name="maxDigitWidth"/> is the
+    /// widest digit of the workbook's default font in pixels (MDW): 7 for Calibri 11, Excel's default. These are
+    /// screen units, not printed width: Excel prints a character slightly wider than it draws it.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDigitWidth"/> is not a positive finite number.</exception>
+    public int DefaultWidthInPixels(double maxDigitWidth = 7) => WidthToPixels(DefaultWidth(), maxDigitWidth);
+
+    /// <summary><see cref="DefaultWidthInPixels"/> in points (pixels × 72 / 96), since 2.1.0.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDigitWidth"/> is not a positive finite number.</exception>
+    public double DefaultWidthInPoints(double maxDigitWidth = 7) => DefaultWidthInPixels(maxDigitWidth) * 0.75;
+
+    /// <summary>A &lt;col width&gt; value in pixels (ECMA-376 §18.3.1.13), the formula Chuvadi.Layout uses.</summary>
+    internal static int WidthToPixels(double width, double maxDigitWidth)
+    {
+        if (!(maxDigitWidth > 0) || double.IsInfinity(maxDigitWidth))
+            throw new ArgumentOutOfRangeException(nameof(maxDigitWidth), maxDigitWidth, "The maximum digit width must be a positive number of pixels.");
+        return (int)Math.Truncate(((256 * width) + Math.Truncate(128.0 / maxDigitWidth)) / 256 * maxDigitWidth);
+    }
+
     /// <summary>Load path: values as stored, without validation.</summary>
     internal void Load(double defaultRowHeight, double? defaultColumnWidth, int baseColumnWidth, bool customHeight,
                        bool zeroHeight, bool thickTop, bool thickBottom, int outlineRow, int outlineColumn)
@@ -141,6 +162,21 @@ public sealed class ColumnRange
 
     /// <summary>Column width in Excel character units, or 0 when the file gives none.</summary>
     public double Width { get; internal set; }
+
+    /// <summary>
+    /// <see cref="Width"/> in screen pixels at 96 dpi (since 2.1.0; ECMA-376 §18.3.1.13, see
+    /// <see cref="SheetFormat.DefaultWidthInPixels"/>). A span knows only its stored width: when the file gives
+    /// none (<see cref="Width"/> 0) this is 0 too, and the columns render at the sheet default
+    /// (<see cref="SheetFormat.DefaultWidthInPixels"/>, or <see cref="Column.WidthInPixels"/>, which applies it).
+    /// Hidden columns report their width too; check <see cref="Hidden"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDigitWidth"/> is not a positive finite number.</exception>
+    public int WidthInPixels(double maxDigitWidth = 7)
+        => SheetFormat.WidthToPixels(Width, maxDigitWidth);   // width 0 gives 0 px
+
+    /// <summary><see cref="WidthInPixels"/> in points (pixels × 72 / 96), since 2.1.0.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDigitWidth"/> is not a positive finite number.</exception>
+    public double WidthInPoints(double maxDigitWidth = 7) => WidthInPixels(maxDigitWidth) * 0.75;
 
     /// <summary>True if the width was set by the user rather than auto-sized (customWidth).</summary>
     public bool CustomWidth { get; internal set; }
