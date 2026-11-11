@@ -1,6 +1,6 @@
 # Chuvadi.Layout — Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-12)
 
 Chuvadi.Docs 2.1.0 wiring (D-317), engine side:
 

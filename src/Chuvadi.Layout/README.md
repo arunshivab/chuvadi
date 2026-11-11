@@ -15,7 +15,7 @@ own packages, so an app takes only what it needs:
 
 PDF, SVG and PNG output ships separately as Chuvadi.Layout.Pdf; SVG is also in this package (`LayoutSvg`).
 
-Status: **0.1.0 (preview).** Word documents (Chuvadi.Docs 1.6.0), Excel workbooks (Chuvadi.Sheets 1.7.0) and plain
+Status: **0.2.0 (preview).** Word documents (Chuvadi.Docs 2.1.0), Excel workbooks (Chuvadi.Sheets 2.x) and plain
 text; Markdown and HTML through Chuvadi.Layout.Markup. Limits and decisions: `docs/Chuvadi.Layout/DESIGN.md` in the
 repository.
 

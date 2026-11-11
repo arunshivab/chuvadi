@@ -18,7 +18,7 @@
     <Description>Excel workbook (.xlsx) importer for Chuvadi.Layout, on Chuvadi.Sheets: lays out a workbook the way Excel prints it (displayed cell text, effective styles, merges, page setup, print areas and titles, page breaks, conditional formats, pictures, shapes, chart placeholders), encrypted workbooks included. Values are never recalculated or altered. Pure BCL.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

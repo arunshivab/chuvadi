@@ -24,7 +24,7 @@ dotnet run -c Release --project staging\samples\Chuvadi.Layout.Viewer -- upload.
 | Chuvadi.Fonts | `FontPack`: the LiPi Sans files (Latin and nine Indic scripts); Layout uses them as its built-in fonts | both |
 | Chuvadi.Layout.Fonts | `SubstituteFontPack`: OFL metric-compatible substitute faces, a pure data pack (add with `FontPackSource.For(SubstituteFontPack.Instance)`) | both |
 | Chuvadi.Layout.Markup | `MarkdownLayout` and `HtmlLayout`: Markdown, and sanitized HTML (mail, pages), into the same `LaidOutDocument` | both |
-| Chuvadi.Layout.Pdf | `PdfShaper` (Indic shaping), `ToPng`, `ToPdf`, `ToSvg` (delegates to `LayoutSvg`). Source in `staging/src/Chuvadi.Layout.Pdf` (D-37): it takes chuvadi-pdf as pinned packages, so it is built outside `Chuvadi.slnx` and CI until chuvadi-pdf joins the monorepo | both |
+| Chuvadi.Layout.Pdf | `PdfShaper` (Indic shaping), `ToPng`, `ToPdf`, `ToSvg` (delegates to `LayoutSvg`). Source in `staging/src/Chuvadi.Layout.Pdf` (D-37): it takes chuvadi-pdf as pinned packages, so it is built outside `Chuvadi.slnx` and CI until chuvadi-pdf joins the monorepo. Released as `layout-pdf-v*` right after `layout-v*` (D-214, D-304); the chuvadi-pdf packages come from the chuvadi-pdf release it names, `[3.31.2, 4.0.0)` | both |
 
 Opening a document does almost no work. `AutoDetectLayout.Open` (or `DocsLayout.Open`, `SheetsLayout.Open`) reads the source and lays out pages only when they are
 asked for. Each `GetPage(i)` lays out as far as page *i* and no further. Laid-out pages are kept in a small cache

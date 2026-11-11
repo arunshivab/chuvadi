@@ -18,7 +18,7 @@
     <Description>Word document (.docx) importer for Chuvadi.Layout, on Chuvadi.Docs: lays out a document the way Word lays it out (sections, headers and footers, lists, paragraphs, runs, tables, pictures, watermarks, footnotes and endnotes, tracked changes as accepted, text boxes, floating tables, embedded fonts), encrypted documents included. Values are never altered. Pure BCL.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

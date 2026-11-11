@@ -1,6 +1,6 @@
 # Chuvadi.Layout.Sheets — Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-12)
 
 - An encrypted workbook opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a
   `LayoutFormatException`; D-253), with `PasswordGiven` false or true. Messages: "The workbook is encrypted: set
