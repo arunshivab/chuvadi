@@ -169,8 +169,8 @@ namespace Chuvadi.Layout.Docs
                     _ => TextBoxVerticalAlignment.Top,
                 },
                 AutoFit = box.AutoFit,
-                Fill = DocsTheme.TryHex(box.FillHex?.TrimStart('#'), out LayoutColor fill) ? fill : null,
-                Line = DocsTheme.TryHex(box.LineHex?.TrimStart('#'), out LayoutColor line) ? line : null,
+                Fill = DocsHex.TryHex(box.FillHex?.TrimStart('#'), out LayoutColor fill) ? fill : null,
+                Line = DocsHex.TryHex(box.LineHex?.TrimStart('#'), out LayoutColor line) ? line : null,
                 LineWidth = box.LineWidthPt ?? 0.75,
             };
             double inner = Math.Max(1, width - flowBox.InsetLeft - flowBox.InsetRight);

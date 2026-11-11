@@ -197,8 +197,15 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
 Tighten them further with `Clone()` and set the values you need. Compressed packages are bounded as they are read:
 - for xlsx, each decompressed part is capped at `MaxSourceBytes` (passed to Chuvadi.Sheets as `MaxPartBytes`), and
   each picture at `MaxResourceBytes`;
-- for docx, Chuvadi.Docs gets `MaxSourceBytes` as its package and part caps and `MaxLayoutBytes` as its total
-  uncompressed cap; its own zip-bomb, XML-depth and spin-count checks also apply.
+- for docx, Chuvadi.Docs gets `MaxSourceBytes` as its package and part caps, `MaxLayoutBytes` as its total
+  uncompressed cap and five XML elements per `MaxBlocks` as its element cap (10,000,000 by default, 1,000,000
+  untrusted; D-317 E1). Its own zip-bomb, XML-depth and spin-count checks also apply. With `ForUntrustedInput()`,
+  Chuvadi.Docs starts from its own untrusted preset (compression ratio 200:1, 10,000 entries, spin count 500,000) and
+  Layout's limits apply on top (D-317 U1). The element cap matters because a document's memory follows its number of
+  elements, not its size in bytes: Chuvadi.Docs measured up to about 520 bytes per element, so the default cap still
+  allows about 5 GB; use `ForUntrustedInput()` for files you do not trust.
+- a .docx part that Chuvadi.Docs could not use (a broken header, missing styles) is left out and reported as
+  `DocxPartSkipped`, with the part name as its location (B11).
 
 ### Rules for a preview service
 

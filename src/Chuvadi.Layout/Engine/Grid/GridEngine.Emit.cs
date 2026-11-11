@@ -677,7 +677,7 @@ namespace Chuvadi.Layout.Engine.Grid
             {
                 return; // continued text that ends before this page
             }
-            ops.Add(new PushClipOp(clip.X >= clipLeft ? clip : new LayoutRect(clipLeft, clip.Y, clip.Right - clipLeft, clip.Height)));
+            List<LayoutOp> lineOps = new List<LayoutOp>();
             double yy = top;
             StringBuilder ignore = new StringBuilder();
             List<LayoutBox> noBoxes = new List<LayoutBox>();
@@ -692,10 +692,80 @@ namespace Chuvadi.Layout.Engine.Grid
                     AreaWidth = Math.Max(1, clip.Width - (2 * pad)),
                     Top = yy,
                     Path = path,
-                }, _ctx, ops, noBoxes, ignore);
+                }, _ctx, lineOps, noBoxes, ignore);
                 yy += lines[i].Height;
             }
+
+            // Arun's option B (x03, layout-overflow-split-rule5.md): where text runs across a page edge, a letter (a grapheme
+            // cluster) is drawn whole on the page where it starts and left out of the next page, so no page shows half a
+            // letter. Excel 2021 cuts through it (measured on overflow-split.xlsx). Only page edges move: a filled
+            // neighbour still cuts as before.
+            double left = Math.Max(clip.X, clipLeft);
+            double right = clip.Right;
+            double pageRight = cols.Count > 0 ? gx + cols[^1].Start + cols[^1].Size : double.PositiveInfinity;
+            bool cutAtPageEnd = lines.Count == 1 && Math.Abs(right - pageRight) < 0.01;
+            bool cutAtPageStart = lines.Count == 1 && clipLeft > clip.X;
+            if (cutAtPageEnd || cutAtPageStart)
+            {
+                foreach ((double start, double end) in LetterSpans(lineOps))
+                {
+                    if (cutAtPageEnd && start < right - PageEdgeTolerance && end > right + PageEdgeTolerance)
+                    {
+                        right = end;
+                    }
+                    if (cutAtPageStart && start < left - PageEdgeTolerance && end > left + PageEdgeTolerance)
+                    {
+                        left = end;
+                    }
+                }
+            }
+            if (right <= left + PageEdgeTolerance)
+            {
+                return; // the only letters on this page were drawn whole on the page before
+            }
+            ops.Add(new PushClipOp(new LayoutRect(left, clip.Y, right - left, clip.Height)));
+            ops.AddRange(lineOps);
             ops.Add(PopClipOp.Instance);
+        }
+
+        /// <summary>Tolerance for a page edge that falls on a letter's own edge (no letter is cut there).</summary>
+        private const double PageEdgeTolerance = 0.001;
+
+        /// <summary>
+        /// The horizontal extent of each letter in the glyph runs of a cell's line, in page coordinates. A letter is a
+        /// Unicode grapheme cluster (UAX #29, as <see cref="System.Globalization.StringInfo"/> gives it): a base with its
+        /// vowel signs and marks, such as Tamil டு, ர் or வை. The shaper reports one cluster per character, which would
+        /// split a vowel sign from its consonant.
+        /// </summary>
+        private static List<(double Start, double End)> LetterSpans(List<LayoutOp> lineOps)
+        {
+            List<(double, double)> spans = new List<(double, double)>();
+            foreach (LayoutOp op in lineOps)
+            {
+                if (op is not GlyphRunOp run || run.Glyphs.Count == 0)
+                {
+                    continue;
+                }
+                int[] letters = System.Globalization.StringInfo.ParseCombiningCharacters(run.Text);
+                Dictionary<int, (double Start, double End)> byLetter = new Dictionary<int, (double, double)>();
+                foreach (PositionedGlyph g in run.Glyphs)
+                {
+                    int letter = LetterOf(letters, g.Cluster);
+                    double x0 = run.X + g.X;
+                    double x1 = x0 + (g.Advance * run.HorizontalScale);
+                    (double a, double b) = byLetter.TryGetValue(letter, out (double, double) have) ? have : (Math.Min(x0, x1), Math.Max(x0, x1));
+                    byLetter[letter] = (Math.Min(a, Math.Min(x0, x1)), Math.Max(b, Math.Max(x0, x1)));
+                }
+                spans.AddRange(byLetter.Values);
+            }
+            return spans;
+        }
+
+        /// <summary>The start of the letter (grapheme) that holds text index <paramref name="index"/>.</summary>
+        private static int LetterOf(int[] letterStarts, int index)
+        {
+            int i = Array.BinarySearch(letterStarts, index);
+            return i >= 0 ? letterStarts[i] : letterStarts[Math.Max(0, ~i - 1)];
         }
 
         private string FillHashes(GridCell cell, double s, double innerWidth, GridGeometry geo)

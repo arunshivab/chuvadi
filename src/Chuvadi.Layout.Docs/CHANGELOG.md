@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Chuvadi.Docs 2.1.0 wiring (D-317; rule 5 list claude/layout-0.2.0-rule5.md). Requires Chuvadi.Docs 2.1.0.
+
+- **Skipped parts are reported (B11, W1).** Each part in `Document.SkippedParts` is a `DocxPartSkipped` warning, with the
+  part name as its location: ContentLoss for a header, footer, notes or picture, Fidelity for styles, numbering, theme,
+  settings or fonts. Comments and document properties, which Layout never draws, are not reported. Before, a broken
+  header printed as an empty one without a word.
+- **`w:compat/w:noColumnBalance` is honoured (N3, W2).** When the file sets it, no section balances its columns.
+- **Theme fonts and colours come from Chuvadi.Docs (W3, T1).** Layout's own theme1.xml parser is gone. Colours now follow
+  the document's `w:clrSchemeMapping`, which Layout ignored. The theme's per-script fonts are still not used (D-191
+  R1). No change on the 60 repository documents.
+- **Element cap and untrusted preset (D-282 (b), W4 E1, W5 U1).** Chuvadi.Docs reads at most five XML elements per
+  `LayoutLimits.MaxBlocks` (10,000,000 by default, 1,000,000 with `ForUntrustedInput()`); beyond it,
+  `LayoutLimitExceededException` "DocxElements". With `ForUntrustedInput()` the reader starts from Chuvadi.Docs' own
+  untrusted preset (compression ratio 200:1), with Layout's limits on top.
+
 - An encrypted document opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a
   `LayoutFormatException`; D-253), with `PasswordGiven` false or true. Messages: "The document is encrypted: set
   LayoutOptions.Password. …" and "The password for this document is wrong: …", each followed by the Chuvadi.Docs
