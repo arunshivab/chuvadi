@@ -29,17 +29,27 @@ internal static class RunProperties
     /// CT_ParaRPr) and trailing content (w:rPrChange, last); written whenever any is present.
     /// </summary>
     public static void Write(XmlWriter x, TextFormat f, string? characterStyleId, Action<XmlWriter>? head, Action<XmlWriter>? tail)
+        => Write(x, f, characterStyleId, head, tail, impliedComplexScript: false);
+
+    /// <summary>
+    /// As above; <paramref name="impliedComplexScript"/> writes <c>w:cs</c> when <see cref="TextFormat.ComplexScript"/>
+    /// is unset (N4: a caller-built run with a complex-script font and complex-script text).
+    /// </summary>
+    public static void Write(XmlWriter x, TextFormat f, string? characterStyleId, Action<XmlWriter>? head, Action<XmlWriter>? tail,
+        bool impliedComplexScript)
     {
         if (f.IsDefault && characterStyleId is null && head is null && tail is null) return;
         x.WriteStartElement("rPr", W);
         head?.Invoke(x);
-        WriteChildren(x, f, characterStyleId);
+        WriteChildren(x, f, characterStyleId, impliedComplexScript);
         tail?.Invoke(x);
         x.WriteEndElement(); // rPr
     }
 
     /// <summary>The rPr children of a format (no rPr element), in CT_RPr order.</summary>
-    internal static void WriteChildren(XmlWriter x, TextFormat f, string? characterStyleId)
+    internal static void WriteChildren(XmlWriter x, TextFormat f, string? characterStyleId) => WriteChildren(x, f, characterStyleId, false);
+
+    internal static void WriteChildren(XmlWriter x, TextFormat f, string? characterStyleId, bool impliedComplexScript)
     {
 
         if (characterStyleId is not null) Val(x, "rStyle", characterStyleId);
@@ -121,7 +131,7 @@ internal static class RunProperties
             });
 
         Toggle(x, "rtl", f.RightToLeft);
-        Toggle(x, "cs", f.ComplexScript);
+        Toggle(x, "cs", f.ComplexScript ?? (impliedComplexScript ? true : null));
 
         if (f.Language is not null || f.EastAsiaLanguage is not null || f.ComplexScriptLanguage is not null)
         {
@@ -181,13 +191,13 @@ internal static class RunProperties
                     TextFormat old = TextFormat.None;
                     string? oldStyle = null;
                     if (!sub.IsEmptyElement)
-                        using (var ch = sub.ReadSubtree())
+                        using (var ch = sub.LightSubtree())
                         {
                             ch.Read();
                             while (ch.Read())
                                 if (ch.NodeType == XmlNodeType.Element && ch.NamespaceURI == W && ch.LocalName == "rPr")
                                 {
-                                    using (var inner = ch.ReadSubtree()) old = Read(inner, out oldStyle);
+                                    using (var inner = ch.LightSubtree()) old = Read(inner, out oldStyle);
                                     break;
                                 }
                         }

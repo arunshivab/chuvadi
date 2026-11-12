@@ -28,6 +28,57 @@ internal static class FormatResolver
 
     public static TextFormat ResolveRun(Document doc, Paragraph p, Run r, TableCellRef? cell = null)
     {
+        var bag = StyleLevels(doc, p, r, cell);
+        bag.Overlay(RunBag.From(r.Format));
+        return bag.ToFormat();
+    }
+
+    /// <summary>
+    /// Style-level results by (table style and regions, paragraph style, character style), for a caller that resolves
+    /// many runs against one unchanging set of styles (DocxReader.FormattedParagraphs). Bounded; a full cache stops adding.
+    /// </summary>
+    internal sealed class RunStyleCache
+    {
+        public readonly System.Collections.Generic.Dictionary<string, RunBag> Levels = new(StringComparer.Ordinal);
+        public const int MaxEntries = 4096;
+    }
+
+    /// <summary>
+    /// As <see cref="ResolveRun(Document, Paragraph, Run, TableCellRef?)"/>, reusing the style levels from
+    /// <paramref name="cache"/>; <paramref name="paragraphKey"/> is <see cref="ParagraphKey"/> for this paragraph and cell.
+    /// </summary>
+    public static TextFormat ResolveRun(Document doc, Paragraph p, Run r, TableCellRef? cell, RunStyleCache cache, string paragraphKey)
+    {
+        var key = paragraphKey + "\u0001" + r.EffectiveCharacterStyleId;
+        if (!cache.Levels.TryGetValue(key, out var levels))
+        {
+            levels = StyleLevels(doc, p, r, cell);
+            if (cache.Levels.Count < RunStyleCache.MaxEntries) cache.Levels[key] = levels;
+        }
+        var bag = levels.Clone();
+        bag.Overlay(RunBag.From(r.Format));
+        return bag.ToFormat();
+    }
+
+    /// <summary>
+    /// What <see cref="StyleLevels"/> depends on for a paragraph, besides the document and the run's character style:
+    /// the table style and the regions that apply to the cell, and the paragraph style.
+    /// </summary>
+    public static string ParagraphKey(Document doc, Paragraph p, TableCellRef? cell)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (cell is TableCellRef c)
+        {
+            sb.Append('T').Append(c.Table.Format.StyleId);
+            foreach (var region in ApplicableRegions(doc, c)) sb.Append('\u0002').Append((int)region);
+        }
+        sb.Append('\u0001').Append(ParagraphStyleId(doc, p));
+        return sb.ToString();
+    }
+
+    /// <summary>The document defaults with the table, paragraph and character style levels over them (everything but the run's own formatting).</summary>
+    private static RunBag StyleLevels(Document doc, Paragraph p, Run r, TableCellRef? cell)
+    {
         var bag = RunBag.From(doc.Defaults.RunFormat);
 
         // Table style level (lowest style level, §17.7.2): whole-table run format, then the
@@ -47,8 +98,7 @@ internal static class FormatResolver
         var characterStyle = ChainRunBag(doc, characterStyleId, StyleType.Character);
         // Toggles XOR across all style levels (table, paragraph, character); others: later wins.
         bag.Overlay(RunBag.CombineStyleLevels(RunBag.CombineStyleLevels(tableStyle, paragraphStyle), characterStyle));
-        bag.Overlay(RunBag.From(r.Format));
-        return bag.ToFormat();
+        return bag;
     }
 
     /// <summary>A list label's run formatting: the paragraph mark's effective formatting (with the level's character style), then the level's run formatting.</summary>
@@ -373,6 +423,9 @@ internal static class FormatResolver
             b.Lang = f.Language; b.LangEa = f.EastAsiaLanguage; b.LangBidi = f.ComplexScriptLanguage;
             return b;
         }
+
+        /// <summary>A copy of this bag (the values are immutable or shared as they are between levels).</summary>
+        public RunBag Clone() => (RunBag)MemberwiseClone();
 
         /// <summary>Overlays every SET value of <paramref name="top"/> onto this bag.</summary>
         public void Overlay(RunBag top)

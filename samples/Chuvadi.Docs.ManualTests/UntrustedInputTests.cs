@@ -142,7 +142,7 @@ public static class UntrustedInputTests
             var a = new MemoryStream(); d.SaveTo(a);
             var e = Document.Load(new MemoryStream(withHeader), null, new DocxReaderOptions { MaxElements = 10_000_000 });
             var b = new MemoryStream(); e.SaveTo(b);
-            AssertTrue(EncryptedSaveTests.SamePackageExceptTimes(a.ToArray(), b.ToArray()), "a high limit changes nothing");
+            EncryptedSaveTests.AssertSamePackage(a.ToArray(), b.ToArray(), "a high limit changes nothing");
         });
     }
 

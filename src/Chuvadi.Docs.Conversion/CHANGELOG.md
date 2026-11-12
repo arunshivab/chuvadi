@@ -1,5 +1,12 @@
 # Chuvadi.Docs.Conversion — Changelog
 
+## 2.2.0 (2026-11-12)
+
+Versioned with Chuvadi.Docs 2.2.0 (D-15, D-45): depends on Chuvadi.Docs 2.2.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.2.0:
+- **Faster exports of large loaded documents:** `Document.Load` is about twice as fast, with the same document as before (DOC-10).
+- **Imported runs with a font and complex-script text are saved with `<w:cs/>`** (N4, D-343), so Word shows that font: the importers give a run a font (all four slots, `FontForAllScripts`) for inline code (`CodeFont`, Consolas by default) and for an HTML `font-family` or `<font face>`. Such a run whose text has complex-script characters (Tamil, Devanagari, Arabic… the Docs README lists the blocks) is now marked complex script. Runs without a font, and runs with only Latin, Greek, Cyrillic or CJK text, are written as before.
+- **The new Docs 2.2.0 API** (`DocxReader.FormattedParagraphs`, the reader's theme lookups) is in Chuvadi.Docs. See its CHANGELOG.
+
 ## 2.1.0 (2026-11-10)
 
 Versioned with Chuvadi.Docs 2.1.0 (D-15, D-45): depends on Chuvadi.Docs 2.1.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.1.0:

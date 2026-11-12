@@ -62,8 +62,8 @@ public static class OutsideTools
             return;
         }
         var external = MsoffcryptoDecrypt(encrypted, password);
-        if (!EncryptedSaveTests.SamePackageExceptTimes(external, expectedPackage))
-            throw new InvalidOperationException($"{what}: msoffcrypto-tool decrypts to a different package.");
+        if (PackageCompare.Difference(external, expectedPackage) is { } difference)
+            throw new InvalidOperationException($"{what}: msoffcrypto-tool decrypts to a different package ({difference}).");
         Console.WriteLine($"          msoffcrypto-tool: decrypted, identical package ({what})");
     }
 

@@ -56,7 +56,7 @@ public static class EncryptedSaveTests
             d.SaveTo(output, new EncryptionOptions { Password = Pw, SpinCount = 1000 });
             var bytes = output.ToArray();
             AssertTrue(bytes.Length > 8 && bytes[0] == 0xD0 && bytes[1] == 0xCF, "a compound file (encrypted), not a zip");
-            AssertTrue(SamePackageExceptTimes(Decrypt(bytes, Pw), Plain(d)), "decrypted package is byte-identical to SaveTo(Stream) (zip entry times aside)");
+            AssertSamePackage(Decrypt(bytes, Pw), Plain(d), "decrypted package is byte-identical to SaveTo(Stream) (zip entry times aside)");
             AssertTrue(Document.Load(new MemoryStream(bytes), Pw).GetText() == d.GetText(), "text round-trips");
             OutsideTools.CheckWithMsoffcrypto(bytes, Pw, Plain(d), "stream save");
             AssertThrows<DocxPasswordRequiredException>(() => Document.Load(new MemoryStream(bytes)), "needs the password");
@@ -73,22 +73,57 @@ public static class EncryptedSaveTests
             var viaStream = Decrypt(all[3..^1], Pw);
             var path = Path.Combine(dir, "enc-path.docx");
             d.SaveTo(path, new EncryptionOptions { Password = Pw, SpinCount = 1000 });
-            AssertTrue(SamePackageExceptTimes(Decrypt(File.ReadAllBytes(path), Pw), viaStream), "same package as the path overload");
+            AssertSamePackage(Decrypt(File.ReadAllBytes(path), Pw), viaStream, "same package as the path overload");
         });
-        Check("the package comparison ignores only the zip entry times: a changed byte or data descriptors are a difference", () =>
+        Check("the package comparison ignores the zip entry times: a changed byte or data descriptors are a difference", () =>
         {
             var a = Plain(Sample());
             var b = Plain(Sample());
-            AssertTrue(SamePackageExceptTimes(a, b), "two saves of one document");
+            AssertSamePackage(a, b, "two saves of one document");
             var flipped = (byte[])a.Clone();
             flipped[flipped.Length / 2] ^= 0x01;
             AssertTrue(!SamePackageExceptTimes(a, flipped), "one changed byte");
             var timeOnly = (byte[])a.Clone();
             timeOnly[10] ^= 0x01;   // the first entry's local-header time field
-            AssertTrue(SamePackageExceptTimes(a, timeOnly), "a time field only");
+            AssertSamePackage(a, timeOnly, "a time field only");
             var described = new MemoryStream();
             Sample().SaveTo(new WriteOnlyStream(described));   // a non-seekable stream makes the zip writer use data descriptors
             AssertTrue(!SamePackageExceptTimes(a, described.ToArray()), "data descriptors");
+        });
+        Check("the package comparison ignores the save clock in docProps/core.xml (D-321): two saves either side of a second boundary are the same package", () =>
+        {
+            var d = new Document();   // no dates set: each save writes the current time to the second
+            d.AddParagraph("Saved twice, a second apart");
+            var first = Plain(d);
+            var start = DateTime.UtcNow;
+            while (DateTime.UtcNow.Second == start.Second) System.Threading.Thread.Sleep(5);
+            var second = Plain(d);
+            AssertTrue(CoreXml(first) != CoreXml(second), "the two core.xml differ (the clock moved on): " + CoreXml(second));
+            AssertSamePackage(first, second, "the same package apart from the dates");
+        });
+        Check("the package comparison still catches every other difference and names the part: a changed byte, data descriptors, a changed dcterms:title", () =>
+        {
+            var a = Plain(Sample());
+            var flipped = (byte[])a.Clone();
+            int at = DataOffset(a, "word/document.xml") + 7;
+            flipped[at] ^= 0x01;
+            var why = PackageCompare.Difference(a, flipped) ?? "";
+            AssertTrue(why.StartsWith("differs in word/document.xml at byte 7 of its data", StringComparison.Ordinal), "a changed byte: " + why);
+
+            var described = new MemoryStream();
+            Sample().SaveTo(new WriteOnlyStream(described));
+            why = PackageCompare.Difference(a, described.ToArray()) ?? "";
+            AssertTrue(why.Contains("[Content_Types].xml") || why.Contains("local header"), "data descriptors: " + why);
+
+            var titled = Sample();
+            titled.Properties.Title = "A";
+            var other = Sample();
+            other.Properties.Title = "B";
+            why = PackageCompare.Difference(Plain(titled), Plain(other)) ?? "";
+            AssertTrue(why.StartsWith("differs in docProps/core.xml (inflated, the two dates masked)", StringComparison.Ordinal), "a changed title: " + why);
+
+            why = PackageCompare.Difference(a, a.AsSpan(0, a.Length - 1).ToArray()) ?? "";
+            AssertTrue(why.Length > 0, "a truncated package: " + why);
         });
         Check("SaveTo(Stream, EncryptionOptions) argument checks: null stream, null options, empty password", () =>
         {
@@ -105,7 +140,7 @@ public static class EncryptedSaveTests
             var d = Sample();
             var sink = new MemoryStream();
             d.SaveTo(new WriteOnlyStream(sink), new EncryptionOptions { Password = Pw, SpinCount = 1000 });
-            AssertTrue(SamePackageExceptTimes(Decrypt(sink.ToArray(), Pw), Plain(d)), "same package");
+            AssertSamePackage(Decrypt(sink.ToArray(), Pw), Plain(d), "same package");
         });
     }
 
@@ -210,19 +245,35 @@ public static class EncryptedSaveTests
     // ---- helpers ------------------------------------------------------------------------
 
     /// <summary>
-    /// Two zip packages are byte-identical apart from the entries' last-modified times. The zip
-    /// writer stamps each entry with the time of the save (2-second resolution), so two saves of
-    /// one document differ only there; every other byte (entry order, names, flags such as the
-    /// data-descriptor bit, sizes, CRCs and data) must match. The time fields are found through the
-    /// central directory, not by searching.
+    /// Two zip packages are the same apart from the save clocks: the entries' last-modified times and the
+    /// <c>dcterms:created</c>/<c>dcterms:modified</c> dates in <c>docProps/core.xml</c>. Everything else is
+    /// compared byte for byte (see <see cref="PackageCompare"/>, D-321).
     /// </summary>
-    internal static bool SamePackageExceptTimes(byte[] a, byte[] b)
+    internal static bool SamePackageExceptTimes(byte[] a, byte[] b) => PackageCompare.Difference(a, b) is null;
+
+    private static string CoreXml(byte[] package)
     {
-        if (a.Length != b.Length) return false;
-        var x = (byte[])a.Clone();
-        var y = (byte[])b.Clone();
-        if (!MaskZipTimes(x) || !MaskZipTimes(y)) return false;
-        return x.AsSpan().SequenceEqual(y);
+        using var z = new ZipArchive(new MemoryStream(package));
+        using var r = new StreamReader(z.GetEntry("docProps/core.xml")!.Open());
+        return r.ReadToEnd();
+    }
+
+    /// <summary>Where an entry's compressed data starts, from its local header.</summary>
+    private static int DataOffset(byte[] package, string name)
+    {
+        var bytes = Encoding.UTF8.GetBytes(name);
+        for (int i = 0; i + 30 + bytes.Length <= package.Length; i++)
+            if (BitConverter.ToUInt32(package, i) == 0x04034b50 && BitConverter.ToUInt16(package, i + 26) == bytes.Length
+                && package.AsSpan(i + 30, bytes.Length).SequenceEqual(bytes))
+                return i + 30 + bytes.Length + BitConverter.ToUInt16(package, i + 28);
+        throw new InvalidOperationException(name + " not found");
+    }
+
+    /// <summary>Asserts <see cref="SamePackageExceptTimes"/>; the failure names the first differing part and offset.</summary>
+    internal static void AssertSamePackage(byte[] a, byte[] b, string message)
+    {
+        var difference = PackageCompare.Difference(a, b);
+        AssertTrue(difference is null, message + ": " + difference);
     }
 
     /// <summary>
@@ -241,7 +292,7 @@ public static class EncryptedSaveTests
             AssertTrue(output.Seen.Count == 1 && output.Seen[0].StartsWith("chuvadi_docs_") && output.Seen[0].EndsWith(".tmp"),
                 "one spool file in the folder while writing: " + string.Join(", ", output.Seen));
             AssertTrue(Directory.GetFileSystemEntries(folder).Length == 0, "the folder is empty after the save");
-            AssertTrue(SamePackageExceptTimes(Decrypt(output.ToArray(), Pw), Plain(d)), "decrypted package is the plain package");
+            AssertSamePackage(Decrypt(output.ToArray(), Pw), Plain(d), "decrypted package is the plain package");
         });
 
         Check("EncryptionOptions.TempDirectory null (the default): the spool goes to the system temp folder, as before", () =>
@@ -320,8 +371,8 @@ public static class EncryptedSaveTests
             var viaFile = new MemoryStream();
             d.SaveTo(viaFile, new EncryptionOptions { Password = Pw, SpinCount = 1000, TempDirectory = folder });
             var mem = Decrypt(output.ToArray(), Pw);
-            AssertTrue(SamePackageExceptTimes(mem, Decrypt(viaFile.ToArray(), Pw)), "same package as the File route");
-            AssertTrue(SamePackageExceptTimes(mem, Plain(d)), "and as the plain save");
+            AssertSamePackage(mem, Decrypt(viaFile.ToArray(), Pw), "same package as the File route");
+            AssertSamePackage(mem, Plain(d), "and as the plain save");
             OutsideTools.CheckWithMsoffcrypto(output.ToArray(), Pw, Plain(d), "memory spool");
         });
 
@@ -336,7 +387,7 @@ public static class EncryptedSaveTests
             d.SaveTo(path, enc);
             AssertTrue(!Directory.Exists(missing), "the folder was not created");
             AssertTrue(Document.Load(new MemoryStream(output.ToArray()), Pw).GetText() == d.GetText() && Document.Load(path, Pw).GetText() == d.GetText(), "both open with the password");
-            AssertTrue(SamePackageExceptTimes(Decrypt(File.ReadAllBytes(path), Pw), Plain(d)), "the path save holds the plain package");
+            AssertSamePackage(Decrypt(File.ReadAllBytes(path), Pw), Plain(d), "the path save holds the plain package");
         });
     }
 
@@ -377,26 +428,6 @@ public static class EncryptedSaveTests
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
-    }
-
-    private static bool MaskZipTimes(byte[] zip)
-    {
-        int eocd = -1;
-        for (int i = zip.Length - 22; i >= Math.Max(0, zip.Length - 22 - 65535); i--)
-            if (BitConverter.ToUInt32(zip, i) == 0x06054b50) { eocd = i; break; }
-        if (eocd < 0) return false;
-        int count = BitConverter.ToUInt16(zip, eocd + 10);
-        int cd = (int)BitConverter.ToUInt32(zip, eocd + 16);
-        for (int n = 0; n < count; n++)
-        {
-            if (BitConverter.ToUInt32(zip, cd) != 0x02014b50) return false;
-            int local = (int)BitConverter.ToUInt32(zip, cd + 42);
-            if (BitConverter.ToUInt32(zip, local) != 0x04034b50) return false;
-            Array.Clear(zip, cd + 12, 4);      // central directory: last-mod time and date
-            Array.Clear(zip, local + 10, 4);   // local header: last-mod time and date
-            cd += 46 + BitConverter.ToUInt16(zip, cd + 28) + BitConverter.ToUInt16(zip, cd + 30) + BitConverter.ToUInt16(zip, cd + 32);
-        }
-        return true;
     }
 
     /// <summary>The spool's backing file stream, found by reflection (test only).</summary>
