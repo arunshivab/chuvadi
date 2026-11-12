@@ -275,10 +275,10 @@ internal static class TableXml
             switch (sub.LocalName)
             {
                 case "tblPr":
-                    using (var tp = sub.ReadSubtree()) ReadTablePr(tp, format);
+                    using (var tp = sub.LightSubtree()) ReadTablePr(tp, format);
                     break;
                 case "tblGrid":
-                    using (var g = sub.ReadSubtree())
+                    using (var g = sub.LightSubtree())
                     {
                         while (g.Read())
                         {
@@ -290,16 +290,16 @@ internal static class TableXml
                     }
                     break;
                 case "tr":
-                    using (var tr = sub.ReadSubtree()) rows.Add(ReadRow(tr, loadParagraph, marker));
+                    using (var tr = sub.LightSubtree()) rows.Add(ReadRow(tr, loadParagraph, marker));
                     break;
                 case "sdt":
                 case "customXml":
                     // Rows wrapped in content controls / custom XML: read the rows inside.
-                    using (var wrap = sub.ReadSubtree()) ReadWrapped(wrap, "tr", el => rows.Add(ReadRow(el, loadParagraph, marker)));
+                    using (var wrap = sub.LightSubtree()) ReadWrapped(wrap, "tr", el => rows.Add(ReadRow(el, loadParagraph, marker)));
                     break;
                 default:
                     if (marker is not null && IsRangeMarker(sub)) marker(sub);
-                    else if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
+                    else if (!sub.IsEmptyElement) using (sub.LightSubtree()) { }
                     break;
             }
         }
@@ -391,12 +391,12 @@ internal static class TableXml
                 case "tblInd": f.IndentPt = ReadWidth(r) is { Type: TableWidthType.Points } i ? i.Value : null; break;
                 case "tblBorders":
                     borders = true;
-                    using (var b = r.ReadSubtree()) f.Borders = ReadTableBorders(b);
+                    using (var b = r.LightSubtree()) f.Borders = ReadTableBorders(b);
                     break;
                 case "shd": f.Shading = FormattingXml.ReadShading(r); break;
                 case "tblLayout": f.Layout = Attr(r, "type") == "fixed" ? TableLayout.Fixed : TableLayout.Autofit; break;
                 case "tblCellMar":
-                    using (var m = r.ReadSubtree()) f.CellMargins = ReadMargins(m);
+                    using (var m = r.LightSubtree()) f.CellMargins = ReadMargins(m);
                     break;
                 case "tblLook": f.Look = ReadLook(r); break;
                 case "tblCaption": f.Caption = Attr(r, "val"); break;
@@ -404,7 +404,7 @@ internal static class TableXml
                 case "tblpPr": f.FloatingPosition = ReadFloating(r); break;
                 case "tblOverlap": f.AllowOverlap = Attr(r, "val") switch { "never" => false, "overlap" => true, _ => null }; break;
                 default:
-                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                     break;
             }
         }
@@ -425,20 +425,20 @@ internal static class TableXml
             switch (r.LocalName)
             {
                 case "trPr":
-                    using (var tp = r.ReadSubtree()) ReadRowPr(tp, row.Props);
+                    using (var tp = r.LightSubtree()) ReadRowPr(tp, row.Props);
                     break;
                 case "tc":
-                    using (var tc = r.ReadSubtree()) row.Cells.Add(ReadCell(tc, loadParagraph, marker));
+                    using (var tc = r.LightSubtree()) row.Cells.Add(ReadCell(tc, loadParagraph, marker));
                     break;
                 case "sdt":
                 case "customXml":
                     // Cells wrapped in content controls / custom XML: read the cells inside.
-                    using (var wrap = r.ReadSubtree()) ReadWrapped(wrap, "tc", el => row.Cells.Add(ReadCell(el, loadParagraph, marker)));
+                    using (var wrap = r.LightSubtree()) ReadWrapped(wrap, "tc", el => row.Cells.Add(ReadCell(el, loadParagraph, marker)));
                     break;
                 default:
                     // tblPrEx (row-level table property exceptions): not modelled.
                     if (marker is not null && IsRangeMarker(r)) marker(r);
-                    else if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    else if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                     break;
             }
         }
@@ -472,7 +472,7 @@ internal static class TableXml
                     row.Revision = RunProperties.ReadRevisionMark(r, r.LocalName == "ins" ? RevisionType.Insert : RevisionType.Delete);
                     break;
                 default:
-                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                     break;
             }
         }
@@ -489,19 +489,19 @@ internal static class TableXml
             if (r.NodeType != XmlNodeType.Element || r.Depth != childDepth) continue;
             if (DocumentLoader.IsAlternateRepresentation(r) || r.NamespaceURI != W)
             {
-                if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                 continue;
             }
             switch (r.LocalName)
             {
                 case "tcPr":
-                    using (var tp = r.ReadSubtree()) pc.Span = ReadCellPr(tp, cell);
+                    using (var tp = r.LightSubtree()) pc.Span = ReadCellPr(tp, cell);
                     break;
                 case "p":
-                    using (var p = r.ReadSubtree()) cell.Paragraphs.Add(loadParagraph(p));
+                    using (var p = r.LightSubtree()) cell.Paragraphs.Add(loadParagraph(p));
                     break;
                 case "tbl":
-                    using (var t = r.ReadSubtree()) cell.AppendNestedTable(Read(t, loadParagraph, marker));
+                    using (var t = r.LightSubtree()) cell.AppendNestedTable(Read(t, loadParagraph, marker));
                     break;
                 case "bookmarkStart":
                 case "bookmarkEnd":
@@ -513,12 +513,12 @@ internal static class TableXml
                     // sdt / customXml wrappers around cell content: keep their paragraphs' text.
                     if (!r.IsEmptyElement)
                     {
-                        using var inner = r.ReadSubtree();
+                        using var inner = r.LightSubtree();
                         while (inner.Read())
                         {
                             if (inner.NodeType == XmlNodeType.Element && inner.NamespaceURI == W && inner.LocalName == "p")
                             {
-                                using var p = inner.ReadSubtree();
+                                using var p = inner.LightSubtree();
                                 cell.Paragraphs.Add(loadParagraph(p));
                             }
                         }
@@ -545,7 +545,7 @@ internal static class TableXml
                 case "hMerge": cell.HorizontalMerge = Attr(r, "val") == "restart" ? HorizontalMerge.Restart : HorizontalMerge.Continue; break;
                 case "vMerge": cell.VerticalMerge = Attr(r, "val") == "restart" ? VerticalMerge.Restart : VerticalMerge.Continue; break;
                 case "tcBorders":
-                    using (var b = r.ReadSubtree()) cell.Borders = ReadCellBorders(b);
+                    using (var b = r.LightSubtree()) cell.Borders = ReadCellBorders(b);
                     break;
                 case "shd":
                     var shd = FormattingXml.ReadShading(r);
@@ -553,7 +553,7 @@ internal static class TableXml
                     break;
                 case "noWrap": cell.NoWrap = RunProperties.OnOff(r); break;
                 case "tcMar":
-                    using (var m = r.ReadSubtree()) cell.Margins = ReadMargins(m);
+                    using (var m = r.LightSubtree()) cell.Margins = ReadMargins(m);
                     break;
                 case "textDirection": cell.TextDirection = ParseTextDirection(Attr(r, "val")); break;
                 case "tcFitText": cell.FitText = RunProperties.OnOff(r); break;
@@ -568,7 +568,7 @@ internal static class TableXml
                     break;
                 case "hideMark": cell.HideMark = RunProperties.OnOff(r); break;
                 default:
-                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                     break;
             }
         }
@@ -589,17 +589,17 @@ internal static class TableXml
             if (wrap.NodeType != XmlNodeType.Element || wrap.Depth != childDepth || wrap.NamespaceURI != W) continue;
             if (wrap.LocalName == target)
             {
-                using var el = wrap.ReadSubtree();
+                using var el = wrap.LightSubtree();
                 read(el);
             }
             else if (wrap.LocalName is "sdtContent" or "sdt" or "customXml")
             {
-                using var inner = wrap.ReadSubtree();
+                using var inner = wrap.LightSubtree();
                 ReadWrapped(inner, target, read);
             }
             else if (!wrap.IsEmptyElement)
             {
-                using (wrap.ReadSubtree()) { } // sdtPr, sdtEndPr, customXmlPr
+                using (wrap.LightSubtree()) { } // sdtPr, sdtEndPr, customXmlPr
             }
         }
     }

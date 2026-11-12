@@ -174,7 +174,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "tbl")
                 {
                     DocTable table;
-                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, body);
+                    using (var sub = r.LightSubtree()) table = LoadTable(sub, body);
                     r.Read();
                     doc.AddBlock(table);
                     continue;
@@ -187,14 +187,14 @@ internal static class DocumentLoader
                 }
                 if (r.LocalName == "sectPr")
                 {
-                    using (var sub = r.ReadSubtree()) bodySectPr = SectionXml.Read(sub);
+                    using (var sub = r.LightSubtree()) bodySectPr = SectionXml.Read(sub);
                     r.Read();
                     continue;
                 }
                 if (r.LocalName == "p" && IsBodyLevel(r))
                 {
                     Paragraph p;
-                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, body);
+                    using (var sub = r.LightSubtree()) p = LoadParagraph(sub, body);
                     r.Read();
                     doc.AddBlock(p);
                     continue;
@@ -212,10 +212,10 @@ internal static class DocumentLoader
         return doc;
     }
 
-    private static string Resolve(string sourceUri, string target)
+    internal static string Resolve(string sourceUri, string target)
         => target.StartsWith('/') ? target : sourceUri[..(sourceUri.LastIndexOf('/') + 1)] + target;
 
-    private static void ReadSettings(XmlReader r, Document doc)
+    internal static void ReadSettings(XmlReader r, Document doc)
     {
         if (!r.Read()) return;
         r.MoveToContent();
@@ -232,10 +232,10 @@ internal static class DocumentLoader
                 case "updateFields": doc.UpdateFieldsOnOpen = RunProperties.OnOff(r) == true; break;
                 case "trackRevisions": doc.TrackRevisions = RunProperties.OnOff(r) == true; break;
                 case "footnotePr":
-                    using (var sub = r.ReadSubtree()) NotesXml.Read(sub, doc.FootnoteProperties);
+                    using (var sub = r.LightSubtree()) NotesXml.Read(sub, doc.FootnoteProperties);
                     continue;
                 case "endnotePr":
-                    using (var sub = r.ReadSubtree()) NotesXml.Read(sub, doc.EndnoteProperties);
+                    using (var sub = r.LightSubtree()) NotesXml.Read(sub, doc.EndnoteProperties);
                     continue;
                 case "embedTrueTypeFonts": doc.EmbedTrueTypeFonts = RunProperties.OnOff(r) == true; break;
                 case "saveSubsetFonts": doc.SaveSubsetFonts = RunProperties.OnOff(r) == true; break;
@@ -247,7 +247,7 @@ internal static class DocumentLoader
                 // D-296: compatibility, theme-font languages and the layout/field settings.
                 case "compat":
                     if (!r.IsEmptyElement)
-                        using (var sub = r.ReadSubtree()) ReadCompat(sub, doc.Compatibility);
+                        using (var sub = r.LightSubtree()) ReadCompat(sub, doc.Compatibility);
                     continue;
                 case "themeFontLang":
                     doc.ThemeFontLanguages.Latin = NonEmpty(r.GetAttribute("val", W));
@@ -288,7 +288,7 @@ internal static class DocumentLoader
                 case "decimalSymbol": doc.DecimalSymbol = r.GetAttribute("val", W); break;
                 case "listSeparator": doc.ListSeparator = r.GetAttribute("val", W); break;
             }
-            if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+            if (!r.IsEmptyElement) using (r.LightSubtree()) { }
         }
     }
 
@@ -363,7 +363,7 @@ internal static class DocumentLoader
                 int index = Array.IndexOf(CompatibilityOptions.FlagElements, r.LocalName);
                 if (index >= 0) compat.SetFlag(index, RunProperties.OnOff(r) == true);
             }
-            if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+            if (!r.IsEmptyElement) using (r.LightSubtree()) { }
         }
     }
 
@@ -625,7 +625,7 @@ internal static class DocumentLoader
                 if (!int.TryParse(r.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) || loadContext.Comments.ContainsKey(id)
                     || loadContext.Comments.Count >= 65_536)
                 {
-                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                     continue;
                 }
                 var mark = RunProperties.ReadRevisionMark(r, RevisionType.Insert); // author and date
@@ -634,7 +634,7 @@ internal static class DocumentLoader
                 doc.Comments.AddLoaded(c);
                 if (r.IsEmptyElement) continue;
                 var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
-                using (var n = r.ReadSubtree())
+                using (var n = r.LightSubtree())
                 {
                     n.Read();
                     int childDepth = n.Depth + 1;
@@ -647,13 +647,13 @@ internal static class DocumentLoader
                             {
                                 var paraId = n.GetAttribute("paraId", W14);
                                 if (paraId is not null) c.LoadedParaId = paraId; // the last paragraph's id names the comment
-                                using (var sub = n.ReadSubtree()) c.Paragraphs.Add(LoadParagraph(sub, story));
+                                using (var sub = n.LightSubtree()) c.Paragraphs.Add(LoadParagraph(sub, story));
                                 more = n.Read();
                                 continue;
                             }
                             if (n.LocalName == "tbl")
                             {
-                                using (var sub = n.ReadSubtree()) c.AppendTable(LoadTable(sub, story));
+                                using (var sub = n.LightSubtree()) c.AppendTable(LoadTable(sub, story));
                                 more = n.Read();
                                 continue;
                             }
@@ -718,7 +718,7 @@ internal static class DocumentLoader
                 if (!normal || !int.TryParse(r.GetAttribute("id", W), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) || byId.ContainsKey(id)
                     || byId.Count >= 65_536)
                 {
-                    if (!r.IsEmptyElement) using (r.ReadSubtree()) { }
+                    if (!r.IsEmptyElement) using (r.LightSubtree()) { }
                     continue;
                 }
                 var note = new Note(kind) { LoadedId = id };
@@ -726,7 +726,7 @@ internal static class DocumentLoader
                 collection.AddLoaded(note);
                 if (r.IsEmptyElement) continue;
                 var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
-                using (var n = r.ReadSubtree())
+                using (var n = r.LightSubtree())
                 {
                     n.Read();
                     int childDepth = n.Depth + 1;
@@ -737,13 +737,13 @@ internal static class DocumentLoader
                         {
                             if (n.LocalName == "p")
                             {
-                                using (var sub = n.ReadSubtree()) note.Paragraphs.Add(LoadParagraph(sub, story));
+                                using (var sub = n.LightSubtree()) note.Paragraphs.Add(LoadParagraph(sub, story));
                                 more = n.Read();
                                 continue;
                             }
                             if (n.LocalName == "tbl")
                             {
-                                using (var sub = n.ReadSubtree()) note.AppendTable(LoadTable(sub, story));
+                                using (var sub = n.LightSubtree()) note.AppendTable(LoadTable(sub, story));
                                 more = n.Read();
                                 continue;
                             }
@@ -791,7 +791,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "tbl")
                 {
                     DocTable table;
-                    using (var sub = r.ReadSubtree()) table = LoadTable(sub, story);
+                    using (var sub = r.LightSubtree()) table = LoadTable(sub, story);
                     r.Read();
                     content.AppendTable(table);
                     continue;
@@ -805,7 +805,7 @@ internal static class DocumentLoader
                 if (r.LocalName == "p")
                 {
                     Paragraph p;
-                    using (var sub = r.ReadSubtree()) p = LoadParagraph(sub, story);
+                    using (var sub = r.LightSubtree()) p = LoadParagraph(sub, story);
                     r.Read();
                     content.Add(p);
                     continue;
@@ -830,7 +830,7 @@ internal static class DocumentLoader
             var fill = r.GetAttribute("fillcolor");
             string? text = null, font = null;
             double opacity = 1;
-            using (var sub = r.ReadSubtree())
+            using (var sub = r.LightSubtree())
             {
                 while (sub.Read())
                 {
@@ -902,7 +902,7 @@ internal static class DocumentLoader
     /// A well-formedness error met while a nested subtree reader is disposed leaves the reader in
     /// the Error state without throwing; report it like any other malformed part.
     /// </summary>
-    private static void EnsureWellFormed(XmlReader r, string partUri)
+    internal static void EnsureWellFormed(XmlReader r, string partUri)
     {
         if (r.ReadState == ReadState.Error)
             throw new XmlException($"Part '{partUri}' is not well-formed XML.");
@@ -911,23 +911,32 @@ internal static class DocumentLoader
     /// <summary>Links the numIds read from w:numPr (paragraphs and styles) to the loaded list instances.</summary>
     private static void LinkNumbering(Document doc)
     {
-        foreach (var p in DocumentSerializer.AllParagraphs(doc))
+        foreach (var p in DocumentSerializer.AllParagraphs(doc)) LinkParagraphNumbering(doc, p);
+        LinkStyleNumbering(doc);
+    }
+
+    /// <summary>Links one paragraph's numId (w:numPr) to the document's list instances (Load, and DocxReader.FormattedParagraphs).</summary>
+    internal static void LinkParagraphNumbering(Document doc, Paragraph p)
+    {
+        if (p.FormatChange is { OldNumbering: (int oldId and not 0, _) } pfc && doc.Numbering.TryGetList(oldId, out var oldList))
+            pfc.OldList = oldList;
+        if (p.LoadedNumId is not int id)
         {
-            if (p.FormatChange is { OldNumbering: (int oldId and not 0, _) } pfc && doc.Numbering.TryGetList(oldId, out var oldList))
-                pfc.OldList = oldList;
-            if (p.LoadedNumId is not int id)
-            {
-                // w:numPr with only w:ilvl: the level for numbering that comes from the style.
-                if (p.LoadedListLevelExplicit) { p.StyleListLevel = p.ListLevel; p.ListLevel = 0; }
-                p.LoadedListLevelExplicit = false;
-                continue;
-            }
-            p.LoadedNumId = null;
+            // w:numPr with only w:ilvl: the level for numbering that comes from the style.
+            if (p.LoadedListLevelExplicit) { p.StyleListLevel = p.ListLevel; p.ListLevel = 0; }
             p.LoadedListLevelExplicit = false;
-            if (id == 0) p.NumberingSuppressed = true;
-            else if (doc.Numbering.TryGetList(id, out var list)) p.ListInstance = list;
-            // An unknown numId numbers nothing in Word either; it is dropped.
+            return;
         }
+        p.LoadedNumId = null;
+        p.LoadedListLevelExplicit = false;
+        if (id == 0) p.NumberingSuppressed = true;
+        else if (doc.Numbering.TryGetList(id, out var list)) p.ListInstance = list;
+        // An unknown numId numbers nothing in Word either; it is dropped.
+    }
+
+    /// <summary>Links the styles' numIds to the document's list instances.</summary>
+    internal static void LinkStyleNumbering(Document doc)
+    {
         foreach (var s in doc.Styles)
         {
             if (s.LoadedNumId is not int id) continue;
@@ -1107,7 +1116,7 @@ internal static class DocumentLoader
             if (sub.NodeType != XmlNodeType.Element) continue;
             if (IsAlternateRepresentation(sub))
             {
-                using (sub.ReadSubtree()) { } // mc:Fallback duplicates mc:Choice
+                using (sub.LightSubtree()) { } // mc:Fallback duplicates mc:Choice
                 continue;
             }
             if (sub.NamespaceURI != W) continue;
@@ -1126,7 +1135,7 @@ internal static class DocumentLoader
                     var insertion = mark.Type == RevisionType.Delete
                         ? (revision is { Type: RevisionType.Insert } ? revision : outerInsertion)
                         : null;
-                    using (var rv = sub.ReadSubtree())
+                    using (var rv = sub.LightSubtree())
                     {
                         rv.Read();
                         LoadParagraphContent(rv, p, ctx, link, mark, insertion);
@@ -1135,8 +1144,8 @@ internal static class DocumentLoader
                 }
                 case "pPr":
                     if (link is null)
-                        using (var pPr = sub.ReadSubtree()) ParagraphProperties.Read(pPr, p);
-                    else using (sub.ReadSubtree()) { }
+                        using (var pPr = sub.LightSubtree()) ParagraphProperties.Read(pPr, p);
+                    else using (sub.LightSubtree()) { }
                     break;
                 case "bookmarkStart":
                 case "bookmarkEnd":
@@ -1162,7 +1171,7 @@ internal static class DocumentLoader
                     var tooltip = sub.GetAttribute("tooltip", W);
                     if (sub.IsEmptyElement) break;
                     var inner = url is null && anchorOnly is null ? link : new LinkInfo(url, anchorOnly, tooltip);
-                    using (var h = sub.ReadSubtree())
+                    using (var h = sub.LightSubtree())
                     {
                         h.Read();
                         LoadParagraphContent(h, p, ctx, inner, revision, outerInsertion);
@@ -1170,7 +1179,7 @@ internal static class DocumentLoader
                     break;
                 }
                 case "r":
-                    using (var r = sub.ReadSubtree()) LoadRun(r, p, ctx, link, revision, outerInsertion);
+                    using (var r = sub.LightSubtree()) LoadRun(r, p, ctx, link, revision, outerInsertion);
                     break;
                 case "fldSimple":
                 {
@@ -1181,7 +1190,7 @@ internal static class DocumentLoader
                         TextFormat? fieldFormat = null;
                         string? fieldStyle = null;
                         RevisionMark? fieldRevision = revision;
-                        using (var fs = sub.ReadSubtree())
+                        using (var fs = sub.LightSubtree())
                         {
                             bool adv = true;
                             while (true)
@@ -1191,7 +1200,7 @@ internal static class DocumentLoader
                                 if (fs.EOF) break;
                                 if (fs.NodeType != XmlNodeType.Element || fs.NamespaceURI != W) continue;
                                 if (fs.LocalName == "rPr" && fieldFormat is null)
-                                    using (var rp = fs.ReadSubtree()) fieldFormat = RunProperties.Read(rp, out fieldStyle);
+                                    using (var rp = fs.LightSubtree()) fieldFormat = RunProperties.Read(rp, out fieldStyle);
                                 else if (fs.LocalName is "t" or "delText") { result.Append(fs.ReadElementContentAsString()); adv = false; }
                                 else if (fs.LocalName is "ins" or "del" or "moveTo" or "moveFrom" && fs.Depth > 0)
                                 {
@@ -1214,7 +1223,7 @@ internal static class DocumentLoader
                     };
                     p.AddRun(Run.FieldMarkRun(field, FieldMarkType.Begin));
                     if (!sub.IsEmptyElement)
-                        using (var fs = sub.ReadSubtree())
+                        using (var fs = sub.LightSubtree())
                         {
                             fs.Read();
                             LoadParagraphContent(fs, p, ctx, link, revision, outerInsertion);
@@ -1348,13 +1357,13 @@ internal static class DocumentLoader
             {
                 if (r.LocalName == "p")
                 {
-                    using (var sub = r.ReadSubtree()) box.Paragraphs.Add(LoadParagraph(sub, story));
+                    using (var sub = r.LightSubtree()) box.Paragraphs.Add(LoadParagraph(sub, story));
                     more = r.Read();
                     continue;
                 }
                 if (r.LocalName == "tbl")
                 {
-                    using (var sub = r.ReadSubtree()) box.AppendTable(LoadTable(sub, story));
+                    using (var sub = r.LightSubtree()) box.AppendTable(LoadTable(sub, story));
                     more = r.Read();
                     continue;
                 }
@@ -1408,16 +1417,49 @@ internal static class DocumentLoader
             }
     }
 
+    /// <summary>
+    /// A run's text as it is read: most runs have one <c>w:t</c>, which is kept as the string read, so no
+    /// builder is needed; a second piece (or a tab, break or special character) switches to a builder.
+    /// </summary>
+    private struct RunText
+    {
+        private string? _one;
+        private System.Text.StringBuilder? _many;
+
+        public readonly int Length => _many?.Length ?? _one?.Length ?? 0;
+
+        public void Append(string value)
+        {
+            if (_many is not null) _many.Append(value);
+            else if (_one is null) _one = value;
+            else { _many = new System.Text.StringBuilder(_one.Length + value.Length + 16).Append(_one).Append(value); _one = null; }
+        }
+
+        public void Append(char c)
+        {
+            if (_many is null) { _many = new System.Text.StringBuilder().Append(_one); _one = null; }
+            _many.Append(c);
+        }
+
+        public readonly override string ToString() => _many?.ToString() ?? _one ?? "";
+
+        public void Clear()
+        {
+            _one = null;
+            _many?.Clear();
+        }
+    }
+
     private static void LoadRunCore(XmlReader sub, Paragraph p, StoryContext ctx, LinkInfo? link, ref RunFormatChange? formatChange)
     {
         var images = ctx.Images;
         var format = TextFormat.None;
         string? charStyle = null;
-        var text = new System.Text.StringBuilder();
+        var text = new RunText();
         if (!sub.Read()) return; // positioned on <w:r>
 
         bool sawText = false; // an empty <w:t/> is still a run (kept for exact round-trip)
-        var acTaken = new System.Collections.Generic.Dictionary<int, bool>();
+        System.Collections.Generic.Dictionary<int, bool>? acTaken = null; // made on the first mc:AlternateContent
         void Flush()
         {
             if (text.Length == 0 && !sawText) return;
@@ -1448,13 +1490,13 @@ internal static class DocumentLoader
             // else the Fallback — never both (they carry the same content in two forms).
             if (sub.NamespaceURI == Mc && sub.LocalName == "AlternateContent")
             {
-                acTaken[sub.Depth] = false;
+                (acTaken ??= new())[sub.Depth] = false;
                 continue;
             }
             if (sub.NamespaceURI == Mc && sub.LocalName is "Choice" or "Fallback")
             {
                 int parent = sub.Depth - 1;
-                bool taken = acTaken.TryGetValue(parent, out var t) && t;
+                bool taken = acTaken is not null && acTaken.TryGetValue(parent, out var t) && t;
                 bool use = !taken && (sub.LocalName == "Fallback" || UnderstoodRequires(sub.GetAttribute("Requires")));
                 if (!use)
                 {
@@ -1462,11 +1504,11 @@ internal static class DocumentLoader
                     // position older readers use: keep it as the picture's point offsets.
                     if (sub.LocalName == "Fallback" && p.Runs.Count > 0 && p.Runs[^1].Image?.Position is { } pp
                         && (pp.HorizontalOffsetPercent is not null || pp.VerticalOffsetPercent is not null))
-                        using (var fb = sub.ReadSubtree()) ReadFallbackOffsets(fb, pp);
-                    else using (sub.ReadSubtree()) { }
+                        using (var fb = sub.LightSubtree()) ReadFallbackOffsets(fb, pp);
+                    else using (sub.LightSubtree()) { }
                     continue;
                 }
-                acTaken[parent] = true;
+                (acTaken ??= new())[parent] = true;
                 continue;
             }
 
@@ -1476,7 +1518,7 @@ internal static class DocumentLoader
                 // properties); other drawings keep their text, flattened.
                 Flush();
                 var loose = new System.Text.StringBuilder(); // text outside wp:inline / wp:anchor (non-standard drawings)
-                using (var d = sub.ReadSubtree())
+                using (var d = sub.LightSubtree())
                 {
                     d.Read();
                     int depth = d.Depth + 1;
@@ -1522,7 +1564,7 @@ internal static class DocumentLoader
                 // Text boxes / shapes: keep their words, flattened (geometry is outside the model).
                 Flush();
                 if (NormalText()) AppendEmbeddedText(sub, p);
-                else using (sub.ReadSubtree()) { }
+                else using (sub.LightSubtree()) { }
                 continue;
             }
             if (sub.NamespaceURI != W) continue;
@@ -1533,7 +1575,7 @@ internal static class DocumentLoader
                     // rPr belongs first in a run; if (invalidly) text came before it, that text
                     // keeps the formatting it was read with.
                     Flush();
-                    using (var rPr = sub.ReadSubtree()) format = RunProperties.Read(rPr, out charStyle, out formatChange, out _);
+                    using (var rPr = sub.LightSubtree()) format = RunProperties.Read(rPr, out charStyle, out formatChange, out _);
                     break;
                 case "t":
                 case "delText":
@@ -1574,7 +1616,7 @@ internal static class DocumentLoader
                         if (ctx.Fields.Count >= 64 || ctx.IgnoredFields > 0)
                         {
                             ctx.IgnoredFields++; // absurd nesting: the outer 64 fields are kept
-                            if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
+                            if (!sub.IsEmptyElement) using (sub.LightSubtree()) { }
                             break;
                         }
                         bool inInstruction = ctx.Fields.Count > 0 && (ctx.Fields[^1].InInstruction || !ctx.Fields[^1].Separated);
@@ -1762,7 +1804,7 @@ internal static class DocumentLoader
     private static void AppendEmbeddedText(XmlReader sub, Paragraph p)
     {
         var sb = new System.Text.StringBuilder();
-        using (var inner = sub.ReadSubtree())
+        using (var inner = sub.LightSubtree())
         {
             bool advance = true;
             while (true)
@@ -1826,7 +1868,7 @@ internal static class DocumentLoader
         },
     };
 
-    private static DocTable LoadTable(XmlReader sub, StoryContext story)
+    internal static DocTable LoadTable(XmlReader sub, StoryContext story)
         => TableXml.Read(sub, s => LoadParagraph(s, story), m =>
         {
             if (BookmarkMarker(m, story) is { } marker) story.Pending.Add(marker);

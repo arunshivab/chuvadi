@@ -1129,10 +1129,12 @@ internal static class DocumentSerializer
     /// <summary>A run's rPr, with its tracked formatting change (w:rPrChange) when it has one.</summary>
     private static void WriteRunPr(XmlWriter x, Run run, string? characterStyleId, PartContext? ctx)
     {
+        // N4 (D-343): a caller-built run with a complex-script font and complex-script text gets w:cs, so Word uses that font.
+        bool implied = ComplexScriptText.ImpliesFlag(run.Format, run.TextContent);
         if (run.FormatChange is { } change && ctx is not null)
             RunProperties.Write(x, run.Format, characterStyleId, null,
-                w => ParagraphProperties.WriteRunFormatChange(w, change, ctx.State.NextRevisionId()));
-        else RunProperties.Write(x, run.Format, characterStyleId);
+                w => ParagraphProperties.WriteRunFormatChange(w, change, ctx.State.NextRevisionId()), implied);
+        else RunProperties.Write(x, run.Format, characterStyleId, null, null, implied);
     }
 
     /// <summary>The instruction runs of a field: text as w:instrText, nested fields as complete fields with their cached result.</summary>
@@ -1640,8 +1642,15 @@ internal static class DocumentSerializer
         foreach (var p in AllParagraphsCore(doc))
         {
             yield return p;
+            if (!HasTextBox(p)) continue; // nothing to walk (and no iterator per paragraph)
             foreach (var inner in TextBoxParagraphs(p, 0, seenBoxes)) yield return inner;
         }
+    }
+
+    private static bool HasTextBox(Paragraph p)
+    {
+        foreach (var r in p.Runs) if (r.TextBox is not null) return true;
+        return false;
     }
 
     /// <summary>Paragraphs inside the text boxes of <paramref name="p"/> (and of tables in them), each box once, depth-guarded.</summary>

@@ -1,5 +1,49 @@
 # Chuvadi.Docs — Changelog
 
+## 2.2.0 (2026-11-12)
+
+Formatted streaming reads on `DocxReader` (D-336, D-340). `Document.Load` about twice as fast and with half the allocations, with identical results (DOC-10). A built run with a complex-script font and complex-script text is marked `w:cs`, so Word shows that font (DOC-14 B, D-343).
+
+### New
+
+- **`DocxReader.FormattedParagraphs()`** (and an overload taking a `CancellationToken`) streams every paragraph with its runs and their effective formatting, as `DocxFormattedParagraph` items:
+  - `Paragraph`: the paragraph as `Document.Load` builds it (the same loader code);
+  - `RunFormats`: one effective `TextFormat` per run, in order, exactly as `Document.GetEffectiveRunFormat` resolves it (defaults, table style, paragraph style chain, character style chain, direct formatting);
+  - `ParagraphFormat`: the effective paragraph format, list indents included, as `Document.GetEffectiveParagraphFormat`;
+  - `Part` (the part name) and `Cell` (`TableCellRef`: table, row and grid column; null outside tables).
+  
+  Order: the body in document order with the paragraphs of table cells (nested tables included) in place, then the headers, then the footers (`IncludeHeadersAndFooters`). Footnotes, endnotes and comments are not read in this version, so their references are not among the runs. Only one paragraph, or one top-level table, is held at a time; the styles, numbering, theme and settings parts are read on the first call and kept for the reader's life, and count towards that call's `MaxElements`. A missing or broken one of those parts is listed in `SkippedParts` and the defaults are used without it. Limits, cancellation and the error contract are the reader's. **Why:** a text viewer (Anjal Mail) can show bold, italic, sizes and colours without loading the whole document.
+- **`DocxReader.GetThemeFontName(ThemeFont)` and `GetThemeColorHex(ThemeColor, tint, shade)`**: the same lookups as `Document`'s, from the file's theme and settings (read once), for the theme references in the effective formats.
+
+### Performance
+
+- **`Document.Load` is about twice as fast** on large text-heavy files, with the same document as before (DOC-10, D-98). Measured on 2 cores, .NET 10, warm, on Word-like files of 11–28 MB:
+
+  | File | 2.1.0 | 2.2.0 |
+  |---|---|---|
+  | text and tables, 11 MB (66 MB of XML) | 6.1 s | 3.0 s |
+  | dense runs, 11 MB (154 MB of XML) | 11.7 s | 6.4 s |
+  | Word-like (revision ids, proofing marks), 28 MB | 8.7 s | 4.9 s |
+
+  Allocations per Load fell from about 2.2 GB to 0.95 GB on the first file. The model it builds (0.55–0.9 GB on these files) is unchanged, so the time left is mostly the garbage collector's.
+  - **What changed:** Load reads its body, table, row, cell, paragraph, run and property subtrees with an internal light subtree reader instead of `XmlReader.ReadSubtree`, whose namespace bookkeeping per element and per nesting level was half the cost. It moves through the same nodes, reports the same values and leaves the outer reader in the same place (a test drives both readers through 6,000 random read sequences, including damaged XML and element limits, and requires the same observations at every step). The places that keep XML verbatim (form-field data and drawing shape properties) still capture it through the BCL reader, and the captured XML is the same (also checked on files built with unusual namespace prefixes). Also: no hash sets for table cells without nested tables, no text-box walk for paragraphs without text boxes, and no dictionary or text builder for runs that do not need one.
+  - **Proof of the same result:** every output of the full gate matches 2.1.0's: the 62 Layout previews byte for byte, and all Docs and Conversion outputs apart from save times and salts, except the spin-count fixture (measured on each run) and the three Tamil runs of `text-tamil.docx`, which gain `<w:cs/>` from the change below. And 382 test documents loaded and saved with 2.1.0 and with 2.2.0 give the same packages, with the same text and skipped parts; 183 damaged ones fail with the same exceptions.
+### Behaviour changes
+
+- **A run you build with a complex-script font and complex-script text is now saved with `<w:cs/>`** (DOC-14 B, N4, D-343). Word shows `ComplexScriptFont` only for runs marked complex script: a Tamil run with `Font = "Nirmala UI"` and `ComplexScriptFont = "Latha"` showed in Nirmala UI in Word, and in Latha once marked (Arun's Word check, 11 Nov 2026).
+  - **When:** the run's format was built in code (`MirrorToComplexScript`, the default for formats you build), `ComplexScriptFont` is set (directly or by `FontForAllScripts`), `ComplexScript` is unset, and the run's text has a character in one of the fixed Unicode blocks listed in the README (**Complex-script runs**): Hebrew, Arabic and its supplements and presentation forms, Syriac, Thaana, NKo, Samaritan, Mandaic, the Indic scripts (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala, Vedic Extensions, Devanagari Extended, Tamil Supplement), Thai, Lao, Tibetan, Myanmar, Khmer and Mongolian.
+  - **What changes:** only the saved `w:rPr` of such runs (one `<w:cs/>`). The whole run is marked, so in a run mixing Tamil and English, Word uses the complex-script font, bold, italic and size for all of it; with mirroring on (the default), the complex-script bold, italic and size equal the Latin ones unless you set them. Runs with only Latin, Greek, Cyrillic or CJK text, and runs without a complex-script font, are written as before.
+  - **Unchanged:** loaded documents (their formats have mirroring off: a load and save writes what the file had); `ComplexScript = false` (no flag) and `true` (the flag, as before); `DocxTemplate.Fill`.
+
+### Tests
+
+- **The package comparison ignores the save clock** (D-321, N1). Two saves of one document either side of a second boundary differ in `docProps/core.xml` (`dcterms:created` and `dcterms:modified` are the time of the save, to the second); that made `Suite_UntrustedInput` fail on a macOS runner. The comparison now checks the packages entry by entry through the central directory: names, order, every header field, the compressed data and the data descriptors byte for byte, except that `core.xml` is inflated and compared with only those two dates masked. A difference names the part and the offset, for example "differs in word/document.xml at byte 7 of its data". New checks: a save across a second boundary compares equal; a changed byte, data descriptors and a changed `dcterms:title` are still caught.
+- New groups: `SubtreeReader` (the light reader against `ReadSubtree`) and `FormattedParagraphs` (equivalence with `Document.Load` plus `GetEffectiveRunFormat` on a hand-built document covering every resolution level and on every .docx the other groups write; order; theme lookups; skipped parts; limits, cancellation and errors; memory), each with an xUnit fact.
+
+### Documentation
+
+- README, **Read documents:** formatted text without loading the whole document; the reader's new members in **Errors** and **Untrusted input**.
+
 ## 2.1.0 (2026-11-10)
 
 Limits for untrusted input, and cancellation for the reader's later reads (D-281, D-284). The settings model, theme fonts and colours, and the in-memory spool for encrypted saves (D-296, D-299). Damaged encrypted containers and legacy binary files are format errors (D-293, D-300). `Document.SkippedParts` (D-310).

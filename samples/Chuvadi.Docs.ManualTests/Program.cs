@@ -52,6 +52,9 @@ public static class Program
             ("Theme", ThemeTests.Run),
             ("DamagedEncrypted", DamagedEncryptedTests.Run),
             ("LoadSkippedParts", LoadSkippedPartsTests.Run),
+            ("SubtreeReader", SubtreeReaderTests.Run),
+            ("ComplexScriptFlag", ComplexScriptFlagTests.Run),
+            ("FormattedParagraphs", FormattedParagraphsTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

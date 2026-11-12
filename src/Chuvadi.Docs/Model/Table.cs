@@ -202,6 +202,9 @@ public sealed class TableRow
     /// <summary>The cell at 0-based <paramref name="columnIndex"/>.</summary>
     public TableCell Cell(int columnIndex) => CellAt(columnIndex);
 
+    /// <summary>The cell at grid column <paramref name="i"/> when the row has one there; null for a slot no cell starts in (nothing is created).</summary>
+    internal TableCell? CellIfPresent(int i) => _cells[i];
+
     internal TableCell CellAt(int i)
     {
         if (i < 0 || i >= _cells.Length) throw new ArgumentOutOfRangeException(nameof(i));
@@ -296,6 +299,12 @@ public sealed class TableCell
         get
         {
             var list = new List<object>(Paragraphs.Count + _nested.Count);
+            if (_nested.Count == 0)
+            {
+                // No nested tables: the content is the paragraphs, in order (the common case; no sets needed).
+                foreach (var p in Paragraphs) list.Add(p);
+                return list;
+            }
             var present = new HashSet<Paragraph>(ReferenceEqualityComparer.Instance);
             foreach (var p in Paragraphs) present.Add(p);
             foreach (var (after, t) in _nested) if (after is null) list.Add(t);

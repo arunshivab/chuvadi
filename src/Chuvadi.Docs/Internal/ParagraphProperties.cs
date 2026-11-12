@@ -212,7 +212,7 @@ internal static class ParagraphProperties
             if (sub.NodeType != XmlNodeType.Element || sub.Depth != childDepth) continue;
             if (sub.NamespaceURI != W)
             {
-                if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
+                if (!sub.IsEmptyElement) using (sub.LightSubtree()) { }
                 continue;
             }
             switch (sub.LocalName)
@@ -280,20 +280,20 @@ internal static class ParagraphProperties
                     f.HangingIndentPt = RunProperties.FromTwips(Attr(sub, "hanging")) ?? f.HangingIndentPt;
                     break;
                 case "numPr":
-                    using (var np = sub.ReadSubtree()) ReadNumbering(np, p);
+                    using (var np = sub.LightSubtree()) ReadNumbering(np, p);
                     break;
                 case "pBdr":
-                    using (var bd = sub.ReadSubtree()) f.Borders = ReadBorders(bd);
+                    using (var bd = sub.LightSubtree()) f.Borders = ReadBorders(bd);
                     break;
                 case "tabs":
-                    using (var tb = sub.ReadSubtree()) ReadTabs(tb, f);
+                    using (var tb = sub.LightSubtree()) ReadTabs(tb, f);
                     break;
                 case "rPr":
                 {
                     TextFormat mark;
                     RevisionMark? markRevision;
                     RunFormatChange? markChange;
-                    using (var rp = sub.ReadSubtree()) mark = RunProperties.Read(rp, out _, out markChange, out markRevision);
+                    using (var rp = sub.LightSubtree()) mark = RunProperties.Read(rp, out _, out markChange, out markRevision);
                     f.MarkFormat = mark.IsDefault ? null : mark;
                     if (markRevision is not null) p.MarkRevision = markRevision;
                     if (markChange is not null) p.MarkFormatChange = markChange;
@@ -305,13 +305,13 @@ internal static class ParagraphProperties
                     var old = new Paragraph();
                     bool sawStyle = false;
                     if (!sub.IsEmptyElement)
-                        using (var ch = sub.ReadSubtree())
+                        using (var ch = sub.LightSubtree())
                         {
                             ch.Read();
                             while (ch.Read())
                                 if (ch.NodeType == XmlNodeType.Element && ch.NamespaceURI == W && ch.LocalName == "pPr")
                                 {
-                                    using (var inner = ch.ReadSubtree()) Read(inner, old);
+                                    using (var inner = ch.LightSubtree()) Read(inner, old);
                                     break;
                                 }
                         }
@@ -325,11 +325,11 @@ internal static class ParagraphProperties
                     break;
                 }
                 case "sectPr":
-                    using (var sp = sub.ReadSubtree()) p.LoadedSection = SectionXml.Read(sp);
+                    using (var sp = sub.LightSubtree()) p.LoadedSection = SectionXml.Read(sp);
                     break;
                 default:
                     // framePr, cnfStyle, divId…: not part of the model.
-                    if (!sub.IsEmptyElement) using (sub.ReadSubtree()) { }
+                    if (!sub.IsEmptyElement) using (sub.LightSubtree()) { }
                     break;
             }
         }

@@ -11,9 +11,10 @@ namespace Chuvadi.Docs.Model;
 /// <see cref="AsciiFont"/> (basic Latin), <see cref="HighAnsiFont"/> (other Latin/Greek/
 /// Cyrillic), <see cref="EastAsiaFont"/> (CJK) and <see cref="ComplexScriptFont"/>. Word uses
 /// <see cref="ComplexScriptFont"/> only for a run marked as complex script
-/// (<see cref="ComplexScript"/> = true, w:cs); for Indic text such as Tamil or Devanagari, either
-/// mark the run with <see cref="ComplexScript"/> or use <see cref="FontForAllScripts"/>, which sets
-/// every slot. Complex-script text also takes its bold, italic and size from separate properties. <see cref="Font"/> sets the two Latin
+/// (<see cref="ComplexScript"/> = true, w:cs). Since 2.2.0 a run you build with a complex-script
+/// font and complex-script text (Tamil, Devanagari, Arabic…) is marked w:cs on save unless you set
+/// <see cref="ComplexScript"/> yourself, so Word shows that font; <see cref="FontForAllScripts"/>
+/// sets every slot. Complex-script text also takes its bold, italic and size from separate properties. <see cref="Font"/> sets the two Latin
 /// slots, exactly like Word's Font box; <see cref="FontForAllScripts"/> sets all four.
 /// With <see cref="MirrorToComplexScript"/> (the default for formats you build),
 /// <see cref="Bold"/>, <see cref="Italic"/> and <see cref="SizePt"/> also apply to complex-script
@@ -102,9 +103,12 @@ public sealed class TextFormat
 
     /// <summary>
     /// Font for complex-script text (w:rFonts/@w:cs). Word uses it only for a run marked as
-    /// complex script (<see cref="ComplexScript"/> = true, w:cs). To be sure Indic text such as
-    /// Tamil or Devanagari gets this font, set <see cref="ComplexScript"/> = true, or use
-    /// <see cref="FontForAllScripts"/>. Null = inherit.
+    /// complex script (w:cs). Since 2.2.0, a run you build whose text has complex-script characters
+    /// (Tamil, Devanagari, Arabic, Hebrew, Thai… the README lists the Unicode blocks) is marked
+    /// w:cs on save when <see cref="ComplexScript"/> is left unset, so Word shows this font; the
+    /// whole run is marked, so mixed Tamil and English text all uses it. Set
+    /// <see cref="ComplexScript"/> = false to write no flag. Loaded documents are saved as they
+    /// were (<see cref="MirrorToComplexScript"/> is off for them). Null = inherit.
     /// </summary>
     public string? ComplexScriptFont { get => _complexScriptFont; init => _complexScriptFont = value; }
 
@@ -145,7 +149,9 @@ public sealed class TextFormat
     /// <summary>
     /// Force the run to be treated as complex script (w:cs). Word then uses
     /// <see cref="ComplexScriptFont"/> and the complex-script bold, italic and size for it.
-    /// Null = inherit.
+    /// Null = inherit; on save, a built run with <see cref="ComplexScriptFont"/> set and
+    /// complex-script text is written as true (2.2.0, see <see cref="ComplexScriptFont"/>).
+    /// False = never flagged.
     /// </summary>
     public bool? ComplexScript { get; init; }
 

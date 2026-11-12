@@ -63,8 +63,7 @@ public static class EncryptedLargeTests
             doc.SaveTo(output, enc);
             var bytes = output.ToArray();
             AssertSize(mb, bytes.Length);
-            AssertTrue(EncryptedSaveTests.SamePackageExceptTimes(Chuvadi.Docs.Internal.PackageGuard.Decrypt(new MemoryStream(bytes), Pw, new DocxReaderOptions(), default), plain),
-                "decrypted package is the plain package");
+            EncryptedSaveTests.AssertSamePackage(Chuvadi.Docs.Internal.PackageGuard.Decrypt(new MemoryStream(bytes), Pw, new DocxReaderOptions(), default), plain, "decrypted package is the plain package");
             AssertTrue(Document.Load(new MemoryStream(bytes), Pw).GetText().Contains(marker), "Load reads to the end");
             using var r = DocxReader.Open(new MemoryStream(bytes), Pw);
             AssertTrue(r.ExtractText().Contains(marker), "DocxReader reads to the end");

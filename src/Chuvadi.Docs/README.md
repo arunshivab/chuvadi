@@ -57,9 +57,9 @@ Paragraph styles: `Title`, `Heading1`–`Heading9`, `Quote`, `Normal`, plus list
 `TextFormat` covers the full run-property set: fonts per script slot, complex-script bold/italic/size, language, every underline style, caps/small caps, hidden, outline/shadow/emboss/engrave, superscript/subscript, baseline shift, character spacing and scaling, kerning, theme colors and arbitrary shading.
 
 ```csharp
-// Indic text: FontForAllScripts sets every slot, so Word uses the font whether or not the run is
-// marked complex script. (Word uses ComplexScriptFont alone only when ComplexScript = true, w:cs;
-// Word's Font box and TextFormat.Font set the Latin slots only.)
+// Indic text: FontForAllScripts sets every slot. Word uses a complex-script font only for runs marked
+// complex script (w:cs); Docs marks a run you build when it has a complex-script font and complex-script
+// text (see "Complex-script runs" below). Word's Font box and TextFormat.Font set the Latin slots only.
 var tamil = new TextFormat { FontForAllScripts = "Nirmala UI", SizePt = 12, Bold = true, ComplexScriptLanguage = "ta-IN" };
 doc.AddParagraph().Text("நோயாளி அறிக்கை — Patient report", tamil);
 
@@ -69,6 +69,19 @@ doc.Footer.Add(new Paragraph("Confidential").PositionalTab(PositionalTabAlignmen
 doc.AddParagraph("Example Clinic\n12 Sample Road, Testville");        // \n → line break
 doc.AddParagraph().Text("Part 1").Break(BreakType.Page).Text("Part 2");
 ```
+
+### Complex-script runs (2.2.0)
+
+Word shows a run's complex-script font (`ComplexScriptFont`, `w:rFonts/@w:cs`) only when the run is marked complex script (`w:cs`); otherwise Tamil text shows in the Latin font (checked in Word on 11 Nov 2026). So when you save, a run **you built** gets `<w:cs/>` when all of these hold:
+- `ComplexScriptFont` is set (directly or through `FontForAllScripts`);
+- `ComplexScript` is left unset (`ComplexScript = false` writes no flag, `true` writes it as always);
+- its text has at least one character in the blocks below.
+
+The whole run is marked, so a run mixing Tamil and English uses the complex-script font, size and bold for all of it, as Word does for text typed that way; split the run to keep English in the Latin font. Documents you load are saved as they were: their formats have `MirrorToComplexScript` off, and nothing is added.
+
+The blocks (fixed; inclusive code points): Hebrew 0590–05FF, Arabic 0600–06FF, Syriac 0700–074F, Arabic Supplement 0750–077F, Thaana 0780–07BF, NKo 07C0–07FF, Samaritan 0800–083F, Mandaic 0840–085F, Syriac Supplement 0860–086F, Arabic Extended-B 0870–089F, Arabic Extended-A 08A0–08FF, Devanagari 0900–097F, Bengali 0980–09FF, Gurmukhi 0A00–0A7F, Gujarati 0A80–0AFF, Oriya 0B00–0B7F, Tamil 0B80–0BFF, Telugu 0C00–0C7F, Kannada 0C80–0CFF, Malayalam 0D00–0D7F, Sinhala 0D80–0DFF, Thai 0E00–0E7F, Lao 0E80–0EFF, Tibetan 0F00–0FFF, Myanmar 1000–109F, Khmer 1780–17FF, Mongolian 1800–18AF, Khmer Symbols 19E0–19FF, Vedic Extensions 1CD0–1CFF, Devanagari Extended A8E0–A8FF, Myanmar Extended-B A9E0–A9FF, Myanmar Extended-A AA60–AA7F, Hebrew presentation forms FB1D–FB4F, Arabic Presentation Forms-A FB50–FDFF, Arabic Presentation Forms-B FE70–FEFF, Rumi Numeral Symbols 10E60–10E7F, Tamil Supplement 11FC0–11FFF, Arabic Mathematical Alphabetic Symbols 1EE00–1EEFF.
+
+This applies to documents saved with `SaveTo`; `DocxTemplate.Fill` writes the value's formatting into the template's own run properties and does not add the flag.
 
 Toggles added in 1.2 are tri-state (`bool?`): `null` inherits, `false` switches an inherited effect off.
 
@@ -369,6 +382,33 @@ foreach (var skipped in r.SkippedParts)                    // parts the reader c
 
 A header or footer that is missing, cannot be opened or is not well-formed XML reads as blank, as in `Document.Load`; a picture whose part is missing or cannot be opened is left out of `Images()`. Nothing is dropped silently: each such part is listed once in `SkippedParts` (`PartName`, `Reason`: `Missing`, `Unreadable` or `NotWellFormed`, and the `Error`). The list grows as the lazy readers reach the parts. The main document part is never skipped: a problem there is a `DocxFormatException`. `GetActiveContent` and the template methods stay strict: a part they cannot read is an error.
 
+### Formatted text without loading the whole document (2.2.0)
+
+`FormattedParagraphs()` streams each paragraph with its runs and their **effective** formatting: document defaults, the table style (in table cells), the paragraph style chain, the character style chain and the run's own formatting, resolved exactly as `Document.GetEffectiveRunFormat` resolves them. Only one paragraph, or one top-level table, is held at a time, so a viewer can show bold, italic, sizes and colours without the memory of `Document.Load`.
+
+```csharp
+using var r = DocxReader.Open(attachment, password: null, DocxReaderOptions.ForUntrustedInput(), token);
+foreach (var item in r.FormattedParagraphs())
+{
+    for (int i = 0; i < item.Paragraph.Runs.Count; i++)
+    {
+        var run = item.Paragraph.Runs[i];
+        if (run.IsDeleted) continue;                         // tracked deletion
+        TextFormat f = item.RunFormats[i];                   // effective: f.Bold, f.Italic, f.SizePt, f.ColorHex…
+        string? font = f.AsciiThemeFont is ThemeFont t ? r.GetThemeFontName(t) : f.AsciiFont;
+        Show(run.TextContent, f, font);
+    }
+    // item.ParagraphFormat (effective alignment, indents, spacing), item.Cell (table, row, grid column), item.Part
+}
+```
+
+- **Order:** the body in document order, with the paragraphs of table cells (nested tables included) in place, then the headers, then the footers (`IncludeHeadersAndFooters`). Footnotes, endnotes and comments are not read, so their references are not among the runs.
+- **What each item holds:** `Paragraph` (the same model `Document.Load` builds: text, direct formatting, hyperlinks, fields, bookmarks, symbols, pictures, text boxes, tracked changes), `RunFormats` (one effective `TextFormat` per run, in order), `ParagraphFormat` (effective, list indents included), `Part` and `Cell` (`TableCellRef`, null outside tables). The objects are a read snapshot: changing them changes nothing.
+- **Theme references** stay references, as in `Document`; `GetThemeFontName(ThemeFont)` and `GetThemeColorHex(ThemeColor, tint, shade)` turn them into names and colours from the file's theme and settings.
+- **Styles are read once:** the styles, numbering, theme and settings parts are read on the first call and kept for the reader's life. Their elements count towards that call's `MaxElements`; each call is one operation with its own count, as for the other read calls. Cancellation and errors follow the reader's rules.
+- **A missing or broken styles, numbering, theme or settings part** is listed in `SkippedParts` and the formatting falls back to the defaults without it. (`Document.Load` is stricter: it rejects malformed styles or numbering.)
+- **Measured** on 10–11 MB Word-like files (2 cores, .NET 10): about 130 MB of heap at the peak against 0.55–0.9 GB for `Document.Load`, in a little less time than `Load`.
+
 `Document.Load` keeps the same kind of list in `Document.SkippedParts`, with the same types. It covers every optional part Load left out: a header, footer, picture, theme, styles, numbering, settings, font table or embedded font, footnotes, endnotes, comments or a document-properties part that is missing, cannot be opened or is not well-formed XML. Load itself behaves as it always has (a broken header loads blank, a broken settings part leaves the defaults); the list only says what happened. It describes the load: edits don't change it, and saving doesn't use it.
 
 ## Untrusted input (mail attachments, uploads)
@@ -416,7 +456,7 @@ var a = r.GetActiveContent();
 // a.HasRemoteTemplate, a.HasExternalResources, a.ExternalReferences (verbatim targets)
 ```
 
-**Cancellation:** `Open`, `Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`.
+**Cancellation:** `Open`, `Paragraphs`, `FormattedParagraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent` and `Document.Load` all have `CancellationToken` overloads. The token is checked on every XML node and every decompression buffer, so cancellation lands within milliseconds as `OperationCanceledException`.
 
 **The token given to `DocxReader.Open` also covers the reader's later reads** (since 2.1.0):
 - the read methods without a token observe it;
@@ -429,7 +469,7 @@ So open with a token that lives as long as the reader, for example a request's t
 
 ## Errors
 
-Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers (`Paragraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent`, `ContainsVbaProject`), and `DocxTemplate.Fill`, `GetPlaceholders` and `CheckTemplate` — reports a file it cannot read as one exception type:
+Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers (`Paragraphs`, `FormattedParagraphs`, `Tables`, `ExtractText`, `Images`, `SaveImages`, `GetActiveContent`, `ContainsVbaProject`, `GetThemeFontName`, `GetThemeColorHex`), and `DocxTemplate.Fill`, `GetPlaceholders` and `CheckTemplate` — reports a file it cannot read as one exception type:
 
 | Exception | When |
 |---|---|
