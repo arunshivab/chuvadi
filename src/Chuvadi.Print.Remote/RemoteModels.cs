@@ -205,6 +205,12 @@ namespace Chuvadi.Print.Remote
         /// <summary>See <see cref="PrintAuditEvent.Route"/>. Null from agents older than 1.0.0-rc.2.</summary>
         public string? Route { get; set; }
 
+        /// <summary>
+        /// See <see cref="PrintAuditEvent.PrinterDefaults"/>. Null when no setting was left to the printer, and from
+        /// agents older than 1.0.0-rc.4 (not written when null).
+        /// </summary>
+        public string? PrinterDefaults { get; set; }
+
         public static AuditRecord From(PrintAuditEvent e) => new()
         {
             JobId = e.JobId,
@@ -219,7 +225,8 @@ namespace Chuvadi.Print.Remote
             CompletedAt = e.CompletedAt,
             TenantId = e.TenantId,
             Error = e.Error,
-            Route = e.Route
+            Route = e.Route,
+            PrinterDefaults = e.PrinterDefaults
         };
 
         public PrintAuditEvent ToEvent() => new()
@@ -236,7 +243,8 @@ namespace Chuvadi.Print.Remote
             CompletedAt = CompletedAt,
             TenantId = TenantId,
             Error = Error,
-            Route = Route
+            Route = Route,
+            PrinterDefaults = PrinterDefaults
         };
     }
 

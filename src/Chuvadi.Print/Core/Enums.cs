@@ -53,4 +53,31 @@ namespace Chuvadi.Print
 
     /// <summary>Lifecycle status of a print job.</summary>
     public enum PrintJobStatus { Created, Queued, Spooling, Printed, Failed, Cancelled }
+
+    /// <summary>
+    /// Settings left to the printer's own default instead of the value in <see cref="PrintSettings"/>
+    /// (<see cref="PrintSettings.PrinterDefaults"/>). Combine with <c>|</c>.
+    /// </summary>
+    [System.Flags]
+    public enum PrinterDefault
+    {
+        /// <summary>Every setting comes from <see cref="PrintSettings"/> (the default).</summary>
+        None = 0,
+
+        /// <summary>The printer's default paper size (<see cref="PrintSettings.Paper"/> is not sent).</summary>
+        Paper = 1,
+
+        /// <summary>The printer's default one- or two-sided printing (<see cref="PrintSettings.Duplex"/> is not sent).</summary>
+        Duplex = 2,
+
+        /// <summary>The printer's default colour mode (<see cref="PrintSettings.Color"/> is not sent).</summary>
+        Color = 4,
+
+        /// <summary>
+        /// The printer's default number of copies (<see cref="PrintSettings.Copies"/> and
+        /// <see cref="PrintSettings.Collate"/> are not sent). One set is produced; where the copies would be made by
+        /// Chuvadi.Print rather than the printer, this means one copy.
+        /// </summary>
+        Copies = 8
+    }
 }

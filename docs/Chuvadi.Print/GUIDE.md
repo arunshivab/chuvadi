@@ -38,8 +38,38 @@ in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
 | `Margins` | `Margins.Default` (0.5 in); `None`, `Narrow`, `Wide`, `Uniform`, `FromMillimetres`, `FromInches` |
 | `AutoRotate` | false: when true, a page whose orientation differs from the printable area is turned 90° |
 | `Silent` | false: no dialogs |
+| `PrinterDefaults` | `PrinterDefault.None`; any of `Paper`, `Duplex`, `Color`, `Copies` combined with `\|` (since 1.0.0-rc.4) |
 
 `PrintSettings.Clone()` gives an independent copy.
+
+### Leaving settings to the printer's defaults (1.0.0-rc.4)
+
+```csharp
+job.WithPrinterDefaults(PrinterDefault.Paper | PrinterDefault.Duplex);   // the printer's own paper and sides
+```
+
+- **What it does:** a flagged setting is not sent. The IPP job ticket leaves out `media`, `sides`,
+  `print-color-mode` or `copies`; the Windows DEVMODE (and the XPS PrintTicket made from it) keeps the driver's own
+  value. The printer applies its default.
+- **When Chuvadi.Print renders the pages itself** (`PrintTo`, the XPS target), it needs that default for the
+  layout: the sheet size, the back of a two-sided sheet, grey or colour. The target reports it
+  (`PrintTargetCapabilities.DefaultPaper`, `DefaultDuplex`, `DefaultColor`, `DefaultCopies`):
+  - IPP reads `media-default` (or `media-col-default`), `sides-default`, `print-color-mode-default` and
+    `copies-default` (`IppPrinterCapabilities.DefaultPaper` and the others). "auto" colour is not a default.
+  - Windows reads the driver's default DEVMODE (`WindowsPrinterCapabilities.DefaultPaper` and the others; driver
+    "monochrome" is `Grayscale`).
+  - `PrintSettings.ResolvePrinterDefaults(capabilities, notes)` does the replacement, for your own targets.
+- **When the printer reports no default**, the job is laid out with the value in `PrintSettings`, nothing is sent,
+  and the audit says so. The job is not failed, and the approximation is not counted by `IppJobOptions.Strict`.
+- **Copies:** one set is produced and the printer's own number of copies applies. Where the copies would be made by
+  Chuvadi.Print rather than the printer, the flag means one copy.
+- **Audit:** `PrintAuditEvent.PrinterDefaults` says what was used, for example
+  `paper: printer default (Letter)` or `paper: printer default not reported; laid out for A4`. When the printer lays
+  out the document itself (`SubmitTo`), it says `paper: printer default`. `FileAuditSink` writes it as a 14th column,
+  only on lines for such jobs.
+- **Not included:** orientation (it belongs to the document's layout) and the tray (an unset `MediaSource` or `Bin`
+  already means the printer's default).
+- With `PrinterDefault.None` (the default) every ticket, DEVMODE, page and audit line is as before.
 
 ## 2. PrintJob (A2)
 
@@ -95,7 +125,9 @@ Your own target implements `IPrintTarget` (raster pages) or `IDocumentTarget` (t
 ### Spool envelope
 
 `job.SaveSpoolTo(path)` / `ToSpoolArray()` and `PrintJob.LoadSpool(...)` carry the PDF, the settings and
-the job metadata (JobId, title, user, tenant) in one checksummed package (format v2; v1 still reads). It is
+the job metadata (JobId, title, user, tenant) in one checksummed package (format v2; v1 still reads). A job with
+`PrinterDefaults` set is written as format v3 (1.0.0-rc.4), which agents on rc.3 and earlier cannot read; every
+other job is still written as v2, byte for byte as before. It is
 how a job travels to another machine (P04: the PDF travels, never bitmaps).
 
 ## 3. Windows printers (A3, `Chuvadi.Print.Windows`)
@@ -137,6 +169,12 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
   operation, plus raw `Send`), `IppPrinterCapabilities`, and a PWG Raster writer and reader.
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
+- **AutoRotate when the printer lays out the PDF** (`IppDocumentTarget`, and the PdfAsIs and CUPS routes, since
+  1.0.0-rc.4): with `AutoRotate` set and `Orientation` portrait, the orientation is left to the printer. The ticket
+  sends `orientation-requested` "none" (7) when the printer lists it, and otherwise no orientation, instead of
+  portrait (3). Forcing portrait stops CUPS and printers turning landscape pages, which then print cut off or
+  shrunk (D-288, checked on a CUPS driverless queue, D-289). A landscape or reversed orientation is still sent as
+  set, and the raster routes are unchanged.
 - **Spool**: `IppPrinterTarget` holds the PWG Raster job until it is sent as one Print-Job.
   - The default, `IppSpoolMode.TemporaryFile`, is a file in `TemporaryFolder` (or the system temp folder),
     deleted when the job ends.
@@ -206,6 +244,16 @@ if (cache.StoreIn(ward3!)) { registry.Set(ward3!); registry.SaveTo("printers.jso
 
 // The queues of a CUPS server (Linux, macOS).
 foreach (CupsQueue q in CupsQueues.List()) Console.WriteLine(q.Name + " " + q.Uri);
+
+// The queues of the CUPS server this computer is set up to use (CUPS_SERVER or client.conf), else the local one.
+IReadOnlyList<CupsQueue> configured = CupsQueues.ListConfigured();
+
+// One list: local CUPS, the configured server, any other servers, and DNS-SD, each printer once (1.0.0-rc.4).
+var options = new PrinterListingOptions();
+options.CupsServers.Add("print-server.hospital.local");
+PrinterListingResult listing = PrinterListing.List(options);
+foreach (ListedPrinter p in listing.Printers) Console.WriteLine(p.Name + " " + p.Uri + (p.IsCupsQueue ? " (CUPS)" : ""));
+foreach (PrinterListingProblem problem in listing.Problems) Console.WriteLine("Not listed: " + problem);
 ```
 
 - **Discovery** uses DNS-SD over multicast DNS (RFC 6762/6763) on every active IPv4 interface. It sends one-shot
@@ -215,7 +263,22 @@ foreach (CupsQueue q in CupsQueues.List()) Console.WriteLine(q.Name + " " + q.Ur
 - **The registry** keeps names, connections, addresses, pins, forced routes and the last-read capabilities with
   their age. It never stores credentials.
 - **CUPS queues** come from the CUPS-Get-Printers operation over IPP; each `CupsQueue.Uri` goes to
-  `IppRoutes.CreateCupsRouter`.
+  `IppRoutes.CreateCupsRouter`. Since 1.0.0-rc.4 a queue also has `PrinterType`, `IsRemote` (shared by another CUPS
+  server, bit 0x2), `Uuid` (printer-uuid) and `DeviceUri` (where CUPS sends its jobs; some systems send it only to
+  an administrator).
+- **The configured CUPS server** (`CupsQueues.ConfiguredServer()`, 1.0.0-rc.4) is the `CUPS_SERVER` environment
+  variable, else `ServerName` in `~/.cups/client.conf`, else in `/etc/cups/client.conf`, as an IPP URI with port 631
+  when none is given. A local socket path means the local server. Null when nothing is set, and on Windows.
+- **The merged list** (`PrinterListing.List`, 1.0.0-rc.4):
+  - It asks the local CUPS server (not on Windows), the configured server and `CupsServers`, each once, and browses
+    DNS-SD; each of these can be turned off in `PrinterListingOptions`.
+  - Entries are one printer when they share a UUID (a queue's printer-uuid, the `uuid` in a CUPS `dnssd://` device
+    URI, or the DNS-SD `UUID` key) or a URI (a queue's device URI or own URI, or the advertised URI; compared
+    without case, a trailing slash or the default port).
+  - **The CUPS queue comes first** when a printer is found both ways: `Name` and `Uri` are the first queue's, so
+    CUPS converts and spools the job. Every queue is kept in `Queues` (for example a queue added by hand and the one
+    CUPS made by itself for the same printer), and every advertisement in `Discovered`.
+  - A server or browse that fails goes into `Problems`; the rest is still listed.
 - **Duplex backs** for PWG Raster follow PWG 5102.4 Table 9 (`pwg-raster-document-sheet-back`).
 
 ## 4b. Vector pages and XPS (Phase 4, `Chuvadi.Print.Windows`)

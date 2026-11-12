@@ -253,6 +253,24 @@ namespace Chuvadi.Print.Windows
 
         internal DeviceGeometry Geometry { get; }
 
+        /// <summary>The paper in the driver's default DEVMODE; null when it names none this driver lists.</summary>
+        public PaperSize? DefaultPaper => Defaults.Paper;
+
+        /// <summary>One- or two-sided printing in the driver's default DEVMODE; null when it does not say.</summary>
+        public Duplex? DefaultDuplex => Defaults.Duplex;
+
+        /// <summary>
+        /// The colour mode in the driver's default DEVMODE (driver "monochrome" is <see cref="ColorMode.Grayscale"/>);
+        /// null when it does not say.
+        /// </summary>
+        public ColorMode? DefaultColor => Defaults.Color;
+
+        /// <summary>The number of copies in the driver's default DEVMODE; null when it does not say.</summary>
+        public int? DefaultCopies => Defaults.Copies;
+
+        /// <summary>The driver's defaults, read before any settings are applied.</summary>
+        internal DevModeDefaults Defaults { get; init; }
+
         /// <summary>Converts to the device-independent form the print planner uses.</summary>
         /// <param name="maxRasterDpi">Upper bound on the rendering resolution (null = full device resolution).</param>
         public PrintTargetCapabilities ToTargetCapabilities(double? maxRasterDpi = 300)
@@ -274,7 +292,11 @@ namespace Chuvadi.Print.Windows
                 SupportsCollate = SupportsCollate,
                 SupportsDuplex = SupportsDuplex,
                 SupportsColor = SupportsColor,
-                PreferredPixelFormat = RasterPixelFormat.Bgra32
+                PreferredPixelFormat = RasterPixelFormat.Bgra32,
+                DefaultPaper = DefaultPaper,
+                DefaultDuplex = DefaultDuplex,
+                DefaultColor = DefaultColor,
+                DefaultCopies = DefaultCopies
             };
         }
     }

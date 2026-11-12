@@ -4,7 +4,7 @@ Pure-BCL printing for .NET — zero NuGet dependencies, part of the [Chuvadi](ht
 
 What v1.0 gives you:
 
-- **Device-independent print settings** with every choice exposed: page selection, copies, collation, duplex, colour, all paper sizes, all four orientations, six scale modes, nine alignments, margins, auto-rotate, silent printing.
+- **Device-independent print settings** with every choice exposed: page selection, copies, collation, duplex, colour, all paper sizes, all four orientations, six scale modes, nine alignments, margins, auto-rotate, silent printing, and leaving paper, sides, colour or copies to the printer's own defaults (`PrinterDefaults`).
 - **`PrintJob`**: plans the job, renders one page at a time (memory does not grow with document length), lays each page out on the sheet, converts colour, and sends it to a print target. One audit event per job.
 - **Spool envelope**: a checksummed binary package of PDF + settings + job metadata, for handing a job from a web host to a print agent.
 - **`ImageFileTarget`**: writes each printed sheet as a PNG — print preview, archiving, and visual verification.

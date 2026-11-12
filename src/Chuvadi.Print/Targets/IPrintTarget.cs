@@ -77,6 +77,30 @@ namespace Chuvadi.Print
         /// </summary>
         public RasterPixelFormat PreferredPixelFormat { get; init; } = RasterPixelFormat.Bgra32;
 
+        /// <summary>
+        /// The printer's default paper size, used to lay out a job with <see cref="PrinterDefault.Paper"/>; null when
+        /// the printer does not report one.
+        /// </summary>
+        public PaperSize? DefaultPaper { get; init; }
+
+        /// <summary>
+        /// The printer's default one- or two-sided printing, used with <see cref="PrinterDefault.Duplex"/>; null when
+        /// the printer does not report one.
+        /// </summary>
+        public Duplex? DefaultDuplex { get; init; }
+
+        /// <summary>
+        /// The printer's default colour mode, used with <see cref="PrinterDefault.Color"/>; null when the printer does
+        /// not report one (or reports "auto").
+        /// </summary>
+        public ColorMode? DefaultColor { get; init; }
+
+        /// <summary>
+        /// The printer's default number of copies, recorded in the audit with <see cref="PrinterDefault.Copies"/>; null
+        /// when the printer does not report one.
+        /// </summary>
+        public int? DefaultCopies { get; init; }
+
         /// <summary>Capabilities of an idealised 300 dpi device that does nothing itself.</summary>
         public static PrintTargetCapabilities Default { get; } = new();
     }

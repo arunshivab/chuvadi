@@ -17,7 +17,7 @@
     <Description>Driverless IPP printing for Chuvadi.Print on any OS: a complete RFC 8010 encoder and decoder, IppClient (every common operation, IPPS with certificate pinning), printer capabilities and a capability cache, PWG Raster writer and reader, IppPrinterTarget (rendered pages as PWG Raster) and IppDocumentTarget (PDF passthrough), IPP and CUPS print routes, and RawSocketTarget (raw TCP port 9100). No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0-rc.3</Version>
+    <Version>1.0.0-rc.4</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

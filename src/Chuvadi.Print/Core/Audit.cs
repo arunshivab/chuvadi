@@ -29,6 +29,13 @@ namespace Chuvadi.Print
         /// Null for events recorded by older versions.
         /// </summary>
         public string? Route { get; init; }
+
+        /// <summary>
+        /// What was used for each setting left to the printer (<see cref="PrintSettings.PrinterDefaults"/>), separated by
+        /// "; ": for example "paper: printer default (A4); copies: printer default (not reported)". Null when no
+        /// setting was left to the printer, and for events recorded by older versions.
+        /// </summary>
+        public string? PrinterDefaults { get; init; }
     }
 
     /// <summary>Receives audit events. Phase 1 uses local sinks; Phase 2 supplies a coordinator sink.</summary>
@@ -47,8 +54,9 @@ namespace Chuvadi.Print
 
     /// <summary>
     /// Appends one tab-delimited line per event to a local file. Thread-safe. Columns: job id, title, pages,
-    /// copies, printer, machine, user, status, started, completed, tenant, error, route (the route column was
-    /// added last in 1.0.0-rc.2, so older columns keep their positions).
+    /// copies, printer, machine, user, status, started, completed, tenant, error, route (added in 1.0.0-rc.2), then,
+    /// only for a job that left settings to the printer, printer defaults (added in 1.0.0-rc.4). New columns go at
+    /// the end, so older columns keep their positions.
     /// </summary>
     public sealed class FileAuditSink : IPrintAuditSink
     {
@@ -77,6 +85,9 @@ namespace Chuvadi.Print
               .Append(Escape(e.TenantId)).Append('\t')
               .Append(Escape(e.Error)).Append('\t')
               .Append(Escape(e.Route));
+            // The printer defaults column is written only when a setting was left to the printer, so lines for
+            // other jobs stay exactly as earlier versions wrote them.
+            if (e.PrinterDefaults is not null) sb.Append('\t').Append(Escape(e.PrinterDefaults));
             lock (_gate)
             {
                 File.AppendAllText(_path, sb.ToString() + Environment.NewLine, Encoding.UTF8);

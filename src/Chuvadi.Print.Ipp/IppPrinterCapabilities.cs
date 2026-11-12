@@ -117,6 +117,12 @@ namespace Chuvadi.Print.Ipp
 
             IppAttribute? copies = Attributes["copies-supported"];
             MaxCopies = copies?.Value.Value is IppRange range ? Math.Max(1, range.Upper) : 1;
+
+            DefaultMedia = Text("media-default");
+            DefaultMediaSize = MediaColDefaultSize();
+            DefaultSides = Text("sides-default");
+            DefaultColorMode = Text("print-color-mode-default");
+            DefaultCopies = Int("copies-default") is int dc && dc >= 1 ? dc : null;
         }
 
         /// <summary>Every printer attribute as received, for anything not surfaced below.</summary>
@@ -154,6 +160,58 @@ namespace Chuvadi.Print.Ipp
 
         public bool PageRangesSupported { get; }
         public int MaxCopies { get; }
+
+        /// <summary>The printer's default media name (<c>media-default</c>), e.g. "iso_a4_210x297mm"; null when not reported.</summary>
+        public string? DefaultMedia { get; }
+
+        /// <summary>
+        /// The default media size from <c>media-col-default</c> (its <c>media-size</c>), portrait; null when not reported.
+        /// </summary>
+        public PaperSize? DefaultMediaSize { get; }
+
+        /// <summary>The printer's default <c>sides</c> (<c>sides-default</c>), e.g. "one-sided"; null when not reported.</summary>
+        public string? DefaultSides { get; }
+
+        /// <summary>The printer's default <c>print-color-mode</c> (<c>print-color-mode-default</c>); null when not reported.</summary>
+        public string? DefaultColorMode { get; }
+
+        /// <summary>The printer's default number of copies (<c>copies-default</c>); null when not reported.</summary>
+        public int? DefaultCopies { get; }
+
+        /// <summary>
+        /// The default paper size: the size in <see cref="DefaultMedia"/> when it names one, otherwise
+        /// <see cref="DefaultMediaSize"/>; null when the printer reports neither.
+        /// </summary>
+        public PaperSize? DefaultPaper
+        {
+            get
+            {
+                if (DefaultMedia is not null && PwgMediaNames.TryParseSize(DefaultMedia, out double w, out double h))
+                    return PaperSize.FromMillimetres(w, h, DefaultMedia);
+                return DefaultMediaSize;
+            }
+        }
+
+        /// <summary>The default one- or two-sided printing (<see cref="DefaultSides"/>); null when not reported or unknown.</summary>
+        public Duplex? DefaultDuplex => DefaultSides switch
+        {
+            "one-sided" => Duplex.Simplex,
+            "two-sided-long-edge" => Duplex.Vertical,
+            "two-sided-short-edge" => Duplex.Horizontal,
+            _ => null
+        };
+
+        /// <summary>
+        /// The default colour mode (<see cref="DefaultColorMode"/>): "color" is colour, "monochrome" grey and "bi-level"
+        /// black and white. Null when not reported, or for "auto" and other values, which say nothing about the pages.
+        /// </summary>
+        public ColorMode? DefaultColor => DefaultColorMode switch
+        {
+            "color" => ColorMode.Color,
+            "monochrome" => ColorMode.Grayscale,
+            "bi-level" => ColorMode.Monochrome,
+            _ => null
+        };
 
         public bool SupportsFormat(string mimeType) => Contains(DocumentFormats, mimeType);
         public bool SupportsDuplex => Contains(Sides, "two-sided-long-edge") || Contains(Sides, "two-sided-short-edge");
@@ -193,6 +251,15 @@ namespace Chuvadi.Print.Ipp
         }
 
         private int? Int(string name) => Attributes[name]?.Value.Value is int i ? i : null;
+
+        private PaperSize? MediaColDefaultSize()
+        {
+            if (Attributes["media-col-default"]?.Value.Value is not IppCollection col) return null;
+            if (col["media-size"]?.Value.Value is not IppCollection size) return null;
+            if (size["x-dimension"]?.Value.Value is not int x || size["y-dimension"]?.Value.Value is not int y || x <= 0 || y <= 0)
+                return null;
+            return PaperSize.FromMillimetres(Math.Min(x, y) / 100.0, Math.Max(x, y) / 100.0);
+        }
 
         private IReadOnlyList<string> Strings(string name)
         {

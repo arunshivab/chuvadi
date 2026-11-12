@@ -167,6 +167,9 @@ namespace Chuvadi.Print
         public PrintJob WithAutoRotate(bool autoRotate = true) { _settings.AutoRotate = autoRotate; return this; }
         public PrintJob WithSilent(bool silent = true) { _settings.Silent = silent; return this; }
 
+        /// <summary>Leaves these settings to the printer's own defaults (see <see cref="PrintSettings.PrinterDefaults"/>).</summary>
+        public PrintJob WithPrinterDefaults(PrinterDefault defaults) { _settings.PrinterDefaults = defaults; return this; }
+
         // ----------------------------------------------------------------- fluent: metadata
 
         public PrintJob WithJobId(Guid jobId) { JobId = jobId; return this; }
@@ -245,15 +248,19 @@ namespace Chuvadi.Print
         /// Works out what will be printed without rendering anything. Opens the document with the
         /// configured rasteriser to learn its page count.
         /// </summary>
-        /// <param name="capabilities">The device to plan for (decides who makes copies). Default: <see cref="PrintTargetCapabilities.Default"/>.</param>
+        /// <param name="capabilities">
+        /// The device to plan for (decides who makes copies, and supplies the defaults for
+        /// <see cref="PrintSettings.PrinterDefaults"/>). Default: <see cref="PrintTargetCapabilities.Default"/>.
+        /// </param>
         public PrintPlan Plan(PrintTargetCapabilities? capabilities = null)
         {
             IPageRasterizer rasterizer = RequireRasterizer(_options);
             int pageCount;
             using (IRasterDocument document = rasterizer.Open(_pdf))
                 pageCount = document.PageCount;
-            return PrintPlan.Create(pageCount, _settings,
-                TargetMakesCopies(_settings, capabilities ?? PrintTargetCapabilities.Default, _options.CopyHandling));
+            capabilities ??= PrintTargetCapabilities.Default;
+            PrintSettings settings = _settings.ResolvePrinterDefaults(capabilities);
+            return PrintPlan.Create(pageCount, settings, TargetMakesCopies(settings, capabilities, _options.CopyHandling));
         }
 
         /// <summary>Decides whether the device, rather than the job, should make the copies.</summary>
@@ -317,11 +324,13 @@ namespace Chuvadi.Print
             Exception? failure = null;
 
             IRasterDocument? document = null;
+            var defaultNotes = new List<string>();
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 PrintTargetCapabilities capabilities = target.GetCapabilities(settings)
                     ?? throw new InvalidOperationException("The print target returned no capabilities.");
+                settings = settings.ResolvePrinterDefaults(capabilities, defaultNotes);
 
                 document = rasterizer.Open(_pdf)
                     ?? throw new InvalidOperationException("The rasteriser returned no document.");
@@ -409,7 +418,8 @@ namespace Chuvadi.Print
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = TenantId,
                 Error = error,
-                Route = RouteLabel ?? AuditRoutes.Raster
+                Route = RouteLabel ?? AuditRoutes.Raster,
+                PrinterDefaults = defaultNotes.Count == 0 ? null : string.Join("; ", defaultNotes)
             });
 
             if (failure is not null && options.ThrowOnFailure)
@@ -450,6 +460,8 @@ namespace Chuvadi.Print
             int selected = 0;
             PrintJobStatus status;
             Exception? failure = null;
+            var defaultNotes = new List<string>();
+            PrintSettings.DescribeDocumentDefaults(settings.PrinterDefaults, defaultNotes);
 
             try
             {
@@ -483,7 +495,7 @@ namespace Chuvadi.Print
                 JobId = jobId,
                 DocumentTitle = DocumentTitle,
                 PageCount = selected,
-                Copies = settings.Copies,
+                Copies = (settings.PrinterDefaults & PrinterDefault.Copies) != 0 ? 1 : settings.Copies,
                 PrinterName = SafeName(target),
                 MachineName = Environment.MachineName,
                 UserName = UserName,
@@ -492,7 +504,8 @@ namespace Chuvadi.Print
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = TenantId,
                 Error = error,
-                Route = RouteLabel ?? AuditRoutes.Document
+                Route = RouteLabel ?? AuditRoutes.Document,
+                PrinterDefaults = defaultNotes.Count == 0 ? null : string.Join("; ", defaultNotes)
             });
 
             if (failure is not null && options.ThrowOnFailure)

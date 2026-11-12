@@ -162,7 +162,11 @@ namespace Chuvadi.Print.Ipp
                 SupportsCollate = caps.SupportsCollatedCopies,
                 SupportsDuplex = caps.SupportsDuplex,
                 SupportsColor = color,
-                PreferredPixelFormat = RasterPixelFormat.Rgb24
+                PreferredPixelFormat = RasterPixelFormat.Rgb24,
+                DefaultPaper = caps.DefaultPaper,
+                DefaultDuplex = caps.DefaultDuplex,
+                DefaultColor = caps.DefaultColor,
+                DefaultCopies = caps.DefaultCopies
             };
         }
 

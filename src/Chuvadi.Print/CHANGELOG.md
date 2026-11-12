@@ -1,5 +1,72 @@
 # Chuvadi.Print — Changelog
 
+## 1.0.0-rc.4 (2026-11-12)
+
+All four packages move to 1.0.0-rc.4 (D-326). Printer defaults (L3, D-235, D-257), auto-rotation on the as-is
+route (D-288, D-289), and one printer list for local and remote CUPS servers (P3 option B). Two approved changes to
+existing behaviour, listed first.
+
+- **AutoRotate on the as-is IPP and CUPS route** (D-289 option A, output change; Chuvadi.Print.Ipp): with
+  `PrintSettings.AutoRotate` set and `Orientation` portrait, `IppDocumentTarget` (and so the PdfAsIs and CUPS routes)
+  no longer sends `orientation-requested` 3 (portrait). It sends 7 ("none") when the printer lists 7 in
+  `orientation-requested-supported`, and otherwise leaves the attribute out, so the printer or CUPS turns landscape
+  pages itself. Forcing portrait stopped that: on a CUPS driverless queue the landscape page printed upright and cut
+  off (Arun's lp test, HP Ink Tank 410). The approximation "auto-rotate is chosen by the printer" stays, and is now
+  true. Unchanged: the ticket with `AutoRotate` off, a landscape or reversed orientation (still sent as set),
+  `print-scaling`, and the raster routes.
+- **CUPS-Get-Printers asks for three more attributes** (Chuvadi.Print.Ipp): `printer-type`, `printer-uuid` and
+  `device-uri`, for the new `CupsQueue` properties below. The same queues come back, in the same order, with the
+  same values in the existing properties.
+- **Printer defaults** (core, Ipp, Windows; new API): `PrintSettings.PrinterDefaults`, a flags enum
+  `PrinterDefault { None, Paper, Duplex, Color, Copies }`, and `PrintJob.WithPrinterDefaults`. A flagged setting is
+  not sent, so the printer applies its own default:
+  - IPP: the ticket leaves out `media`/`media-col` size (a tray or media type is still sent in `media-col`),
+    `sides`, `print-color-mode`, or `copies` and `multiple-document-handling`.
+  - Windows: the DEVMODE keeps the driver's paper (and form name), duplex, colour, or copies and collation, in
+    `WindowsPrinterTarget` and in the XPS PrintTicket of `WindowsXpsPrinterTarget`. A flagged paper is not matched, so
+    `PaperMatching.ExactOnly` cannot fail on it.
+  - When Chuvadi.Print lays out the pages, it uses the printer's default: new `PrintTargetCapabilities.DefaultPaper`,
+    `DefaultDuplex`, `DefaultColor` and `DefaultCopies`, filled by `IppPrinterTarget` (from `media-default` or
+    `media-col-default`, `sides-default`, `print-color-mode-default`, `copies-default`; new
+    `IppPrinterCapabilities.DefaultMedia`, `DefaultMediaSize`, `DefaultSides`, `DefaultColorMode`, `DefaultCopies`,
+    `DefaultPaper`, `DefaultDuplex`, `DefaultColor`) and by the Windows targets (from the driver's default DEVMODE;
+    new `WindowsPrinterCapabilities.DefaultPaper`, `DefaultDuplex`, `DefaultColor`, `DefaultCopies`). "auto" colour
+    is not a default; driver "monochrome" is `Grayscale`.
+  - `PrintSettings.ResolvePrinterDefaults(capabilities, notes)` does the replacement; `PrintJob.PrintTo`,
+    `PrintJob.Plan` and the XPS target use it.
+  - When the printer reports no default (L3.4 option A, D-257), the job is laid out with the `PrintSettings` value,
+    nothing is sent, and the audit says so. The job is not failed, and `IppJobOptions.Strict` does not count it.
+  - Copies (L3.5): one set is produced; the printer's own number of copies applies. Where Chuvadi.Print would make
+    the copies itself, the flag means one copy.
+  - Audit (L3.6): new `PrintAuditEvent.PrinterDefaults`, for example "paper: printer default (Letter)" or "paper:
+    printer default not reported; laid out for A4" ("paper: printer default" for `SubmitTo`). `FileAuditSink`
+    writes it as a 14th column, only on lines for such jobs; other lines are unchanged. The remote `AuditRecord`
+    carries it (`printerDefaults`, left out when null, so the JSON of other jobs is unchanged).
+  - Spool envelope: a job with `PrinterDefaults` set is written as format version 3 (`SpoolEnvelope.CurrentVersion`
+    is now 3), which agents on 1.0.0-rc.3 and earlier cannot read. Every other job is still written as version 2,
+    byte for byte as before. Unknown flags in a version 3 envelope are refused.
+  - Orientation and the tray are not included (L3.7, L3.8).
+  - With `PrinterDefault.None`, the default, every ticket, DEVMODE, page, envelope and audit line is unchanged.
+- **One printer list for local and remote CUPS** (P3 option B, Chuvadi.Print.Ipp; new API):
+  - `CupsQueue.PrinterType`, `IsRemote` (bit 0x2 of `printer-type`, a queue shared by another CUPS server), `Uuid`
+    and `DeviceUri`.
+  - `CupsQueues.ConfiguredServer()`: the CUPS server this computer is set up to use (`CUPS_SERVER`, else
+    `ServerName` in `~/.cups/client.conf`, else in `/etc/cups/client.conf`), as an IPP URI; port 631 when none is
+    given; a local socket path means the local server; null when none is set and on Windows.
+    `CupsQueues.ListConfigured()` lists that server, or the local one. New `CupsQueues.DefaultPort` (631).
+  - `PrinterListing.List(PrinterListingOptions)`: the local CUPS server (not on Windows), the configured server,
+    any `CupsServers`, and DNS-SD browsing, each printer once. Entries are one printer when they share a UUID (a
+    queue's printer-uuid, the `uuid` of a CUPS `dnssd://` device URI, or the DNS-SD `UUID` key) or a URI (compared
+    without case, a trailing slash or the default port). When a printer is found both ways, its CUPS queue comes
+    first (`ListedPrinter.Name` and `Uri`), with every queue in `Queues` and every advertisement in `Discovered`. A
+    server or browse that fails is reported in `PrinterListingResult.Problems`, and the rest is still listed.
+- **ManualTests**: `--autorotate-pdf` (with `--autorotate-file`), `--defaults-printer`, `--list-printers` (with
+  `--list-seconds`), and `--xps-defaults` for the `--xps-ticket`, `--xps-queue` and `--xps-route` options; the
+  `--xps-ticket` line now also names the driver's defaults, and `--cups-server` shows each queue's type, uuid and
+  device URI. The spool-version group now checks that version 2 is written without printer defaults and version 3
+  with them. WINDOWS-VERIFICATION.md gains step 11n.
+- **Tests**: Print 393 (was 337): auto-rotation on the as-is route (3), printer defaults (28), the printer list (25).
+
 ## 1.0.0-rc.3 (2026-11-07)
 
 All four packages move to 1.0.0-rc.3 (D-201 P-02). Phase 4 parts 1 to 3 (D-189, D-223, D-238): the vector page

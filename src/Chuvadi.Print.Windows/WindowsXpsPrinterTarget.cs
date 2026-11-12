@@ -312,6 +312,7 @@ namespace Chuvadi.Print.Windows
             if (settings is null) throw new ArgumentNullException(nameof(settings));
             WindowsPrinters.EnsureWindows();
             PrintTargetCapabilities capabilities = ReadCapabilities(settings).ToTargetCapabilities(null);
+            settings = settings.ResolvePrinterDefaults(capabilities);
             bool targetCopies = PrintJob.TargetMakesCopies(settings, capabilities, CopyHandling);
             return XpsPackageSubmitter.CreatePrintTicket(PrinterName, BuildDevMode(settings, targetCopies));
         }
@@ -326,7 +327,7 @@ namespace Chuvadi.Print.Windows
                 XpsWriter.Write(prepared.Sheets, buffer);
                 xps = buffer.ToArray();
             }
-            byte[] devMode = BuildDevMode(settings, prepared.TargetMakesCopies);
+            byte[] devMode = BuildDevMode(prepared.Settings, prepared.TargetMakesCopies);
             string jobName = string.IsNullOrEmpty(documentTitle) ? "Chuvadi.Print job" : documentTitle!;
 
             LastSpoolJobId = 0;
@@ -354,14 +355,18 @@ namespace Chuvadi.Print.Windows
 
         private sealed class Prepared
         {
-            public Prepared(IReadOnlyList<VectorPage> sheets, bool targetMakesCopies)
+            public Prepared(IReadOnlyList<VectorPage> sheets, bool targetMakesCopies, PrintSettings settings)
             {
                 Sheets = sheets;
                 TargetMakesCopies = targetMakesCopies;
+                Settings = settings;
             }
 
             public IReadOnlyList<VectorPage> Sheets { get; }
             public bool TargetMakesCopies { get; }
+
+            /// <summary>The settings the sheets were laid out with (printer defaults resolved).</summary>
+            public PrintSettings Settings { get; }
         }
 
         private Prepared Prepare(IVectorDocument document, PrintSettings settings, CancellationToken cancellationToken)
@@ -369,6 +374,7 @@ namespace Chuvadi.Print.Windows
             if (settings.Copies < 1) throw new InvalidOperationException("PrintSettings.Copies must be at least 1.");
             WindowsPrinterCapabilities driver = ReadCapabilities(settings);
             PrintTargetCapabilities capabilities = driver.ToTargetCapabilities(null);
+            settings = settings.ResolvePrinterDefaults(capabilities);
 
             bool duplexRequested = settings.Duplex != Duplex.Simplex;
             if (duplexRequested && !capabilities.SupportsDuplex && StrictCapabilities)
@@ -383,7 +389,7 @@ namespace Chuvadi.Print.Windows
                                                                     skipBlankSides: duplexRequested && !capabilities.SupportsDuplex,
                                                                     cancellationToken);
             if (!XpsWriter.CanWrite(sheets, out string? reason)) throw new NotSupportedException(reason);
-            return new Prepared(sheets, targetCopies);
+            return new Prepared(sheets, targetCopies, settings);
         }
 
         /// <summary>The driver-merged DEVMODE for these settings, as <see cref="WindowsPrinterTarget"/> makes it.</summary>

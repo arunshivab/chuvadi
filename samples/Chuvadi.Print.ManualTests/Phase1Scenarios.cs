@@ -96,7 +96,9 @@ namespace Chuvadi.Print.ManualTests
             var sb = new StringBuilder(queues.Count + " queue(s)");
             foreach (CupsQueue q in queues)
                 sb.Append(Environment.NewLine).Append("      ").Append(q.Name).Append(" | ").Append(q.Uri ?? "-")
-                  .Append(" | ").Append(q.IsAcceptingJobs ? "accepting" : "not accepting");
+                  .Append(" | ").Append(q.IsAcceptingJobs ? "accepting" : "not accepting")
+                  .Append(" | type ").Append(q.PrinterType is int t ? "0x" + t.ToString("X") : "-").Append(q.IsRemote ? " (remote)" : string.Empty)
+                  .Append(" | uuid ").Append(q.Uuid ?? "-").Append(" | device ").Append(q.DeviceUri ?? "-");
             return sb.ToString();
         }
 
