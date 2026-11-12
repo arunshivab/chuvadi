@@ -1,4 +1,4 @@
-# Phase 1 report (in progress)
+# Phase 1 report
 
 Branch `feat/shaping-phase1`, from main 5b03e81 (phase 0 merged, #57); merged with main 9b8110b for the D-295 delivery. Plan: design note v1, phase 1: read-only GDEF,
 GSUB and GPOS views in Chuvadi.OpenType (FeatureVariations and variation data at the default instance), the layout
@@ -209,3 +209,96 @@ identical, file by file, to the tree built and tested on Linux.
   33 format 14 sequences and the 22 recorded probes.
 - Pack harness r2 through the wrapper on 3.32.1 with the 0.1.0-phase1.1 packages: SELF-TEST PASSED (22 checks);
   gate 1 2,144 of 29,493; gate 2 Default tags match the contract, 0 of 358; GATE FAILED, expected until phase 4.
+
+## The engine (feat/shaping-engine, phase-1 exit)
+
+Branch `feat/shaping-engine`, from main 055d258 (after the font reader, #124, and `opentype-v0.1.0`). One PR at the
+phase-1 exit (D-323), nothing on main in between: the engine commit, then one commit with D-361, D-363 and the
+corrected mark centring.
+
+Decisions:
+
+- D-332 (2026-11-11): the wrapper fallback (F1 to F4) is not in Chuvadi.Pdf 3.33.0; it ships as its own Pdf release
+  once Chuvadi.Text.Shaping and Chuvadi.OpenType are stable and hosted and the gate is green. When the wrapper is next
+  updated it needs a `LimitReached` member (value 4).
+- D-345 (2026-11-11): E3 option (b). ZWJ joins the cluster of the character before it; ZWNJ starts its own. It rests
+  on the black-box statement filed in `inputs/d345-joiners-statement.md` (R-TS-0031).
+- D-361 (2026-11-12): both D-354 scope points approved. (1) The mark fallback applies only when the font lacks the
+  glyph and the font has no GPOS table. (2) Marks are always put into canonical order before placement; only the shaped
+  glyph order changes, the stored text never.
+- D-363 (2026-11-12): empty multiple-substitution sequence deletes the glyph, kept and documented as lenient handling
+  of a broken font; an alternate value past the end of the set leaves the glyph unchanged (changed, tested); no
+  MissingGlyph for a missing space replaced by the space glyph, kept.
+- D-354 (2026-11-11): option (b) for both fallbacks, built from the Unicode Standard and the black-box statement in
+  `inputs/d345-fallback-statement.md`: widths for missing space characters (R-TS-0036) and positions for missing
+  combining marks (R-TS-0037). Measured, not tuned (rule 2).
+
+What is built (trace R-TS-0016 to R-TS-0042): language system choice; feature plan with ranged settings and alternate
+values; a cache of 16 plans per font; GSUB types 1 to 8 and GPOS 1 to 9 (extensions resolved by the views); lookup flags,
+mark attachment classes and mark filtering sets; LookupList order, one GSUB and one GPOS pass; level-0 clusters;
+normalisation against the font; automatic fractions; default ignorables; legacy 'kern'; attachment resolution;
+`ShapingLimits` with `LimitReached`; the D-354 fallbacks; per-lookup glyph sets so a lookup is not tried at a glyph it
+cannot start at (E11, R-TS-0042). The Indic scripts keep the phase 0 path (E1).
+
+Speed here (Linux container, gate `--bench 200`, Latin words, microseconds per call): 7.74 with the font cached,
+28.34 when the font is loaded on every call. The comparison with Chuvadi.Pdf 3.31.0 (D-73, D-190) is on Arun's machine.
+
+### First measurement of the D-354 fallbacks
+
+Latin 809 to 848 of 852 with nothing fitted to the corpus. In two places the statement's own wording set the scope:
+
+1. The mark fallback runs only in a font with no GPOS table (the statement is headed "in a font without GPOS"). The
+   first build used it wherever no lookup had positioned the mark, and 19 Carlito lines (Carlito has GPOS) broke: there
+   the reference keeps the .notdef mark at its own advance with no offset.
+2. Canonical order is applied even when a cluster is kept as given ("marks are first put into canonical order"); it
+   fixed line 9652 and changed no other line.
+
+Then still differing, all on ChuvadiTest-Cff.otf, the horizontal offset of a fallback mark on a narrow base: 9675 and
+9743 (f + mark: expected x −410, ours −390) and 9751 and 9825 (i + acute: expected −370, ours −375). The first
+statement had said the mark is centred on the base's ink box; a second black-box statement from a separate test chat
+(`inputs/fallback-narrow-base-statement.md`, 2026-11-12) corrected that: the mark is centred on the base's advance, and
+the horn (216) puts its right edge at the end of the advance on every base. R-TS-0037 now follows it.
+
+### Phase-1 exit
+
+Latin 852 of 852, cpsp-on 358 of 358, every Indic and oldtags count unchanged, parity 36,594 of 36,594; the gate's
+phase target is 2,503 matching lines (syllables 290, words 2,213). Nothing was fitted to the corpus: every fallback
+number comes from the Unicode Standard or one of the two statements.
+
+Open, not in the corpus: the rounding of an odd half advance; the classes 222, 226, 232 and the left classes, which
+follow the horn's reference by analogy; a mark after a ligature in a font without GPOS (the statement saw −385 on f_i,
+probably the last component).
+
+### Rule 5 list for the engine PR
+
+Behaviour (each traced; items 1 to 8 approved in D-319 or D-345, listed again here for the record):
+
+| # | Item | Trace |
+|---|---|---|
+| 1 | Latin and every non-Indic script are now shaped with GSUB and GPOS (before: character map and advances only); the Indic scripts are unchanged | R-TS-0035 |
+| 2 | Features always on: rvrn, rlig, rclt, curs, dist, abvm, blwm; on by default ccmp, locl, calt, liga, cpsp, kern, mark, mkmk; each switched off by value 0 | R-TS-0017 |
+| 3 | Ranged feature settings get their own mask bits, at most 63 in all; settings past that are ignored | R-TS-0017 |
+| 4 | GSUB skips default ignorables except ZWJ and ZWNJ; GPOS skips all default ignorables | R-TS-0020 |
+| 5 | Default ignorables become the space glyph with zero advance after GSUB | R-TS-0029 |
+| 6 | A mark positioned by a mark-attachment lookup gets advance 0 (the spec leaves advances unchanged) | R-TS-0027 |
+| 7 | Legacy 'kern' only when the font has no GPOS | R-TS-0033 |
+| 8 | ZWJ joins the cluster before it; ZWNJ starts its own (D-345) | R-TS-0031 |
+| 9 | Automatic fractions around U+2044, switched off by a global frac=0 | R-TS-0019 |
+| 10 | A multiple substitution with an empty sequence (out of spec) deletes the glyph: lenient handling of a broken font, kept (D-363) | R-TS-0038 |
+| 11 | An alternate value past the end of the set leaves the glyph unchanged, no substitution (D-363; before D-363 it picked the last alternate) | R-TS-0038 |
+| 12 | Fallbacks (D-354) apply only when the font lacks the glyph: a missing space character takes the space glyph with the width for its kind, with no MissingGlyph for it (kept, D-363); a missing combining mark is positioned only when the font lacks the glyph and the font has no GPOS table (scope point 1 above, approved D-361) | R-TS-0036, R-TS-0037 |
+| 13 | Canonical mark order is applied even when a cluster is kept as given; only the shaped glyph order changes, the stored text never (scope point 2 above, approved D-361) | R-TS-0032 |
+
+New API: `ShapingLimits` (`MaxNestingDepth`, `MaxOperationsPerGlyph`, `MinOperations`, `Default`), `ShapeOptions.Limits`,
+`ShapingDiagnosticKind.LimitReached` (value 4; 3 is kept free for the wrapper's FontReaderFallback). Error types:
+`ShapingLimits` throws ArgumentOutOfRangeException for a value below 1; `ShapeOptions.Limits` throws
+ArgumentNullException for null. Nothing existing changes.
+
+### Tests
+
+`EngineTests` (60 cases) on built fonts: every GSUB type (single, multiple, alternate, ligature, context formats 1 and 2,
+chained context format 3, extension, reverse chaining), GPOS single, pair, cursive, mark-to-base, mark-to-ligature,
+mark-to-mark and chained context; IgnoreMarks, mark attachment type and mark filtering set; ranged settings, later
+settings replacing earlier ones and `UseDefaultFeatures = false`; fractions; normalisation and canonical order;
+joiners and the D-345 clusters; the operation and nesting limits; the plan cache; legacy 'kern'; every D-354 case in
+the statement. IgnoreBaseGlyphs and IgnoreLigatures have no test of their own yet.
