@@ -9,8 +9,9 @@ namespace Chuvadi.Text.Shaping;
 /// settings layered over the default features; a setting with value 0 turns a
 /// default feature off. With <see cref="UseDefaultFeatures"/> false, only the
 /// script-required features and the listed settings apply.
-/// The set of default features is applied from phase 3 of the shaper's plan and
-/// will be listed for approval before then; this version maps characters only.
+/// The default features are the contract's list (ccmp, locl, calt, liga, cpsp, kern, mark, mkmk; P4 a, D-188). The
+/// registry's required and on-by-default features (rvrn, rlig, rclt, curs, dist, abvm, blwm) and the automatic fraction
+/// around U+2044 (frac, numr, dnom) always apply unless a setting with value 0 turns them off (E5, E7, D-319).
 /// </remarks>
 public sealed class ShapeOptions
 {
@@ -31,4 +32,14 @@ public sealed class ShapeOptions
 
     /// <summary>Gets or inits whether the default features apply. Default: true.</summary>
     public bool UseDefaultFeatures { get; init; } = true;
+
+    /// <summary>Gets or inits the limits against hostile fonts. Default: <see cref="ShapingLimits.Default"/>.</summary>
+    /// <exception cref="ArgumentNullException">The value is null.</exception>
+    public ShapingLimits Limits
+    {
+        get => _limits;
+        init => _limits = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    private readonly ShapingLimits _limits = ShapingLimits.Default;
 }

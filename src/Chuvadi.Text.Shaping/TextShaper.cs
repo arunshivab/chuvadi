@@ -1,6 +1,6 @@
-// PHASE 0. Character-to-glyph mapping and default advances only; no layout
-// features yet. The pipeline stages (normalisation, script engines, GSUB, GPOS,
-// fallback positioning) are added in phases 3 to 6 of design note v1.
+// PHASE 1. Latin and the other non-complex scripts go through the engine (Engine/DefaultShaper: normalisation, GSUB,
+// GPOS); the Indic scripts keep the phase-0 path (character-to-glyph mapping and default advances) until their
+// phases (E1, D-319).
 
 using System;
 using System.Globalization;
@@ -41,6 +41,12 @@ public static class TextShaper
         CharacterMap cmap = f.CharacterMap;
         output.Reset(f.UnitsPerEm, length);
         CheckScript(f, options.Script, output);
+        if (!IsIndic(options.Script))
+        {
+            Engine.DefaultShaper.Shape(font, text, start, length, options, output);
+            return;
+        }
+
         int end = start + length;
         int i = start;
         while (i < end)
@@ -105,6 +111,11 @@ public static class TextShaper
 
         output.AddDiagnostic(ShapingDiagnosticKind.ScriptNotInFont, $"The font has no layout data for the script {script}; its default script system was used.");
     }
+
+    // TRACE R-TS-0035
+    private static bool IsIndic(Script s) =>
+        s == Script.Devanagari || s == Script.Bengali || s == Script.Gurmukhi || s == Script.Gujarati || s == Script.Odia
+        || s == Script.Tamil || s == Script.Telugu || s == Script.Kannada || s == Script.Malayalam;
 
     // TRACE R-TS-0012
     private static int NextCodePoint(ReadOnlySpan<char> text, ref int i, int end)

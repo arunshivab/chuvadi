@@ -2,7 +2,20 @@
 
 ## Unreleased (0.1.0)
 
-Phase 1 (D-205, D-246, D-295):
+Phase 1 (D-205, D-246, D-295, D-319, D-332, D-345, D-354):
+
+- The default engine for Latin and every non-Indic script: GSUB lookup types 1 to 8 and GPOS 1 to 9, lookup flags
+  and mark filtering sets, features with UTF-16 ranges and alternate values, LookupList order (R-TS-0016 to
+  R-TS-0041). The Indic scripts keep the phase 0 mapping until phases 2 and 3.
+- Clusters at level 0: a combining mark or ZWJ joins the character before it, ZWNJ starts its own (D-345).
+- Normalisation against the font, canonical mark order always (D-319 E2, D-354).
+- Default ignorables become the space glyph with zero advance; legacy 'kern' only without GPOS; automatic fractions,
+  switched off with frac=0.
+- Fallbacks when the font lacks the glyph (D-354): widths for missing space characters; in a font with no GPOS table,
+  positions for missing combining marks.
+- `ShapingLimits` and `ShapeOptions.Limits`; diagnostic kind `LimitReached` (value 4; 3 is the wrapper's
+  FontReaderFallback).
+- A bounded cache of 16 shape plans per font.
 
 - Typed diagnostics on the result (D-246): `GlyphBuffer.Diagnostics`, `ShapedRun.Diagnostics`, `ShapingDiagnostic`,
   `ShapingDiagnosticKind` (`MissingGlyph`, `ScriptNotInFont`), each kind once per call, nothing allocated when none.
