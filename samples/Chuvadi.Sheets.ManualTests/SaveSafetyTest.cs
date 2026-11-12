@@ -466,7 +466,7 @@ internal static class SaveSafetyTest
     /// The decrypted package holds the same parts, with the same bytes, as the unencrypted save. Only the save
     /// time differs: the zip entry times, and the created/modified dates in docProps/core.xml.
     /// </summary>
-    private static void SamePackage(byte[] decrypted, byte[] plain)
+    internal static void SamePackage(byte[] decrypted, byte[] plain)   // also used by SavesTest (2.1.0)
     {
         static SortedDictionary<string, byte[]> Parts(byte[] zip)
         {

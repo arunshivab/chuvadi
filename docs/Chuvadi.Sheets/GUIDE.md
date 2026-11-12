@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.0.5 (released 2026-11-10) |
+| Library version | Chuvadi.Sheets 2.1.0 (released 2026-11-12) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -27,7 +27,7 @@ library before the PDF is published (see the last chapter).
 | Part II · Writing workbooks | 5 Choosing a write API · 6 The Workbook model · 7 The streaming writer · 8 Values and types · 9 Cell styles · 10 Formulas and defined names · 11 One-line exports · 12 Sheet features · 13 Page setup and printing · 14 Data validation · 15 Conditional formatting |
 | Part III · Reading workbooks | 16 The streaming reader · 17 Loading a workbook · 18 Typed and table reads · 19 Display text and number formats · 20 Styles on read · 21 Layout for renderers · 22 Rich text, hyperlinks and comments · 23 Drawings, charts and header pictures |
 | Part IV · Security | 24 Sheet and workbook protection · 25 Encryption · 26 Untrusted input · 27 Errors |
-| Part V · Operations and reference | 28 Performance · 29 Threading · 30 The zip API (obsolete) · 31 Options reference · 32 Public API map · 33 Troubleshooting · 34 About this guide |
+| Part V · Operations and reference | 28 Performance · 29 Threads and platforms · 30 The zip API (obsolete) · 31 Options reference · 32 Public API map · 33 Troubleshooting · 34 About this guide |
 
 # 1 Introduction
 
@@ -89,13 +89,13 @@ it a sound base for viewers and converters (Chuvadi.Layout.Sheets lays out and r
 ## 2.2 Getting the package
 
 Chuvadi.Sheets is published as a NuGet package attached to its GitHub release, not on nuget.org. Download
-`Chuvadi.Sheets.2.0.5.nupkg` from the release page (tag `sheets-v2.0.5`), put it in a folder, and use that folder
+`Chuvadi.Sheets.2.1.0.nupkg` from the release page (tag `sheets-v2.1.0`), put it in a folder, and use that folder
 as a package source.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path C:\local-nuget | Out-Null
-Copy-Item .\Chuvadi.Sheets.2.0.5.nupkg C:\local-nuget\
-Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.0.5.nupkg -Algorithm SHA256
+Copy-Item .\Chuvadi.Sheets.2.1.0.nupkg C:\local-nuget\
+Get-FileHash C:\local-nuget\Chuvadi.Sheets.2.1.0.nupkg -Algorithm SHA256
 ```
 
 The release page shows the package's SHA-256 digest; the hash printed here should be the same.
@@ -114,7 +114,7 @@ Add a `nuget.config` next to your solution so the folder is a source:
 Then reference the package:
 
 ```powershell
-dotnet add package Chuvadi.Sheets --version 2.0.5
+dotnet add package Chuvadi.Sheets --version 2.1.0
 ```
 
 ## 2.3 Building from source
@@ -246,7 +246,7 @@ header text.
 # 4 Upgrading from 1.x
 
 Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 to 2.0.5 are bug-fix releases on
-top of it (sections 4.5 to 4.9). Values, styles, display text and saved
+top of it (sections 4.5 to 4.9), and 2.1.0 adds to it without breaking anything (section 4.10). Values, styles, display text and saved
 output are the same as in 1.8.0; the public API is the same apart from the namespace and the obsolete zip types.
 
 ## 4.1 The namespace is now `Chuvadi.Sheets.Model`
@@ -371,6 +371,27 @@ This applies to every write path: cells, `Workbook.SaveTo`, `ToXlsx`, `DataValid
 evaluation. Load → save no longer moves those dates, nor durations from 24 hours up to 59 days, which the reader
 returns as dates in that range. Later dates and time-only values are unchanged.
 
+## 4.10 Changes in 2.1.0
+
+2.1.0 is a minor release: everything it adds is new API, and existing calls compile and behave as before, apart from
+the two Display text rows.
+
+| Area | What is new | Section |
+|---|---|---|
+| Saves | `Workbook.SaveTo(Stream, EncryptionOptions)`; `XlsxWriterOptions` on every save: `Workbook.SaveTo`, `ToXlsx` for lists and DataTables, `new XlsxExport(path or stream, options)`; `ToXlsx(DataTable, Stream)` | 6.4, 11 |
+| Temporary files | `XlsxWriterOptions.TempStorage = TempStorage.Memory`: no file in the temp folder | 7.6 |
+| Streaming reader | `RowReader.HasColumn`, `RowReader.HeaderNames`, `SheetReader.HeaderNames`; a cancellation example | 16.1, 16.3 |
+| Typed and table reads | `ReadXlsx`, `ReadXlsxSheet` and `ReadXlsx<T>` on a `Stream` | 18 |
+| Sizes | `WidthInPixels` and `WidthInPoints` on `Column`, `ColumnRange` and `SheetFormat`; the `CellReference` helper | 6.2 |
+| Trimming and AOT | the typed exports and reads are annotated; the package is marked trimmable and AOT-compatible | 29.2 |
+| Errors | `XlsxLimitExceededException` gains a constructor with an inner exception; an old binary .xls is a format error, not a password prompt (in the package since 2.0.5) | 27.1 |
+| Display text | serials from 0 to 1 under a date or time format show as Excel shows them (`09:00:00`), not `########` | 19.2 |
+| Display text | built-in formats 14 and 22 show the culture's short date, as Excel does in each region | 19.2 |
+| Package | the description and tags no longer say "zip" | 2.2 |
+
+A literal `null` in an existing call, such as `wb.SaveTo(path, null)` or `list.ToXlsx(path, null)`, binds to the
+same overload as before: the older overloads take priority over the new options overloads.
+
 # 5 Choosing a write API
 
 All three write APIs produce the same kind of file and share the same styles, formats and sheet features. They
@@ -451,6 +472,36 @@ wb.SaveTo("ranges.xlsx");
 `sheet.Columns[n]` and `sheet.Rows[n]` are 1-based and settable: width, hidden, outline level, collapsed and a
 style for the whole column or row. Chapter 12 covers views, outlines and visibility in full.
 
+A column width is in Excel's character units, as the file stores it. Since 2.1.0 `WidthInPixels` and
+`WidthInPoints` give it in screen units, for a renderer or a viewer, and `CellReference` converts A1 references:
+
+```csharp
+var wb = new Workbook();
+var sheet = wb.AddSheet("Sizes");
+sheet.Columns[1].Width = 13.7109375;
+
+Console.WriteLine(sheet.Columns[1].WidthInPixels());          // 96
+Console.WriteLine(sheet.Columns[1].WidthInPoints());          // 72
+Console.WriteLine(sheet.Columns[2].WidthInPixels());          // 64: no width, the sheet default
+Console.WriteLine(sheet.Format.DefaultWidthInPixels());       // 64
+
+Console.WriteLine(CellReference.ColumnLetters(28));           // AB
+Console.WriteLine(CellReference.ColumnIndex("XFD"));          // 16384
+Console.WriteLine(CellReference.ToA1(10, 28));                // AB10
+var (row, column) = CellReference.ParseA1("B3");
+Console.WriteLine($"{row}, {column}");                         // 3, 2
+```
+
+- The pixels follow ECMA-376 §18.3.1.13, the formula Chuvadi.Layout uses:
+  Truncate(((256 × width + Truncate(128 / MDW)) / 256) × MDW). MDW, the optional argument, is the widest digit of
+  the workbook's default font in pixels: 7 for Calibri 11, Excel's default. Points are pixels × 72 / 96.
+- These are screen units at 96 dpi, not printed width: Excel prints a character slightly wider than it draws it.
+- `Column` uses its own width or the sheet default. A loaded span (`ColumnRange`) knows only its stored width, so it
+  gives 0 when the file stores none. Hidden columns report their width too.
+- `CellReference` takes upper-case references as files store them. `ParseA1` rejects `$`, lower case and ranges,
+  and checks the shape, not the range: `XFE1` comes back as column 16,385, so compare with the limits (16,384
+  columns, 1,048,576 rows) where it matters. `ColumnLetters`, `ColumnIndex` and `ToA1` check the range.
+
 ## 6.3 Load, edit, save
 
 ```csharp
@@ -486,6 +537,30 @@ the last byte written, and never closes it, so you can keep using it or hand it 
 The stream need not be seekable. The same holds for `XlsxWriter.Create(stream)`, `ToXlsx(stream)` and
 `new XlsxExport(stream)`, encrypted or not. (2.0.0 and earlier closed the stream after an unencrypted save, although
 the documentation said it did not.)
+
+Since 2.1.0 the model saves take every writer option, to a path or a stream, and an encrypted save can go to a
+stream directly:
+
+```csharp
+var wb = new Workbook();
+wb.AddSheet("Data").Cell("A1").Value = "Confidential";
+
+var encrypted = new MemoryStream();
+wb.SaveTo(encrypted, new EncryptionOptions { Password = "s3cret" });
+
+var options = new XlsxWriterOptions
+{
+    Encryption = new EncryptionOptions { Password = "s3cret" },
+    TempStorage = TempStorage.Memory,                // no file in the temp folder (section 7.6)
+};
+wb.SaveTo("confidential.xlsx", options);
+Console.WriteLine($"{encrypted.Length:N0} bytes; file {new FileInfo("confidential.xlsx").Length:N0} bytes");
+```
+
+`SaveTo(path or stream, XlsxWriterOptions)` applies every writer option: `Encryption`, `TempDirectory`,
+`TempStorage`, `UseInlineStrings`, `FullCalculationOnLoad`, and the `Default…Format` options, which format a cell
+holding a date, time or `TimeSpan` that has no style. Null options are the defaults. (`cell.DisplayText` before a
+save shows such a cell with the default formats, whatever options the save will use.)
 
 # 7 The streaming writer
 
@@ -635,6 +710,32 @@ calls against the same writer at the same time.
   save succeeds: a failed or cancelled save, or a writer disposed without `Save`, leaves an existing file as it was
   and removes the temporary file. A replaced file keeps its permissions (on Windows also its attributes and
   security settings), and a symbolic link stays a link.
+
+Since 2.1.0, `XlsxWriterOptions.TempStorage` chooses where the working copies go. `TempStorage.File`, the default, is
+everything above. `TempStorage.Memory` keeps the sheet spools and the package of an encrypted save in process
+memory instead, for a read-only file system, a sandboxed app or a container without a writable temp folder:
+
+```csharp
+var options = new XlsxWriterOptions { TempStorage = TempStorage.Memory };
+using (var writer = XlsxWriter.Create("in-memory.xlsx", options))
+{
+    using (var sheet = writer.AddSheet("Data"))
+        for (int i = 1; i <= 1000; i++) sheet.WriteRow(i, "row " + i);
+    writer.Save();
+}
+Console.WriteLine(new FileInfo("in-memory.xlsx").Length > 0);
+```
+
+- No file is created in the temp folder, and `TempDirectory` is ignored (not checked).
+- The in-memory copies are not encrypted: they hold the same data the program already holds, and they are gone
+  when the save returns. With `File`, an encrypted save's temporary files are encrypted because a file can outlive
+  the process.
+- Memory grows by about two and a half times the package size at the peak. A sheet, or an encrypted package, over
+  about 2 GB fails with the system's `IOException`.
+- A save to a path still writes its output beside the target and replaces the target only on success, so there is
+  no temporary file outside the target folder. A save to a stream creates no file at all.
+- The saved file is the same either way. Chuvadi.Docs has the same setting, with the same values and meaning, on its
+  `EncryptionOptions`.
 
 # 8 Values and types
 
@@ -911,6 +1012,41 @@ new XlsxExport("multi.xlsx")
 `XlsxExport` also takes a stream. The one-liners are built on the streaming writer, so memory stays flat for large
 lists.
 
+Since 2.1.0 every one-liner also takes `XlsxWriterOptions`, for encryption, the temporary files and inline strings,
+and a DataTable can go to a stream:
+
+```csharp
+var options = new XlsxWriterOptions
+{
+    Encryption = new EncryptionOptions { Password = "s3cret" },
+    TempStorage = TempStorage.Memory,
+};
+var people = new[] { new Patient { Id = "P-002", Name = "Ravi Iyer", Ward = "B" } };
+people.ToXlsx("people-locked.xlsx", options, cfg => cfg.AutoFilter());
+
+var table = new DataTable("Visits");
+table.Columns.Add("Id", typeof(int));
+table.Rows.Add(2);
+var ms = new MemoryStream();
+table.ToXlsx(ms);                                             // new in 2.1.0: a DataTable to a stream
+
+new XlsxExport("multi-locked.xlsx", options)
+    .AddSheet("Patients", people)
+    .AddSheet("Visits", table)
+    .Save();
+Console.WriteLine($"{ms.Length:N0} bytes");
+```
+
+| Export | Overloads with `XlsxWriterOptions` (2.1.0) |
+|---|---|
+| A list | `ToXlsx(path, options, configure)`, `ToXlsx(stream, options, configure)` |
+| A DataTable | `ToXlsx(path, options, configure)`, `ToXlsx(stream, options, configure)`; also new: `ToXlsx(stream)`, `ToXlsx(stream, configure)` |
+| Several sheets | `new XlsxExport(path, options)`, `new XlsxExport(stream, options)` |
+| A workbook | `wb.SaveTo(path, options)`, `wb.SaveTo(stream, options)`, `wb.SaveTo(stream, encryption)` (section 6.4) |
+
+`configure` is optional, and null options are the defaults. A call written before 2.1.0 with a literal `null`, such
+as `list.ToXlsx(path, null)`, still means "no configure".
+
 # 12 Sheet features
 
 ## 12.1 Views, panes and visibility
@@ -1172,6 +1308,30 @@ foreach (var row in staff.Rows)
 - `Sheet(name)` or `Sheet(index)` returns a `SheetReader`; enumerating `Rows` streams the sheet's XML once.
 - The reader keeps the package open until it is disposed.
 
+A large or encrypted file can take a while to open. `XlsxReaderOptions.CancellationToken` stops it: pass a token
+with a timeout, or one a Cancel button sets, and catch `OperationCanceledException`:
+
+```csharp
+using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+var options = new XlsxReaderOptions { CancellationToken = timeout.Token };
+try
+{
+    using var slow = XlsxReader.Open("staff.xlsx", options);
+    int rows = 0;
+    foreach (var row in slow.Sheet("Staff").Rows) rows++;
+    Console.WriteLine($"{rows} rows read");
+}
+catch (OperationCanceledException)
+{
+    Console.WriteLine("Opening the file was cancelled.");
+}
+```
+
+The token is checked while the package is checked, every 256 shared strings, every 4,096 spins of an encrypted
+file's key derivation, at every row, and at the start of `ReadLayout`, `ReadDrawings` and `ReadComments`. The same
+option works for `Workbook.Load` and the `ReadXlsx` readers. Run a slow open off the UI thread, so the Cancel button
+stays responsive.
+
 ## 16.2 Rows
 
 Each row is a `RowReader`, a transient view over a buffer that the next row reuses. Copy out what you need inside
@@ -1221,6 +1381,30 @@ addresses columns in `row["Name"]`, `TryGet("Name", ...)`, `GetString("Name")` a
   against the header row when they come from outside.
 - With headers off, every row is returned and only 0-based indexes work: any name throws
   `InvalidOperationException` ("Header index not built; enable TreatFirstRowAsHeaders.").
+
+Since 2.1.0 you can check the header row before reading values, for example to reject an upload with a missing
+column:
+
+```csharp
+using var check = XlsxReader.Open("staff.xlsx");
+var staffSheet = check.Sheet("Staff");
+foreach (var row in staffSheet.Rows)
+{
+    Console.WriteLine(string.Join(", ", row.HeaderNames));       // Id, Name, Joined
+    Console.WriteLine(row.HasColumn("joined"));                  // True: case is ignored
+    Console.WriteLine(row.HasColumn("Ward"));                    // False
+    break;
+}
+```
+
+- `row.HasColumn(name)` is the same lookup as `row[name]`: case is ignored, only text headers count.
+- `HeaderNames` lists the header row's text by column position, exactly as written, with `null` where the header
+  cell is empty or not text. It is the raw text: names can repeat or be missing. (`ReadXlsxSheet` makes its
+  DataTable column names unique, section 18.2.)
+- `SheetReader.HeaderNames` is the same list, filled once the header row is read, that is after the first
+  `MoveNext` of `Rows`. A sheet with only a header row yields no rows, but its `HeaderNames` is filled, so its columns
+  can still be checked. Without headers, `HasColumn` is `false` and `HeaderNames` is empty (`null` on the
+  `SheetReader`).
 
 ## 16.4 Options that change what is read
 
@@ -1288,6 +1472,18 @@ Console.WriteLine($"{back[0].Id} {back[0].Name} {back[0].DateOfBirth:yyyy-MM-dd}
 
 Values are converted to the property type: numbers to any numeric type, numbers to `bool`, date serials to
 `DateTime`, everything else through `Convert.ChangeType` with the invariant culture.
+
+Since 2.1.0 `ReadXlsx`, `ReadXlsxSheet` and `ReadXlsx<T>` also read a stream, such as a server upload or an Android
+content stream, with the same results as the path versions. The stream is left open:
+
+```csharp
+using var upload = File.OpenRead("roundtrip.xlsx");
+List<Patient> fromStream = upload.ReadXlsx<Patient>();
+Console.WriteLine(fromStream.Count);
+```
+
+Each has the same overloads on a stream as on a path: with a sheet name, and with a sheet name, a password and
+`XlsxReaderOptions`.
 
 ## 18.2 Into DataTables
 
@@ -1371,6 +1567,29 @@ repeat-fill character from a `*` code and where it goes, and whether a date or t
 - Formula cells show their cached result; a formula without one shows empty text.
 - Culture-dependent built-in formats (currency and accounting ids 5 to 8 and 41 to 44) render as Excel does in
   en-US.
+- Built-in formats 14 (short date) and 22 (short date and time) follow `DisplayCulture`, since 2.1.0. Excel marks
+  them "respond to changes in regional settings" and shows the system's short date, not their ECMA codes
+  (`mm-dd-yy`, `m/d/yy h:mm`). Chuvadi.Sheets uses the culture's `ShortDatePattern`, and for 22 adds `h:mm`. A code
+  the file itself declares for id 14 or 22 still wins, and the cell's `Style.NumberFormat` still reports the stored
+  code.
+
+| `DisplayCulture` | Built-in 14 | Built-in 22 |
+|---|---|---|
+| Invariant (the default) | 05/18/1903 | 05/18/1903 14:05 |
+| en-US | 5/18/1903 | 5/18/1903 14:05 |
+| en-GB, en-IN (.NET's data) | 18/05/1903 | 18/05/1903 14:05 |
+| de-DE | 18.05.1903 | 18.05.1903 14:05 |
+| `CultureInfo.CurrentCulture` with Windows set to dd-MM-yyyy | 18-05-1903 | 18-05-1903 14:05 |
+
+  Pass `CultureInfo.CurrentCulture` to show what Excel shows on the same machine; the invariant default is a
+  US-style order. Before 2.1.0 both ids showed their ECMA codes ("05-18-03").
+- A date or time format on a serial from 0 to 1 shows as Excel shows it, since 2.1.0: 0.375 under `hh:mm:ss` is
+  `09:00:00`, and 0 under `dd-mm-yyyy` is `00-01-1900`, Excel's "day 0". The reader returns such a value as a time
+  on 30 December 1899, and `NumberFormatter.ToSerial` now maps that back to the time of day (0.375), where it gave a
+  negative serial and so `########`. A negative serial under a date format still shows `########`, as in Excel.
+- The `/` in a format code is the culture's date separator, as in Excel: `dd/mm/yyyy` shows `18.05.1903` under
+  de-DE. Other characters, such as `-`, are shown as written. Chuvadi.Layout's `Culture` option sets the culture its
+  sheets render with.
 
 ```csharp
 var wb = new Workbook();
@@ -1773,9 +1992,9 @@ saving a loaded workbook writes a macro-free `.xlsx`.
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | The file is malformed: not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, declared or not), a damaged relationship entry, a truncated part, a text cell whose shared-string reference does not exist, or, with a password given, a damaged encrypted container or a failed integrity check. `InnerException` holds the original error, when there is one. |
+| `XlsxFormatException` | The file is malformed: not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, declared or not), a damaged relationship entry, a truncated part, a text cell whose shared-string reference does not exist, or, with a password given, a damaged encrypted container or a failed integrity check. Since 2.0.5 also an old binary file, such as an Excel 97-2003 .xls, or another compound file that is not an encrypted xlsx: the message names the old format, for example "This is an Excel 97-2003 binary file (.xls), not an Office Open XML package, and it is not encrypted." (before 2.0.5 it asked for a password). `InnerException` holds the original error, when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. |
-| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. |
+| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. `LimitName`, `Limit` and `Actual` say which. Since 2.1.0 a second constructor also takes an inner exception, for code that rethrows a limit with its cause, as Chuvadi.Docs' `DocxLimitExceededException` does. |
 | `InvalidDataException` with `Data["Chuvadi.Sheets.ReadLimit"]` | `MaxPartBytes` was exceeded (a limit, not a malformed file). |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 | `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |
@@ -1838,7 +2057,9 @@ dotnet run -c Release --project samples\Chuvadi.Sheets.ManualTests -- perf
 - **Open from memory** when the file arrived over the network: on Windows, antivirus scans files on open, and an
   encrypted file's scan can take seconds (chapter 25).
 
-# 29 Threading
+# 29 Threads and platforms
+
+## 29.1 Threads
 
 No public type is thread-safe for concurrent use. Use each instance from one thread at a time; separate instances
 are independent.
@@ -1868,6 +2089,28 @@ async Task ExportAsync(IAsyncEnumerable<(int Id, string Name)> source, string pa
     await writer.SaveAsync();
 }
 ```
+
+## 29.2 Platforms
+
+Chuvadi.Sheets is one managed DLL with no native code, no font files and no NuGet dependencies, so it runs wherever
+.NET 10 runs: Windows, Linux, macOS (CI runs the test suites on all three), Android and iOS through
+.NET, containers and servers.
+
+- **State:** static state (the format-code cache, the font metrics) is safe from any thread. Instances are one per
+  thread, or one per request on a server (section 29.1).
+- **Folders:** a path save writes beside its target, and every save spools to the temp folder unless
+  `TempStorage.Memory` is set (section 7.6). With `TempStorage.Memory` and a stream, a save needs no writable folder
+  at all. Reading never writes a file.
+- **Globalization:** builds with `InvariantGlobalization` work. Display text then uses the invariant culture unless a
+  `DisplayCulture` is given (chapter 19).
+- **Trimming and NativeAOT (since 2.1.0):** the package is marked `IsTrimmable` and `IsAotCompatible`, and the build
+  runs the trim and AOT analyzers with warnings as errors. The typed APIs (`ToXlsx<T>`, `XlsxExport.AddSheet<T>`,
+  `XlsxExportConfig<T>`, `ReadXlsx<T>`) carry `[DynamicallyAccessedMembers(PublicProperties)]` on `T`, so a trimmed or
+  AOT app keeps the properties they read and write. Before 2.1.0, under NativeAOT, `ToXlsx<T>` wrote empty cells and
+  `ReadXlsx<T>` returned empty properties. A generic method of yours that passes its own `T` on to these needs the
+  same attribute; the analyzer says so (IL2091).
+- **Encrypted reads** decrypt the package into memory, so memory grows with the file size times the number of files
+  open at once; `MaxTotalUncompressedBytes` bounds it (chapter 26).
 
 # 30 The zip API (obsolete)
 
@@ -1908,6 +2151,7 @@ broken and AES zip is not in the base class library. To protect a spreadsheet, e
 |---|---|---|
 | `UseInlineStrings` | `false` | Write strings in their cells instead of a shared strings table |
 | `TempDirectory` | `Path.GetTempPath()` | Where the temporary files go (section 7.6) |
+| `TempStorage` | `TempStorage.File` | `Memory` keeps the working copies in memory: no file in the temp folder (section 7.6, 2.1.0) |
 | `Encryption` | `null` | `EncryptionOptions` for a password-encrypted file |
 | `DefaultDateFormat` | `yyyy-mm-dd` | Dates without a time and no style |
 | `DefaultDateTimeFormat` | `yyyy-mm-dd hh:mm:ss` | Dates with a time and no style |
@@ -1932,8 +2176,8 @@ All types are in `Chuvadi.Sheets.Model`.
 
 | Area | Types |
 |---|---|
-| Model | `Workbook`, `Sheet`, `Cell`, `Range`, `Row`, `Column`, `RowIndexer`, `ColumnIndexer`, `ColumnRange`, `SheetFormat`, `DefinedName`, `DefinedNameCollection`, `LoadWarning`, `LoadWarningKind` |
-| Streaming write | `XlsxWriter`, `SheetWriter`, `RowBuilder`, `RowFormat`, `ColumnFormat`, `XlsxWriterOptions` |
+| Model | `Workbook`, `Sheet`, `Cell`, `Range`, `Row`, `Column`, `RowIndexer`, `ColumnIndexer`, `ColumnRange`, `SheetFormat`, `DefinedName`, `DefinedNameCollection`, `LoadWarning`, `LoadWarningKind`, `CellReference` (2.1.0) |
+| Streaming write | `XlsxWriter`, `SheetWriter`, `RowBuilder`, `RowFormat`, `ColumnFormat`, `XlsxWriterOptions`, `TempStorage` (2.1.0) |
 | One-line export | `XlsxExtensions`, `XlsxExport`, `XlsxExportConfig<T>`, `DataTableExportConfig`, `ExportConfigBase`, `ColumnAttribute`, `ColumnStyleAttribute`, `ColumnIgnoreAttribute`, `TableStyle` |
 | Streaming read | `XlsxReader`, `SheetReader`, `RowReader`, `SheetInfo`, `SheetLayoutInfo`, `DefinedNameInfo`, `SheetVisibility`, `XlsxReaderOptions`, `XlsxReadExtensions` |
 | Styles | `CellStyle`, `CellStyleBuilder`, `Border`, `BorderStyle`, `HorizontalAlign`, `VerticalAlign`, `UnderlineStyle`, `FontVerticalAlign`, `FontScheme`, `FillPattern`, `GradientFill`, `GradientStop`, `GradientType`, `ReadingOrder` |
@@ -2032,6 +2276,9 @@ a local function, such as an upload handler, are compiled but not run.
 
 ## 34.3 History
 
+- **2.1.0** (November 2026): updated for Chuvadi.Sheets 2.1.0 (section 4.10): writer options on every save (6.4,
+  11.3), `TempStorage` (7.6), widths in pixels and `CellReference` (6.2), the header check and a cancellation
+  example (16.1, 16.3), stream reads (18.1), display text (19.2), errors (27.1), platforms, trimming and AOT (29.2).
 - **2.0.5** (November 2026): updated for Chuvadi.Sheets 2.0.5 (section 4.9): dates before 1 March 1900 (8.1).
 - **2.0.4** (November 2026): updated for Chuvadi.Sheets 2.0.4 (section 4.8): DataTable column names as in Excel
   tables (18.2).

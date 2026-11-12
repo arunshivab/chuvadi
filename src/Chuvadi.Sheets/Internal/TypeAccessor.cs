@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,7 +43,7 @@ internal sealed class ColumnPlan
 ///
 /// Thread-safe via static initialization on a generic type.
 /// </summary>
-internal static class TypeAccessor<T>
+internal static class TypeAccessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>
 {
     /// <summary>The columns derived from <c>T</c>'s public properties (attribute-aware), sorted.</summary>
     public static readonly IReadOnlyList<ColumnPlan> Columns;

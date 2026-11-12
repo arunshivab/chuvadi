@@ -410,11 +410,12 @@ internal static class ReadSafetyTest
                 var row = r.Sheet(1).Rows.First();
                 Eq(new DateTime(1904, 1, 1), (DateTime)row[0]!, "serial 0");
                 Eq(new DateTime(2023, 3, 15), (DateTime)row[1]!, "serial 43538 (1904) = 2023-03-15");
-                Eq("03-15-23", row.GetDisplayString(1), "display (built-in 14)");
+                // 2.1.0 (SH-9 C2): built-in 14 shows the culture's short date; invariant is MM/dd/yyyy (was "03-15-23").
+                Eq("03/15/2023", row.GetDisplayString(1), "display (built-in 14)");
             }
             var wb = Workbook.Load(d1904);
             True(wb.Date1904, "model flag");
-            Eq("03-15-23", wb.Sheets[0].Cell("B1").DisplayText, "model display");
+            Eq("03/15/2023", wb.Sheets[0].Cell("B1").DisplayText, "model display");
         });
 
         Check("1900 system: serials before March 1900 convert exactly", () =>
@@ -428,7 +429,7 @@ internal static class ReadSafetyTest
             Eq(new DateTime(1900, 1, 1), (DateTime)row[0]!, "serial 1");
             Eq(new DateTime(1900, 2, 28), (DateTime)row[1]!, "serial 59");
             Eq(60.0, (double)row[2]!, "serial 60 (29-Feb-1900) stays a number");
-            Eq("02-29-00", row.GetDisplayString(2), "…but displays as Excel does");
+            Eq("02/29/1900", row.GetDisplayString(2), "…but displays as Excel does");   // built-in 14, invariant (2.1.0 C2)
         });
 
         Console.WriteLine();

@@ -204,6 +204,7 @@ public sealed class Workbook
     /// one-time key held only in memory, owner-only and deleted on close), and the file is
     /// replaced only when the save succeeds, so a failed save keeps an existing file.
     /// </summary>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]   // SaveTo(path, null) binds here, as before 2.1.0
     public void SaveTo(string path, EncryptionOptions encryption)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
@@ -215,6 +216,60 @@ public sealed class Workbook
         // beside the target and replaces it only on success, so a failed save keeps the old file.
         // The password is not checked here, as before 2.0.1.
         using var writer = XlsxWriter.CreateForPath(path, new XlsxWriterOptions { Encryption = encryption }, checkPassword: false);
+        WorkbookSerializer.WriteWorkbook(writer, this);
+        writer.Save();
+    }
+
+    /// <summary>
+    /// Saves the workbook as an ENCRYPTED xlsx to the given stream, from its current position (since 2.1.0).
+    /// The same file as <see cref="SaveTo(string, EncryptionOptions)"/> writes; the stream is flushed and not
+    /// closed, and need not be seekable. No plaintext reaches the disk (see <see cref="XlsxWriterOptions.Encryption"/>).
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> or <paramref name="encryption"/> is null.</exception>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]   // SaveTo(stream, null) binds here
+    public void SaveTo(System.IO.Stream output, EncryptionOptions encryption)
+    {
+        if (output is null) throw new ArgumentNullException(nameof(output));
+        if (encryption is null) throw new ArgumentNullException(nameof(encryption));
+        if (_sheets.Count == 0) throw new InvalidOperationException("Workbook has no sheets.");
+
+        using var writer = XlsxWriter.CreateForStream(output, new XlsxWriterOptions { Encryption = encryption }, checkPassword: false);
+        WorkbookSerializer.WriteWorkbook(writer, this);
+        writer.Save();
+    }
+
+    /// <summary>
+    /// Saves the workbook to the given xlsx file path with every writer option (since 2.1.0):
+    /// <see cref="XlsxWriterOptions.Encryption"/>, <see cref="XlsxWriterOptions.TempDirectory"/>,
+    /// <see cref="XlsxWriterOptions.TempStorage"/>, <see cref="XlsxWriterOptions.UseInlineStrings"/> and
+    /// <see cref="XlsxWriterOptions.FullCalculationOnLoad"/>, and the <c>Default…Format</c> options, which format a
+    /// cell holding a date, time or <see cref="TimeSpan"/> that has no style, as <see cref="XlsxWriter"/> does. Null
+    /// options are the defaults, the same save as <see cref="SaveTo(string)"/>. The file is replaced only when the
+    /// save succeeds.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is null or empty, or an encryption password is empty.</exception>
+    public void SaveTo(string path, XlsxWriterOptions? options)
+    {
+        if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
+        if (_sheets.Count == 0) throw new InvalidOperationException("Workbook has no sheets.");
+
+        using var writer = XlsxWriter.Create(path, options);
+        WorkbookSerializer.WriteWorkbook(writer, this);
+        writer.Save();
+    }
+
+    /// <summary>
+    /// Saves the workbook to the given stream, from its current position, with every writer option (since
+    /// 2.1.0; see <see cref="SaveTo(string, XlsxWriterOptions)"/>). The stream is flushed and not closed.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is null.</exception>
+    /// <exception cref="ArgumentException">An encryption password is empty.</exception>
+    public void SaveTo(System.IO.Stream output, XlsxWriterOptions? options)
+    {
+        if (output is null) throw new ArgumentNullException(nameof(output));
+        if (_sheets.Count == 0) throw new InvalidOperationException("Workbook has no sheets.");
+
+        using var writer = XlsxWriter.Create(output, options);
         WorkbookSerializer.WriteWorkbook(writer, this);
         writer.Save();
     }
@@ -882,6 +937,20 @@ public sealed class Column
     /// </summary>
     public double EffectiveWidth { get { var w = Width; return w > 0 ? w : _sheet.Format.DefaultWidth(); } }
 
+    /// <summary>
+    /// <see cref="EffectiveWidth"/> in screen pixels at 96 dpi (since 2.1.0), by ECMA-376 §18.3.1.13:
+    /// Truncate(((256 × width + Truncate(128 / MDW)) / 256) × MDW), the formula Chuvadi.Layout uses.
+    /// <paramref name="maxDigitWidth"/> is the widest digit of the workbook's default font in pixels (MDW): 7 for
+    /// Calibri 11, Excel's default. These are screen units, not printed width: Excel prints a character slightly
+    /// wider than it draws it. Hidden columns report their width too; check <see cref="Hidden"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDigitWidth"/> is not a positive finite number.</exception>
+    public int WidthInPixels(double maxDigitWidth = 7) => SheetFormat.WidthToPixels(EffectiveWidth, maxDigitWidth);
+
+    /// <summary><see cref="WidthInPixels"/> in points (pixels × 72 / 96), since 2.1.0.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDigitWidth"/> is not a positive finite number.</exception>
+    public double WidthInPoints(double maxDigitWidth = 7) => WidthInPixels(maxDigitWidth) * 0.75;
+
     /// <summary>The loaded &lt;col&gt; span covering this column, or null if the file defines none.</summary>
     public ColumnRange? Range => _sheet.FindColumnRange(_column);
 
@@ -1113,20 +1182,25 @@ public sealed class Cell
         if (v is null) return string.Empty;
         var wb = Owner?.Owner;
         var o = options ?? wb?.DisplayOptions ?? NumberFormatOptions.Default;
-        return NumberFormatter.Format(v, DisplayFormatCode(wb), o);
+        return NumberFormatter.Format(v, DisplayFormatCode(wb, o.Culture), o);
     }
 
-    private string? DisplayFormatCode(Workbook? wb)
+    private string? DisplayFormatCode(Workbook? wb, System.Globalization.CultureInfo culture)
     {
         if (_style?.Value is CellStyle st)
         {
+            // 2.1.0 (SH-9 C2): built-in 14 and 22 follow the culture, even where the resolved style also
+            // carries their ECMA code.
+            if (st.NumberFormatId is int rid && wb is not null && SerialDate.IsRegionalDateId(rid)
+                && !wb.StyleTable.CustomNumberFormats.ContainsKey(rid))
+                return SerialDate.RegionalDateCode(rid, culture);
             if (st.NumberFormat is not null) return st.NumberFormat;
-            if (st.NumberFormatId is int id && wb is not null) return SerialDate.DisplayCode(wb.StyleTable, id);
+            if (st.NumberFormatId is int id && wb is not null) return SerialDate.DisplayCode(wb.StyleTable, id, culture);
             if (_value is DateTime or DateTimeOffset or DateOnly or TimeSpan) return DefaultCodeFor(_value);
             return null;
         }
         if (StyleIndex >= 0 && wb is not null && StyleIndex < wb.StyleTable.CellFormats.Count)
-            return SerialDate.DisplayCode(wb.StyleTable, wb.StyleTable.CellFormats[StyleIndex].NumberFormatId);
+            return SerialDate.DisplayCode(wb.StyleTable, wb.StyleTable.CellFormats[StyleIndex].NumberFormatId, culture);
         return DefaultCodeFor(_value);
     }
 

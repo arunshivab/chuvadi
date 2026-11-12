@@ -480,7 +480,11 @@ internal static class Layout17Test
             big = EncryptedBytes(3_000_000, "x");
             fullMs = sw.ElapsedMilliseconds;
         }
-        long CancelLimitMs() => Math.Max(1500, fullMs / 2);
+        // 2.1.0 (L, D-297): the limit is half the full derivation, with a 250 ms minimum. Cancellation fires at
+        // 100 ms and has landed at 100-114 ms on every machine measured, so 250 ms leaves room for scheduling;
+        // it matters only where the whole derivation takes under 500 ms. The old 1,500 ms floor was above the
+        // full derivation on fast machines (about 1,000 ms on Arun's PC), where an ignored cancellation passed.
+        long CancelLimitMs() => Math.Max(250, fullMs / 2);
 
         Check("D-25: MaxSpinCount (default 500,000) rejects a higher declared spin count before key derivation", () =>
         {

@@ -93,6 +93,22 @@ public static class Program
             if (testName is "all" or "dates1900")
                 Dates1900Test.Run(outputDir);
 
+            // 2.1.0 groups (D-298, D-306, D-329).
+            if (testName is "all" or "saves")
+                SavesTest.Run(outputDir);
+            if (testName is "all" or "headers")
+                HeadersTest.Run(outputDir);
+            if (testName is "all" or "streamreads")
+                StreamReadsTest.Run(outputDir);
+            if (testName is "all" or "widths")
+                Items210Test.RunWidths(outputDir);
+            if (testName is "all" or "cellref")
+                Items210Test.RunCellRef(outputDir);
+            if (testName is "all" or "displaytext")
+                Items210Test.RunDisplayText(outputDir);
+            if (testName is "all" or "limits")
+                Items210Test.RunLimits(outputDir);
+
             if (testName is "all" or "perf")
                 LoadBenchmarkTest.Run(outputDir);
 

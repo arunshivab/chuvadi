@@ -52,7 +52,13 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Defined names (workbook and sheet scope; read and write) | `wb.DefinedNames.Add(...)`, `XlsxWriter.AddDefinedName(...)`, `reader.DefinedNames` |
 | Sheet protection | `sheet.Protect(password, options)` |
 | Workbook structure protection | `wb.Protect(password, lockStructure)` |
-| Workbook encryption (open-password) | `wb.SaveTo(path, new EncryptionOptions {...})` |
+| Workbook encryption (open-password) | `wb.SaveTo(path or stream, new EncryptionOptions {...})` (stream since 2.1.0) |
+| Writer options on every save (2.1.0) | `wb.SaveTo(path or stream, XlsxWriterOptions)`, `ToXlsx(..., options, configure)`, `new XlsxExport(path or stream, options)`, `table.ToXlsx(stream)` |
+| Saves with no temp-folder file (2.1.0) | `XlsxWriterOptions.TempStorage = TempStorage.Memory` |
+| Header check on the streaming reader (2.1.0) | `row.HasColumn(name)`, `row.HeaderNames`, `sheetReader.HeaderNames` |
+| One-line reads from a stream (2.1.0) | `stream.ReadXlsx()`, `stream.ReadXlsxSheet(...)`, `stream.ReadXlsx<T>(...)` |
+| Column widths in pixels and points, A1 references (2.1.0) | `column.WidthInPixels()`, `WidthInPoints()`, `sheet.Format.DefaultWidthInPixels()`, `CellReference` |
+| Trimming and NativeAOT (2.1.0) | `IsTrimmable`, `IsAotCompatible`; typed APIs annotated |
 | Streaming export + encryption | `XlsxWriter` with `XlsxWriterOptions.Encryption` |
 | Read encrypted xlsx | `Workbook.Load(path, password)` |
 | Zip create/extract (obsolete since 2.0.0; use the Chuvadi.Zip package) | `Chuvadi.Sheets.Zip.*` |
@@ -116,6 +122,32 @@ opts.CancellationToken = requestAborted;
 using (var upload = XlsxReader.Open(uploadStream, password, opts))
     foreach (var row in upload.Sheet(1).Rows)
         Console.WriteLine(row.GetDisplayString(0));        // "15/03/2023", "1,234.50", ...
+
+// Cancel a slow open (a large or encrypted file): a timeout, or a token a Cancel button sets
+using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+try
+{
+    var book = Workbook.Load("large.xlsx", null, new XlsxReaderOptions { CancellationToken = timeout.Token });
+}
+catch (OperationCanceledException) { /* the user cancelled, or the timeout passed */ }
+// Checked while the package is checked, every 256 shared strings, every 4,096 key-derivation spins and every
+// row. Run it off the UI thread so the Cancel button stays responsive.
+
+// 2.1.0: check an upload's columns before reading values
+using (var check = XlsxReader.Open(uploadStream))
+    foreach (var row in check.Sheet(1).Rows)
+    {
+        if (!row.HasColumn("Patient Id")) throw new InvalidDataException("Missing column: Patient Id");
+        break;                                              // row.HeaderNames lists them all
+    }
+
+// 2.1.0: every save takes XlsxWriterOptions; TempStorage.Memory leaves no file in the temp folder
+wb.SaveTo(responseBody, new XlsxWriterOptions
+{
+    Encryption = new EncryptionOptions { Password = password },
+    TempStorage = TempStorage.Memory,
+});
+List<Patient> fromUpload = uploadStream.ReadXlsx<Patient>();   // one-line reads on a stream too
 
 // Formulas with cached results (1.5.0): readers that do not calculate still show values
 sheet.WriteRow(rb => rb.Cell(120).Cell(18).Formula("A2*B2/100", 21.6));
@@ -231,9 +263,9 @@ readers throw is one of these:
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, whether or not `[Content_Types].xml` declares it; since 2.0.2 also when it does not), a damaged relationship (`.rels`) entry, a truncated part, a text cell whose shared-string reference does not exist (2.0.2), or (with a password given) a damaged encrypted container or a failed integrity check. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, `FileNotFoundException`, ...), when there is one. |
+| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, whether or not `[Content_Types].xml` declares it; since 2.0.2 also when it does not), a damaged relationship (`.rels`) entry, a truncated part, a text cell whose shared-string reference does not exist (2.0.2), or (with a password given) a damaged encrypted container or a failed integrity check. **Since 2.0.5 also an old binary file** (an Excel 97-2003 .xls, or another compound file that is not an encrypted xlsx), named in the message, for example "This is an Excel 97-2003 binary file (.xls), not an Office Open XML package, and it is not encrypted."; it asked for a password before. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, `FileNotFoundException`, ...), when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. Without a password the encrypted container is not read, so damage to it is found only once a password is supplied. |
-| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. |
+| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. Since 2.1.0 it also has a constructor with an inner exception, as Chuvadi.Docs' `DocxLimitExceededException`. |
 | `InvalidDataException` | `MaxPartBytes` was exceeded (a limit, as in 1.x; not a malformed file). |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 | `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |
@@ -294,6 +326,24 @@ Requires the **.NET 10 SDK**.
 ```
 dotnet build
 ```
+
+## Platforms and threads
+
+- **One managed DLL:** no native code, no font files, no NuGet dependencies. It runs wherever .NET 10 runs: Windows,
+  Linux and macOS (CI runs the suites on all three), Android and iOS, containers and servers.
+- **Threads:** static state (the format-code cache, the font metrics) is safe from any thread. Instances are not
+  thread-safe: use one writer, reader or workbook per thread, or per request on a server.
+- **Writable folders:** a path save writes beside its target, and every save spools to the temp folder unless
+  `XlsxWriterOptions.TempStorage = TempStorage.Memory` (2.1.0). With `Memory` and a stream, a save needs no writable
+  folder. Reading never writes a file.
+- **Invariant globalization:** builds with `InvariantGlobalization` work; display text uses the invariant culture
+  unless `DisplayCulture` is given.
+- **Trimming and NativeAOT (2.1.0):** the package is marked `IsTrimmable` and `IsAotCompatible`, the build runs the
+  analyzers with warnings as errors, and `ToXlsx<T>`, `XlsxExport.AddSheet<T>` and `ReadXlsx<T>` keep `T`'s public
+  properties (`[DynamicallyAccessedMembers]`). Before 2.1.0, under NativeAOT, they wrote empty cells and read empty
+  properties.
+- **Encrypted reads** decrypt the package into memory, so memory grows with file size times files open at once;
+  `MaxTotalUncompressedBytes` bounds it.
 
 ## Tests & CI
 

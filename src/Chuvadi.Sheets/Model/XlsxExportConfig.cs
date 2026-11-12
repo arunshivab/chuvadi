@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
@@ -86,7 +87,7 @@ public abstract class ExportConfigBase
 /// Fluent configuration for exporting an <see cref="IEnumerable{T}"/> to xlsx. Used inside
 /// the lambda of <c>list.ToXlsx(path, cfg =&gt; cfg. ...)</c>.
 /// </summary>
-public sealed class XlsxExportConfig<T> : ExportConfigBase
+public sealed class XlsxExportConfig<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T> : ExportConfigBase
 {
     /// <summary>The name of the worksheet in the output file. Default: "Sheet1".</summary>
     public XlsxExportConfig<T> SheetName(string name) { SetSheetName(name); return this; }
