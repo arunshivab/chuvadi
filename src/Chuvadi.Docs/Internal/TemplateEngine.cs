@@ -800,7 +800,7 @@ internal sealed class TemplateEngine
         foreach (var (text, format) in value.Runs)
         {
             var clone = (XmlElement)run.CloneNode(deep: false);
-            var newRPr = MergeRPr(rPr, format);
+            var newRPr = MergeRPr(rPr, format, ComplexScriptText.ImpliesFlag(format, text));
             if (newRPr is not null) clone.AppendChild(newRPr);
             var tEl = _xml.CreateElement(run.Prefix, "t", W);
             tEl.InnerText = text;
@@ -834,15 +834,21 @@ internal sealed class TemplateEngine
     /// The placeholder's rPr with the value's formatting laid over it: elements the value sets
     /// replace the original ones (rFonts and lang merge attribute by attribute); everything else
     /// in the original (unknown elements, w14 effects, rPrChange) is kept, in schema order.
+    /// <paramref name="impliedComplexScript"/> (2.3.0, T1/D-349): the value is a built format with a
+    /// complex-script font and complex-script text, so w:cs is added as SaveTo adds it; a w:cs the
+    /// template run already states (on or off) is kept.
     /// </summary>
-    private XmlElement? MergeRPr(XmlElement? original, TextFormat format)
+    private XmlElement? MergeRPr(XmlElement? original, TextFormat format, bool impliedComplexScript)
     {
-        var overlay = format.IsDefault ? null : BuildRPr(format);
+        var overlay = format.IsDefault ? null : BuildRPr(format, impliedComplexScript);
         if (original is null) return overlay;
         var merged = (XmlElement)original.CloneNode(deep: true);
         if (overlay is null) return merged;
+        bool originalStatesCs = merged.ChildNodes.Cast<XmlNode>().OfType<XmlElement>().Any(e => e.LocalName == "cs" && e.NamespaceURI == W);
         foreach (var add in overlay.ChildNodes.Cast<XmlNode>().OfType<XmlElement>().ToList())
         {
+            // Only the implied flag yields to the template; a ComplexScript the value sets itself replaces it.
+            if (add.LocalName == "cs" && add.NamespaceURI == W && format.ComplexScript is null && originalStatesCs) continue;
             var existing = merged.ChildNodes.Cast<XmlNode>().OfType<XmlElement>()
                 .FirstOrDefault(e => e.LocalName == add.LocalName && e.NamespaceURI == add.NamespaceURI);
             if (existing is not null && add.LocalName is "rFonts" or "lang")
@@ -865,13 +871,13 @@ internal sealed class TemplateEngine
         return merged;
     }
 
-    private XmlElement? BuildRPr(TextFormat format)
+    private XmlElement? BuildRPr(TextFormat format, bool impliedComplexScript)
     {
         var sb = new StringBuilder();
         using (var w = XmlWriter.Create(sb, new XmlWriterSettings { OmitXmlDeclaration = true, ConformanceLevel = ConformanceLevel.Fragment }))
         {
             w.WriteStartElement("w", "root", W);
-            RunProperties.Write(w, format, null);
+            RunProperties.Write(w, format, null, null, null, impliedComplexScript);
             w.WriteEndElement();
         }
         var frag = new XmlDocument();

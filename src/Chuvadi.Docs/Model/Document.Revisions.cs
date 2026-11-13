@@ -96,6 +96,13 @@ public sealed partial class Document
 
     private void ResolveRevisions(bool accept)
     {
+        BlocksRemoved();
+        try { ResolveRevisionsCore(accept); }
+        finally { BlocksRemoved(); }
+    }
+
+    private void ResolveRevisionsCore(bool accept)
+    {
         var tables = new List<(DocTable Table, Func<DocTable, bool> Remove)>();
         var containers = ParagraphContainers(tables);
         var removedComments = new HashSet<Comment>(ReferenceEqualityComparer.Instance);

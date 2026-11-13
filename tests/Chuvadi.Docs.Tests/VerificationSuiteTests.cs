@@ -53,6 +53,8 @@ public class VerificationSuiteTests
     [Fact] public void Suite_LoadSkippedParts() => LoadSkippedPartsTests.Run(FreshOutDir());
     [Fact] public void Suite_SubtreeReader() => SubtreeReaderTests.Run(FreshOutDir());
     [Fact] public void Suite_ComplexScriptFlag() => ComplexScriptFlagTests.Run(FreshOutDir());
+    [Fact] public void Suite_DefaultSpacing() => DefaultSpacingTests.Run(FreshOutDir());
+    [Fact] public void Suite_HeaderFooterStyles() => HeaderFooterStyleTests.Run(FreshOutDir());
     [Fact] public void Suite_FormattedParagraphs() => FormattedParagraphsTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------

@@ -35,10 +35,33 @@ public sealed partial class Document
 {
     private readonly List<object> _blocks = new();  // Paragraph | DocTable
 
-    /// <summary>Creates an empty document with the built-in styles and Calibri 11pt defaults.</summary>
-    public Document()
+    /// <summary>
+    /// Creates an empty document with the built-in styles, Calibri 11pt, Word's new-document paragraph
+    /// spacing and Word's Header and Footer styles (<see cref="DocumentPreset.Word"/>: 8 pt after, 1.08 lines;
+    /// header and footer paragraphs with no space after and single lines).
+    /// </summary>
+    public Document() : this(DocumentPreset.Word) { }
+
+    /// <summary>
+    /// Creates an empty document with the defaults of <paramref name="preset"/>: <see cref="DocumentPreset.Word"/>
+    /// (Word's new-document paragraph spacing, and Word's Header and Footer styles for header and footer paragraphs)
+    /// or <see cref="DocumentPreset.Minimal"/> (no default paragraph spacing and no Header or Footer style, the
+    /// output before 2.3.0). Both have the other built-in styles and Calibri 11pt.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="preset"/> is not a defined value.</exception>
+    public Document(DocumentPreset preset)
     {
+        if (preset is not (DocumentPreset.Word or DocumentPreset.Minimal))
+            throw new ArgumentOutOfRangeException(nameof(preset), preset, "Not a defined DocumentPreset value.");
+        if (preset == DocumentPreset.Minimal) Defaults.ParagraphFormat = new ParagraphFormat();
         StylesXml.AddBuiltIns(Styles);
+        if (preset == DocumentPreset.Word)
+        {
+            // D-374: Word's Header and Footer styles, used by header and footer paragraphs in Normal.
+            StylesXml.AddHeaderFooterStyles(Styles);
+            Defaults.HeaderParagraphStyleId = "Header";
+            Defaults.FooterParagraphStyleId = "Footer";
+        }
         Numbering = new NumberingCollection(this);
         Footnotes = new NoteCollection(this, NoteKind.Footnote);
         Endnotes = new NoteCollection(this, NoteKind.Endnote);
@@ -297,6 +320,55 @@ public sealed partial class Document
             return list;
         }
     }
+
+    // D-374: the sections, cached for the header/footer style lookup, which the format resolver makes for every
+    // paragraph and run. Valid while no block was added or removed, no paragraph's SectionProperties was set and
+    // the last section is the same object.
+    private List<Section>? _sectionCache;
+    private (int Count, int SectionVersion, int RevisionVersion, Section Last) _sectionCacheKey;
+    private int _revisionVersion;
+
+    /// <summary>Called when tracked changes are resolved (blocks may be removed).</summary>
+    internal void BlocksRemoved() => _revisionVersion++;
+
+    private List<Section> CachedSections()
+    {
+        var key = (_blocks.Count, Paragraph.SectionVersion, _revisionVersion, Section);
+        if (_sectionCache is null || _sectionCacheKey != key)
+        {
+            _sectionCache = (List<Section>)Sections;
+            _sectionCacheKey = key;
+        }
+        return _sectionCache;
+    }
+
+    /// <summary>
+    /// The style a header or footer paragraph in Normal uses (<see cref="DocumentDefaults.HeaderParagraphStyleId"/>,
+    /// <see cref="DocumentDefaults.FooterParagraphStyleId"/>), or null: the paragraph is not in Normal, not in a
+    /// header or footer (table cells included), or the id is null or names no paragraph style of this document.
+    /// </summary>
+    internal string? HeaderFooterStyleOf(Paragraph p)
+    {
+        string? header = Defaults.HeaderParagraphStyleId, footer = Defaults.FooterParagraphStyleId;
+        if (header is null && footer is null) return null;
+        if (p.StyleId != "Normal") return null;
+        foreach (var section in CachedSections())
+            foreach (var (content, isHeader, _) in section.Slots())
+            {
+                var id = isHeader ? header : footer;
+                if (id is null || !content.HasContent) continue;
+                foreach (var q in DocumentSerializer.AllParagraphsOf(content))
+                    if (ReferenceEquals(q, p)) return UsableHeaderFooterStyle(id);
+            }
+        return null;
+    }
+
+    /// <summary>The header (or footer) style id to write for this document's Normal paragraphs in headers (footers), or null.</summary>
+    internal string? HeaderFooterStyleFor(bool isHeader)
+        => (isHeader ? Defaults.HeaderParagraphStyleId : Defaults.FooterParagraphStyleId) is { } id ? UsableHeaderFooterStyle(id) : null;
+
+    private string? UsableHeaderFooterStyle(string id)
+        => Styles.TryGet(id, out var s) && s.Type == StyleType.Paragraph ? id : null;
 
     /// <summary>
     /// Ends the current section and starts a new one, as Word's Insert › Break › Section

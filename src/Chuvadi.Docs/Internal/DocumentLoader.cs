@@ -56,7 +56,7 @@ internal static class DocumentLoader
         using var pkg = OoxmlPackage.Open(packageStream);
         string documentUri = FindMainDocument(pkg);
 
-        var doc = new Document();
+        var doc = new Document(DocumentPreset.Minimal); // the file's own paragraph defaults, or none (S1)
         doc.ClearCompatibilityForLoad(); // a loaded document keeps the file's compatibility settings, or none (D-296)
 
         // Theme part (theme fonts/colours), carried through verbatim, within the part-size limit.

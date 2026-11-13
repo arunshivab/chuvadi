@@ -23,10 +23,10 @@ internal static class ParagraphProperties
     /// mirrorIndents, jc, textAlignment, outlineLvl, rPr.
     /// </summary>
     public static void Write(XmlWriter x, Paragraph p, NumberingXml.Plan? numbering, Action<XmlWriter>? sectPr = null,
-        Func<RevisionMark, string>? revisionId = null)
+        Func<RevisionMark, string>? revisionId = null, string? headerFooterStyleId = null)
     {
         var f = p.Format;
-        var styleId = p.StyleId;
+        var styleId = headerFooterStyleId ?? p.StyleId; // D-374: a header/footer paragraph in Normal is written in Header/Footer
         bool hasStyle = styleId != "Normal";
         var num = numbering?.For(p);
         bool tracked = revisionId is not null && (p.MarkRevision is not null || p.FormatChange is not null || p.MarkFormatChange is not null);

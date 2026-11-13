@@ -54,6 +54,8 @@ public static class Program
             ("LoadSkippedParts", LoadSkippedPartsTests.Run),
             ("SubtreeReader", SubtreeReaderTests.Run),
             ("ComplexScriptFlag", ComplexScriptFlagTests.Run),
+            ("DefaultSpacing", DefaultSpacingTests.Run),
+            ("HeaderFooterStyles", HeaderFooterStyleTests.Run),
             ("FormattedParagraphs", FormattedParagraphsTests.Run),
         };
 

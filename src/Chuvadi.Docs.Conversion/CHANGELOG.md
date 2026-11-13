@@ -1,5 +1,12 @@
 # Chuvadi.Docs.Conversion — Changelog
 
+## 2.3.0 (2026-11-13)
+
+Versioned with Chuvadi.Docs 2.3.0 (D-15, D-45): depends on Chuvadi.Docs 2.3.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.3.0:
+- **Imports into a new document get Word's paragraph spacing** (S1, D-371): Markdown, HTML and text imports without a `target` document create a new `Document`, whose defaults are now 8 pt after and 1.08 lines. Imported body paragraphs sit like a new Word document's; the code style keeps its own 0 pt and single lines. Imports into a `target` keep that document's defaults, so `target: new Document(DocumentPreset.Minimal)` imports with no default spacing, as before. All 37 Conversion test packages differ in `word/styles.xml`.
+- **Header and footer paragraphs of a new document use Word's Header and Footer styles** (D-374): every new document's `styles.xml` gains the two styles. A Word-preset document's header or footer paragraphs in Normal are saved in them (one test package, `md-export-source.docx`, also differs in its header part). Exports with `IncludeHeadersFooters` read header paragraphs through the effective formats, so they see the Header style; the exported test outputs (Markdown, HTML, text) are unchanged. Imports write no headers.
+- **The new Docs 2.3.0 API** (`DocumentPreset` and `new Document(DocumentPreset)`, `DocumentDefaults.StandardParagraphFormat`, the settable `ParagraphFormat`, `HeaderParagraphStyleId` and `FooterParagraphStyleId`) is in Chuvadi.Docs. See its CHANGELOG.
+
 ## 2.2.0 (2026-11-12)
 
 Versioned with Chuvadi.Docs 2.2.0 (D-15, D-45): depends on Chuvadi.Docs 2.2.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.2.0:

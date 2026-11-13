@@ -345,10 +345,13 @@ internal static class FormatResolver
         BottomPt = over.BottomPt ?? under?.BottomPt, RightPt = over.RightPt ?? under?.RightPt,
     };
 
-    /// <summary>The paragraph's style id, falling back to the default paragraph style when it does not exist.</summary>
+    /// <summary>
+    /// The paragraph's style id, falling back to the default paragraph style when it does not exist. A header or
+    /// footer paragraph in Normal resolves through the document's header or footer paragraph style (D-374).
+    /// </summary>
     internal static string? ParagraphStyleId(Document doc, Paragraph p)
     {
-        var id = p.StyleId;
+        var id = doc.HeaderFooterStyleOf(p) ?? p.StyleId;
         if (doc.Styles.TryGet(id, out var s) && s.Type == StyleType.Paragraph) return id;
         return doc.Styles.GetDefault(StyleType.Paragraph)?.StyleId;
     }
