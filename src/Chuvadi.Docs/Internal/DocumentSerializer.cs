@@ -95,6 +95,19 @@ internal static class DocumentSerializer
         /// <summary>Comment anchors may be written (body and notes; not comments, headers or footers).</summary>
         public bool AllowCommentReferences { get; init; }
 
+        /// <summary>
+        /// D-374: the style written for this header or footer's paragraphs in Normal (its own paragraphs and table
+        /// cells, not text boxes), or null.
+        /// </summary>
+        public string? HeaderFooterStyleId { get; init; }
+
+        /// <summary>The paragraphs <see cref="HeaderFooterStyleId"/> applies to.</summary>
+        public HashSet<Paragraph>? HeaderFooterParagraphs { get; init; }
+
+        /// <summary>The header or footer style to write for <paramref name="p"/> instead of Normal, or null.</summary>
+        public string? HeaderFooterStyleFor(Paragraph p)
+            => HeaderFooterStyleId is not null && HeaderFooterParagraphs!.Contains(p) && p.StyleId == "Normal" ? HeaderFooterStyleId : null;
+
         /// <summary>w14:paraId to write on paragraphs (the comments part names comments by their last paragraph).</summary>
         public Dictionary<Paragraph, string>? ParaIds { get; init; }
         public List<(string RelId, string MediaUri)> Images { get; } = new();
@@ -365,7 +378,12 @@ internal static class DocumentSerializer
         int watermarkCount = 0;
         foreach (var (uri, _, _, content, isHeader, watermark, section) in hfParts)
         {
-            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId) { Numbering = numbering, State = state };
+            var hfStyle = doc.HeaderFooterStyleFor(isHeader);
+            var hfCtx = new PartContext(uri, RegisterMedia, NextDrawingId)
+            {
+                Numbering = numbering, State = state, HeaderFooterStyleId = hfStyle,
+                HeaderFooterParagraphs = hfStyle is null ? null : new HashSet<Paragraph>(AllParagraphsOf(content), ReferenceEqualityComparer.Instance),
+            };
             hfContexts.Add(hfCtx);
             using var s = pkg.CreatePart(uri, isHeader ? CtHeader : CtFooter);
             using var x = CreateXml(s);
@@ -404,6 +422,14 @@ internal static class DocumentSerializer
             {
                 // A header/footer must end with a paragraph; the watermark needs one to live in.
                 x.WriteStartElement("p", W);
+                if (hfStyle is not null)
+                {
+                    x.WriteStartElement("pPr", W);
+                    x.WriteStartElement("pStyle", W);
+                    x.WriteAttributeString("val", W, hfStyle);
+                    x.WriteEndElement();
+                    x.WriteEndElement();
+                }
                 leading?.Invoke(x);
                 x.WriteEndElement();
             }
@@ -591,7 +617,8 @@ internal static class DocumentSerializer
         if (ctx?.ParaIds is { } ids && ids.TryGetValue(p, out var paraId)) x.WriteAttributeString("w14", "paraId", W14, paraId);
 
         // pPr — paragraph properties in schema order (see ParagraphProperties).
-        ParagraphProperties.Write(x, p, ctx?.Numbering, sectPr, ctx is null ? null : _ => ctx.State.NextRevisionId());
+        ParagraphProperties.Write(x, p, ctx?.Numbering, sectPr, ctx is null ? null : _ => ctx.State.NextRevisionId(),
+            ctx?.HeaderFooterStyleFor(p));
         leadingRuns?.Invoke(x);
 
         if (p.PageBreakBefore)
@@ -1117,7 +1144,7 @@ internal static class DocumentSerializer
         x.WriteAttributeString("mc", "Ignorable", "http://schemas.openxmlformats.org/markup-compatibility/2006", "wp14");
     }
 
-    private static IEnumerable<Paragraph> AllParagraphsOf(HeaderFooterContent content)
+    internal static IEnumerable<Paragraph> AllParagraphsOf(HeaderFooterContent content)
     {
         foreach (var b in content.Blocks)
         {

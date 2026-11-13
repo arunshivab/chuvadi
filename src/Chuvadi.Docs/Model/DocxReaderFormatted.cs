@@ -123,7 +123,7 @@ public sealed partial class DocxReader
 
         Document Fresh()
         {
-            var d = new Document();
+            var d = new Document(DocumentPreset.Minimal); // the file's own paragraph defaults, as Load
             d.ClearCompatibilityForLoad();
             d.ThemeXml = theme;
             return d;

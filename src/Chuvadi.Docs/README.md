@@ -81,7 +81,7 @@ The whole run is marked, so a run mixing Tamil and English uses the complex-scri
 
 The blocks (fixed; inclusive code points): Hebrew 0590–05FF, Arabic 0600–06FF, Syriac 0700–074F, Arabic Supplement 0750–077F, Thaana 0780–07BF, NKo 07C0–07FF, Samaritan 0800–083F, Mandaic 0840–085F, Syriac Supplement 0860–086F, Arabic Extended-B 0870–089F, Arabic Extended-A 08A0–08FF, Devanagari 0900–097F, Bengali 0980–09FF, Gurmukhi 0A00–0A7F, Gujarati 0A80–0AFF, Oriya 0B00–0B7F, Tamil 0B80–0BFF, Telugu 0C00–0C7F, Kannada 0C80–0CFF, Malayalam 0D00–0D7F, Sinhala 0D80–0DFF, Thai 0E00–0E7F, Lao 0E80–0EFF, Tibetan 0F00–0FFF, Myanmar 1000–109F, Khmer 1780–17FF, Mongolian 1800–18AF, Khmer Symbols 19E0–19FF, Vedic Extensions 1CD0–1CFF, Devanagari Extended A8E0–A8FF, Myanmar Extended-B A9E0–A9FF, Myanmar Extended-A AA60–AA7F, Hebrew presentation forms FB1D–FB4F, Arabic Presentation Forms-A FB50–FDFF, Arabic Presentation Forms-B FE70–FEFF, Rumi Numeral Symbols 10E60–10E7F, Tamil Supplement 11FC0–11FFF, Arabic Mathematical Alphabetic Symbols 1EE00–1EEFF.
 
-This applies to documents saved with `SaveTo`; `DocxTemplate.Fill` writes the value's formatting into the template's own run properties and does not add the flag.
+This applies to documents saved with `SaveTo` and, since 2.3.0, to `DocxTemplate.Fill`: a filled value whose format has a complex-script font and whose text has complex-script characters gets `<w:cs/>` in the template run's properties. A `w:cs` the template run already states (on or off) is kept, and `ComplexScript = false` on the value still writes no flag.
 
 Toggles added in 1.2 are tri-state (`bool?`): `null` inherits, `false` switches an inherited effect off.
 
@@ -115,6 +115,41 @@ doc.AddParagraph("…").ApplyFormat(body);
 ```
 
 Headings run from `AddHeading(text, 1)` to `AddHeading(text, 9)`.
+
+### Default spacing of a new document (2.3.0)
+
+A new `Document` starts with Word's spacing for a new document: **8 pt after each paragraph and 1.08 lines** (`DocumentDefaults.StandardParagraphFormat`, written as `<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>` in `w:pPrDefault`). Styles and paragraphs that set their own spacing keep it: the headings and the title keep their own space before and after, and note text keeps 0 pt after and single lines.
+
+Without that spacing, Word lets the next line paint over marks that reach below their own line: at 0 pt after and single lines, Latha's Tamil vowel signs (ு, ூ, ழு) lose their lower part in Word. Chuvadi.Layout never clips body text, so its previews and PDFs show them whole either way.
+
+Choose when you create the document:
+
+```csharp
+var forWord  = new Document();                            // DocumentPreset.Word: 8 pt after, 1.08 lines (the default)
+var minimal  = new Document(DocumentPreset.Minimal);      // no default spacing: 0 pt after, single lines (the output before 2.3.0)
+
+forWord.Defaults.ParagraphFormat.SpaceAfterPt = 6;        // or change one value
+forWord.Defaults.ParagraphFormat = new ParagraphFormat(); // or drop the spacing later (the same as Minimal)
+```
+
+**Headers and footers** (D-374). As in Word, header and footer paragraphs do not take the body's spacing: a `Word` document has Word's Header and Footer styles (based on Normal, no space after, single lines, a centre tab at 225.65 pt and a right tab at 451.3 pt, the middle and end of an A4 page's text width with 1-inch margins), and every header or footer paragraph in Normal uses them, whether you add it with `Add`, `SetText` or in a table cell. It is saved with that style, and `GetEffectiveParagraphFormat` resolves it so, so Chuvadi.Layout lays it out as Word does. A paragraph with another style keeps it. Text boxes in headers keep Normal.
+
+```csharp
+doc.Header.Add(new Paragraph("Clinic name"));          // written and resolved in Header: 0 pt after, single lines
+doc.Defaults.HeaderParagraphStyleId = null;           // header paragraphs in Normal instead
+doc.Defaults.FooterParagraphStyleId = "MyFooter";     // or your own paragraph style
+```
+
+The Header style's tab stops come first, as in Word (D-376). A header written as text, Tab, text, with its own right tab stop, now puts the second text on the centre tab (225.65 pt) rather than at the right tab, exactly as Word shows it. To keep the 2.2.0 look, use one of these:
+
+```csharp
+p.Configure(f => f.TabStops.Add(new TabStop(225.65, TabAlignment.Clear)));   // remove the centre tab for this paragraph
+doc.Defaults.HeaderParagraphStyleId = null;                                    // or keep header paragraphs in Normal
+```
+
+Use `Word` for documents people will open in Word. `Minimal` suits documents only shown through Chuvadi, or callers who set every paragraph's spacing themselves. The two presets differ only in this spacing and the Header and Footer styles (a `Minimal` document is the 2.2.0 output byte for byte): both have the other built-in styles, Calibri 11 pt and compatibility mode 15.
+
+A loaded document keeps the defaults its file has (or none), and its header and footer paragraphs keep the style the file gives them, so loading and saving never adds spacing or styles. Markdown, HTML and text imports into a new document get the new spacing; imports into a document you pass keep that document's defaults.
 
 ## Styles and effective formatting
 

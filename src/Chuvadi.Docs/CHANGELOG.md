@@ -1,5 +1,46 @@
 # Chuvadi.Docs — Changelog
 
+## 2.3.0 (2026-11-13)
+
+New documents start with Word's paragraph spacing, so Latha's Tamil vowel signs are no longer cut in Word (S1, D-371), and their header and footer paragraphs use Word's Header and Footer styles (D-374). `DocxTemplate.Fill` marks complex-script values as `SaveTo` does (T1, D-349).
+
+### New
+
+- **`DocumentPreset` and `new Document(DocumentPreset)`**: choose a new document's defaults when you create it. `DocumentPreset.Word` (what `new Document()` gives) has Word's new-document paragraph spacing and Word's Header and Footer styles; `DocumentPreset.Minimal` has neither (0 pt after, single lines, header and footer paragraphs in Normal: the 2.2.0 output, byte for byte). Otherwise the two are the same document: the other built-in styles, Calibri 11 pt, compatibility mode 15. An undefined value throws `ArgumentOutOfRangeException`. Arun's choice: Word is the default, and app makers get the choice by name.
+- **`DocumentDefaults.StandardParagraphFormat`**: Word's spacing for a new document, 8 pt after and 1.08 lines (a new instance on every call).
+- **`DocumentDefaults.HeaderParagraphStyleId` and `FooterParagraphStyleId`** (D-374): the paragraph style that header (footer) paragraphs in Normal use. `"Header"` and `"Footer"` in a Word-preset document; null in a Minimal or loaded document. Set null to keep header paragraphs in Normal, or name your own paragraph style. An id that names no paragraph style of the document is ignored.
+- **`DocumentDefaults.ParagraphFormat` has a setter**, so `doc.Defaults.ParagraphFormat = new ParagraphFormat();` gives the empty defaults back in one line. A null value throws `ArgumentNullException`.
+
+### Behaviour changes
+
+- **A new document starts with Word's new-document paragraph spacing** (S1, D-371): `w:pPrDefault` now holds `<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>`. It was empty before.
+  - **Why:** with 0 pt after and single lines, Word lets the next line paint over marks that reach below their own line. Latha's vowel signs (ு, ூ, ழு) lost their lower part in Word: Arun's Word checks, 13 Nov 2026, showed the cut in a Word-made document too, and no cut with 6 pt after. A new Word document has this spacing, so a new Docs document now looks like one.
+  - **What changes:** every new document's `styles.xml`. In those documents, body paragraphs without their own spacing get 8 pt after and 1.08 lines, so text sits lower and page breaks can move. Styles that set their own spacing keep it: the headings and the title keep their space before and after, and note text keeps 0 pt after and single lines.
+  - **Unchanged:**
+    - loaded documents keep their file's defaults, or none, through `Load` and `DocxReader.FormattedParagraphs`;
+    - `DocxTemplate.Fill` uses the template's own styles.
+  - **The way back:** `new Document(DocumentPreset.Minimal)`, or `doc.Defaults.ParagraphFormat = new ParagraphFormat();` on an existing document, writes the 2.2.0 output.
+  - **Measured on the test outputs (against 2.2.0, with D-374 below):** of the 306 Docs manual-test packages that can be compared directly, the 300 made with `new Document()` differ: all in `word/styles.xml`, and 22 of them also in their header and footer parts (the Header and Footer `pStyle`, nothing else). The 6 written as raw XML, or loaded and saved again, are unchanged. All 37 Conversion packages differ in `word/styles.xml`, one of them also in its header part. 6 of the 62 Layout previews change (`docx-import` p1–p3 and their box views), still 3 pages.
+- **Header and footer paragraphs of a new document use Word's Header and Footer styles** (D-374). With S1 above, header and footer paragraphs in Normal would also get 8 pt after and 1.08 lines; in Word they have the Header and Footer styles instead.
+  - **What a Word-preset document gets:** the styles `Header` and `Footer` as Word writes them for a new A4 document: name `header` / `footer`, based on Normal, priority 99, unhide when used, a centre tab at 4513 twips (225.65 pt) and a right tab at 9026 twips (451.3 pt), `w:after="0" w:line="240" w:lineRule="auto"`. Word's linked "Header Char" and "Footer Char" character styles are not added: nothing in Chuvadi uses them, and Word adds them itself when it needs them.
+  - **What changes:** every header or footer paragraph in Normal (added with `Add`, `SetText`, or in a header table cell; not text boxes) is saved with `<w:pStyle w:val="Header"/>` (`Footer`), as is the empty paragraph that closes a header after a table or a blank header. `GetEffectiveParagraphFormat` and `GetEffectiveRunFormat` resolve such paragraphs through that style, so Chuvadi.Layout lays them out as Word does. The model is not changed: `Paragraph.StyleId` still reads `Normal` until the document is saved and loaded again. Paragraphs with another style keep it.
+  - **Visible effect on tabs:** the style's centre tab now comes first. A header that relied on one Tab to reach its own right tab stop (text, Tab, text) now centres the second text on 225.65 pt, as Word does with its own Header style. Layout's `docx-import` preview shows this ("Radiation Oncology" moves from the right edge to the centre). Arun kept Word's tabs (D-376). To keep the old look, use one line: `p.Configure(f => f.TabStops.Add(new TabStop(225.65, TabAlignment.Clear)));` on that paragraph, or `doc.Defaults.HeaderParagraphStyleId = null;` for the document (or use two Tabs).
+  - **Unchanged:** Minimal documents (no Header or Footer style, the ids are null); loaded documents (the ids are null, so their header paragraphs keep the style the file gives them, even when the file has a Header style); `DocxTemplate.Fill`; `DocxReader.FormattedParagraphs`.
+- **`DocxTemplate.Fill` adds `<w:cs/>` for complex-script values** (T1, D-349), as `SaveTo` has since 2.2.0. The condition: the value's format was built in code with a complex-script font, `ComplexScript` is unset, and the filled text has characters in the README's complex-script blocks. The flag goes into the template run's properties.
+  - A `w:cs` the template run already states (on or off) is kept.
+  - `ComplexScript = false` on the value writes no flag.
+  - Values without a complex-script font, and English text, are filled as before.
+
+### Tests
+
+- New group `DefaultSpacing` (6 checks, with an xUnit fact): Word's line in `styles.xml`, fresh instances, the one-line way back and null, the presets (Word is the default; Minimal is Word without the spacing and the Header and Footer styles, with the same other styles and settings), effective formats (body and note text), and loaded documents (none, Word's, no styles part) through `Load` and `FormattedParagraphs`.
+- New group `HeaderFooterStyles` (7 checks, with an xUnit fact): Word's Header and Footer style XML; what is written (added paragraphs, `SetText`, table cells, the closing paragraph, another style kept, text boxes and the body unchanged); effective formats; changes after a lookup (a later paragraph, a new section, a removed paragraph); the settings (null, an own style, a character style id and a missing id ignored); Minimal; loaded documents and a round trip. A separate run built the same documents (headers, footers, tables, notes, two sections, a blank header) with 2.2.0's `new Document()` and 2.3.0's `new Document(DocumentPreset.Minimal)`: every part is identical.
+- `ComplexScriptFlag`: two more checks for `Fill` (Tamil, English and `ComplexScript = false`; the template's own `w:cs` on and off kept; no complex-script font).
+
+### Documentation
+
+- README, **Paragraph formatting:** "Default spacing of a new document", with headers and footers. **Complex-script runs:** `Fill` now applies the flag too.
+
 ## 2.2.0 (2026-11-12)
 
 Formatted streaming reads on `DocxReader` (D-336, D-340). `Document.Load` about twice as fast and with half the allocations, with identical results (DOC-10). A built run with a complex-script font and complex-script text is marked `w:cs`, so Word shows that font (DOC-14 B, D-343).

@@ -69,6 +69,31 @@ internal static class StylesXml
         });
     }
 
+    /// <summary>
+    /// Word's Header and Footer styles (2.3.0, D-374), for a <see cref="DocumentPreset.Word"/> document: based on
+    /// Normal, no space after and single lines, a centre tab at the middle and a right tab at the end of an A4 page's
+    /// text width with 1-inch margins (4513 and 9026 twips, as Word writes them for a new A4 document). Not part of
+    /// <see cref="AddBuiltIns"/>: a Minimal document and the styles added for a loaded file's references stay as before.
+    /// </summary>
+    public static void AddHeaderFooterStyles(StyleCollection styles)
+    {
+        void Add(string id, string name)
+        {
+            if (styles.Contains(id)) return;
+            var s = new StyleDefinition(id, StyleType.Paragraph)
+            {
+                Name = name, BasedOn = "Normal", UiPriority = 99, UnhideWhenUsed = true,
+            };
+            s.ParagraphFormat.TabStops.Add(new TabStop(4513 / 20.0, TabAlignment.Center));
+            s.ParagraphFormat.TabStops.Add(new TabStop(9026 / 20.0, TabAlignment.Right));
+            s.ParagraphFormat.SpaceAfterPt = 0;
+            s.ParagraphFormat.LineSpacing = LineSpacing.Multiple(1);
+            styles.Add(s);
+        }
+        Add("Header", "header");
+        Add("Footer", "footer");
+    }
+
     // ---- Write -----------------------------------------------------------------------------
 
     public static void Write(XmlWriter x, Document doc, IEnumerable<string>? referencedStyleIds = null, NumberingXml.Plan? numbering = null)

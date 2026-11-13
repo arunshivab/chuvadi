@@ -272,13 +272,15 @@ public sealed class StyleCollection : IEnumerable<StyleDefinition>
 
 /// <summary>
 /// Document-wide defaults (w:docDefaults): the base run and paragraph formatting every style
-/// inherits. A new document defaults to Calibri 11pt (all scripts' size) with no paragraph
-/// spacing.
+/// inherits. A new document defaults to Calibri 11pt (all scripts' size) and, since 2.3.0, to
+/// Word's paragraph spacing for a new document: 8pt after and 1.08 lines
+/// (<see cref="StandardParagraphFormat"/>). A loaded document keeps the file's own defaults.
 ///
 /// <code>
 /// doc.Defaults.RunFormat = new TextFormat { FontForAllScripts = "Nirmala UI", SizePt = 10.5, Language = "en-IN" };
 /// doc.Defaults.ParagraphFormat.SpaceAfterPt = 6;
-/// doc.Defaults.ParagraphFormat.LineSpacing = LineSpacing.Multiple(1.08);
+/// doc.Defaults.ParagraphFormat = new ParagraphFormat();   // no default spacing (as new Document(DocumentPreset.Minimal))
+/// doc.Defaults.HeaderParagraphStyleId = null;              // header paragraphs in Normal, not Header
 /// </code>
 /// </summary>
 public sealed class DocumentDefaults
@@ -289,9 +291,52 @@ public sealed class DocumentDefaults
         AsciiFont = "Calibri", HighAnsiFont = "Calibri", ComplexScriptFont = "Calibri", SizePt = 11,
     };
 
+    /// <summary>
+    /// The paragraph spacing a new document starts with (2.3.0, S1/D-371): 8pt after and 1.08 lines
+    /// (written as <c>w:after="160" w:line="259" w:lineRule="auto"</c>, as Word writes it for a new document).
+    /// Without it, fonts whose marks reach below their line (Latha's vowel signs, for example) are cut
+    /// by the next line in Word. A new instance on every call.
+    /// </summary>
+    public static ParagraphFormat StandardParagraphFormat => new()
+    {
+        SpaceAfterPt = 8,
+        LineSpacing = LineSpacing.Multiple(259 / 240.0),
+    };
+
     /// <summary>Default run formatting (w:rPrDefault). Null = none (Word's own fallback: Times New Roman 10pt).</summary>
     public TextFormat? RunFormat { get; set; } = StandardRunFormat;
 
-    /// <summary>Default paragraph formatting (w:pPrDefault).</summary>
-    public ParagraphFormat ParagraphFormat { get; } = new();
+    private ParagraphFormat _paragraphFormat = StandardParagraphFormat;
+
+    /// <summary>
+    /// Default paragraph formatting (w:pPrDefault). A new document starts with <see cref="StandardParagraphFormat"/>
+    /// (<see cref="DocumentPreset.Word"/>) or empty (<see cref="DocumentPreset.Minimal"/>); setting
+    /// <c>new ParagraphFormat()</c> gives no default spacing (0pt after, single lines, the output before 2.3.0).
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is null.</exception>
+    public ParagraphFormat ParagraphFormat
+    {
+        get => _paragraphFormat;
+        set => _paragraphFormat = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// The paragraph style that header paragraphs in the <c>Normal</c> style use (2.3.0, D-374), as Word gives every
+    /// header paragraph its Header style. <c>"Header"</c> in a <see cref="DocumentPreset.Word"/> document, which also
+    /// has Word's Header style (no space after, single lines, a centre and a right tab stop); null in a
+    /// <see cref="DocumentPreset.Minimal"/> document and in a loaded document (their header paragraphs keep their own
+    /// style, as before).
+    /// <para>It applies to the paragraphs of every section's headers, table cells included (not to text boxes), when
+    /// their style is <c>Normal</c> (the default) and the document has a paragraph style with this id; otherwise it is
+    /// ignored. Such a paragraph is saved with this style, and <see cref="Document.GetEffectiveParagraphFormat(Paragraph)"/>
+    /// and <see cref="Document.GetEffectiveRunFormat(Paragraph, Run)"/> resolve it through this style, so a paginator
+    /// sees what Word shows. A paragraph with any other style keeps it. Set null to give header paragraphs Normal.</para>
+    /// </summary>
+    public string? HeaderParagraphStyleId { get; set; }
+
+    /// <summary>
+    /// As <see cref="HeaderParagraphStyleId"/>, for footer paragraphs: <c>"Footer"</c> in a
+    /// <see cref="DocumentPreset.Word"/> document, null in a <see cref="DocumentPreset.Minimal"/> or loaded document.
+    /// </summary>
+    public string? FooterParagraphStyleId { get; set; }
 }

@@ -159,7 +159,21 @@ public sealed class Paragraph
     /// laid out with these settings. Only paragraphs directly in <see cref="Document.Blocks"/>
     /// end sections. See <see cref="Document.AddSectionBreak"/>.
     /// </summary>
-    public Section? SectionProperties { get; set; }
+    public Section? SectionProperties
+    {
+        get => _sectionProperties;
+        set
+        {
+            _sectionProperties = value;
+            System.Threading.Interlocked.Increment(ref s_sectionVersion);
+        }
+    }
+
+    private Section? _sectionProperties;
+    private static int s_sectionVersion;
+
+    /// <summary>Changes whenever any paragraph's <see cref="SectionProperties"/> is set (a document's cached section list checks it).</summary>
+    internal static int SectionVersion => System.Threading.Volatile.Read(ref s_sectionVersion);
 
     /// <summary>Loader: the w:sectPr read from w:pPr with its header/footer references, completed once header parts can be read.</summary>
     internal (Section Section, List<Internal.SectionXml.Reference> References)? LoadedSection { get; set; }

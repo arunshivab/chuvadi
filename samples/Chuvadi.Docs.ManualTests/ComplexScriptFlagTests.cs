@@ -70,6 +70,37 @@ public static class ComplexScriptFlagTests
             AssertTrue(Flag(saved, Tamil) == "none", "a loaded run is saved as it was: " + Flag(saved, Tamil));
         });
 
+        Check("DocxTemplate.Fill (2.3.0, T1): a Tamil value with a complex-script font gets <w:cs/>; English does not; ComplexScript = false gives none", () =>
+        {
+            var tpl = Template("<w:p><w:r><w:t>{{A}}</w:t></w:r></w:p><w:p><w:r><w:t>{{B}}</w:t></w:r></w:p><w:p><w:r><w:t>{{C}}</w:t></w:r></w:p>");
+            var data = new TemplateData()
+                .Set("A", TemplateValue.Formatted(Tamil, new TextFormat { ComplexScriptFont = "Latha" }))
+                .Set("B", TemplateValue.Formatted("English text", new TextFormat { ComplexScriptFont = "Latha" }))
+                .Set("C", TemplateValue.Formatted("off " + Tamil, new TextFormat { ComplexScriptFont = "Latha", ComplexScript = false }));
+            var bytes = Fill(tpl, data);
+            File.WriteAllBytes(Path.Combine(outDir, "complex-script-flag-fill.docx"), bytes);
+            AssertTrue(Flag(bytes, Tamil) == "cs", "Tamil: " + Flag(bytes, Tamil));
+            AssertTrue(Flag(bytes, "English text") == "none", "English: " + Flag(bytes, "English text"));
+            AssertTrue(Flag(bytes, "off " + Tamil) == "cs=0", "explicit false: " + Flag(bytes, "off " + Tamil));
+        });
+
+        Check("DocxTemplate.Fill: a w:cs the template run states (on or off) is kept; a value without a complex-script font adds nothing", () =>
+        {
+            var tpl = Template(
+                "<w:p><w:r><w:rPr><w:cs w:val=\"0\"/></w:rPr><w:t>{{A}}</w:t></w:r></w:p>" +
+                "<w:p><w:r><w:rPr><w:b/><w:cs/></w:rPr><w:t>{{B}}</w:t></w:r></w:p>" +
+                "<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>{{C}}</w:t></w:r></w:p>");
+            var data = new TemplateData()
+                .Set("A", TemplateValue.Formatted(Tamil, new TextFormat { ComplexScriptFont = "Latha" }))
+                .Set("B", TemplateValue.Formatted("B " + Tamil, new TextFormat { ComplexScriptFont = "Latha" }))
+                .Set("C", TemplateValue.Formatted("C " + Tamil, new TextFormat { Italic = true }));
+            var bytes = Fill(tpl, data);
+            AssertTrue(Flag(bytes, Tamil) == "cs=0", "template off kept: " + Flag(bytes, Tamil));
+            AssertTrue(Flag(bytes, "B " + Tamil) == "cs", "template on kept (one flag): " + Flag(bytes, "B " + Tamil));
+            AssertTrue(CsCount(bytes, "B " + Tamil) == 1, "exactly one w:cs");
+            AssertTrue(Flag(bytes, "C " + Tamil) == "none", "no complex-script font: none");
+        });
+
         Check("the block list: sorted, no overlaps; Tamil, Devanagari, Malayalam, Arabic, Hebrew, Thai and Tamil Supplement are in; Latin, Greek, Cyrillic, CJK and emoji are out", () =>
         {
             var blocks = ComplexScriptText.Blocks;
@@ -81,6 +112,24 @@ public static class ComplexScriptFlagTests
                 AssertTrue(!ComplexScriptText.Contains(s), "out: " + s);
             AssertTrue(!ComplexScriptText.Contains(null), "null");
         });
+    }
+
+    private static byte[] Template(string body) => Package(body);
+
+    private static byte[] Fill(byte[] template, TemplateData data)
+    {
+        var output = new MemoryStream();
+        DocxTemplate.Fill(new MemoryStream(template), output, data);
+        return output.ToArray();
+    }
+
+    private static int CsCount(byte[] package, string text)
+    {
+        using var z = new ZipArchive(new MemoryStream(package));
+        using var s = z.GetEntry("word/document.xml")!.Open();
+        var x = XDocument.Load(s);
+        var run = x.Descendants(W + "r").First(r => string.Concat(r.Elements(W + "t").Select(t => t.Value)) == text);
+        return run.Element(W + "rPr")?.Elements(W + "cs").Count() ?? 0;
     }
 
     private static byte[] Save(Document d)
