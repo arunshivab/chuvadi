@@ -161,16 +161,19 @@ namespace Chuvadi.Print
         /// <c> (fallback: Kind: reason; Kind: reason)</c> when earlier routes were skipped; <c>None (...)</c>
         /// when no route can print.
         /// </summary>
-        public string AuditText
+        public string AuditText => AuditTextFor(isPrivate: false);
+
+        /// <summary>
+        /// The audit route text; for a private job only the route kinds, without the skip reasons (which can quote
+        /// printer replies and error messages, D-375).
+        /// </summary>
+        internal string AuditTextFor(bool isPrivate)
         {
-            get
-            {
-                string head = Route is null ? AuditRoutes.None : Route.Kind.ToString();
-                if (Skipped.Count == 0) return head;
-                var parts = new string[Skipped.Count];
-                for (int i = 0; i < Skipped.Count; i++) parts[i] = Skipped[i].ToString();
-                return head + (Route is null ? " (" : " (fallback: ") + string.Join("; ", parts) + ")";
-            }
+            string head = Route is null ? AuditRoutes.None : Route.Kind.ToString();
+            if (Skipped.Count == 0) return head;
+            var parts = new string[Skipped.Count];
+            for (int i = 0; i < Skipped.Count; i++) parts[i] = isPrivate ? Skipped[i].Kind.ToString() : Skipped[i].ToString();
+            return head + (Route is null ? " (" : " (fallback: ") + string.Join("; ", parts) + ")";
         }
     }
 
@@ -367,13 +370,13 @@ namespace Chuvadi.Print
                 var reasons = new string[decision.Skipped.Count];
                 for (int i = 0; i < reasons.Length; i++) reasons[i] = decision.Skipped[i].ToString();
                 string error = "No print route can print this job: " + string.Join("; ", reasons) + ".";
-                Audit(job, startedAt, PrintJobStatus.Failed, error, decision.AuditText);
+                Audit(job, startedAt, PrintJobStatus.Failed, error, decision.AuditTextFor(job.Settings.Private));
                 if (job.Options.ThrowOnFailure) throw new InvalidOperationException(error);
                 return new PrintRouteResult(PrintResult.Failed(job.JobId, error), decision);
             }
 
             string? previous = job.RouteLabel;
-            job.RouteLabel = decision.AuditText;
+            job.RouteLabel = decision.AuditTextFor(job.Settings.Private);
             try
             {
                 PrintResult result = decision.Route.Print(job, cancellationToken)
@@ -392,12 +395,15 @@ namespace Chuvadi.Print
             foreach (IPrintRoute route in _routes) (route as IDisposable)?.Dispose();
         }
 
+        /// <summary>The audit error for a private job no route could print (the reasons are withheld).</summary>
+        internal const string NoRouteForPrivateJob = "No print route can print this job (details withheld for a private job).";
+
         private void Audit(PrintJob job, DateTimeOffset startedAt, PrintJobStatus status, string? error, string route)
         {
             job.Options.AuditSink.Record(new PrintAuditEvent
             {
                 JobId = job.JobId,
-                DocumentTitle = job.DocumentTitle,
+                DocumentTitle = job.Settings.Private ? null : job.DocumentTitle,
                 PageCount = 0,
                 Copies = job.Settings.Copies,
                 PrinterName = Name ?? _routes[0].Name,
@@ -407,7 +413,8 @@ namespace Chuvadi.Print
                 StartedAt = startedAt,
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = job.TenantId,
-                Error = error,
+                // The reasons name printers and their replies; a private job's audit keeps only the fact (D-375).
+                Error = error is not null && job.Settings.Private ? NoRouteForPrivateJob : error,
                 Route = route
             });
         }

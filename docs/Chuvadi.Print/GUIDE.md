@@ -71,6 +71,33 @@ job.WithPrinterDefaults(PrinterDefault.Paper | PrinterDefault.Duplex);   // the 
   already means the printer's default).
 - With `PrinterDefault.None` (the default) every ticket, DEVMODE, page and audit line is as before.
 
+### Private jobs (1.0.0-rc.5)
+
+```csharp
+job.WithTitle("Recovery codes").WithPrivate();   // the title stays in this PrintJob only
+```
+
+With `PrintSettings.Private` set:
+- **The printer and the operating system's queue** get the job name `PrintSettings.PrivateJobName` ("Chuvadi job")
+  instead of the title: IPP `job-name`, and the document name the Windows spooler (GDI, XPS and raw) records.
+  Printers and spoolers keep these names in their job history.
+- **Audit events** (`PrintTo`, `SubmitTo`, the router's own events, the agent's and the hub's) carry no
+  `DocumentTitle`.
+- **The spool envelope** carries no title (format v4), so a hub and its agents never receive it: no title in the
+  hub's job record, its `FileJobStore`, the lease, the agent's journal or its log.
+- `PrintHubOptions.PrivateJobs` and `PrintAgentOptions.PrivateJobs` treat **every** job as private on that hub or
+  agent, whatever its settings say.
+- **What it does not do:** keep the document itself off disk. For the agent use `AgentJobStorage.Memory`
+  (section 6). `IppDocumentTarget` never writes the document to disk; `IppPrinterTarget` does unless it uses
+  `IppSpoolMode.Memory`. A Windows or CUPS queue writes its own spool files.
+- **Errors** (D-375): the audit's `Error` keeps only the error's type and code, for example
+  `IOException (0x80131620)` (`PrintAuditEvent.ErrorCode`), never the message, which can name a file path or quote
+  a printer. The router's `Route` text keeps only the route kinds. On an agent, the report to the hub carries the
+  same code, so the hub's job record has no message either. `PrintResult.Error`, returned only to your code, keeps
+  the full message.
+- The document's bytes never go to an audit sink, a log callback or a journal, private or not.
+- Without `Private` (the default) titles go exactly where they did before.
+
 ## 2. PrintJob (A2)
 
 ```csharp
@@ -126,8 +153,9 @@ Your own target implements `IPrintTarget` (raster pages) or `IDocumentTarget` (t
 
 `job.SaveSpoolTo(path)` / `ToSpoolArray()` and `PrintJob.LoadSpool(...)` carry the PDF, the settings and
 the job metadata (JobId, title, user, tenant) in one checksummed package (format v2; v1 still reads). A job with
-`PrinterDefaults` set is written as format v3 (1.0.0-rc.4), which agents on rc.3 and earlier cannot read; every
-other job is still written as v2, byte for byte as before. It is
+`PrinterDefaults` set is written as format v3 (1.0.0-rc.4), which agents on rc.3 and earlier cannot read; a
+`Private` job as format v4 (1.0.0-rc.5), which agents before rc.5 refuse, so a private job is never printed by an
+agent that would keep its title. Every other job is still written as v2, byte for byte as before. It is
 how a job travels to another machine (P04: the PDF travels, never bitmaps).
 
 ## 3. Windows printers (A3, `Chuvadi.Print.Windows`)
@@ -433,6 +461,18 @@ await agent.RunAsync(stoppingToken);
 - **Leases and cancel**: heartbeats renew the lease and pick up cancel requests.
 - **Never prints twice**: the crash-safe journal means a job that was interrupted is reported as Failed
   instead of being reprinted, and outcomes the hub has not acknowledged are resent.
+- **Memory-only jobs** (`JobStorage = AgentJobStorage.Memory`, 1.0.0-rc.5): the job is downloaded into memory
+  (resuming within memory), printed from there, and the buffers the agent owns are cleared afterwards. Nothing of
+  the document is written to `JournalFolder`. The journal is still kept, so a job is never printed twice after a
+  crash, but it holds metadata only: no content and no title. A job over `MemoryJobLimit` (256 MB) fails and is
+  not written to disk. Clearing is best effort (.NET can copy managed memory). The target decides the rest:
+  `IppDocumentTarget` (the PDF to an IPP printer) never writes it to disk; `IppPrinterTarget` (PWG Raster) needs
+  `WithSpool(IppSpoolMode.Memory)`; Windows and CUPS queues write their own spool files.
+
+  ```csharp
+  var options = new PrintAgentOptions { /* as above */ JobStorage = AgentJobStorage.Memory, PrivateJobs = true };
+  options.DocumentTargetResolver = uri => new IppDocumentTarget(uri);   // the printer is reached directly over IPP
+  ```
 - **HTTPS**: required, except to loopback or with `AllowInsecureHttp`.
 - **Protocol v1**: `POST agents/hello`, `POST agents/poll` (204 or a lease), `GET jobs/{id}/payload`
   (Range), `POST jobs/{id}/status`. Every request carries the headers `X-Chuvadi-Protocol: 1`,

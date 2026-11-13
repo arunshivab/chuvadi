@@ -57,6 +57,36 @@ namespace Chuvadi.Print
         /// </remarks>
         public PrinterDefault PrinterDefaults { get; set; }
 
+        /// <summary>
+        /// The job name sent to the printer and the operating system's queue for a <see cref="Private"/> job, instead
+        /// of its title.
+        /// </summary>
+        public const string PrivateJobName = "Chuvadi job";
+
+        /// <summary>
+        /// When true, the job's title is kept out of everything that records or names the job. Default false
+        /// (since 1.0.0-rc.5).
+        /// </summary>
+        /// <remarks>
+        /// <para>With <c>Private</c> set:</para>
+        /// <list type="bullet">
+        /// <item>the printer and the operating system's queue get <see cref="PrivateJobName"/> as the job name (IPP
+        /// <c>job-name</c>, the Windows spooler's document name), which printers and spoolers keep in their job
+        /// history;</item>
+        /// <item>audit events carry no <see cref="PrintAuditEvent.DocumentTitle"/>;</item>
+        /// <item>the spool envelope carries no title, so a print hub and its agents never receive it (no title in the
+        /// hub's job record, its stored job, the lease, or the agent's journal).</item>
+        /// <item>audit events and an agent's reports to its hub carry only the error's type and code
+        /// (<see cref="PrintAuditEvent.ErrorCode"/>), never the message; <see cref="PrintResult.Error"/>, returned
+        /// only to the caller, keeps it.</item>
+        /// </list>
+        /// <para>The document's bytes never go to an audit sink, a log callback or a journal, private or not.</para>
+        /// <para>This does not keep the document itself off disk: see <c>PrintAgentOptions.JobStorage</c> for the agent
+        /// and <c>IppSpoolMode.Memory</c> for <c>IppPrinterTarget</c> (<c>IppDocumentTarget</c> never writes it to disk);
+        /// the operating system's spooler writes its own spool files.</para>
+        /// </remarks>
+        public bool Private { get; set; }
+
         public PrintSettings Clone() => new()
         {
             Pages = Pages,
@@ -72,7 +102,8 @@ namespace Chuvadi.Print
             Margins = Margins,
             AutoRotate = AutoRotate,
             Silent = Silent,
-            PrinterDefaults = PrinterDefaults
+            PrinterDefaults = PrinterDefaults,
+            Private = Private
         };
 
         /// <summary>

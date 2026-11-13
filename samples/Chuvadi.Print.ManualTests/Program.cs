@@ -31,6 +31,7 @@ namespace Chuvadi.Print.ManualTests
         ///   --xps-copies &lt;n&gt;              copies (default 1); --xps-software-copies repeats the sheets in the XPS instead
         ///   --xps-duplex &lt;name&gt;           Simplex (default), Vertical (long edge) or Horizontal (short edge)
         ///   --xps-defaults &lt;list&gt;         settings left to the driver's defaults, e.g. Paper or "Paper, Copies" (PrinterDefault names)
+        ///   --xps-private                    print as a private job: the spooler's document name is "Chuvadi job" (rc.5)
         ///   --autorotate-pdf ipp://...       send --autorotate-file &lt;file.pdf&gt; as it is with AutoRotate (rc.4, D-289); says which orientation was sent
         ///   --defaults-printer ipp://...     print 2 raster pages with paper, sides and colour left to the printer's defaults (rc.4, L3)
         ///   --list-printers [a,b]            the merged printer list: local and configured CUPS, servers a and b, and DNS-SD (rc.4, P3)

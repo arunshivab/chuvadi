@@ -19,7 +19,7 @@
     <Description>Windows printing for Chuvadi.Print: printer discovery, driver capabilities (papers, trays, media types, resolutions, quality presets), DEVMODE mapping with all three paper-matching modes, WindowsPrinterTarget printing through the GDI spooler, WindowsRawPrinterTarget sending bytes unchanged with the RAW datatype, XpsWriter writing vector pages as XPS (ECMA-388) with embedded TrueType fonts, and WindowsXpsPrinterTarget printing vector pages as XPS through the Print Document Package API with the job PrintTicket made from the same driver settings. P/Invoke to operating-system DLLs only; no native binaries. Builds on any OS, runs on Windows. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0-rc.4</Version>
+    <Version>1.0.0-rc.5</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

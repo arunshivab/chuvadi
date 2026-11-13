@@ -39,6 +39,15 @@ namespace Chuvadi.Print.Remote
         /// <summary>Largest spool envelope <see cref="PrintHub.Submit(string, string, SpoolEnvelope)"/> accepts. Default 1 GiB.</summary>
         public long MaxPayloadBytes { get; set; } = 1L << 30;
 
+        /// <summary>
+        /// When true, every job submitted to this hub is treated as <see cref="PrintSettings.Private"/>, whatever its
+        /// settings say: its title is dropped before it is stored, leased or audited, and its agent names it
+        /// <see cref="PrintSettings.PrivateJobName"/>. Default false: only jobs whose settings say Private
+        /// (since 1.0.0-rc.5).
+        /// </summary>
+        /// <remarks>A private job is sent as spool envelope version 4, which agents older than 1.0.0-rc.5 refuse.</remarks>
+        public bool PrivateJobs { get; set; }
+
         /// <summary>Clock for leases and timestamps. Default <see cref="TimeProvider.System"/>.</summary>
         public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
@@ -126,10 +135,18 @@ namespace Chuvadi.Print.Remote
             ThrowIfDisposed();
 
             Guid id = envelope.JobId is Guid g && g != Guid.Empty ? g : Guid.NewGuid();
-            var normalized = new SpoolEnvelope(envelope.PdfBytes, envelope.Settings)
+            PrintSettings settings = envelope.Settings;
+            if (_options.PrivateJobs && !settings.Private)
+            {
+                settings = settings.Clone();
+                settings.Private = true;
+            }
+            // A private job's title is never stored, leased or audited, even when the envelope was built with one.
+            string? title = settings.Private ? null : envelope.DocumentTitle;
+            var normalized = new SpoolEnvelope(envelope.PdfBytes, settings)
             {
                 JobId = id,
-                DocumentTitle = envelope.DocumentTitle,
+                DocumentTitle = title,
                 UserName = envelope.UserName,
                 TenantId = envelope.TenantId
             };
@@ -144,7 +161,7 @@ namespace Chuvadi.Print.Remote
                 Printer = printer,
                 State = HubJobState.Queued,
                 SubmittedAt = _time.GetUtcNow(),
-                Title = envelope.DocumentTitle,
+                Title = title,
                 UserName = envelope.UserName,
                 TenantId = envelope.TenantId,
                 Copies = envelope.Settings.Copies,

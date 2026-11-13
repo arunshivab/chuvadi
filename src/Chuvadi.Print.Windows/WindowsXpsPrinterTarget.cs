@@ -328,7 +328,9 @@ namespace Chuvadi.Print.Windows
                 xps = buffer.ToArray();
             }
             byte[] devMode = BuildDevMode(prepared.Settings, prepared.TargetMakesCopies);
-            string jobName = string.IsNullOrEmpty(documentTitle) ? "Chuvadi.Print job" : documentTitle!;
+            // A private job never names its title to the spooler, even when called directly with one.
+            string jobName = settings.Private ? PrintSettings.PrivateJobName
+                : string.IsNullOrEmpty(documentTitle) ? "Chuvadi.Print job" : documentTitle!;
 
             LastSpoolJobId = 0;
             LastJobStatus = null;

@@ -13,15 +13,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 ## A. Preparation
 
 1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, the D-48 removal,
-   the package split, Phase 1 part 1 (rc.2), Phase 4 parts 1 to 3 (rc.3), and printer defaults, auto-rotation on
-   the as-is route and the printer list (rc.4). Update your clone:
+   the package split, Phase 1 part 1 (rc.2), Phase 4 parts 1 to 3 (rc.3), printer defaults, auto-rotation on the
+   as-is route and the printer list (rc.4), and private and memory-only jobs (rc.5). Update your clone:
    ```powershell
    cd C:\src\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
    ```
-   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.4</Version>`.
+   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.5</Version>`.
 2. **Local feed.** Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf 3.32.0 (the floor of its range) from the local feed: the folder `local-nuget` next to the folder that holds your clones (see
    `staging/README.md`), for example `C:\Users\<you>\Documents\local-nuget`. Chuvadi.Fonts 1.0.0 or later must be
    there too.
@@ -49,7 +49,7 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    dotnet build Chuvadi.slnx -c Release
    dotnet test Chuvadi.slnx -c Release --no-build
    ```
-   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 393). No "Access is denied" from
+   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 420). No "Access is denied" from
    HttpListener: the IPP and hub tests listen on `localhost` without a URL reservation. If Windows Firewall
    asks about "dotnet", choose Cancel; the traffic is loopback only.
 6. **ManualTests.**
@@ -289,6 +289,30 @@ output to a file, so no save dialog appears and the output can be opened afterwa
     ```powershell
     Set-PrintConfiguration -PrinterName "Chuvadi PDF Test" -PaperSize A4
     ```
+
+11o. **Private jobs (1.0.0-rc.5).** The job name is read from the queue while the job waits in it. The PrintService
+    event log is no help here: on current Windows its event 307 records every document as "Print Document" unless a
+    policy allows job names, so it shows neither name. You need two PowerShell windows: **A elevated**, and **B
+    normal** in the repository folder.
+    In window A, pause the queue:
+    ```powershell
+    Invoke-CimMethod -InputObject (Get-CimInstance Win32_Printer -Filter "Name='Chuvadi PDF Test'") -MethodName Pause
+    ```
+    In window B, print a private job. It waits up to 5 minutes for the paused queue:
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-queue.pdf" --xps-private --xps-status-seconds 300
+    ```
+    In window A, once the 61 groups have run in B, read the job's name, then resume the queue:
+    ```powershell
+    Get-PrintJob -PrinterName "Chuvadi PDF Test" | Select-Object Id, DocumentName, JobStatus
+    ```
+    ```powershell
+    Invoke-CimMethod -InputObject (Get-CimInstance Win32_Printer -Filter "Name='Chuvadi PDF Test'") -MethodName Resume
+    ```
+    Expected: `Pause` and `Resume` return `ReturnValue 0`. The job's `DocumentName` is **`Chuvadi job`**, not its
+    title. Window B then ends with `PASS  XPS queue: 2 sheets, ..., private, status: job <n>: Completed`.
+    Repeat with the normal job: pause in A, run the same command in B without `--xps-private`, read the queue in A,
+    and resume. Expected: `DocumentName` is `Chuvadi.Print XPS check`. Both PDFs have the same two A4 pages.
 
 ## E. Sign-off and tag
 

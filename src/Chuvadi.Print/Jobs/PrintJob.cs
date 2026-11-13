@@ -170,6 +170,15 @@ namespace Chuvadi.Print
         /// <summary>Leaves these settings to the printer's own defaults (see <see cref="PrintSettings.PrinterDefaults"/>).</summary>
         public PrintJob WithPrinterDefaults(PrinterDefault defaults) { _settings.PrinterDefaults = defaults; return this; }
 
+        /// <summary>Keeps the title out of job names, audit events and spool envelopes (see <see cref="PrintSettings.Private"/>).</summary>
+        public PrintJob WithPrivate(bool isPrivate = true) { _settings.Private = isPrivate; return this; }
+
+        /// <summary>The name targets give the job: <see cref="PrintSettings.PrivateJobName"/> for a private job, else the title.</summary>
+        private string? JobName(PrintSettings settings) => settings.Private ? PrintSettings.PrivateJobName : DocumentTitle;
+
+        /// <summary>The title an audit event records: none for a private job.</summary>
+        private string? AuditTitle(PrintSettings settings) => settings.Private ? null : DocumentTitle;
+
         // ----------------------------------------------------------------- fluent: metadata
 
         public PrintJob WithJobId(Guid jobId) { JobId = jobId; return this; }
@@ -337,7 +346,7 @@ namespace Chuvadi.Print
                 plan = PrintPlan.Create(document.PageCount, settings,
                     TargetMakesCopies(settings, capabilities, options.CopyHandling));
                 RasterPixelFormat outputFormat = OutputPixelFormatFor(settings, capabilities);
-                var context = new PrintJobContext(jobId, DocumentTitle, settings, plan, capabilities, outputFormat);
+                var context = new PrintJobContext(jobId, JobName(settings), settings, plan, capabilities, outputFormat);
 
                 target.StartJob(context);
                 jobStarted = true;
@@ -404,10 +413,12 @@ namespace Chuvadi.Print
             }
 
             string? error = status == PrintJobStatus.Failed ? failure!.Message : null;
+            // A private job's audit keeps only the error's type and code (D-375); the result keeps the message.
+            string? auditError = status == PrintJobStatus.Failed && settings.Private ? PrintAuditEvent.ErrorCode(failure!) : error;
             options.AuditSink.Record(new PrintAuditEvent
             {
                 JobId = jobId,
-                DocumentTitle = DocumentTitle,
+                DocumentTitle = AuditTitle(settings),
                 PageCount = plan?.SelectedPages.Count ?? 0,
                 Copies = settings.Copies,
                 PrinterName = SafeName(target),
@@ -417,7 +428,7 @@ namespace Chuvadi.Print
                 StartedAt = startedAt,
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = TenantId,
-                Error = error,
+                Error = auditError,
                 Route = RouteLabel ?? AuditRoutes.Raster,
                 PrinterDefaults = defaultNotes.Count == 0 ? null : string.Join("; ", defaultNotes)
             });
@@ -474,7 +485,7 @@ namespace Chuvadi.Print
                     pageCount = document.PageCount;
                     selected = settings.Pages.Resolve(pageCount.Value).Count;
                 }
-                target.Submit(new DocumentSubmission(jobId, DocumentTitle, UserName, TenantId, settings, _pdf,
+                target.Submit(new DocumentSubmission(jobId, JobName(settings), UserName, TenantId, settings, _pdf,
                                                      "application/pdf", pageCount), cancellationToken);
                 status = PrintJobStatus.Printed;
             }
@@ -490,10 +501,12 @@ namespace Chuvadi.Print
             }
 
             string? error = status == PrintJobStatus.Failed ? failure!.Message : null;
+            // A private job's audit keeps only the error's type and code (D-375); the result keeps the message.
+            string? auditError = status == PrintJobStatus.Failed && settings.Private ? PrintAuditEvent.ErrorCode(failure!) : error;
             options.AuditSink.Record(new PrintAuditEvent
             {
                 JobId = jobId,
-                DocumentTitle = DocumentTitle,
+                DocumentTitle = AuditTitle(settings),
                 PageCount = selected,
                 Copies = (settings.PrinterDefaults & PrinterDefault.Copies) != 0 ? 1 : settings.Copies,
                 PrinterName = SafeName(target),
@@ -503,7 +516,7 @@ namespace Chuvadi.Print
                 StartedAt = startedAt,
                 CompletedAt = DateTimeOffset.UtcNow,
                 TenantId = TenantId,
-                Error = error,
+                Error = auditError,
                 Route = RouteLabel ?? AuditRoutes.Document,
                 PrinterDefaults = defaultNotes.Count == 0 ? null : string.Join("; ", defaultNotes)
             });
@@ -522,11 +535,14 @@ namespace Chuvadi.Print
 
         // ----------------------------------------------------------------- spool
 
-        /// <summary>The spool envelope for this job: PDF, a snapshot of the settings, and the metadata.</summary>
+        /// <summary>
+        /// The spool envelope for this job: PDF, a snapshot of the settings, and the metadata. A
+        /// <see cref="PrintSettings.Private"/> job's envelope carries no title.
+        /// </summary>
         public SpoolEnvelope ToEnvelope() => new(_pdf, _settings.Clone())
         {
             JobId = JobId,
-            DocumentTitle = DocumentTitle,
+            DocumentTitle = AuditTitle(_settings),
             UserName = UserName,
             TenantId = TenantId
         };

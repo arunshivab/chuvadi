@@ -1,5 +1,50 @@
 # Chuvadi.Print — Changelog
 
+## 1.0.0-rc.5 (2026-11-13)
+
+All four packages move to 1.0.0-rc.5. Two privacy changes (D-349, decided in D-355), for documents that must exist
+only on paper (Anjal's recovery sheet). Everything is opt-in; without the new settings every job, file, message and
+audit line is as in rc.4.
+
+- **Memory-only agent jobs** (S1, Chuvadi.Print.Remote; new API): `PrintAgentOptions.JobStorage`
+  (`AgentJobStorage.Disk`, the default, or `Memory`), `MemoryJobLimit` (default 256 MB, at most
+  `PrintAgentOptions.MaxMemoryJobLimit`).
+  - With `Memory`, the job is downloaded into memory, resumed there after a dropped connection, its SHA-256
+    checked, printed from memory, and the buffers the agent owns are cleared afterwards. No `.cvpr` or `.partial`
+    file is written. Clearing is best effort: .NET can copy managed memory, and a rasteriser or target may keep its
+    own copies.
+  - The journal is kept (D-355), so a job is still never printed twice after a crash, but its entries are written
+    without the job title. The report to the hub still carries the title, unless the job is private.
+  - A job larger than `MemoryJobLimit` fails ("The payload could not be downloaded: The job is N bytes; this agent
+    keeps jobs in memory and takes at most M (PrintAgentOptions.MemoryJobLimit).") and is not written to disk.
+  - The target decides the rest: `IppDocumentTarget` never writes the document to disk; `IppPrinterTarget` needs
+    `IppSpoolMode.Memory`; Windows and CUPS queues write their own spool files.
+- **Private jobs** (S2, core, Remote, Windows; new API): `PrintSettings.Private`, `PrintSettings.PrivateJobName`
+  ("Chuvadi job", D-355), `PrintJob.WithPrivate`, `PrintHubOptions.PrivateJobs` and `PrintAgentOptions.PrivateJobs`
+  (every job on that hub or agent is private).
+  - Targets get "Chuvadi job" as the job name instead of the title (`PrintJobContext.DocumentTitle` and
+    `DocumentSubmission.DocumentTitle`): IPP `job-name`, and the Windows spooler's document name for GDI, XPS and raw
+    jobs. `WindowsXpsPrinterTarget.PrintPages` uses it for private settings even when called with a title.
+  - Audit events carry no `DocumentTitle`: `PrintTo`, `SubmitTo`, the router's own events, and the agent's and hub's.
+  - The spool envelope carries no title. The hub drops the title of a private job even from an envelope built by
+    hand, so it is not in the job record, `FileJobStore`, the lease, the hub audit or the agent's journal.
+  - **Errors (D-375):** a private job's audit `Error` keeps only the error's type and code
+    (`PrintAuditEvent.ErrorCode`, for example "IOException (0x80131620)"), never the message, so nothing identifying
+    such as a file path is recorded. A failure without an exception records `PrintAuditEvent.PrivateErrorText`, and
+    a job no route can print records "No print route can print this job (details withheld for a private job)." The
+    router's `Route` text keeps the route kinds without the skip reasons. On an agent, the report to the hub carries
+    the same code, so the hub's job record holds no message either. `PrintResult.Error`, returned only to the app
+    that printed, keeps the full message.
+  - The document's bytes never went to an audit sink, a log callback or a journal; tests now hold that for private
+    jobs.
+- **Spool envelope version 4**: written only for a private job (`SpoolEnvelope.CurrentVersion` is now 4). It adds
+  one options byte (bit 0 = Private; other bits are refused). Agents before 1.0.0-rc.5 refuse it, so a private job
+  is never printed by an agent that would record its title. Jobs with printer defaults are still version 3, and
+  every other job version 2, byte for byte as before.
+- **ManualTests**: `--xps-private` for the Windows queue options (WINDOWS-VERIFICATION step 11o). The spool-version
+  group also checks version 4 for a private job.
+- **Tests**: Print 420 (was 393): private jobs, private errors and memory-only agent jobs (27).
+
 ## 1.0.0-rc.4 (2026-11-12)
 
 All four packages move to 1.0.0-rc.4 (D-326). Printer defaults (L3, D-235, D-257), auto-rotation on the as-is

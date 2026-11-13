@@ -28,6 +28,9 @@ namespace Chuvadi.Print.ManualTests
             /// <summary>Settings left to the driver's defaults (--xps-defaults).</summary>
             public PrinterDefault PrinterDefaults { get; set; }
 
+            /// <summary>Print as a private job (--xps-private): the spooler sees "Chuvadi job", not the title.</summary>
+            public bool Private { get; set; }
+
             public PrintSettings ToSettings() => new()
             {
                 Paper = PaperSize.A4,
@@ -36,12 +39,14 @@ namespace Chuvadi.Print.ManualTests
                 Collate = true,
                 Duplex = Duplex,
                 Scale = ScaleMode.FitToPage,
-                PrinterDefaults = PrinterDefaults
+                PrinterDefaults = PrinterDefaults,
+                Private = Private
             };
 
             public override string ToString()
                 => Orientation + ", " + Copies + (Copies == 1 ? " copy" : " copies") + ", " + Duplex
-                   + (PrinterDefaults == PrinterDefault.None ? string.Empty : ", printer defaults: " + PrinterDefaults);
+                   + (PrinterDefaults == PrinterDefault.None ? string.Empty : ", printer defaults: " + PrinterDefaults)
+                   + (Private ? ", private" : string.Empty);
 
             /// <summary>Like <see cref="ToString"/>, saying who makes the copies on this queue when there is more than one.</summary>
             public string Describe(WindowsXpsPrinterTarget target)
@@ -50,7 +55,8 @@ namespace Chuvadi.Print.ManualTests
                 PrintSettings settings = ToSettings();
                 bool driver = PrintJob.TargetMakesCopies(settings, target.ReadCapabilities(settings).ToTargetCapabilities(null), target.CopyHandling);
                 return Orientation + ", " + Copies + " copies" + (driver ? " (in the PrintTicket)" : " (repeated in the XPS)") + ", " + Duplex
-                       + (PrinterDefaults == PrinterDefault.None ? string.Empty : ", printer defaults: " + PrinterDefaults);
+                       + (PrinterDefaults == PrinterDefault.None ? string.Empty : ", printer defaults: " + PrinterDefaults)
+                       + (Private ? ", private (job name \"" + PrintSettings.PrivateJobName + "\")" : string.Empty);
             }
 
             /// <summary>What the queue's driver reports as its defaults (paper, sides, colour, copies).</summary>
@@ -219,6 +225,7 @@ namespace Chuvadi.Print.ManualTests
             o.SoftwareCopies = option("--xps-software-copies", string.Empty) is not null;
             string? defaults = option("--xps-defaults", null);
             if (defaults is not null) o.PrinterDefaults = (PrinterDefault)Enum.Parse(typeof(PrinterDefault), defaults, ignoreCase: true);
+            o.Private = option("--xps-private", string.Empty) is not null;
             string? wait = option("--xps-status-seconds", null);
             if (wait is not null)
             {
