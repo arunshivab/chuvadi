@@ -290,24 +290,29 @@ output to a file, so no save dialog appears and the output can be opened afterwa
     Set-PrintConfiguration -PrinterName "Chuvadi PDF Test" -PaperSize A4
     ```
 
-11o. **Private jobs (1.0.0-rc.5).** The Windows spooler records each document's name in its PrintService log. Turn
-    the log on once, in an **elevated** PowerShell:
+11o. **Private jobs (1.0.0-rc.5).** The job name is read from the queue while the job waits in it. The PrintService
+    event log is no help here: on current Windows its event 307 records every document as "Print Document" unless a
+    policy allows job names, so it shows neither name. You need two PowerShell windows: **A elevated**, and **B
+    normal** in the repository folder.
+    In window A, pause the queue:
     ```powershell
-    wevtutil sl Microsoft-Windows-PrintService/Operational /e:true
+    Invoke-CimMethod -InputObject (Get-CimInstance Win32_Printer -Filter "Name='Chuvadi PDF Test'") -MethodName Pause
     ```
-    Then, in a normal PowerShell, print once as a private job and once as a normal one:
+    In window B, print a private job. It waits up to 5 minutes for the paused queue:
     ```powershell
-    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-private.pdf" --xps-private
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-queue.pdf" --xps-private --xps-status-seconds 300
+    ```
+    In window A, once the 61 groups have run in B, read the job's name, then resume the queue:
+    ```powershell
+    Get-PrintJob -PrinterName "Chuvadi PDF Test" | Select-Object Id, DocumentName, JobStatus
     ```
     ```powershell
-    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-named.pdf"
+    Invoke-CimMethod -InputObject (Get-CimInstance Win32_Printer -Filter "Name='Chuvadi PDF Test'") -MethodName Resume
     ```
-    ```powershell
-    Get-WinEvent -LogName Microsoft-Windows-PrintService/Operational -MaxEvents 30 | Where-Object Id -eq 307 | Select-Object -First 2 TimeCreated, Message | Format-List
-    ```
-    Expected: the first line says `..., private (job name "Chuvadi job")` and PASS. Of the two events, the newer one's
-    message names `Chuvadi.Print XPS check` (the normal job), and the older one names **`Chuvadi job`**, not the
-    title. Both PDFs have the same two pages. If no event 307 appears, record what `Get-WinEvent` shows.
+    Expected: `Pause` and `Resume` return `ReturnValue 0`. The job's `DocumentName` is **`Chuvadi job`**, not its
+    title. Window B then ends with `PASS  XPS queue: 2 sheets, ..., private, status: job <n>: Completed`.
+    Repeat with the normal job: pause in A, run the same command in B without `--xps-private`, read the queue in A,
+    and resume. Expected: `DocumentName` is `Chuvadi.Print XPS check`. Both PDFs have the same two A4 pages.
 
 ## E. Sign-off and tag
 
