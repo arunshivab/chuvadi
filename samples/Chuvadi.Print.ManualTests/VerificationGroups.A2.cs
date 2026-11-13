@@ -485,7 +485,9 @@ namespace Chuvadi.Print.ManualTests
             Require(back.Settings.Copies == 2 && back.Settings.Pages.ToCanonicalString() == "odd", "v1 settings read");
             Require(!back.Settings.AutoRotate && back.JobId is null && back.DocumentTitle is null, "v1 carries no v2 fields");
             Require(SpoolEnvelope.FromArray(envelope.ToArray()).DocumentTitle == "x", "v2 carries metadata");
-            Require(envelope.ToArray()[4] == SpoolEnvelope.CurrentVersion, "current version written");
+            Require(envelope.ToArray()[4] == 2, "version 2 written without printer defaults");
+            settings.PrinterDefaults = PrinterDefault.Paper;
+            Require(envelope.ToArray()[4] == SpoolEnvelope.CurrentVersion, "current version written with printer defaults");
         }
 
         // ------------------------------------------------------------------ conversion + PNG

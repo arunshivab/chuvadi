@@ -105,6 +105,7 @@ namespace Chuvadi.Print.Windows
             using PrinterSession session = PrinterSession.Open(printerName);
             IReadOnlyList<PrinterPaper> papers = session.ReadPapers();
             DevModeBuffer devMode = session.GetDefaultDevMode();
+            DevModeDefaults defaults = DevModeDefaults.Read(devMode, papers);
             if (settings is not null)
             {
                 DevModeRequest request = DevModeMapper.Map(settings, papers, matching, targetHandlesCopies: false,
@@ -137,7 +138,10 @@ namespace Chuvadi.Print.Windows
                 Math.Max(0, session.Capability(NativeMethods.DC_ORIENTATION)),
                 session.ReadExtent(NativeMethods.DC_MINEXTENT),
                 session.ReadExtent(NativeMethods.DC_MAXEXTENT),
-                geometry);
+                geometry)
+            {
+                Defaults = defaults
+            };
         }
 
         internal static void EnsureWindows()

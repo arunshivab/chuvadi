@@ -13,14 +13,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 ## A. Preparation
 
 1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, the D-48 removal,
-   the package split, Phase 1 part 1 (rc.2), and Phase 4 parts 1 to 3 (rc.3). Update your clone:
+   the package split, Phase 1 part 1 (rc.2), Phase 4 parts 1 to 3 (rc.3), and printer defaults, auto-rotation on
+   the as-is route and the printer list (rc.4). Update your clone:
    ```powershell
    cd C:\src\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
    ```
-   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.3</Version>`.
+   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.4</Version>`.
 2. **Local feed.** Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf 3.32.0 (the floor of its range) from the local feed: the folder `local-nuget` next to the folder that holds your clones (see
    `staging/README.md`), for example `C:\Users\<you>\Documents\local-nuget`. Chuvadi.Fonts 1.0.0 or later must be
    there too.
@@ -48,14 +49,14 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    dotnet build Chuvadi.slnx -c Release
    dotnet test Chuvadi.slnx -c Release --no-build
    ```
-   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 229). No "Access is denied" from
+   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 393). No "Access is denied" from
    HttpListener: the IPP and hub tests listen on `localhost` without a URL reservation. If Windows Firewall
    asks about "dotnet", choose Cancel; the traffic is loopback only.
 6. **ManualTests.**
    ```powershell
    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests
    ```
-   Expected: `Total: 59`, `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
+   Expected: `Total: 61`, `Failed: 0` and `Skipped: 0`. On Windows the two Windows groups must PASS, not SKIP:
    `WindowsPrintersAreDiscoverable` and `WindowsPrintToPdfWritesFile`. The 12 `Remote...` groups and the
    six Phase 1 groups (`RouterFallsBackToRasterAndAuditsWhy`, `RouterSendsEmbeddedPdfAsIs`,
    `RawSocketDeliversBytesUnchanged`, `CupsQueuesAreListed`, `PrinterRegistryKeepsCapabilities`,
@@ -257,6 +258,37 @@ output to a file, so no save dialog appears and the output can be opened afterwa
     Expected: a PASS line with a status, and two printed A4 sheets matching 11i. Text and thin lines are crisp. Record
     the status part. If the spooler hangs (the job stays in the queue), cancel it in the queue window; if that does
     not clear it, in an elevated PowerShell run `Restart-Service Spooler`, then record what happened.
+
+11n. **Printer defaults (1.0.0-rc.4, L3).** Give the PDF test queue a different default paper, in an **elevated**
+    PowerShell:
+    ```powershell
+    Set-PrintConfiguration -PrinterName "Chuvadi PDF Test" -PaperSize Letter
+    ```
+    Then, in a normal PowerShell, write the ticket twice, once with the paper left to the driver:
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-ticket "Chuvadi PDF Test" --xps-ticket-file "C:\Users\Public\chuvadi-ticket-a4.xml"
+    ```
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-ticket "Chuvadi PDF Test" --xps-ticket-file "C:\Users\Public\chuvadi-ticket-default.xml" --xps-defaults Paper
+    ```
+    Expected: both lines end with `driver defaults: paper Letter, ...`. The second line says `printer defaults: Paper`.
+    In Notepad, `chuvadi-ticket-a4.xml` names A4 in `psk:PageMediaSize` (for example `psk:ISOA4`), and
+    `chuvadi-ticket-default.xml` names Letter (for example `psk:NorthAmericaLetter`): the driver's default was kept.
+    Then print through the queue with the paper left to the driver:
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-queue.pdf" --xps-defaults Paper
+    ```
+    Expected: a PASS line as in 11j. Open the PDF: both pages are **Letter** (8.5 x 11 in; in the browser's document
+    properties, or Edge's page size), and the two sample pages are laid out on Letter (page 1 scaled to fit, centred).
+    If the first line does not say `paper Letter`, record what it says: the driver reported its default from somewhere
+    else, and the Print chat needs to know.
+    If the HP Ink Tank is available, also run 11h's HP command with `--xps-defaults Copies` added (and without
+    `--xps-copies`). Record the `driver defaults` part of the line and the value of `psk:JobCopiesAllDocuments` in the
+    XML: with the flag, the copies are the driver's own default, whatever it is. Put the queue back afterwards
+    (elevated):
+    ```powershell
+    Set-PrintConfiguration -PrinterName "Chuvadi PDF Test" -PaperSize A4
+    ```
 
 ## E. Sign-off and tag
 

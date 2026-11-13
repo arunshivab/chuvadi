@@ -30,6 +30,11 @@ namespace Chuvadi.Print.ManualTests
         ///   --xps-orientation &lt;name&gt;      with the --xps-ticket/-queue/-route options: Portrait (default), Landscape, ReversePortrait, ReverseLandscape
         ///   --xps-copies &lt;n&gt;              copies (default 1); --xps-software-copies repeats the sheets in the XPS instead
         ///   --xps-duplex &lt;name&gt;           Simplex (default), Vertical (long edge) or Horizontal (short edge)
+        ///   --xps-defaults &lt;list&gt;         settings left to the driver's defaults, e.g. Paper or "Paper, Copies" (PrinterDefault names)
+        ///   --autorotate-pdf ipp://...       send --autorotate-file &lt;file.pdf&gt; as it is with AutoRotate (rc.4, D-289); says which orientation was sent
+        ///   --defaults-printer ipp://...     print 2 raster pages with paper, sides and colour left to the printer's defaults (rc.4, L3)
+        ///   --list-printers [a,b]            the merged printer list: local and configured CUPS, servers a and b, and DNS-SD (rc.4, P3)
+        ///   --list-seconds &lt;n&gt;            with --list-printers: how long to browse DNS-SD (default 3)
         ///   --xps-status-seconds &lt;n&gt;      how long to wait for the job status (default 120; -1 = do not wait)
         /// </summary>
         public static int Main(string[] args)
@@ -115,6 +120,12 @@ namespace Chuvadi.Print.ManualTests
             if (Array.IndexOf(args, "--discover") >= 0)
                 failed += Scenario(args, "--discover", "Discovery", _ => Phase1Scenarios.Discover(Option(args, "--discover", null)), always: true);
             failed += Scenario(args, "--cups-server", "CUPS", Phase1Scenarios.Cups);
+            failed += Scenario(args, "--autorotate-pdf", "Auto-rotate PDF", uri =>
+                Rc4Scenarios.AutoRotatePdf(uri, Option(args, "--autorotate-file", null), Array.IndexOf(args, "--ipp-insecure") >= 0));
+            failed += Scenario(args, "--defaults-printer", "Printer defaults", uri =>
+                Rc4Scenarios.PrinterDefaults(uri, Array.IndexOf(args, "--ipp-insecure") >= 0));
+            if (Array.IndexOf(args, "--list-printers") >= 0)
+                failed += Scenario(args, "--list-printers", "Printer list", servers => Rc4Scenarios.ListPrinters(servers, Option(args, "--list-seconds", null)), always: true);
             failed += Scenario(args, "--ipp-certificate", "IPP certificate", Phase1Scenarios.Certificate);
             failed += Scenario(args, "--raw-printer", "Raw printer", uri => Phase1Scenarios.RawSocket(uri, Option(args, "--raw-file", null)));
             failed += Scenario(args, "--windows-raw-printer", "Windows RAW", queue =>

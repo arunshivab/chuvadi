@@ -25,6 +25,9 @@ namespace Chuvadi.Print.ManualTests
             public bool SoftwareCopies { get; set; }
             public TimeSpan? StatusTimeout { get; set; } = WindowsXpsPrinterTarget.DefaultStatusTimeout;
 
+            /// <summary>Settings left to the driver's defaults (--xps-defaults).</summary>
+            public PrinterDefault PrinterDefaults { get; set; }
+
             public PrintSettings ToSettings() => new()
             {
                 Paper = PaperSize.A4,
@@ -32,11 +35,13 @@ namespace Chuvadi.Print.ManualTests
                 Copies = Copies,
                 Collate = true,
                 Duplex = Duplex,
-                Scale = ScaleMode.FitToPage
+                Scale = ScaleMode.FitToPage,
+                PrinterDefaults = PrinterDefaults
             };
 
             public override string ToString()
-                => Orientation + ", " + Copies + (Copies == 1 ? " copy" : " copies") + ", " + Duplex;
+                => Orientation + ", " + Copies + (Copies == 1 ? " copy" : " copies") + ", " + Duplex
+                   + (PrinterDefaults == PrinterDefault.None ? string.Empty : ", printer defaults: " + PrinterDefaults);
 
             /// <summary>Like <see cref="ToString"/>, saying who makes the copies on this queue when there is more than one.</summary>
             public string Describe(WindowsXpsPrinterTarget target)
@@ -44,7 +49,18 @@ namespace Chuvadi.Print.ManualTests
                 if (Copies == 1) return ToString();
                 PrintSettings settings = ToSettings();
                 bool driver = PrintJob.TargetMakesCopies(settings, target.ReadCapabilities(settings).ToTargetCapabilities(null), target.CopyHandling);
-                return Orientation + ", " + Copies + " copies" + (driver ? " (in the PrintTicket)" : " (repeated in the XPS)") + ", " + Duplex;
+                return Orientation + ", " + Copies + " copies" + (driver ? " (in the PrintTicket)" : " (repeated in the XPS)") + ", " + Duplex
+                       + (PrinterDefaults == PrinterDefault.None ? string.Empty : ", printer defaults: " + PrinterDefaults);
+            }
+
+            /// <summary>What the queue's driver reports as its defaults (paper, sides, colour, copies).</summary>
+            public static string DriverDefaults(WindowsXpsPrinterTarget target)
+            {
+                WindowsPrinterCapabilities caps = target.ReadCapabilities(new PrintSettings());
+                return "driver defaults: paper " + (caps.DefaultPaper?.ToString() ?? "not reported")
+                       + ", " + (caps.DefaultDuplex?.ToString() ?? "sides not reported")
+                       + ", " + (caps.DefaultColor?.ToString() ?? "colour not reported")
+                       + ", " + (caps.DefaultCopies is int c ? c + (c == 1 ? " copy" : " copies") : "copies not reported");
             }
         }
 
@@ -60,7 +76,8 @@ namespace Chuvadi.Print.ManualTests
             if (!text.Contains("PrintTicket", StringComparison.Ordinal))
                 throw new InvalidOperationException("the ticket written to " + path + " has no PrintTicket element");
             return ticket.Length + " bytes written to " + Path.GetFullPath(path) + " for " + options.Describe(target)
-                   + "; mentions: " + Mentions(text, "PageMediaSize", "PageOrientation", "JobCopiesAllDocuments", "JobDuplexAllDocumentsContiguously", "PageOutputColor");
+                   + "; mentions: " + Mentions(text, "PageMediaSize", "PageOrientation", "JobCopiesAllDocuments", "JobDuplexAllDocumentsContiguously", "PageOutputColor")
+                   + "; " + QueueOptions.DriverDefaults(target);
         }
 
         /// <summary>
@@ -200,6 +217,8 @@ namespace Chuvadi.Print.ManualTests
             string? duplex = option("--xps-duplex", null);
             if (duplex is not null) o.Duplex = (Duplex)Enum.Parse(typeof(Duplex), duplex, ignoreCase: true);
             o.SoftwareCopies = option("--xps-software-copies", string.Empty) is not null;
+            string? defaults = option("--xps-defaults", null);
+            if (defaults is not null) o.PrinterDefaults = (PrinterDefault)Enum.Parse(typeof(PrinterDefault), defaults, ignoreCase: true);
             string? wait = option("--xps-status-seconds", null);
             if (wait is not null)
             {

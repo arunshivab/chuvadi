@@ -326,6 +326,66 @@ public class IppMappingTests
     }
 
     [Fact]
+    public void Auto_rotate_leaves_the_orientation_to_the_printer_on_the_as_is_route()
+    {
+        // The fake printer lists 3 to 6 but not "none" (7): the attribute is left out instead of forcing portrait.
+        var (omitted, approx) = Ticket(new PrintSettings { AutoRotate = true });
+        Assert.Null(omitted["orientation-requested"]);
+        Assert.Contains(approx, a => a == "auto-rotate is chosen by the printer");
+
+        // A printer that lists 7 gets 7.
+        IppPrinterCapabilities withNone = Caps(g => g.Set("orientation-requested-supported",
+            IppValue.Enum(3), IppValue.Enum(4), IppValue.Enum(5), IppValue.Enum(6), IppValue.Enum(7)));
+        var (none, _) = Ticket(new PrintSettings { AutoRotate = true }, withNone);
+        Assert.Equal(7, none["orientation-requested"]!.Value.AsInteger());
+
+        // A printer that reports no orientations at all: left out.
+        IppPrinterCapabilities unlisted = Caps(g => g.Remove("orientation-requested-supported"));
+        var (bare, _) = Ticket(new PrintSettings { AutoRotate = true }, unlisted);
+        Assert.Null(bare["orientation-requested"]);
+    }
+
+    [Fact]
+    public void Auto_rotate_off_or_an_explicit_orientation_keeps_the_ticket_as_before()
+    {
+        IppPrinterCapabilities withNone = Caps(g => g.Set("orientation-requested-supported",
+            IppValue.Enum(3), IppValue.Enum(4), IppValue.Enum(5), IppValue.Enum(6), IppValue.Enum(7)));
+
+        // AutoRotate off: portrait is sent as 3, even when the printer lists 7.
+        Assert.Equal(3, Ticket(new PrintSettings(), withNone).Job["orientation-requested"]!.Value.AsInteger());
+
+        // AutoRotate on with an orientation other than portrait: that orientation is still sent.
+        Assert.Equal(4, Ticket(new PrintSettings { AutoRotate = true, Orientation = PageOrientation.Landscape }, withNone)
+            .Job["orientation-requested"]!.Value.AsInteger());
+        Assert.Equal(5, Ticket(new PrintSettings { AutoRotate = true, Orientation = PageOrientation.ReverseLandscape }, withNone)
+            .Job["orientation-requested"]!.Value.AsInteger());
+        Assert.Equal(6, Ticket(new PrintSettings { AutoRotate = true, Orientation = PageOrientation.ReversePortrait }, withNone)
+            .Job["orientation-requested"]!.Value.AsInteger());
+
+        // print-scaling is unchanged by AutoRotate.
+        Assert.Equal(Ticket(new PrintSettings()).Job["print-scaling"]!.Value.AsString(),
+                     Ticket(new PrintSettings { AutoRotate = true }).Job["print-scaling"]!.Value.AsString());
+
+        // The raster route never sends an orientation, with or without AutoRotate.
+        Assert.Null(Ticket(new PrintSettings { AutoRotate = true }, withNone, documentMode: false)
+            .Job["orientation-requested"]);
+    }
+
+    [Fact]
+    public void Auto_rotate_pdf_passthrough_sends_no_forced_portrait_to_the_printer()
+    {
+        using var printer = new FakeIppPrinter();
+        using var target = new IppDocumentTarget(printer.Uri);
+        byte[] pdf = Encoding.ASCII.GetBytes("%PDF-1.7\n% Chuvadi auto-rotate test\n%%EOF\n");
+        PrintResult result = new PrintJob(pdf).WithAutoRotate().SubmitTo(target);
+
+        Assert.True(result.Status == PrintJobStatus.Printed, result.Error);
+        var (request, _) = Assert.Single(printer.PrintJobs);
+        Assert.Null(request.Group(IppTag.JobAttributes)!["orientation-requested"]);
+        Assert.Contains(target.LastApproximations, a => a == "auto-rotate is chosen by the printer");
+    }
+
+    [Fact]
     public void Printer_limits_degrade_gracefully()
     {
         IppPrinterCapabilities simplex = Caps(g =>

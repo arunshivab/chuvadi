@@ -2,7 +2,7 @@
 
 Part of [Chuvadi.Print](../Chuvadi.Print/README.md): pure-BCL printing for .NET, zero NuGet dependencies, in the [Chuvadi](https://github.com/arunshivab/chuvadi) family. It needs the Chuvadi.Print package.
 
-- **Windows printing** (`Chuvadi.Print.Windows`): list printers, read every driver paper, tray, media type and resolution, and print through the GDI spooler with full control of the driver settings. Plain P/Invoke — no native binaries, and the rest of the library still runs everywhere.
+- **Windows printing** (`Chuvadi.Print.Windows`): list printers, read every driver paper, tray, media type and resolution, and print through the GDI spooler with full control of the driver settings, or keep the driver's own default paper, duplex, colour or copies (`PrintSettings.PrinterDefaults`). Plain P/Invoke — no native binaries, and the rest of the library still runs everywhere.
 - **XPS documents**: `XpsWriter` writes vector pages (`VectorPage` from Chuvadi.Print) as an XPS package (ECMA-388), with TrueType fonts embedded. Pure managed code; it runs on any OS.
 - **Vector printing to Windows queues**: `WindowsXpsPrinterTarget` prints vector pages as XPS through the Print Document Package API, with the job PrintTicket made from the same driver settings as GDI printing, and job status reported back. `WindowsQueueRoute` puts it in a `PrintRouter`.
 

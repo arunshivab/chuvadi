@@ -9,7 +9,10 @@ print queues are in Chuvadi.Print.Windows.
 - **Routing**: `IppRoutes` builds a `PrintRouter` that sends the PDF as-is when every font is embedded and the printer lists `application/pdf`, and PWG Raster otherwise. `IppCapabilityCache` keeps printer capabilities for 10 minutes.
 - **Certificate pinning** for `ipps://` printers with their own certificates (`IppClientOptions.PinnedCertificates`, `IppCertificates`).
 - **Discovery** (`NetworkPrinterDiscovery`): finds IPP, IPPS and raw-port printers on the local network with DNS-SD, only when you ask.
-- **CUPS queues** (`CupsQueues`): lists a CUPS server's queues over IPP.
+- **CUPS queues** (`CupsQueues`): lists a CUPS server's queues over IPP, or those of the server this computer is set up to use (`ListConfigured`, from `CUPS_SERVER` or `client.conf`).
+- **One printer list** (`PrinterListing`): local CUPS, the configured CUPS server, other servers and DNS-SD, each printer once, with its CUPS queue first.
+- **Printer defaults**: reads the printer's default paper, sides, colour and copies, and leaves out what `PrintSettings.PrinterDefaults` leaves to the printer.
+- **Auto-rotation** when the printer lays out the PDF: with `AutoRotate`, the orientation is left to the printer or CUPS.
 - **Raw port 9100** (`RawSocketTarget`): bytes unchanged to a network printer's raw port (PostScript, PCL, ZPL, ESC/POS).
 
 ```csharp

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Chuvadi.Print.Ipp
 {
@@ -28,6 +29,9 @@ namespace Chuvadi.Print.Ipp
     /// <summary>Maps device-independent <see cref="PrintSettings"/> to IPP job template attributes.</summary>
     public static class IppJobTicket
     {
+        /// <summary>The <c>orientation-requested</c> value "none" (RFC 8011 section 5.2.10): the printer chooses.</summary>
+        private const int OrientationNone = 7;
+
         /// <summary>
         /// Builds the job attribute group.
         /// </summary>
@@ -52,8 +56,10 @@ namespace Chuvadi.Print.Ipp
             options ??= new IppJobOptions();
             var job = new IppAttributeGroup(IppTag.JobAttributes);
 
+            PrinterDefault keep = settings.PrinterDefaults;
+
             // copies + collation
-            if (printerMakesCopies && settings.Copies > 1)
+            if ((keep & PrinterDefault.Copies) == 0 && printerMakesCopies && settings.Copies > 1)
             {
                 int copies = settings.Copies;
                 if (copies > capabilities.MaxCopies)
@@ -69,53 +75,54 @@ namespace Chuvadi.Print.Ipp
                     approximations.Add("printer cannot choose collation (" + handling + " not supported)");
             }
 
-            // sides
-            string sides = settings.Duplex switch
+            // sides (left out with PrinterDefault.Duplex: the printer's sides-default applies)
+            if ((keep & PrinterDefault.Duplex) == 0)
             {
-                Duplex.Vertical => "two-sided-long-edge",
-                Duplex.Horizontal => "two-sided-short-edge",
-                _ => "one-sided"
-            };
-            if (capabilities.Sides.Count > 0 && !IppPrinterCapabilities.Contains(capabilities.Sides, sides))
-            {
-                approximations.Add("sides " + sides + " not supported; printing one-sided");
-                sides = "one-sided";
+                string sides = settings.Duplex switch
+                {
+                    Duplex.Vertical => "two-sided-long-edge",
+                    Duplex.Horizontal => "two-sided-short-edge",
+                    _ => "one-sided"
+                };
+                if (capabilities.Sides.Count > 0 && !IppPrinterCapabilities.Contains(capabilities.Sides, sides))
+                {
+                    approximations.Add("sides " + sides + " not supported; printing one-sided");
+                    sides = "one-sided";
+                }
+                job.Add("sides", IppValue.Keyword(sides));
             }
-            job.Add("sides", IppValue.Keyword(sides));
 
-            // media / media-col
-            string media = PwgMediaNames.NameFor(settings.Paper, capabilities.Media);
-            if (capabilities.Media.Count > 0 && !IppPrinterCapabilities.Contains(capabilities.Media, media)
-                && !media.StartsWith("custom_", StringComparison.Ordinal))
-                approximations.Add("media " + media + " is not listed by the printer");
+            // media / media-col (with PrinterDefault.Paper no size is sent; a tray or media type still is)
+            bool keepPaper = (keep & PrinterDefault.Paper) != 0;
+            string? media = null;
+            if (!keepPaper)
+            {
+                media = PwgMediaNames.NameFor(settings.Paper, capabilities.Media);
+                if (capabilities.Media.Count > 0 && !IppPrinterCapabilities.Contains(capabilities.Media, media)
+                    && !media.StartsWith("custom_", StringComparison.Ordinal))
+                    approximations.Add("media " + media + " is not listed by the printer");
+            }
             if (options.MediaSource is not null || options.MediaType is not null)
             {
-                var size = new IppCollection()
-                    .Add("x-dimension", IppValue.Integer(HundredthsMm(Math.Min(settings.Paper.WidthPoints, settings.Paper.HeightPoints))))
-                    .Add("y-dimension", IppValue.Integer(HundredthsMm(Math.Max(settings.Paper.WidthPoints, settings.Paper.HeightPoints))));
-                var col = new IppCollection().Add("media-size", IppValue.Collection(size)).Add("media-size-name", IppValue.Keyword(media));
+                var col = new IppCollection();
+                if (media is not null)
+                {
+                    var size = new IppCollection()
+                        .Add("x-dimension", IppValue.Integer(HundredthsMm(Math.Min(settings.Paper.WidthPoints, settings.Paper.HeightPoints))))
+                        .Add("y-dimension", IppValue.Integer(HundredthsMm(Math.Max(settings.Paper.WidthPoints, settings.Paper.HeightPoints))));
+                    col.Add("media-size", IppValue.Collection(size)).Add("media-size-name", IppValue.Keyword(media));
+                }
                 if (options.MediaSource is not null) col.Add("media-source", IppValue.Keyword(options.MediaSource));
                 if (options.MediaType is not null) col.Add("media-type", IppValue.Keyword(options.MediaType));
                 job.Add("media-col", IppValue.Collection(col));
             }
-            else
+            else if (media is not null)
             {
                 job.Add("media", IppValue.Keyword(media));
             }
 
-            // colour
-            string colorMode = settings.Color switch
-            {
-                ColorMode.Color => "color",
-                ColorMode.Monochrome when IppPrinterCapabilities.Contains(capabilities.ColorModes, "bi-level") => "bi-level",
-                _ => "monochrome"
-            };
-            if (capabilities.ColorModes.Count > 0 && !IppPrinterCapabilities.Contains(capabilities.ColorModes, colorMode))
-            {
-                approximations.Add("print-color-mode " + colorMode + " not supported; using monochrome");
-                colorMode = "monochrome";
-            }
-            job.Add("print-color-mode", IppValue.Keyword(colorMode));
+            // colour (left out with PrinterDefault.Color: the printer's print-color-mode-default applies)
+            if ((keep & PrinterDefault.Color) == 0) AddColorMode(settings, capabilities, job, approximations);
 
             if (options.Quality.HasValue) job.Add("print-quality", IppValue.Enum((int)options.Quality.Value));
             if (!documentMode && rasterResolution.HasValue) job.Add("printer-resolution", IppValue.Resolution(rasterResolution.Value));
@@ -129,16 +136,43 @@ namespace Chuvadi.Print.Ipp
             return job;
         }
 
+        private static void AddColorMode(PrintSettings settings, IppPrinterCapabilities capabilities, IppAttributeGroup job,
+                                         IList<string> approximations)
+        {
+            string colorMode = settings.Color switch
+            {
+                ColorMode.Color => "color",
+                ColorMode.Monochrome when IppPrinterCapabilities.Contains(capabilities.ColorModes, "bi-level") => "bi-level",
+                _ => "monochrome"
+            };
+            if (capabilities.ColorModes.Count > 0 && !IppPrinterCapabilities.Contains(capabilities.ColorModes, colorMode))
+            {
+                approximations.Add("print-color-mode " + colorMode + " not supported; using monochrome");
+                colorMode = "monochrome";
+            }
+            job.Add("print-color-mode", IppValue.Keyword(colorMode));
+        }
+
         private static void AddDocumentLayout(PrintSettings settings, IppPrinterCapabilities capabilities, IppAttributeGroup job,
                                               int? pageCount, IList<string> approximations)
         {
-            job.Add("orientation-requested", IppValue.Enum(settings.Orientation switch
+            if (settings.AutoRotate && settings.Orientation == PageOrientation.Portrait)
             {
-                PageOrientation.Landscape => 4,
-                PageOrientation.ReverseLandscape => 5,
-                PageOrientation.ReversePortrait => 6,
-                _ => 3
-            }));
+                // Forcing portrait (3) stops the printer or CUPS turning landscape pages, so with AutoRotate the
+                // orientation is left to the printer: "none" (7) when it lists it, otherwise no attribute at all.
+                if (capabilities.Orientations.Contains(OrientationNone))
+                    job.Add("orientation-requested", IppValue.Enum(OrientationNone));
+            }
+            else
+            {
+                job.Add("orientation-requested", IppValue.Enum(settings.Orientation switch
+                {
+                    PageOrientation.Landscape => 4,
+                    PageOrientation.ReverseLandscape => 5,
+                    PageOrientation.ReversePortrait => 6,
+                    _ => 3
+                }));
+            }
 
             string canonical = settings.Pages.ToCanonicalString();
             if (canonical != "all")
