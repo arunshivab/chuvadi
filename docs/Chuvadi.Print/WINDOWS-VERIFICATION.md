@@ -13,15 +13,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 ## A. Preparation
 
 1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, the D-48 removal,
-   the package split, Phase 1 part 1 (rc.2), Phase 4 parts 1 to 3 (rc.3), and printer defaults, auto-rotation on
-   the as-is route and the printer list (rc.4). Update your clone:
+   the package split, Phase 1 part 1 (rc.2), Phase 4 parts 1 to 3 (rc.3), printer defaults, auto-rotation on the
+   as-is route and the printer list (rc.4), and private and memory-only jobs (rc.5). Update your clone:
    ```powershell
    cd C:\src\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
    ```
-   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.4</Version>`.
+   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.5</Version>`.
 2. **Local feed.** Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf 3.32.0 (the floor of its range) from the local feed: the folder `local-nuget` next to the folder that holds your clones (see
    `staging/README.md`), for example `C:\Users\<you>\Documents\local-nuget`. Chuvadi.Fonts 1.0.0 or later must be
    there too.
@@ -49,7 +49,7 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    dotnet build Chuvadi.slnx -c Release
    dotnet test Chuvadi.slnx -c Release --no-build
    ```
-   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 393). No "Access is denied" from
+   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 420). No "Access is denied" from
    HttpListener: the IPP and hub tests listen on `localhost` without a URL reservation. If Windows Firewall
    asks about "dotnet", choose Cancel; the traffic is loopback only.
 6. **ManualTests.**
@@ -289,6 +289,25 @@ output to a file, so no save dialog appears and the output can be opened afterwa
     ```powershell
     Set-PrintConfiguration -PrinterName "Chuvadi PDF Test" -PaperSize A4
     ```
+
+11o. **Private jobs (1.0.0-rc.5).** The Windows spooler records each document's name in its PrintService log. Turn
+    the log on once, in an **elevated** PowerShell:
+    ```powershell
+    wevtutil sl Microsoft-Windows-PrintService/Operational /e:true
+    ```
+    Then, in a normal PowerShell, print once as a private job and once as a normal one:
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-private.pdf" --xps-private
+    ```
+    ```powershell
+    dotnet run -c Release --no-build --project samples/Chuvadi.Print.ManualTests -- --xps-queue "Chuvadi PDF Test" --xps-queue-file "C:\Users\Public\chuvadi-named.pdf"
+    ```
+    ```powershell
+    Get-WinEvent -LogName Microsoft-Windows-PrintService/Operational -MaxEvents 30 | Where-Object Id -eq 307 | Select-Object -First 2 TimeCreated, Message | Format-List
+    ```
+    Expected: the first line says `..., private (job name "Chuvadi job")` and PASS. Of the two events, the newer one's
+    message names `Chuvadi.Print XPS check` (the normal job), and the older one names **`Chuvadi job`**, not the
+    title. Both PDFs have the same two pages. If no event 307 appears, record what `Get-WinEvent` shows.
 
 ## E. Sign-off and tag
 

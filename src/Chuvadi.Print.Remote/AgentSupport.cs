@@ -119,10 +119,15 @@ namespace Chuvadi.Print.Remote
         private const string Extension = ".journal.json";
         private readonly object _gate = new();
 
-        public AgentJournal(string folder)
+        private readonly bool _stripTitles;
+
+        /// <param name="folder">Where the journal lives.</param>
+        /// <param name="stripTitles">Write entries without the job title (memory mode and private jobs).</param>
+        public AgentJournal(string folder, bool stripTitles = false)
         {
             Folder = System.IO.Path.GetFullPath(folder);
             Directory.CreateDirectory(Folder);
+            _stripTitles = stripTitles;
         }
 
         public string Folder { get; }
@@ -144,7 +149,15 @@ namespace Chuvadi.Print.Remote
 
         public void Save(AgentJournalEntry entry)
         {
-            lock (_gate) AtomicFile.Write(EntryPath(entry.JobId), JsonSerializer.SerializeToUtf8Bytes(entry, RemoteProtocol.Json.AgentJournalEntry));
+            byte[] json = JsonSerializer.SerializeToUtf8Bytes(entry, RemoteProtocol.Json.AgentJournalEntry);
+            if (_stripTitles && entry.FinalReport?.Audit?.DocumentTitle is not null)
+            {
+                // Write a copy without the title; the entry in memory keeps it for the report to the hub.
+                AgentJournalEntry copy = JsonSerializer.Deserialize(json, RemoteProtocol.Json.AgentJournalEntry)!;
+                copy.FinalReport!.Audit!.DocumentTitle = null;
+                json = JsonSerializer.SerializeToUtf8Bytes(copy, RemoteProtocol.Json.AgentJournalEntry);
+            }
+            lock (_gate) AtomicFile.Write(EntryPath(entry.JobId), json);
         }
 
         public IReadOnlyList<AgentJournalEntry> List()

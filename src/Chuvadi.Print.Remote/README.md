@@ -3,6 +3,7 @@
 Part of [Chuvadi.Print](../Chuvadi.Print/README.md): pure-BCL printing for .NET, zero NuGet dependencies, in the [Chuvadi](https://github.com/arunshivab/chuvadi) family. It needs the Chuvadi.Print package.
 
 - **Remote printing** (`Chuvadi.Print.Remote`): your web application embeds a `PrintHub`; a `PrintAgent` on each branch PC dials out to it over HTTPS (no inbound port), fetches jobs, prints them on local or IPP printers and reports back. Per-agent tokens with rotation and revocation, a durable file-based job store, resumable downloads, and a journal that never prints a job twice. Still one audit event per job.
+- **Sensitive documents** (1.0.0-rc.5): `PrintAgentOptions.JobStorage = AgentJobStorage.Memory` keeps each job off the agent's disk (the journal keeps metadata only, so nothing prints twice), and private jobs (`PrintSettings.Private`, or `PrivateJobs` on the hub or agent) keep the title out of the hub's records, the agent's journal and the printer's job name.
 
 The agent example prints through Chuvadi.Print.Windows; any `IPrintTarget` or `IDocumentTarget` works, including the IPP targets of Chuvadi.Print.Ipp.
 

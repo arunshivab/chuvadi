@@ -487,7 +487,9 @@ namespace Chuvadi.Print.ManualTests
             Require(SpoolEnvelope.FromArray(envelope.ToArray()).DocumentTitle == "x", "v2 carries metadata");
             Require(envelope.ToArray()[4] == 2, "version 2 written without printer defaults");
             settings.PrinterDefaults = PrinterDefault.Paper;
-            Require(envelope.ToArray()[4] == SpoolEnvelope.CurrentVersion, "current version written with printer defaults");
+            Require(envelope.ToArray()[4] == 3, "version 3 written with printer defaults");
+            settings.Private = true;
+            Require(envelope.ToArray()[4] == SpoolEnvelope.CurrentVersion, "current version (4) written for a private job");
         }
 
         // ------------------------------------------------------------------ conversion + PNG

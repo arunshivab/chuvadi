@@ -19,6 +19,11 @@ namespace Chuvadi.Print
         public DateTimeOffset StartedAt { get; init; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? CompletedAt { get; init; }
         public string? TenantId { get; init; }
+        /// <summary>
+        /// Why the job failed: the error message, or, for a <see cref="PrintSettings.Private"/> job, only the error's
+        /// type and code (<see cref="ErrorCode"/>, for example "IOException (0x80131620)"), so nothing identifying such
+        /// as a file path is recorded (D-375). Null when the job did not fail.
+        /// </summary>
         public string? Error { get; init; }
 
         /// <summary>
@@ -36,6 +41,19 @@ namespace Chuvadi.Print
         /// setting was left to the printer, and for events recorded by older versions.
         /// </summary>
         public string? PrinterDefaults { get; init; }
+
+        /// <summary>
+        /// The error text recorded for a private job: the exception's type name and its HRESULT, without its message,
+        /// for example "IOException (0x80131620)" (since 1.0.0-rc.5).
+        /// </summary>
+        public static string ErrorCode(Exception error)
+        {
+            if (error is null) throw new ArgumentNullException(nameof(error));
+            return error.GetType().Name + " (0x" + error.HResult.ToString("X8", System.Globalization.CultureInfo.InvariantCulture) + ")";
+        }
+
+        /// <summary>The error text recorded for a private job that failed without an exception.</summary>
+        public const string PrivateErrorText = "Failed (details withheld for a private job)";
     }
 
     /// <summary>Receives audit events. Phase 1 uses local sinks; Phase 2 supplies a coordinator sink.</summary>

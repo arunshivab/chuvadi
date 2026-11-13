@@ -228,7 +228,6 @@ public class PrinterDefaultsTests
         var envelope = new SpoolEnvelope(new byte[] { 9, 8, 7 }, settings) { JobId = Guid.NewGuid(), DocumentTitle = "t" };
         byte[] bytes = envelope.ToArray();
         Assert.Equal(3, bytes[4]);
-        Assert.Equal(SpoolEnvelope.CurrentVersion, bytes[4]);
         SpoolEnvelope back = SpoolEnvelope.FromArray(bytes);
         Assert.Equal(PrinterDefault.Paper | PrinterDefault.Color, back.Settings.PrinterDefaults);
         Assert.Equal(2, back.Settings.Copies);

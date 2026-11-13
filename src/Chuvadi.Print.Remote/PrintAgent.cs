@@ -14,8 +14,27 @@ using System.Threading.Tasks;
 namespace Chuvadi.Print.Remote
 {
     /// <summary>Settings for <see cref="PrintAgent"/>.</summary>
+    /// <summary>Where a <see cref="PrintAgent"/> keeps each job's document while it prints it.</summary>
+    public enum AgentJobStorage
+    {
+        /// <summary>
+        /// Downloaded to a file in <see cref="PrintAgentOptions.JournalFolder"/> (resumable across restarts), deleted
+        /// after printing. The default.
+        /// </summary>
+        Disk = 0,
+
+        /// <summary>
+        /// Downloaded into memory and printed from there; never written to the agent's disk. Up to
+        /// <see cref="PrintAgentOptions.MemoryJobLimit"/> bytes (since 1.0.0-rc.5).
+        /// </summary>
+        Memory = 1
+    }
+
     public sealed class PrintAgentOptions
     {
+        /// <summary>The largest <see cref="MemoryJobLimit"/>: the largest array .NET allows.</summary>
+        public static readonly long MaxMemoryJobLimit = Array.MaxLength;
+
         /// <summary>The hub's base address, e.g. https://hub.example.com/print-hub/. Required. HTTPS unless loopback or <see cref="AllowInsecureHttp"/>.</summary>
         public Uri? HubUri { get; set; }
 
@@ -49,6 +68,34 @@ namespace Chuvadi.Print.Remote
 
         /// <summary>Folder for the journal and payload downloads. Required; keep it private to the agent's account.</summary>
         public string? JournalFolder { get; set; }
+
+        /// <summary>
+        /// Where each job's document is kept while it prints. Default <see cref="AgentJobStorage.Disk"/>, exactly as
+        /// before (since 1.0.0-rc.5).
+        /// </summary>
+        /// <remarks>
+        /// <para>With <see cref="AgentJobStorage.Memory"/>, the job is downloaded into memory, printed from there, and
+        /// the buffers the agent owns are cleared afterwards. Nothing of the document is written to
+        /// <see cref="JournalFolder"/>. Clearing is best effort: .NET can copy managed memory (the garbage collector moves
+        /// objects, and a rasteriser or target may keep its own copies).</para>
+        /// <para>The journal is kept, so a job is still never printed twice after a crash, but it holds metadata only:
+        /// no document content and no title (D-355).</para>
+        /// <para>A job larger than <see cref="MemoryJobLimit"/> fails ("The payload could not be downloaded: ...") and is
+        /// not written to disk.</para>
+        /// <para>The target decides the rest. <c>IppDocumentTarget</c> (the PDF to an IPP printer) never writes it to
+        /// disk; <c>IppPrinterTarget</c> (PWG Raster) does unless it uses <c>IppSpoolMode.Memory</c>. A Windows queue or a
+        /// CUPS queue writes its own spool files, which this library cannot prevent.</para>
+        /// </remarks>
+        public AgentJobStorage JobStorage { get; set; } = AgentJobStorage.Disk;
+
+        /// <summary>The largest job, in bytes, kept in memory with <see cref="AgentJobStorage.Memory"/>. Default 256 MB.</summary>
+        public long MemoryJobLimit { get; set; } = 256L * 1024 * 1024;
+
+        /// <summary>
+        /// When true, this agent treats every job as <see cref="PrintSettings.Private"/>: no title in its audit events,
+        /// journal or job names, whatever the hub sent. Default false (since 1.0.0-rc.5).
+        /// </summary>
+        public bool PrivateJobs { get; set; }
 
         /// <summary>How long each poll may wait on the hub. Default 25 s.</summary>
         public int PollWaitSeconds { get; set; } = 25;
@@ -110,6 +157,8 @@ namespace Chuvadi.Print.Remote
             if (string.IsNullOrWhiteSpace(JournalFolder)) throw new ArgumentException("PrintAgentOptions.JournalFolder is required.");
             if (PollWaitSeconds < 0 || PollWaitSeconds > 300) throw new ArgumentOutOfRangeException(nameof(PollWaitSeconds));
             if (DownloadAttempts < 1) throw new ArgumentOutOfRangeException(nameof(DownloadAttempts));
+            if (JobStorage is not (AgentJobStorage.Disk or AgentJobStorage.Memory)) throw new ArgumentOutOfRangeException(nameof(JobStorage));
+            if (MemoryJobLimit < 1 || MemoryJobLimit > MaxMemoryJobLimit) throw new ArgumentOutOfRangeException(nameof(MemoryJobLimit));
             if (InitialBackoff <= TimeSpan.Zero || MaxBackoff < InitialBackoff) throw new ArgumentOutOfRangeException(nameof(MaxBackoff));
             string s = HubUri.AbsoluteUri;
             return new Uri(s.EndsWith('/') ? s : s + "/");
@@ -145,7 +194,8 @@ namespace Chuvadi.Print.Remote
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _hub = options.ValidatedHub();
-            _journal = new AgentJournal(options.JournalFolder!);
+            // In memory mode the journal keeps metadata only (D-355): no title.
+            _journal = new AgentJournal(options.JournalFolder!, stripTitles: options.JobStorage == AgentJobStorage.Memory || options.PrivateJobs);
             HttpMessageHandler handler = options.HttpHandler ?? new HttpClientHandler();
             _http = new HttpClient(handler, options.HttpHandler is null || options.DisposeHttpHandler)
             {
@@ -282,10 +332,13 @@ namespace Chuvadi.Print.Remote
             }
 
             entry = new AgentJournalEntry { JobId = jobId };
-            string spool;
+            bool inMemory = _options.JobStorage == AgentJobStorage.Memory;
+            string? spool = null;
+            byte[]? spoolBytes = null;
             try
             {
-                spool = await DownloadAsync(lease, ct).ConfigureAwait(false);
+                if (inMemory) spoolBytes = await DownloadToMemoryAsync(lease, ct).ConfigureAwait(false);
+                else spool = await DownloadAsync(lease, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -293,47 +346,60 @@ namespace Chuvadi.Print.Remote
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException || (ex is RemotePrintException r && r.StatusCode is 404 or 410))
             {
-                await FinishWithoutPrintingAsync(lease, entry, PrintJobStatus.Failed, "The payload could not be downloaded: " + ex.Message, ct).ConfigureAwait(false);
+                await FinishWithoutPrintingAsync(lease, entry, PrintJobStatus.Failed, "The payload could not be downloaded: " + ex.Message, ct, ex).ConfigureAwait(false);
                 return;
             }
 
-            StatusResponse accepted = await ReportAsync(jobId, new StatusReport { LeaseId = lease.LeaseId, State = HubJobState.Accepted }, ct).ConfigureAwait(false);
-            if (accepted.Final)
+            try
             {
+                StatusResponse accepted = await ReportAsync(jobId, new StatusReport { LeaseId = lease.LeaseId, State = HubJobState.Accepted }, ct).ConfigureAwait(false);
+                if (accepted.Final)
+                {
+                    _journal.DeleteFiles(jobId);
+                    return;
+                }
+                if (accepted.CancelRequested)
+                {
+                    await FinishWithoutPrintingAsync(lease, entry, PrintJobStatus.Cancelled, null, ct).ConfigureAwait(false);
+                    return;
+                }
+
+                entry.StartedAt = DateTimeOffset.UtcNow;
+                _journal.Save(entry);
+
+                StatusReport final = await PrintAsync(lease, spool, spoolBytes, ct).ConfigureAwait(false);
+                entry.FinalReport = final;
+                entry.FinishedAt = DateTimeOffset.UtcNow;
+                _journal.Save(entry);
                 _journal.DeleteFiles(jobId);
-                return;
             }
-            if (accepted.CancelRequested)
+            finally
             {
-                await FinishWithoutPrintingAsync(lease, entry, PrintJobStatus.Cancelled, null, ct).ConfigureAwait(false);
-                return;
+                if (spoolBytes is not null) Array.Clear(spoolBytes);
             }
-
-            entry.StartedAt = DateTimeOffset.UtcNow;
-            _journal.Save(entry);
-
-            StatusReport final = await PrintAsync(lease, spool, ct).ConfigureAwait(false);
-            entry.FinalReport = final;
-            entry.FinishedAt = DateTimeOffset.UtcNow;
-            _journal.Save(entry);
-            _journal.DeleteFiles(jobId);
             await DeliverFinalAsync(entry, ct).ConfigureAwait(false);
         }
 
-        private async Task<StatusReport> PrintAsync(JobLease lease, string spool, CancellationToken ct)
+        /// <summary>True when this agent keeps titles out of its records for <paramref name="job"/>.</summary>
+        private bool IsPrivate(PrintJob? job) => _options.PrivateJobs || job?.Settings.Private == true;
+
+        private async Task<StatusReport> PrintAsync(JobLease lease, string? spool, byte[]? spoolBytes, CancellationToken ct)
         {
             var capture = new CapturingAuditSink();
             var progress = new LatestProgress(_options.Progress);
             PrintResult result;
             object? target = null;
+            PrintJob? loaded = null;
             try
             {
-                PrintJob job = PrintJob.LoadSpool(spool);
+                PrintJob job = spool is not null ? PrintJob.LoadSpool(spool) : PrintJob.LoadSpool(spoolBytes!);
+                loaded = job;
                 job.JobId = lease.JobId;
                 job.WithAuditSink(capture).WithThrowOnFailure(false).WithProgress(progress);
                 if (_options.Rasterizer is not null) job.WithRasterizer(_options.Rasterizer);
                 _options.ConfigureJob?.Invoke(job, lease);
                 job.WithAuditSink(capture).WithThrowOnFailure(false).WithProgress(progress);
+                if (_options.PrivateJobs) job.Settings.Private = true;
 
                 IDocumentTarget? documentTarget = _options.DocumentTargetResolver?.Invoke(lease.Printer);
                 IPrintTarget? rasterTarget = documentTarget is null ? _options.PrinterResolver?.Invoke(lease.Printer) : null;
@@ -381,12 +447,14 @@ namespace Chuvadi.Print.Remote
             {
                 // Spool unreadable or job misconfigured before PrintTo ran (PrintTo itself never throws here).
                 if (capture.Count == 0)
-                    return Synthesized(lease, null, PrintJobStatus.Failed, ex.Message);
+                    return Synthesized(lease, loaded, PrintJobStatus.Failed, ex.Message, ex);
                 result = new PrintResult { JobId = lease.JobId, Status = PrintJobStatus.Failed, Error = ex.Message };
             }
             finally
             {
                 if (_options.DisposeTargets) (target as IDisposable)?.Dispose();
+                // In memory mode, clear the document the job held (best effort; see PrintAgentOptions.JobStorage).
+                if (spoolBytes is not null && loaded is not null) Array.Clear(loaded.PdfBytes);
             }
 
             PrintAuditEvent audit = capture.Last ?? throw new InvalidOperationException("The print job recorded no audit event.");
@@ -398,14 +466,16 @@ namespace Chuvadi.Print.Remote
                 PagesPrinted = result.PagesPrinted,
                 ImpressionsPrinted = result.ImpressionsPrinted,
                 SheetsPrinted = result.SheetsPrinted,
-                Error = result.Error,
+                // The hub keeps this in its job record: for a private job, only the error's type and code (D-375).
+                Error = IsPrivate(loaded) && result.Error is not null ? audit.Error ?? PrintAuditEvent.PrivateErrorText : result.Error,
                 Audit = AuditRecord.From(audit)
             };
         }
 
-        private async Task FinishWithoutPrintingAsync(JobLease lease, AgentJournalEntry entry, PrintJobStatus status, string? error, CancellationToken ct)
+        private async Task FinishWithoutPrintingAsync(JobLease lease, AgentJournalEntry entry, PrintJobStatus status, string? error,
+                                                      CancellationToken ct, Exception? cause = null)
         {
-            entry.FinalReport = Synthesized(lease, null, status, error);
+            entry.FinalReport = Synthesized(lease, null, status, error, cause);
             entry.FinishedAt = DateTimeOffset.UtcNow;
             _journal.Save(entry);
             _journal.DeleteFiles(lease.JobId);
@@ -413,12 +483,15 @@ namespace Chuvadi.Print.Remote
         }
 
         /// <summary>The single audit event for a job that never reached PrintTo/SubmitTo.</summary>
-        private StatusReport Synthesized(JobLease lease, PrintJob? job, PrintJobStatus status, string? error)
+        private StatusReport Synthesized(JobLease lease, PrintJob? job, PrintJobStatus status, string? error, Exception? cause = null)
         {
+            // A private job's audit and report keep only the error's type and code (D-375).
+            if (error is not null && IsPrivate(job))
+                error = cause is not null ? PrintAuditEvent.ErrorCode(cause) : PrintAuditEvent.PrivateErrorText;
             var audit = new PrintAuditEvent
             {
                 JobId = lease.JobId,
-                DocumentTitle = job?.DocumentTitle ?? lease.Title,
+                DocumentTitle = IsPrivate(job) ? null : job?.DocumentTitle ?? lease.Title,
                 PageCount = 0,
                 Copies = job?.Settings.Copies ?? 1,
                 PrinterName = lease.Printer,
@@ -452,7 +525,7 @@ namespace Chuvadi.Print.Remote
                 Audit = new AuditRecord
                 {
                     JobId = entry.JobId,
-                    DocumentTitle = lease?.Title,
+                    DocumentTitle = _options.PrivateJobs ? null : lease?.Title,
                     PrinterName = lease?.Printer ?? string.Empty,
                     MachineName = _options.MachineName,
                     Status = PrintJobStatus.Failed,
@@ -526,6 +599,131 @@ namespace Chuvadi.Print.Remote
         }
 
         // ================================================================== download
+
+        /// <summary>
+        /// Downloads the payload into memory (<see cref="AgentJobStorage.Memory"/>), resuming within this attempt's
+        /// buffer; nothing is written to disk.
+        /// </summary>
+        private async Task<byte[]> DownloadToMemoryAsync(JobLease lease, CancellationToken ct)
+        {
+            if (lease.PayloadBytes < 0)
+                throw new InvalidDataException("The hub reported a negative payload size.");
+            if (lease.PayloadBytes > _options.MemoryJobLimit)
+                throw new InvalidDataException("The job is " + lease.PayloadBytes + " bytes; this agent keeps jobs in memory and takes at most "
+                                               + _options.MemoryJobLimit + " (PrintAgentOptions.MemoryJobLimit).");
+            var buffer = new byte[lease.PayloadBytes];
+            var received = new ReceivedBytes();
+            Exception? last = null;
+            for (int attempt = 1; attempt <= _options.DownloadAttempts; attempt++)
+            {
+                try
+                {
+                    if (received.Count < buffer.LongLength)
+                        await FetchIntoAsync(lease, buffer, received, ct).ConfigureAwait(false);
+                    if (received.Count != buffer.LongLength)
+                        throw new IOException("Downloaded " + received.Count + " of " + lease.PayloadBytes + " bytes.");
+                    string hash = Convert.ToHexStringLower(SHA256.HashData(buffer));
+                    if (!string.Equals(hash, lease.PayloadSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Array.Clear(buffer);
+                        received.Count = 0;
+                        throw new InvalidDataException("The payload's SHA-256 does not match the hub's.");
+                    }
+                    return buffer;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    Array.Clear(buffer);
+                    throw;
+                }
+                catch (Exception ex) when (ex is IOException or HttpRequestException or InvalidDataException or OperationCanceledException
+                                           || (ex is RemotePrintException r && r.StatusCode >= 500))
+                {
+                    last = ex;
+                    Log("Download of job " + lease.JobId + " interrupted (" + Describe(ex) + "), attempt " + attempt + " of " + _options.DownloadAttempts + ".");
+                    if (attempt < _options.DownloadAttempts)
+                        await Task.Delay(TimeSpan.FromTicks(Math.Min(_options.InitialBackoff.Ticks * attempt, _options.MaxBackoff.Ticks)), ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    Array.Clear(buffer);
+                    throw;
+                }
+            }
+            Array.Clear(buffer);
+            throw last is IOException or InvalidDataException ? last : new IOException(last?.Message ?? "Download failed.", last);
+        }
+
+        /// <summary>How much of an in-memory download has arrived, kept across attempts so each one resumes.</summary>
+        private sealed class ReceivedBytes
+        {
+            public long Count;
+        }
+
+        /// <summary>
+        /// Fetches the payload from <paramref name="received"/>'s count into <paramref name="buffer"/>, advancing the count
+        /// as bytes arrive (so an interrupted attempt is resumed by the next).
+        /// </summary>
+        private async Task FetchIntoAsync(JobLease lease, byte[] buffer, ReceivedBytes received, CancellationToken ct)
+        {
+            long have = received.Count;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(_options.RequestTimeout);
+            using HttpRequestMessage request = NewRequest(HttpMethod.Get, "jobs/" + lease.JobId.ToString("D") + "/payload");
+            if (have > 0) request.Headers.Range = new RangeHeaderValue(have, null);
+            using HttpResponseMessage response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            TakeRotatedToken(response);
+
+            long position;
+            if (response.StatusCode == HttpStatusCode.PartialContent && have > 0)
+            {
+                long? from = response.Content.Headers.ContentRange?.From;
+                if (from != have) throw new IOException("The hub resumed at byte " + from + " instead of " + have + ".");
+                position = have;
+            }
+            else if (response.StatusCode == HttpStatusCode.OK)
+            {
+                position = 0;
+            }
+            else if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+            {
+                Array.Clear(buffer);
+                received.Count = 0;
+                throw new IOException("The hub rejected the resume range; starting over.");
+            }
+            else
+            {
+                await EnsureAsync(response, ct, HttpStatusCode.OK).ConfigureAwait(false);
+                return;
+            }
+            received.Count = position;
+
+            using Stream body = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+            try
+            {
+                while (true)
+                {
+                    if (position == buffer.LongLength)
+                    {
+                        // The hub sent more than it announced: read one byte to find out, and refuse it.
+                        var probe = new byte[1];
+                        if (await body.ReadAsync(probe, timeout.Token).ConfigureAwait(false) > 0)
+                            throw new InvalidDataException("The hub sent more than the " + lease.PayloadBytes + " bytes it announced.");
+                        break;
+                    }
+                    int read = await body.ReadAsync(buffer.AsMemory((int)position, (int)Math.Min(81920, buffer.LongLength - position)), timeout.Token).ConfigureAwait(false);
+                    if (read == 0) break;
+                    position += read;
+                    received.Count = position;
+                }
+            }
+            catch (InvalidDataException)
+            {
+                Array.Clear(buffer);
+                received.Count = 0;
+                throw;
+            }
+        }
 
         private async Task<string> DownloadAsync(JobLease lease, CancellationToken ct)
         {

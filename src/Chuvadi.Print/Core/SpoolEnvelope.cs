@@ -16,16 +16,19 @@ namespace Chuvadi.Print
     /// <para>Version 3 (1.0.0-rc.4) adds <see cref="PrintSettings.PrinterDefaults"/>. It is written only when that
     /// setting is not <see cref="PrinterDefault.None"/>; otherwise <see cref="Serialize(Stream)"/> still writes
     /// version 2, byte for byte as before, so agents on 1.0.0-rc.3 and earlier keep reading those jobs.</para>
+    /// <para>Version 4 (1.0.0-rc.5) adds <see cref="PrintSettings.Private"/>. It is written only for a private job;
+    /// agents older than 1.0.0-rc.5 refuse it, so a private job is never printed by an agent that does not keep its
+    /// title out of its records.</para>
     /// </remarks>
     public sealed class SpoolEnvelope
     {
         private static readonly byte[] MagicBytes = { (byte)'C', (byte)'V', (byte)'P', (byte)'R' };
 
         /// <summary>
-        /// The newest envelope format version this library writes and reads. <see cref="Serialize(Stream)"/> writes it
-        /// only for settings that need it (see the remarks); otherwise it writes version 2.
+        /// The newest envelope format version this library writes and reads. <see cref="Serialize(Stream)"/> writes the
+        /// oldest version that holds the settings (see the remarks): 2, 3 or 4.
         /// </summary>
-        public const byte CurrentVersion = 3;
+        public const byte CurrentVersion = 4;
 
         /// <summary>Oldest envelope format version <see cref="Deserialize"/> accepts.</summary>
         public const byte MinimumVersion = 1;
@@ -52,10 +55,14 @@ namespace Chuvadi.Print
         }
 
         /// <summary>
-        /// Writes the envelope: version 3 when <see cref="PrintSettings.PrinterDefaults"/> is set, otherwise version 2.
+        /// Writes the envelope: version 4 for a <see cref="PrintSettings.Private"/> job, else version 3 when
+        /// <see cref="PrintSettings.PrinterDefaults"/> is set, otherwise version 2.
         /// </summary>
-        public void Serialize(Stream destination)
-            => Serialize(destination, Settings.PrinterDefaults == PrinterDefault.None ? (byte)2 : CurrentVersion);
+        public void Serialize(Stream destination) => Serialize(destination, VersionFor(Settings));
+
+        /// <summary>The oldest envelope version that holds <paramref name="settings"/>.</summary>
+        internal static byte VersionFor(PrintSettings settings)
+            => settings.Private ? (byte)4 : settings.PrinterDefaults != PrinterDefault.None ? (byte)3 : (byte)2;
 
         /// <summary>Writes a specific format version (used to verify backward compatibility).</summary>
         /// <exception cref="InvalidOperationException">
@@ -66,8 +73,10 @@ namespace Chuvadi.Print
             if (destination is null) throw new ArgumentNullException(nameof(destination));
             if (version < MinimumVersion || version > CurrentVersion)
                 throw new ArgumentOutOfRangeException(nameof(version));
-            if (version < 3 && Settings.PrinterDefaults != PrinterDefault.None)
-                throw new InvalidOperationException("Spool envelope version " + version + " cannot hold PrintSettings.PrinterDefaults.");
+            byte needed = VersionFor(Settings);
+            if (needed > 2 && version < needed)
+                throw new InvalidOperationException("Spool envelope version " + version + " cannot hold these settings ("
+                    + (Settings.Private ? "PrintSettings.Private" : "PrintSettings.PrinterDefaults") + ").");
             byte[] body = BuildBody(version);
             using var w = new BinaryWriter(destination, Encoding.UTF8, leaveOpen: true);
             w.Write(MagicBytes);
@@ -163,6 +172,7 @@ namespace Chuvadi.Print
                     WriteNullableString(w, TenantId);
                 }
                 if (version >= 3) w.Write((int)Settings.PrinterDefaults);
+                if (version >= 4) w.Write((byte)(Settings.Private ? 1 : 0));
                 w.Write((long)PdfBytes.LongLength);
                 w.Write(PdfBytes);
             }
@@ -216,6 +226,12 @@ namespace Chuvadi.Print
                 const int known = (int)(PrinterDefault.Paper | PrinterDefault.Duplex | PrinterDefault.Color | PrinterDefault.Copies);
                 if ((flags & ~known) != 0) throw new InvalidDataException("Unknown printer default flags in spool envelope: " + flags + ".");
                 settings.PrinterDefaults = (PrinterDefault)flags;
+            }
+            if (version >= 4)
+            {
+                byte options = r.ReadByte();
+                if ((options & ~1) != 0) throw new InvalidDataException("Unknown job options in spool envelope: " + options + ".");
+                settings.Private = (options & 1) != 0;
             }
 
             long pdfLength = r.ReadInt64();
