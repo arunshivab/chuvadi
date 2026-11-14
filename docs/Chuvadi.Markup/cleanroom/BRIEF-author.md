@@ -160,6 +160,143 @@ None of the 5,561 earlier cases changed, and patch 8 changed none of the patch-7
 D-198: `gate trace` now accepts `- Status: superseded by R-MD-nnnn` (the named entry must exist); the bare word
 `superseded` still passes, with a warning. Please change your superseded entries to that form.
 
+Patch 9 (cancellation responsiveness): the contract has always been "cancellation honoured in long loops"
+(section 1). `gate time` now checks it. Each of 12 input shapes is parsed (or, for the last one, rendered) with a
+token that is cancelled after 20, 120 and 300 ms. Every run must end within 0.75 s of the cancel, normally with
+`OperationCanceledException`. A run that ends within that time without seeing the cancel also passes, because
+the input was too fast to tell. Revision 6 fails the shapes for emphasis delimiters (`*a_ ` x 500k), open
+brackets (`[` x 3M), code spans (`` `a`` x 3M), extended autolinks (`www.a ` x 1M), and sometimes raw HTML
+(`<a ` x 6M) and many short lines (`a\n` x 1M). These loops run long without checking the token, or they check it
+only once the loop is done. The shapes and limits are in `GateCancel` (gate/Chuvadi.Markdown.Gate/GateCore.cs).
+Output must not change: patch 9 changes no frozen data, and every other check must still pass. The same check runs
+as a unit test in the monorepo.
+
+Patch 10 (revision 8: D-294, D-303, D-309). One round with five changes; one similarity check follows.
+- Gate data: 10,423 cases and 353,669 outputs. 9 existing cases change (157 outputs) and a new set `pins` adds 35
+  cases (1,190 outputs). Revision 7 fails 280 outputs in 18 cases, plus the new span check below. Every other output
+  is unchanged.
+- **1. Positions after a partly used tab (D-309).** Spans are UTF-16 indexes into the input, and a tab is one
+  character. A continuation line may start with a tab that container indentation (a list item's content offset,
+  a block quote) uses only partly. The columns of that tab left over for the content take no width in the source,
+  and the content after the tab keeps its true position. The soft break before the line covers the line ending and
+  the tab, as it covers indentation spaces. Example, ` - - ~` LF TAB `|`:
+  - the `|` Text node is 8+1 (revision 7: 9+1);
+  - its paragraph is 5+4, the soft break 6+2, and the inner and outer lists 3+6 and 1+8.
+
+  Cases: dc-1308, dc-1385, df-0452, df-0475, df-0545, df-0610, df-0635, df-0692, df-0766, and pins pin-0001 to
+  pin-0013 (pin-0011 to pin-0013 are controls that already pass).
+- **2. Span safety net (D-309).** After a parse, every span lies inside the input: Start >= 0 and
+  Start + Length <= the input length. This covers every node and every link reference definition. A span that
+  would not is clamped to the input. Each clamp adds 1 to
+  `[ThreadStatic] internal static int SpanClampsOnThisThread` on `Chuvadi.Markup.Markdown.Parsing.MarkdownEngine`.
+  The clamp is only a safety net: once change 1 is right it never fires.
+  - In P4, `gate run` checks that the field exists, is a thread-static int, and stays 0 for every frozen input
+    under every parse and limit configuration.
+  - It also checks every span of the tree directly.
+  - It reports "Spans (D-309): passed".
+- **3. Unsafe URLs, `data:image/` (D-303).** The exception in the unsafe-URL rule is `data:image/png`,
+  `data:image/gif`, `data:image/jpeg` and `data:image/webp`, compared in ASCII case-insensitively, and only when
+  the next character is `;` or `,`. Every other `data:` URL is unsafe. So `data:image/pngx;...`,
+  `data:image/png-evil,...` and a bare `data:image/png` are now removed under the default options. Cases: pin-0029
+  to pin-0035.
+- **4. The renderer's summary comment (D-303).** The class summary of `MarkdownHtmlRenderer` says the output
+  "matches the CommonMark and GFM spec examples byte for byte". That is not exact: GFM is 651 of 672. Say what holds:
+  - CommonMark 0.31.2 examples 652 of 652;
+  - GFM 0.29 examples 651 of 672 (the differing examples are listed in `gate/data/baseline-scores.txt`);
+  - the GFM extension tests 26 of 26, with footnotes excluded.
+- **5. Memory during a parse (D-303, issue #94; a goal, not a gate).** `gate mem` reports, for 512 KiB, 1 MiB and
+  2 MiB documents built from the spec text:
+  - throughput;
+  - bytes allocated per char;
+  - gen2 collections per round;
+  - the most data alive at a collection.
+
+  On the reference machine, revision 7 shows 1 gen2 collection per round at 1 MiB and 66.5 MiB alive there (1.0.0:
+  0 and 9.2 MiB). That costs about half the throughput at that size. The goal is no gen2 collection per round at 1 MiB
+  and at most about 10 MiB alive, with every output unchanged and no other size worse. Record the before and after
+  figures from your machine in an experiment record. If the goal cannot be met without risk, say so in the note
+  rather than forcing it.
+- **No change needed (D-252):** pins pin-0014 to pin-0028 freeze the nesting behaviour that Arun accepted. A block
+  quote one level below `MaxNestingDepth` may interrupt a paragraph. Revision 7 already passes them.
+- **Gate program (D-294):** the cancellation check in `gate time` now measures from the moment the token actually
+  fires, still with the 0.75 s limit.
+- **Trace:** each of changes 1 to 5 gets its trace entries, citing the ruling (D-303, D-309) and, for change 1, the
+  CommonMark "Tabs" section. Deliver as revision 8, in the same form as before.
+
+Patch 11 (revision 9: D-331). One small change; one similarity check follows.
+- **Given library, `MarkdownNode` (D-330).** A child list of more than 8,192 entries is now stored in chunks of
+  4,096, so no child array reaches the large object heap. `Children` stays the read-only view, and the public API is
+  unchanged. The internal `MutableChildren` still returns a `List<MarkdownNode>`. For a node whose children are
+  chunked, it first turns the storage back into a list, and the node then keeps that list. A list handed out by
+  `MutableChildren` or given to `SetChildren` stays a list.
+- **The rule (D-331).** A pass that only reads the tree reads each node's children through `Children`.
+  `MutableChildren` is only for a pass that changes a child list.
+  - In P4, `gate run` now also parses a document of 20,000 paragraphs under every parse configuration.
+  - It checks that the document's children are still in chunked storage after the parse.
+  - It reports "Storage (D-331): passed".
+  - Revision 8 fails it: the safety-net walk after the inline phase (R-MD-0275) reads the document's children
+    through `MutableChildren`.
+- **Expected effect, reported by `gate mem`, which now also measures 4 MiB:**
+  - every output unchanged;
+  - no gen2 collection per round at 2 MiB or at 4 MiB;
+  - at most about 4.2 bytes alive per input char (about 8.3 MiB at 2 MiB, 16.6 MiB at 4 MiB);
+  - no size slower than revision 8.
+
+  Measured here with the rule applied:
+
+  | Size | Revision 8 | With the rule |
+  |---|---|---|
+  | 2 MiB | 1 gen2, 56.8 MiB alive | 0 gen2, 8.3 MiB |
+  | 4 MiB | 1 gen2, 65.6 MiB | 0 gen2, 16.6 MiB |
+  | 512 KiB, 1 MiB | as before | as before |
+
+  Record your before and after figures in an experiment record.
+- **Gate data:** unchanged (10,423 cases, 353,669 outputs). Every other check must still pass.
+- **Gate program:** the `gate time` heading now says "within 0.75 s of the token firing", which is what the check
+  has measured since patch 10. This is wording only.
+- **Trace:** one entry for the rule, citing D-331. Deliver as revision 9, in the same form as before.
+
+Patch 12 (D-344). No author change. The checker confirms the patch and reruns the gate on revision 9.
+- **Given library, `MarkdownNode`:** a node now keeps its children in one internal `NodeChildren` object for its
+  whole life, from its first child onwards, and `Children` always returns that object.
+  - Why: with patch 11, a `Children` reference held while the node passed 8,192 children stopped seeing later changes.
+  - `NodeChildren` holds the children in one of three forms: one array up to 8,192 entries; chunks of 4,096 after
+    that; or a `List<MarkdownNode>`. The list form is used once `MutableChildren` is asked for or `SetChildren` is
+    given a list, and every read then goes through to that list.
+  - `MutableChildren` and `SetChildren` behave as before for the parser. The rule from patch 11 is unchanged: a pass
+    that only reads the tree uses `Children`.
+- **Gate program:** the Storage check (D-331) now reads the internal `IsChunked` property of the object `Children`
+  returns, instead of comparing type names.
+- **Expected:** revision 9 passes P4 unchanged (353,669 outputs; Spans, Storage, TIME and TRACE passed). `gate mem`
+  shows the same figures as with patch 11, within run-to-run noise. Revision 8 still fails Storage.
+- **Gate data:** unchanged.
+
+Patch 13 (revision 10: D-368, with the D-249 speed rule; small documents). One small change; one similarity check follows.
+- **The rule.** A parse must not allocate a buffer whose size does not depend on the input. Every buffer a parse
+  allocates grows with what it holds, so a document of a few dozen characters costs about what it cost in 1.1.0. The
+  memory goals of patches 10 and 11 still hold: no buffer reaches the large object heap, and nothing large stays
+  alive.
+- **Gate:** in P4, `gate run` now also reports "Small (D-368)".
+  - It parses the inputs of the commonmark, gfm-spec and gfm-extensions sets (1,354 spec examples, about 26 chars
+    each) with default options, after a warm-up.
+  - It divides the bytes allocated on the thread by the input characters.
+  - It passes at 175 bytes per char or less. The figure is the same on every run for a given build.
+- **Measured here:**
+
+  | Build | Bytes per char | Small |
+  |---|---|---|
+  | revision 7 (1.1.0's parser) | 159.4 | passed |
+  | revision 9 | 702.1 | NOT PASSED |
+
+  For revision 9, about 16.5 KB more is allocated per parse, whatever the input's size: a parse of `a` allocates
+  about 19,200 bytes, against 2,688 in 1.1.0.
+- **Speed rule (D-249):** no input class may be more than 25% slower than 1.0.0. Revision 9 parses the spec examples
+  at 0.66 of 1.0.0's speed; with the rule met it should return to about 1.1.0's speed (about 1.35 times 1.0.0).
+- **Unchanged:** every other check must still pass, `gate mem` must still show no gen2 at 1, 2 and 4 MiB, and the
+  gate data does not change (353,669 outputs).
+- **Trace:** one entry for the rule, citing D-368, and an experiment record with your before and after figures.
+  Deliver as revision 10.
+
 Three limit details were decided by Arun under rule 5 (D-130, D-134). The documentation in `MarkupLimits.cs` already
 says this, and `gate/data/rule5-rules.txt` holds the matching gate rules:
 - **R5-01, `MaxNodes`**: count the nodes of the resulting AST. The document node and link reference definitions

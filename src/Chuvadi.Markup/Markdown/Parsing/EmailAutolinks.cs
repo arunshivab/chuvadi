@@ -18,7 +18,9 @@ namespace Chuvadi.Markup.Markdown.Parsing
             while (stack.Count > 0)
             {
                 var node = stack.Pop();
-                var kids = node.MutableChildren;
+                // TRACE R-MD-0280
+                // read through Children; a changed child list is installed whole with SetChildren
+                var kids = node.Children;
                 List<MarkdownNode>? rebuilt = null;
                 for (int k = 0; k < kids.Count; k++)
                 {
@@ -28,7 +30,11 @@ namespace Chuvadi.Markup.Markdown.Parsing
                         var pieces = Split(text, work);
                         if (pieces is not null)
                         {
-                            rebuilt ??= new List<MarkdownNode>(kids.GetRange(0, k));
+                            if (rebuilt is null)
+                            {
+                                rebuilt = new List<MarkdownNode>(kids.Count + pieces.Count);
+                                for (int j = 0; j < k; j++) rebuilt.Add(kids[j]);
+                            }
                             rebuilt.AddRange(pieces);
                             continue;
                         }

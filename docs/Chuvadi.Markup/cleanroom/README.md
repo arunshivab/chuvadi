@@ -13,10 +13,10 @@ so none of this is in the NuGet package.
 | `trace/sources.md` | every source the author read, per phase | the author |
 | `trace/rule5-cases.md` | cases where the specs are silent or where the frozen data decides, with the decision | the author |
 | `trace/experiments/` | experiment records (hypothesis, gate runs, counts, rules created) | the author |
-| `BRIEF-author.md` | the brief the author worked to (firewall, gate, rule 5, phases), final state after patch 8 | the Markup chat |
+| `BRIEF-author.md` | the brief the author worked to (firewall, gate, rule 5, phases), final state after patch 13 | the Markup chat |
 | `BRIEF-checker.md` | the brief the similarity checker worked to | the Markup chat |
 | `P0-bundle-files.md` | every file of the bundle the author received, with sizes, hashes and origin | the Markup chat |
-| `../similarity/markup-P1.md` to `markup-P4.md` | the checker's phase reports (P4: revision 7, CLEAN) | the checker |
+| `../similarity/markup-P1.md` to `markup-P4.md` | the checker's phase reports (P4: revision 10 with patches 11 to 13, CLEAN) | the checker |
 
 The checker's annexes are for the coordinator only and are not in the repository.
 

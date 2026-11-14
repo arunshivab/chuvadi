@@ -540,4 +540,143 @@ namespace Chuvadi.Markdown.Gate
             return why.Count == 0 ? null : string.Join("; ", why);
         }
     }
+
+    /// <summary>
+    /// Span safety net (D-309). Every span must lie inside the input (Start + Length no more than the input's UTF-16
+    /// length). The library clamps any span that would not, and counts each clamp in the thread-static field
+    /// <c>Chuvadi.Markup.Markdown.Parsing.MarkdownEngine.SpanClampsOnThisThread</c> (internal, read here by
+    /// reflection). The clamp is a safety net only: on every frozen input it must never fire, so a later position bug
+    /// shows up here instead of being hidden by the clamp.
+    /// </summary>
+    public static class GateSpans
+    {
+        public const string CounterType = "Chuvadi.Markup.Markdown.Parsing.MarkdownEngine";
+        public const string CounterField = "SpanClampsOnThisThread";
+
+        private static System.Reflection.FieldInfo? Counter() =>
+            typeof(MarkdownParser).Assembly.GetType(CounterType)?.GetField(CounterField,
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+
+        /// <summary>Null when the counter exists and is a thread-static int, otherwise the reason.</summary>
+        public static string? CounterProblem()
+        {
+            var f = Counter();
+            if (f is null) return "the counter " + CounterType + "." + CounterField + " does not exist";
+            if (f.FieldType != typeof(int)) return "the counter must be an int";
+            if (!f.IsDefined(typeof(ThreadStaticAttribute), false)) return "the counter must be [ThreadStatic]";
+            return null;
+        }
+
+        /// <summary>
+        /// Parses <paramref name="input"/> with every parse configuration on the calling thread. Returns null when no
+        /// span was clamped and every span of the resulting tree (link reference definitions included) lies inside
+        /// the input, otherwise the reason. Inputs a configuration rejects with a limit are skipped for it.
+        /// </summary>
+        public static string? Check(string input)
+        {
+            var f = Counter();
+            if (f is null) return CounterProblem();
+            foreach (var p in GateCore.ParseConfigs.Concat(GateCore.LimitConfigs))
+            {
+                f.SetValue(null, 0);
+                MarkdownDocument doc;
+                try { doc = MarkdownParser.Parse(input, GateCore.Parse(p)); }
+                catch (Chuvadi.Markup.MarkupLimitExceededException) { continue; }
+                int clamps = (int)f.GetValue(null)!;
+                if (clamps != 0) return p + ": " + clamps.ToString(CultureInfo.InvariantCulture) + " span(s) clamped";
+                foreach (var n in doc.Descendants().Prepend(doc))
+                    if (n.Span.Start < 0 || n.Span.End > input.Length)
+                        return p + ": " + n.Kind + " span " + n.Span.Start.ToString(CultureInfo.InvariantCulture) + "+" + n.Span.Length.ToString(CultureInfo.InvariantCulture) + " is outside the input (" + input.Length.ToString(CultureInfo.InvariantCulture) + " chars)";
+                foreach (var d in doc.LinkDefinitions.Values)
+                    if (d.Span.Start < 0 || d.Span.End > input.Length)
+                        return p + ": link reference definition span " + d.Span.Start.ToString(CultureInfo.InvariantCulture) + "+" + d.Span.Length.ToString(CultureInfo.InvariantCulture) + " is outside the input";
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Child storage (D-331, D-344). The given <c>MarkdownNode</c> keeps a child list of more than 8,192 entries in
+    /// chunks, so that no child array reaches the large object heap. A parse must leave that storage in place: a pass
+    /// that only reads the tree uses <c>Children</c>; the internal <c>MutableChildren</c> is for a pass that changes a
+    /// child list, and it moves the children into a <c>List</c>. Checked on a document of 20,000 paragraphs under
+    /// every parse configuration, through the internal <c>IsChunked</c> property of the object <c>Children</c>
+    /// returns.
+    /// </summary>
+    public static class GateStorage
+    {
+        public const int Blocks = 20000;
+        public const string StorageType = "Chuvadi.Markup.Markdown.NodeChildren";
+        public const string ChunkedProperty = "IsChunked";
+
+        public static string Input()
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < Blocks; i++) sb.Append("Paragraph ").Append(i.ToString(CultureInfo.InvariantCulture)).Append("\n\n");
+            return sb.ToString();
+        }
+
+        private static string TypeName(Type t) => t.IsGenericType
+            ? t.Namespace + "." + t.Name.Substring(0, t.Name.IndexOf('`')) + "<" + string.Join(", ", t.GetGenericArguments().Select(TypeName)) + ">"
+            : t.FullName ?? t.Name;
+
+        /// <summary>Null when the document keeps chunked child storage after every parse, otherwise the reason.</summary>
+        public static string? Check()
+        {
+            string input = Input();
+            foreach (var p in GateCore.ParseConfigs)
+            {
+                var doc = MarkdownParser.Parse(input, GateCore.Parse(p));
+                if (doc.Children.Count != Blocks)
+                    return p + ": " + doc.Children.Count.ToString(CultureInfo.InvariantCulture) + " top-level blocks, expected " + Blocks.ToString(CultureInfo.InvariantCulture);
+                var type = doc.Children.GetType();
+                if (type.FullName != StorageType)
+                    return p + ": the document's children are a " + TypeName(type) + ", not " + StorageType;
+                var prop = type.GetProperty(ChunkedProperty, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (prop is null || prop.PropertyType != typeof(bool))
+                    return StorageType + " has no bool property " + ChunkedProperty;
+                if (!(bool)prop.GetValue(doc.Children)!)
+                    return p + ": after the parse the document's children are not chunked"
+                        + " (a pass read the document's children through MutableChildren)";
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Small documents (D-368 and the D-249 speed rule, patch 13). A parse must not allocate fixed buffers whose size does not depend on the
+    /// input, so that small documents keep the 1.1.0 cost. Measured on the inputs of the commonmark, gfm-spec and
+    /// gfm-extensions sets (each a few dozen characters): every input is parsed with default options, after a
+    /// warm-up, and the bytes allocated on the thread are divided by the input characters. The count is
+    /// deterministic for a given build and runtime. 1.1.0 allocates about 155 bytes per char here.
+    /// </summary>
+    public static class GateSmall
+    {
+        public static readonly string[] Sets = { "commonmark", "gfm-spec", "gfm-extensions" };
+        public const double MaxBytesPerChar = 175;
+
+        /// <summary>Bytes allocated per input char over one pass, after two warm-up passes.</summary>
+        public static double Measure(IReadOnlyList<string> inputs)
+        {
+            long chars = 0;
+            foreach (var s in inputs) chars += s.Length;
+            for (int w = 0; w < 2; w++)
+                foreach (var s in inputs) MarkdownParser.Parse(s);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            foreach (var s in inputs) MarkdownParser.Parse(s);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            return (after - before) / (double)Math.Max(1, chars);
+        }
+
+        /// <summary>Null when the measured figure is within <see cref="MaxBytesPerChar"/>, otherwise the reason.</summary>
+        public static string? Check(IReadOnlyList<string> inputs, out double bytesPerChar)
+        {
+            bytesPerChar = Measure(inputs);
+            if (inputs.Count == 0) return "no inputs";
+            return bytesPerChar <= MaxBytesPerChar ? null
+                : bytesPerChar.ToString("F1", CultureInfo.InvariantCulture) + " bytes allocated per char, more than "
+                  + MaxBytesPerChar.ToString(CultureInfo.InvariantCulture)
+                  + " (a parse allocates a buffer whose size does not depend on the input)";
+        }
+    }
 }

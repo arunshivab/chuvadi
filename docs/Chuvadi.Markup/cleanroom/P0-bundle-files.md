@@ -102,6 +102,7 @@ list).
 | diff-full | 1,379 | comparison inputs from the Markup chat's generators (D-232, D-237) |
 | slugs | 26 | heading-id inputs (D-237) |
 | diff-domain | 1,336 | domain-start inputs (D-242) |
+| pins | 35 | inputs that pin D-252, D-303 and D-309 behaviour (patch 10) |
 
 Expected outputs come from the given library with the approved rule-5 rulings applied, each derived from the
 spec text or from Arun's ruling. cmark was not consulted. Freezing twice gives a byte-identical file.
@@ -117,6 +118,28 @@ spec text or from Arun's ruling. cmark was not consulted. Freezing twice gives a
 | 6 | D-193, D-198, D-199 | MarkupLimits.cs doc; TraceCheck.cs superseded-by form; 3 url cases added |
 | 7 | D-232, D-237 | 3,491 cases added (diff-core, diff-full, slugs); no earlier case changed |
 | 8 | D-242 | 1,336 cases added (diff-domain); no earlier case changed |
+| 9 | D-249 to D-252 | gate program: cancellation responsiveness check (GateCancel) and LF line endings for exception messages; no data change |
+| 10 | D-294, D-303, D-309 | refreeze: 9 cases (157 outputs) changed, 35 cases added (pins); gate program: cancel timing from the token's firing, span check, `gate mem` |
+| 11 | D-330, D-331 | given library: chunked child storage in MarkdownNode.cs; gate program: Storage check, `gate mem` at 4 MiB; no data change |
+| 12 | D-344 | given library: MarkdownNode.cs keeps one live child view per node (NodeChildren); Storage check reads `IsChunked`; no data change |
+| 13 | D-368 | gate program: Small check (bytes allocated per char on the spec examples, at most 175); no data change |
+
+### Files changed since patch 8 (state after patch 13)
+
+The final bundle after patch 13 is `chuvadi-markdown-cleanroom-p0.zip`, 6,358,179 bytes, SHA-256
+`87C9E86B6490A49B54512E6E83CADB7809B3302449C72B99D2FB4651D2326AF8`, 67 files. These eight files differ from the
+table above; every other file is unchanged.
+
+| Path | Size (bytes) | SHA-256 | Origin |
+|---|---|---|---|
+| BRIEF.md | 30,230 | 348f33b8ec28806f3983557ec8a2f6e570c79f12d14e1210ccc2507cd0315b32 | written by the Markup chat; the copy in this folder is BRIEF-author.md |
+| README.md | 7,148 | f4e422609855d1f6a8a2420e35ef71c79bce7d6abdd85140f972382557a4c4ca | written by the Markup chat |
+| gate/Chuvadi.Markdown.Gate/GateCore.cs | 40,076 | b1e636d7137eab04a048535ce5f175c84d8a8af68d01da9210f702737ebfe7f7 | gate tool written by the Markup chat; identical to tests/Chuvadi.Markup.Tests/Gate/GateCore.cs |
+| gate/Chuvadi.Markdown.Gate/Program.cs | 26,346 | 57fb8f7d6d24bbe6e0be4e023402159ddbd38d11c242b0a40bfc1f0fda37eaec | gate tool written by the Markup chat |
+| gate/data/NOTICE.txt | 3,140 | 6c9e906f00feff86dedf3979516306aaed0fb84c122b83bf59114b94e8a9901a | written by the Markup chat |
+| gate/data/expected.jsonl.gz | 6,421,960 | 1dff1664dd27a0006480b4a966178d7c9e949d80d0baf42673aaa3abd5e8052e | frozen output: 10,423 cases, 353,669 expected outputs |
+| gate/data/rule5-rules.txt | 3,958 | 2a4183ae461e55d0878503d9bce8cca603f7161434d961b32290dac7f9ad2ea6 | written by the Markup chat |
+| src/Chuvadi.Markup/Markdown/MarkdownNode.cs | 15,021 | bb1685674ddf434f58375d23d2b1b4d8495d29aaf1ca223d9ce9c10a114241f2 | given library, written by the Markup chat (D-330, D-344); identical to the shipped file |
 
 ## Confirmations
 

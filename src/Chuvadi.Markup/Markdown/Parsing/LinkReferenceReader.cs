@@ -73,7 +73,7 @@ namespace Chuvadi.Markup.Markdown.Parsing
                 // the span runs to where the next line's content enters: its first non-space char, or for a lazy line
                 // where the container markers stopped (D-232, N3)
                 int spanEnd = nextLine < lines.Count ? lines[nextLine].RawStart : endLine.Next;
-                var span = new SourceSpan(firstLine.Start, spanEnd - firstLine.Start);
+                var span = MarkdownEngine.ClampSpan(new SourceSpan(firstLine.Start, spanEnd - firstLine.Start), source.Length);
                 // TRACE R-MD-0043
                 if (!document.MutableDefinitions.ContainsKey(key))
                 {

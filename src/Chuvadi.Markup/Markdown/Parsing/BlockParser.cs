@@ -22,7 +22,7 @@ namespace Chuvadi.Markup.Markdown.Parsing
         private readonly CancellationToken _cancel;
 
         /// <summary>Raw inline content of every kept paragraph and heading, for the inline phase.</summary>
-        public List<(MarkdownBlock Block, InlineContent Content)> InlineBlocks { get; } = new();
+        public ChunkedList<(MarkdownBlock Block, InlineContent Content)> InlineBlocks { get; } = new();
 
         public BlockParser(string source, MarkdownOptions options, MarkdownDocument document, CancellationToken cancel)
         {

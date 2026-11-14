@@ -31,6 +31,10 @@
 # R5-03 B (MaxOutputChars is exact: output stops at exactly the limit, a TextWriter has received exactly that
 #   many chars, Actual = limit + 1) needs no rule here: the library enforces it in its output sink, the
 #   expected outputs were frozen from a build that does so, and they are compared exactly.
+# D-303 (data:image exception needs ";" or "," after png, gif, jpeg or webp), D-309 (a partly used tab is one
+#   character in spans; every span inside the input, clamped only as a safety net that must never fire) and
+#   D-252 (nesting, pinned) need no rule here: the expected outputs were frozen with them applied, and they are
+#   compared exactly. The D-309 safety net is checked by gate run in P4 ("Spans").
 #
 # id | check prefix | text | mode | status | note
 # mode ignore-actual: same exception, differing only in its "actual" value.

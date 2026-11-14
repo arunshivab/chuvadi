@@ -285,20 +285,13 @@ namespace Chuvadi.Markup.Markdown.Parsing
             int start = _line.FirstNonSpace;
             // TRACE R-MD-0162
             int entry = lazy ? _line.Pos : start;
-            // TRACE R-MD-0266
-            // a lazy line that starts inside a partly used tab has its text positions and its end moved on by the
-            // tab's unused columns, as the frozen output shows ("- >o\n\t[" puts "[" at 8 and ends the blocks at 9;
-            // D-232, C1 as frozen)
-            int shift = lazy ? _line.PartialTabRemaining : 0;
-            paragraph.Lines!.Add(new ContentLine(start, _line.LineEnd, _line.NextLineStart, indent, shift > 0 ? start : entry, entry, shift));
-            if (shift > 0)
-            {
-                // the shifted end leaves out trailing spaces and tabs ("\t:-<b>[X] " ends at the content end + 2)
-                int contentEnd = _line.LineEnd;
-                while (contentEnd > start && IsSpaceOrTab(_src[contentEnd - 1])) contentEnd--;
-                paragraph.End = contentEnd + shift;
-            }
-            else paragraph.End = _line.LineEnd;
+            // TRACE R-MD-0274
+            // a lazy line that starts inside a partly used tab: the tab is one character in the source, so the
+            // content keeps its true position; the soft break before the line covers the line ending and the tab
+            // (D-309, CommonMark "Tabs": " - - ~\n\t|" puts "|" at 8 and the break at 6+2)
+            bool partialTab = lazy && _line.PartialTabRemaining > 0;
+            paragraph.Lines!.Add(new ContentLine(start, _line.LineEnd, _line.NextLineStart, indent, partialTab ? start : entry, entry));
+            paragraph.End = _line.LineEnd;
             if (!lazy && paragraph.HasLazyEnd)
             {
                 // a later non-lazy line: pass the lazy lines' end on now, as before
@@ -355,7 +348,7 @@ namespace Chuvadi.Markup.Markdown.Parsing
                 // TRACE R-MD-0269
                 // a lazy line that became the first line (definitions taken before it) keeps its entry point
                 int from = lines[i].RawStart;
-                sourceStarts[i] = from + lines[i].Shift;
+                sourceStarts[i] = from;
                 breakEnds[i] = lines[i].BreakEnd;
                 sb.Append(_src, from, lines[i].End - from);
             }

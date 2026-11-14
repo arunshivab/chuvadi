@@ -10,7 +10,9 @@ Frozen test data for the Chuvadi.Markup clean-room gate.
   unsafe-URL rule's data:image exception added; and D-232/D-237: the rulings of patch 7 applied and 3,491 cases
   added: 2,086 minimal and 1,379 longer inputs from my comparison generators (seeds 20261106001 to 20261106005,
   shrunk automatically) and 26 heading-id inputs I wrote; and D-242: 1,336 more cases on the domain start, 1,330
-  from the same comparison and 6 I wrote) as a
+  from the same comparison and 6 I wrote; and D-303/D-309 (patch 10): positions after a partly used tab count
+  the tab as one character, spans stay inside the input, and the data:image exception needs ";" or "," after the
+  type, 9 cases changed, and 35 "pins" inputs I wrote) as a
   program over the inputs. They are data, not code.
 - Spec inputs come from the bundled specification files (see specs/LICENSES.md).
 - Several "pathological" inputs follow the published pathological test cases of the CommonMark project's

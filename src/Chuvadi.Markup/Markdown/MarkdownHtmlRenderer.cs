@@ -8,9 +8,12 @@ using Chuvadi.Markup.Internal;
 
 namespace Chuvadi.Markup.Markdown
 {
+    // TRACE R-MD-0278
     /// <summary>
-    /// Renders a <see cref="MarkdownDocument"/> (or any subtree) to HTML. Output matches the CommonMark and
-    /// GFM spec examples byte for byte. The renderer is iterative, so tree depth never threatens the stack.
+    /// Renders a <see cref="MarkdownDocument"/> (or any subtree) to HTML. With the matching options the output
+    /// matches 652 of the 652 CommonMark 0.31.2 spec examples, 651 of the 672 GFM 0.29 spec examples (the
+    /// differing examples are listed in the gate's baseline scores) and 26 of the 26 GFM extension tests, footnotes
+    /// excluded. The renderer is iterative, so tree depth never threatens the stack.
     /// </summary>
     public static class MarkdownHtmlRenderer
     {
@@ -100,8 +103,9 @@ namespace Chuvadi.Markup.Markdown
                 if (!_o.SourcePositions || _document is null) return;
                 var span = node.Span;
                 if (span.Length == 0 && span.Start == 0 && node is not MarkdownDocument && _document.Source.Length == 0) return;
-                // TRACE R-MD-0272
-                // a span that runs past the input (R-MD-0266) is placed at the input's end: "- >o\n\t[" gives 1:1-2:3
+                // TRACE R-MD-0276
+                // a span past the source (only in a tree the caller built or changed; a parse keeps every span inside
+                // the input, R-MD-0275) is placed at the source's end instead of failing
                 int limit = _document.Source.Length;
                 int startOffset = span.Start < limit ? span.Start : limit;
                 int endOffset = span.Length > 0 ? span.End - 1 : span.Start;
@@ -628,17 +632,22 @@ namespace Chuvadi.Markup.Markdown
         /// <summary>Dangerous URL schemes (MarkdownHtmlOptions.UnsafeUrls).</summary>
         private static class UrlSafety
         {
-            // TRACE R-MD-0234
+            private static readonly string[] s_safeImages = { "data:image/png", "data:image/gif", "data:image/jpeg", "data:image/webp" };
+
+            // TRACE R-MD-0277
             /// <summary>
             /// javascript:, vbscript:, file: and data: URLs (scheme in any case) are dangerous, except data: URLs
-            /// of the image types png, gif, jpeg and webp.
+            /// of the image types png, gif, jpeg and webp (any case) followed by ";" or "," (D-303:
+            /// "data:image/pngx;..." and a bare "data:image/png" are dangerous).
             /// </summary>
             public static bool IsDangerous(string url)
             {
                 if (HasScheme(url, "javascript:") || HasScheme(url, "vbscript:") || HasScheme(url, "file:")) return true;
                 if (!HasScheme(url, "data:")) return false;
-                return !(HasScheme(url, "data:image/png") || HasScheme(url, "data:image/gif")
-                    || HasScheme(url, "data:image/jpeg") || HasScheme(url, "data:image/webp"));
+                foreach (var prefix in s_safeImages)
+                    if (HasScheme(url, prefix) && url.Length > prefix.Length && (url[prefix.Length] == ';' || url[prefix.Length] == ','))
+                        return false;
+                return true;
             }
 
             private static bool HasScheme(string url, string prefix)
