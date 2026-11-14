@@ -1,6 +1,6 @@
 # Chuvadi.Markup — Changelog
 
-## 1.2.0 (unreleased)
+## 1.2.0 (2026-11-15)
 
 - **Clean-room revision 9 (D-106, D-303, D-309, D-331).** The Markdown parser and renderer are the author's
   revision 9, with the similarity review P4 CLEAN for revisions 8 and 9 (`docs/Chuvadi.Markup/similarity/markup-P4.md`)
