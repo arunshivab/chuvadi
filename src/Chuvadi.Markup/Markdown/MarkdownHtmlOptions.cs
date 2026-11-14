@@ -36,7 +36,8 @@ namespace Chuvadi.Markup.Markdown
     {
         /// <summary>
         /// Replace with an empty URL. Dangerous: <c>javascript:</c>, <c>vbscript:</c>, <c>file:</c> and
-        /// <c>data:</c> other than <c>data:image/png|gif|jpeg|webp</c>. Default.
+        /// <c>data:</c> other than <c>data:image/png</c>, <c>gif</c>, <c>jpeg</c> or <c>webp</c> followed by
+        /// <c>;</c> or <c>,</c>. Default.
         /// </summary>
         Remove,
         /// <summary>Emit URLs unchanged.</summary>

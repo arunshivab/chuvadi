@@ -1472,6 +1472,7 @@ The log is append-only: a changed rule gets a new entry, and the old one gets `-
 - Source: general
 - Citation: UnsafeUrlPolicy.Remove contract (the XML documentation of the given library)
 - Rule: javascript:, vbscript:, file: and data: URLs (scheme in any case) are dangerous, except data:image/png, gif, jpeg and webp; with Remove they are written as an empty URL.
+- Status: superseded by R-MD-0277
 
 ### R-MD-0235
 - Location: Markdown/MarkdownHtmlRenderer.cs, HtmlWriter.Enter
@@ -1691,6 +1692,7 @@ The log is append-only: a changed rule gets a new entry, and the old one gets `-
 - Rule: A lazy line that starts inside a partly used tab has its text positions moved on by the tab's unused columns, and its end becomes its content end (trailing spaces and tabs left out) plus those columns; its soft break ends at its first non-space char ("- >o\n\t[" puts "[" at 8 and ends the blocks at 9, past the input; D-232, C1 as frozen).
 - Experiment: E-0029
 - Rule5: R5-0033
+- Status: superseded by R-MD-0274
 
 ### R-MD-0267
 - Location: Markdown/Parsing/BlockParser.cs, BlockParser.ProcessLine
@@ -1732,9 +1734,58 @@ The log is append-only: a changed rule gets a new entry, and the old one gets `-
 - Rule: A span that runs past the input (R-MD-0266) is placed at the input's end in data-sourcepos ("- >o\n\t[" gives 1:1-2:3).
 - Experiment: E-0029
 - Rule5: R5-0033
+- Status: superseded by R-MD-0276
 
 ### R-MD-0273
 - Location: Markdown/Parsing/InlineParser.Scanning.cs, WorkBudget.Step
 - Source: general
 - Citation: cancellation contract (BRIEF section 1, "cancellation honoured in long loops"; checked by gate time from patch 9)
 - Rule: Every inline work step also polls the cancellation token (once per 4,096 steps), so the inline parsing of one long block, and the email pass that uses the same budget, stop promptly when the token is cancelled.
+
+### R-MD-0274
+- Location: Markdown/Parsing/BlockStarts.cs, BlockParser.AddParagraphLine
+- Source: spec
+- Citation: CommonMark 0.31.2 "Tabs"
+- Rule: A tab is one character in the source even when container indentation uses only part of it: content after a partly used tab on a lazy line keeps its true position, the line ends at its line end, and the soft break before it covers the line ending, the tab and any indentation up to the content (D-309: " - - ~\n\t|" gives the "|" 8+1, the break 6+2, the paragraph 5+4).
+
+### R-MD-0275
+- Location: Markdown/Parsing/MarkdownEngine.cs, MarkdownEngine.ClampSpan
+- Source: general
+- Citation: D-309 span safety net (every span inside the input; [ThreadStatic] counter SpanClampsOnThisThread)
+- Rule: After a parse, every node span and every link reference definition span is checked against the input length; one that ends past it is clamped to the input and counted in the thread-static SpanClampsOnThisThread, which stays 0 when the span rules are right.
+
+### R-MD-0276
+- Location: Markdown/MarkdownHtmlRenderer.cs, HtmlWriter.SourcePos
+- Source: general
+- Citation: defensive bounds for data-sourcepos on trees the caller built or changed
+- Rule: A span that ends past the document source (possible only in a tree built or changed by the caller, since a parse keeps spans inside the input, R-MD-0275) is placed at the source's end in data-sourcepos instead of failing.
+
+### R-MD-0277
+- Location: Markdown/MarkdownHtmlRenderer.cs, UrlSafety.IsDangerous
+- Source: general
+- Citation: UnsafeUrlPolicy.Remove contract as ruled in D-303
+- Rule: javascript:, vbscript:, file: and data: URLs (scheme in any case) are dangerous, except data:image/png, gif, jpeg and webp (in any case) followed directly by ";" or ","; "data:image/pngx;...", "data:image/png-evil,..." and a bare "data:image/png" are dangerous; with Remove they are written as an empty URL.
+
+### R-MD-0278
+- Location: Markdown/MarkdownHtmlRenderer.cs, MarkdownHtmlRenderer
+- Source: general
+- Citation: D-303 wording of the renderer's class summary
+- Rule: The class summary states the measured conformance: CommonMark 0.31.2 examples 652 of 652, GFM 0.29 examples 651 of 672 (the differing examples are in the gate's baseline scores), GFM extension tests 26 of 26 with footnotes excluded.
+
+### R-MD-0279
+- Location: Markdown/Parsing/MarkdownEngine.cs, ChunkedList
+- Source: general
+- Citation: memory during a parse (D-303, issue #94): no parse-wide array on the large object heap
+- Rule: The list of blocks waiting for inline parsing is kept in chunks of 1,024 entries, below the large-object size, and each entry is released once its block is parsed, so dead parse data is not kept alive by a large array until a gen2 collection; the span walk keeps one stack frame per level, not one entry per node.
+
+### R-MD-0280
+- Location: Markdown/Parsing/MarkdownEngine.cs, MarkdownEngine.ClampTree
+- Source: general
+- Citation: D-331 child-list access rule (chunked child storage of the given MarkdownNode, D-330)
+- Rule: A pass that only reads the tree reads each node's children through Children, by index; MutableChildren or SetChildren is used only once a pass has a change to make (text nodes to merge, emphasis to flatten, an email address to split), so a large child list keeps its chunked storage; this also applies in InlineTree.MergeAdjacentText, InlineTree.FlattenDeepEmphasis and EmailAutolinks.Apply.
+
+### R-MD-0281
+- Location: Markdown/Parsing/MarkdownEngine.cs, ChunkedList.Add
+- Source: general
+- Citation: D-368 rule for small documents (no buffer whose size does not depend on the input), with the D-249 speed rule
+- Rule: Every buffer a parse allocates grows with what it holds: the first chunk of the inline work list starts at 4 entries and doubles up to 1,024 (later chunks stay 1,024, below the large-object size, R-MD-0279), and the emphasis pass allocates its per-kind table only when there is a delimiter run to match (InlineParser.ProcessEmphasis).

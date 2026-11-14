@@ -484,6 +484,9 @@ namespace Chuvadi.Markup.Markdown.Parsing
         private void ProcessEmphasis(DelimiterRun? bottom)
         {
             long bottomOrder = bottom is null ? -1 : bottom.Order;
+            // TRACE R-MD-0281
+            // nothing to match: no table is allocated (D-368)
+            if ((bottom is null ? _runsHead : bottom.Next) is null) return;
             // TRACE R-MD-0124
             var floors = new long[14];
             for (int k = 0; k < floors.Length; k++) floors[k] = bottomOrder;

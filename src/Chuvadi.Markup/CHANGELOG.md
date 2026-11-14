@@ -1,5 +1,65 @@
 # Chuvadi.Markup — Changelog
 
+## 1.2.0 (unreleased)
+
+- **Clean-room revision 9 (D-106, D-303, D-309, D-331).** The Markdown parser and renderer are the author's
+  revision 9, with the similarity review P4 CLEAN for revisions 8 and 9 (`docs/Chuvadi.Markup/similarity/markup-P4.md`)
+  and the trace record updated (R-MD-0274 to R-MD-0280). The frozen gate now has 10,423 cases and 353,669 expected
+  outputs (1.1.0: 10,388 and 352,479), with the new set `pins` (35 cases) for the rulings below and for D-252. The
+  public API is unchanged.
+- **Behaviour change (D-309, #95): positions after a partly used tab.** When list or block-quote indentation uses
+  only part of a tab at the start of a continuation line, the content after the tab now keeps its true position, and
+  the soft break before the line covers the line ending and the tab. In 1.1.0 and 1.0.0 the later spans on that line
+  were one or two characters too far right, and a few ended past the end of the input. `SourceSpan` values and
+  `data-sourcepos` change; 157 frozen outputs in 9 cases.
+- **Behaviour change (D-309): every span lies inside the input.** As a safety net, every source span is clamped to
+  the input after the parse. With the fix above no frozen input needs it: the gate and the tests require that the
+  clamp never fires on any frozen input under any parse or limit configuration.
+- **Behaviour change (D-303): stricter `data:image/` exception for unsafe URLs.** Under the default
+  `UnsafeUrlPolicy.Remove`, a `data:` URL is kept only when it starts with `data:image/png`, `gif`, `jpeg` or `webp`
+  followed by `;` or `,`. `data:image/pngx;...`, `data:image/png-evil,...` and a bare `data:image/png` are now removed
+  (1.1.0 kept any URL that started with one of the four prefixes). No earlier frozen output changes; new pins cover it.
+- **Behaviour change (D-330, D-344): the concrete type behind `MarkdownNode.Children`.** `Children` is typed
+  `IReadOnlyList<MarkdownNode>`, as before. In 1.1.0 the object behind it was the node's own `List<MarkdownNode>`;
+  now it is an internal read-only list, the same object for the life of the node, and it stays a live view of the
+  node's children. Code that cast `Children` to `List<MarkdownNode>` (or `IList`, `ICollection<T>`) now gets an
+  `InvalidCastException` (or null with `as`); such a cast also let a caller change the children without setting
+  `Parent`. Use `AppendChild`, `InsertChild` and `RemoveChild`. LINQ `ToList`, `ToArray` and `Count()` on
+  `Children` enumerate instead of using the `ICollection<T>` fast path. No code in the monorepo is affected.
+- **Memory and speed (D-303, D-330, D-331, #94).** A node with more than 8,192 children stores them in chunks of
+  4,096, so no child array reaches the large object heap, and the parser keeps less data alive during a parse. On the
+  measurement machine (2 cores, workstation GC) a parse no longer pays for a gen2 collection at 1, 2 or 4 MiB, and at
+  most about 4 bytes per input char are alive at a collection (1.1.0: 66.5 MiB at 1 MiB, 70.1 MiB at 2 MiB):
+
+  | Document | 1.1.0 | 1.2.0 |
+  |---|---|---|
+  | 1 MiB | 1 gen2 per round, 66.5 MiB alive | 0 gen2, 4.0 MiB |
+  | 2 MiB | 1 gen2, 70.1 MiB | 0 gen2, 8.1 MiB |
+  | 4 MiB | 1 gen2, 77.5 MiB | 0 gen2, 16.3 MiB |
+
+  Speed against 1.0.0 and 1.1.0 (D-249 rule: no input class more than 25% slower than 1.0.0), parse and parse +
+  render, best median of 7 rounds over two alternating runs, M chars/s:
+
+  | Input | Mode | 1.0.0 | 1.1.0 | 1.2.0 | 1.2.0 / 1.0.0 |
+  |---|---|---|---|---|---|
+  | spec examples (small) | parse | 7.4 | 11.4 | 10.2 | 1.38 |
+  | spec examples (small) | parse + render | 7.2 | 8.7 | 8.2 | 1.14 |
+  | spec documents (medium) | parse | 45.5 | 42.1 | 44.2 | 0.97 |
+  | spec documents (medium) | parse + render | 34.7 | 35.5 | 32.4 | 0.93 |
+  | 1 MB x10 | parse | 22.0 | 18.0 | 23.9 | 1.09 |
+  | 1 MB x10 | parse + render | 19.5 | 16.0 | 20.5 | 1.05 |
+  | 10 MB | parse | 12.4 | 17.8 | 18.0 | 1.45 |
+  | 10 MB | parse + render | 11.4 | 15.2 | 15.8 | 1.39 |
+  | fuzz | parse | 6.9 | 7.3 | 7.5 | 1.09 |
+  | fuzz | parse + render | 12.7 | 13.1 | 12.9 | 1.02 |
+  | pathological | parse | 12.6 | 15.3 | 15.8 | 1.25 |
+  | pathological | parse + render | 12.2 | 12.7 | 15.4 | 1.26 |
+
+  Every class is within the rule; the slowest is 0.93 of 1.0.0. Allocation per char is unchanged from 1.1.0 on large
+  inputs and about 5% higher on the spec examples (163 against 155 bytes per char).
+- **Documentation:** the `MarkdownHtmlRenderer` summary states the measured conformance (CommonMark 652/652, GFM
+  651/672, extension tests 26/26, footnotes excluded); `UnsafeUrlPolicy.Remove` states the `data:image/` rule exactly.
+
 ## 1.1.0 (2026-11-08)
 
 - **Clean-room Markdown engine (D-106).** The Markdown parser, the HTML renderer and the Markdown syntax helpers
@@ -67,8 +127,10 @@
   fence still does not, as in 1.0.0.
 - **Behaviour change (D-237): source span of a link reference definition.** The span covers the whole line ending
   (CR LF included) and, with no line ending, ends at the end of the input (`[f]:r` gives 0+5; 1.0.0 gave 0+6).
-  Other spans are as in 1.0.0, including some that end past the end of the input (the document span of some
-  inputs, for example); clamping them is a possible later change.
+  Other spans are as in 1.0.0, including a few that end past the end of the input: after a tab that list or
+  block-quote indentation uses only in part, later positions on that line are one or two characters too far right
+  (4 frozen cases, 60 outputs). *Corrected in 1.2.0: this line first named the document span as an example, which
+  was wrong; the document span is always exact. Fixed in 1.2.0 (#95).*
 - **Behaviour change (D-237): heading ids follow GitHub's rules** (`MarkdownHtmlOptions.HeadingIds`): letters,
   digits, combining marks (Mn, Mc, Me), `-` and `_` are kept, a space becomes `-`, everything else is removed, and
   duplicates get `-1`, `-2`. Headings in scripts with vowel signs and viramas keep them: `# தமிழ் மொழி` gives

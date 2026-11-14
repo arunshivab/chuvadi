@@ -25,7 +25,7 @@ namespace Chuvadi.Markup.Markdown.Parsing
     /// [Start, End), the offset of the next line, how many columns of indentation were removed, and where the
     /// line break before this line ends (BreakEnd), and where the line began after container markers (RawStart).
     /// </summary>
-    internal readonly record struct ContentLine(int Start, int End, int Next, int Indent, int BreakEnd, int RawStart, int Shift = 0);
+    internal readonly record struct ContentLine(int Start, int End, int Next, int Indent, int BreakEnd, int RawStart);
 
     /// <summary>
     /// The raw inline content of a paragraph or heading: its lines joined with '\n', and the source offset

@@ -23,7 +23,7 @@ namespace Chuvadi.Markup.Tests.Gate
     {
         /// <summary>SHA-256 of Gate/Data/expected.jsonl.gz. A refreeze (an approved rule-5 change only) changes this
         /// value in the same PR, together with the refreeze report.</summary>
-        public const string ExpectedSha256 = "584E07B4E612637B0F5D0330D4D709FE061975053E50D0D0F12A42C55E591F8B";
+        public const string ExpectedSha256 = "1DFF1664DD27A0006480B4A966178D7C9E949D80D0BAF42673AAA3ABD5E8052E";
 
         internal static string DataDir => Path.Combine(AppContext.BaseDirectory, "Gate", "Data");
 
@@ -35,7 +35,7 @@ namespace Chuvadi.Markup.Tests.Gate
 
         public static IEnumerable<object[]> Sets() =>
             new[] { "commonmark", "gfm-spec", "gfm-extensions", "documents", "fuzz", "limits", "labels", "urls", "pathological",
-                    "contract", "diff-core", "diff-full", "slugs", "diff-domain" }.Select(s => new object[] { s });
+                    "contract", "diff-core", "diff-full", "slugs", "diff-domain", "pins" }.Select(s => new object[] { s });
 
         [Fact]
         public void FrozenDataIsTheReviewedFile()
@@ -136,6 +136,55 @@ namespace Chuvadi.Markup.Tests.Gate
             }
             finally { Console.SetOut(old); }
             Assert.True(ok, output.ToString());
+        }
+
+        /// <summary>
+        /// D-309: on every frozen input outside the contract set, under every parse and limit configuration, the span
+        /// safety net never fires and every span lies inside the input (GateSpans, as the gate runs it in P4).
+        /// </summary>
+        [Fact]
+        public void SpansStayInsideTheInputAndTheClampNeverFires()
+        {
+            Assert.Null(GateSpans.CounterProblem());
+            var failures = new List<string>();
+            int inputs = 0;
+            OnBigStack(() =>
+            {
+                foreach (var c in Cases)
+                {
+                    if (c.Set == "contract") continue;
+                    inputs++;
+                    string? why = null;
+                    try { why = GateSpans.Check(c.Input); }
+                    catch (Exception ex) { why = GateCore.DescribeException(ex); }
+                    if (why is not null && failures.Count < 20) failures.Add(c.Id + ": " + why);
+                }
+            });
+            Assert.True(inputs > 10000, "only " + inputs + " inputs");
+            Assert.True(failures.Count == 0, "span check failed:\n" + string.Join("\n", failures));
+        }
+
+        /// <summary>D-331 and D-344: a 20,000-paragraph document keeps chunked child storage after every parse
+        /// configuration (GateStorage, as the gate runs it in P4).</summary>
+        [Fact]
+        public void LargeDocumentKeepsChunkedChildStorage()
+        {
+            string? why = null;
+            OnBigStack(() => why = GateStorage.Check());
+            Assert.True(why is null, why);
+        }
+
+        /// <summary>D-368: small documents keep about 1.1.0's allocation per char on the spec examples (GateSmall,
+        /// as the gate runs it in P4).</summary>
+        [Fact]
+        public void SmallDocumentsAllocateAboutAsMuchAsIn110()
+        {
+            var inputs = Cases.Where(c => Array.IndexOf(GateSmall.Sets, c.Set) >= 0).Select(c => c.Input).ToList();
+            Assert.Equal(1354, inputs.Count);
+            string? why = null;
+            double bpc = 0;
+            OnBigStack(() => why = GateSmall.Check(inputs, out bpc));
+            Assert.True(why is null, why);
         }
 
         /// <summary>
