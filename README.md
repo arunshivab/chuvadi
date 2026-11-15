@@ -7,17 +7,17 @@
 | Package | Formats | Status |
 |---|---|---|
 | **[Chuvadi.Sheets](src/Chuvadi.Sheets/README.md)** | xlsx (read/write/encrypt), zip | v2.1.0 |
-| **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v2.3.0 |
-| **[Chuvadi.Docs.Conversion](src/Chuvadi.Docs.Conversion/README.md)** | Docs to and from plain text, Markdown (CommonMark + GFM) and HTML, plus a self-contained HTML preview (over Chuvadi.Markup; released with Docs) | v2.3.0 |
+| **[Chuvadi.Docs](src/Chuvadi.Docs/README.md)** | docx (read/write/encrypt/templates) | v2.4.0 |
+| **[Chuvadi.Docs.Conversion](src/Chuvadi.Docs.Conversion/README.md)** | Docs to and from plain text, Markdown (CommonMark + GFM) and HTML, plus a self-contained HTML preview (over Chuvadi.Markup; released with Docs) | v2.4.0 |
 | **[Chuvadi.Fonts](src/Chuvadi.Fonts/README.md)** | the LiPi Sans fonts (Latin and nine Indic scripts) as static TrueType files | v1.1.0 |
 | **[Chuvadi.Fonts.Liberation](src/Chuvadi.Fonts.Liberation/README.md)** | the twelve Liberation 2.1.5 fonts (Sans, Serif, Mono; metric-compatible with Arial, Times New Roman and Courier New) as static TrueType files | v1.0.0 |
 | **[Chuvadi.OpenType](src/Chuvadi.OpenType/README.md)** | reads OpenType and TrueType fonts: tables, collections, cmap, metrics, glyph bounds, names | v0.1.0 |
 | **[Chuvadi.Text.Shaping](src/Chuvadi.Text.Shaping/README.md)** | OpenType text shaping for Indic scripts and Latin, with its own Unicode tables (over Chuvadi.OpenType) | v0.1.0 (in progress) |
-| **[Chuvadi.Layout](src/Chuvadi.Layout/README.md)** | page layout engine: flow and grid pages, plain text, display list, SVG | v0.2.0 (preview) |
-| **[Chuvadi.Layout.Docs](src/Chuvadi.Layout.Docs/README.md)** | Word documents (docx) laid out through Chuvadi.Docs | v0.2.0 (preview) |
-| **[Chuvadi.Layout.Sheets](src/Chuvadi.Layout.Sheets/README.md)** | Excel workbooks (xlsx) laid out through Chuvadi.Sheets | v0.2.0 (preview) |
-| **[Chuvadi.Layout.Documents](src/Chuvadi.Layout.Documents/README.md)** | one call for docx, xlsx (encrypted too) and text, format detected | v0.2.0 (preview) |
-| **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible substitutes, Gelasio, Selawik) | v0.1.0 (preview) |
+| **[Chuvadi.Layout](src/Chuvadi.Layout/README.md)** | page layout engine: flow and grid pages, plain text, display list, SVG | v0.3.0 (preview) |
+| **[Chuvadi.Layout.Docs](src/Chuvadi.Layout.Docs/README.md)** | Word documents (docx) laid out through Chuvadi.Docs | v0.3.0 (preview) |
+| **[Chuvadi.Layout.Sheets](src/Chuvadi.Layout.Sheets/README.md)** | Excel workbooks (xlsx) laid out through Chuvadi.Sheets | v0.3.0 (preview) |
+| **[Chuvadi.Layout.Documents](src/Chuvadi.Layout.Documents/README.md)** | one call for docx, xlsx (encrypted too) and text, format detected | v0.3.0 (preview) |
+| **[Chuvadi.Layout.Fonts](src/Chuvadi.Layout.Fonts/README.md)** | offline OFL font pack for Chuvadi.Layout (Office metric-compatible substitutes, Gelasio, Selawik) | v0.2.0 (preview) |
 | **[Chuvadi.Layout.Markup](src/Chuvadi.Layout.Markup/README.md)** | Markdown and sanitized HTML (mail, pages) layout through Chuvadi.Markup | v0.1.0 (preview) |
 | **[Chuvadi.Layout.Pdf](staging/src/Chuvadi.Layout.Pdf/README.md)** | laid-out pages to PDF through Chuvadi.Pdf (staged, outside the solution; needs the Chuvadi.Pdf packages) | v0.1.0 (preview) |
 | **[Chuvadi.Markup](src/Chuvadi.Markup/README.md)** | Markdown (CommonMark + GFM), HTML5 parse/sanitize, CSS, text to HTML | v1.2.0 |
@@ -25,8 +25,8 @@
 | **[Chuvadi.Print.Windows](src/Chuvadi.Print.Windows/README.md)** | Windows printing through the GDI spooler (needs Chuvadi.Print) | v1.0.0-rc.5 (in progress) |
 | **[Chuvadi.Print.Ipp](src/Chuvadi.Print.Ipp/README.md)** | driverless IPP printing, PWG Raster (needs Chuvadi.Print) | v1.0.0-rc.5 (in progress) |
 | **[Chuvadi.Print.Remote](src/Chuvadi.Print.Remote/README.md)** | remote printing: hub and agent (needs Chuvadi.Print) | v1.0.0-rc.5 (in progress) |
-| **[Chuvadi.Print.Pdf.Raster](staging/Chuvadi.Print.Pdf.Raster/README.md)** | prints PDF files by rendering them to pages (staged, outside the solution; needs Chuvadi.Print and the Chuvadi.Pdf packages) | v0.2.0 |
-| **[Chuvadi.Zip](src/Chuvadi.Zip/README.md)** | zip (streaming read/write, Zip64, AES-256, zip-slip and bomb limits) | v1.0.0 |
+| **[Chuvadi.Print.Pdf.Raster](staging/Chuvadi.Print.Pdf.Raster/README.md)** | prints PDF files by rendering them to pages (staged, outside the solution; needs Chuvadi.Print and the Chuvadi.Pdf packages) | v0.2.1 |
+| **[Chuvadi.Zip](src/Chuvadi.Zip/README.md)** | zip (streaming read/write, Zip64, AES-256, zip-slip and bomb limits) | v1.0.1 |
 | [Chuvadi.Pdf](https://github.com/arunshivab/chuvadi-pdf) | pdf | v3.34.0 (separate repo) |
 
 ## Shared foundation
@@ -65,7 +65,7 @@ Every package ships with an xUnit suite plus an end-to-end manual verification s
 
 ## Releases
 
-Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): latest `sheets-v2.1.0`, `docs-v2.3.0`, `zip-v1.0.0`, `markup-v1.2.0`, `fonts-v1.1.0`, `fonts-liberation-v1.0.0`, `layout-v0.2.0`, `layout-docs-v0.2.0`, `layout-sheets-v0.2.0`, `layout-documents-v0.2.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`, `layout-pdf-v0.1.0`, `opentype-v0.1.0`, `print-v1.0.0-rc.5`, `print-pdf-raster-v0.2.0`; `text-shaping-v0.1.0` is not tagged yet. The sizes and SHA-256 of every asset are in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). See [RELEASING.md](RELEASING.md).
+Per-package tags (`docs-v*` releases Chuvadi.Docs and Chuvadi.Docs.Conversion together): latest `sheets-v2.1.0`, `docs-v2.4.0`, `zip-v1.0.1`, `markup-v1.2.0`, `fonts-v1.1.0`, `fonts-liberation-v1.0.0`, `layout-v0.3.0`, `layout-docs-v0.3.0`, `layout-sheets-v0.3.0`, `layout-documents-v0.3.0`, `layout-fonts-v0.2.0`, `layout-markup-v0.1.0`, `layout-pdf-v0.1.0`, `opentype-v0.1.0`, `print-v1.0.0-rc.5`, `print-pdf-raster-v0.2.1`; `text-shaping-v0.1.0` is not tagged yet. The sizes and SHA-256 of every asset are in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). See [RELEASING.md](RELEASING.md).
 
 ## License
 

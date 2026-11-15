@@ -234,12 +234,11 @@ jobs:
 
   # D-217 item 3: the shipped libraries must compile for the Android target framework. tests/Chuvadi.AndroidSmoke is a
   # net10.0-android class library that references Chuvadi.Zip, Chuvadi.Fonts and Chuvadi.Fonts.Liberation and calls their public API (add the other
-  # packages as they are checked). Nothing is run on a device or emulator. Not in Chuvadi.slnx, never packed. Until it has
-  # passed on the runner once it does not block a merge.
+  # packages as they are checked). Nothing is run on a device or emulator. Not in Chuvadi.slnx, never packed. It passed on
+  # the runner in the last six main runs, so it now blocks a merge (C1; it no longer has continue-on-error).
   android-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6

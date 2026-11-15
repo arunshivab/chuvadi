@@ -128,8 +128,8 @@ jobs:
         if: ${{ steps.pkg.outputs.staged == 'true' }}
         run: dotnet test "${{ steps.pkg.outputs.tests }}" -c Release -p:RestoreConfigFile="${{ steps.pdf.outputs.config }}"
 
-      - name: Check the package versions match the tag (docs, print, fonts-liberation, opentype, text-shaping, staged)
-        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'fonts-liberation-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') || steps.pkg.outputs.staged == 'true' }}
+      - name: Check the package versions match the tag (docs, print, layout, fonts-liberation, opentype, text-shaping, staged)
+        if: ${{ startsWith(github.ref_name, 'docs-v') || startsWith(github.ref_name, 'print-v') || startsWith(github.ref_name, 'layout-v') || startsWith(github.ref_name, 'layout-docs-v') || startsWith(github.ref_name, 'layout-sheets-v') || startsWith(github.ref_name, 'layout-documents-v') || startsWith(github.ref_name, 'layout-fonts-v') || startsWith(github.ref_name, 'layout-markup-v') || startsWith(github.ref_name, 'fonts-liberation-v') || startsWith(github.ref_name, 'opentype-v') || startsWith(github.ref_name, 'text-shaping-v') || steps.pkg.outputs.staged == 'true' }}
         shell: bash
         run: |
           TAGV="${GITHUB_REF_NAME#*-v}"

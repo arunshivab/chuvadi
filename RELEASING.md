@@ -86,9 +86,9 @@ dependencies; Chuvadi.Text.Shaping references Chuvadi.OpenType only:
 9. `layout-pdf-v*` (after `layout-v*`, and the Chuvadi.Pdf release it is pinned to must be in `tools/chuvadi-pdf/hashes/`),
    and `print-pdf-raster-v*` (after the `print-v*` release it depends on)
 
-(Already released, latest first: `markup-v1.2.0`, `docs-v2.3.0`, `sheets-v2.1.0`, `print-v1.0.0-rc.5` and `print-pdf-raster-v0.2.0`,
-`layout-v0.2.0` with `layout-docs-v0.2.0`, `layout-sheets-v0.2.0` and `layout-documents-v0.2.0`, `layout-pdf-v0.1.0`,
-`fonts-liberation-v1.0.0`, `fonts-v1.1.0`, `layout-fonts-v0.1.0`, `layout-markup-v0.1.0`, `opentype-v0.1.0` and `zip-v1.0.0`; the list with
+(Already released, latest first: `zip-v1.0.1`, `docs-v2.4.0`, `print-pdf-raster-v0.2.1`, `layout-v0.3.0` with `layout-docs-v0.3.0`,
+`layout-sheets-v0.3.0`, `layout-documents-v0.3.0` and `layout-fonts-v0.2.0`, `markup-v1.2.0`, `sheets-v2.1.0`, `print-v1.0.0-rc.5`,
+`layout-pdf-v0.1.0`, `fonts-liberation-v1.0.0`, `fonts-v1.1.0`, `layout-markup-v0.1.0`, `opentype-v0.1.0`; the list with
 sizes and digests is docs/COMPATIBILITY.md. Not tagged yet: `text-shaping-v0.1.0`. Print is in release-candidate state.
 Chuvadi.Print.Windows, .Ipp and .Remote depend on Chuvadi.Print, and they release with it.)
 Push one tag, wait for its Release workflow to finish green, then push the next. Create each tag
