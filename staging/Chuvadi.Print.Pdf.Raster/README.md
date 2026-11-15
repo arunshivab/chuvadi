@@ -73,7 +73,7 @@ dotnet test staging/Chuvadi.Print.Pdf.Raster.Tests -c Release
 dotnet pack staging/Chuvadi.Print.Pdf.Raster -c Release -o artifacts\pdf-raster
 ```
 
-The package depends on Chuvadi.Print (the version in the same tree, 1.0.0-rc.3 or later) and on the Chuvadi.Pdf range
+The package depends on Chuvadi.Print (the version in the same tree: 1.0.0-rc.5 or later for 0.2.1, rc.3 for 0.2.0) and on the Chuvadi.Pdf range
 above.
 
 ## Notes

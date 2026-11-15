@@ -3,7 +3,8 @@
 ## 0.2.1 (2026-11-15)
 
 **Fix: with `IncludeAnnotations` and `IncludeFormFields` both off, annotations and form fields no longer print.**
-Chuvadi.Pdf floor unchanged (3.32.0); it still depends on Chuvadi.Print 1.0.0-rc.3 or later.
+Chuvadi.Pdf floor unchanged (3.32.0). It depends on Chuvadi.Print **1.0.0-rc.5** or later (was rc.3): the package
+takes the Print version in the same tree, and rc.4 and rc.5 are additive, with unchanged defaults.
 
 - **Output change (rule 5), only when both are off.**
   - In 0.2.0 the document was passed on unflattened in that case, and the renderer's own annotation drawing
