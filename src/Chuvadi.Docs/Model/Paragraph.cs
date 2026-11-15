@@ -24,20 +24,42 @@ public sealed class Paragraph
 
     private ParagraphStyle _style = ParagraphStyle.Normal;
     private string? _customStyleId;
+    private bool _styleSet;
 
     /// <summary>
     /// The paragraph's built-in style. For a custom style (see <see cref="StyleId"/>) this reads
-    /// <see cref="ParagraphStyle.Normal"/>. Setting it clears any custom style.
+    /// <see cref="ParagraphStyle.Normal"/>. Setting it clears any custom style and sets <see cref="IsStyleSet"/>.
     /// </summary>
     public ParagraphStyle Style
     {
         get => _style;
-        set { _style = value; _customStyleId = null; }
+        set { _style = value; _customStyleId = null; _styleSet = true; }
+    }
+
+    /// <summary>
+    /// True once the paragraph's style has been set: through <see cref="Style"/> or <see cref="StyleId"/> (even to
+    /// Normal), or by a <c>w:pStyle</c> in a loaded file. False for <c>new Paragraph()</c>, <c>new Paragraph(text)</c>,
+    /// <see cref="HeaderFooterContent.SetText"/> and <c>Document.AddParagraph(text)</c>, and after <see cref="ResetStyle"/>;
+    /// such a paragraph reads as Normal (2.4.0, D-387).
+    /// <para>It matters in headers and footers: a header or footer paragraph whose style is not set uses
+    /// <see cref="DocumentDefaults.HeaderParagraphStyleId"/> (<see cref="DocumentDefaults.FooterParagraphStyleId"/>),
+    /// Word's Header (Footer) style in a new document, while an explicit <c>Style = ParagraphStyle.Normal</c> keeps Normal.</para>
+    /// </summary>
+    public bool IsStyleSet => _styleSet;
+
+    /// <summary>Makes the style "not set" again (<see cref="IsStyleSet"/> false): the paragraph reads as Normal. Returns this paragraph.</summary>
+    public Paragraph ResetStyle()
+    {
+        _style = ParagraphStyle.Normal;
+        _customStyleId = null;
+        _styleSet = false;
+        return this;
     }
 
     /// <summary>
     /// The paragraph style id (w:pStyle): a built-in ("Normal", "Heading1"…) or any style in
-    /// <see cref="Document.Styles"/>. Setting a built-in id also sets <see cref="Style"/>.
+    /// <see cref="Document.Styles"/>. Setting a built-in id also sets <see cref="Style"/>. Setting it sets
+    /// <see cref="IsStyleSet"/>.
     /// </summary>
     public string StyleId
     {
@@ -47,6 +69,7 @@ public sealed class Paragraph
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Style id required.", nameof(value));
             if (Internal.DocumentSerializer.TryBuiltInStyle(value, out var builtIn)) { _style = builtIn; _customStyleId = null; }
             else { _style = ParagraphStyle.Normal; _customStyleId = value; }
+            _styleSet = true;
         }
     }
 

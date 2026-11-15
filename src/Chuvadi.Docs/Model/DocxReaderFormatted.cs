@@ -20,13 +20,18 @@ public sealed partial class DocxReader
     /// <summary>
     /// Streams every paragraph with its runs and their effective formatting: the body in document order, with the
     /// paragraphs of table cells (nested tables included) in place, then the headers, then the footers (when
-    /// <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/> is true). Each item is a <see cref="DocxFormattedParagraph"/>.
+    /// <see cref="DocxReaderOptions.IncludeHeadersAndFooters"/> is true), then the footnotes and endnotes
+    /// (<see cref="DocxReaderOptions.IncludeNotes"/>), then the comments (<see cref="DocxReaderOptions.IncludeComments"/>).
+    /// With <see cref="DocxReaderOptions.IncludeTextBoxes"/>, each text box's paragraphs follow the paragraph that holds
+    /// it. Each item is a <see cref="DocxFormattedParagraph"/>, with its list label (<see cref="DocxFormattedParagraph.ListLabel"/>).
     /// <para>
     /// The runs and formats are the ones <see cref="Document.Load(Stream, string?)"/> and
     /// <see cref="Document.GetEffectiveRunFormat(Paragraph, Run)"/> give, from the same code. Only one paragraph, or one
     /// top-level table, is held at a time. The styles, numbering, theme and settings parts are read on the first call
     /// and kept for the reader's life; their elements count towards that call's <see cref="DocxReaderOptions.MaxElements"/>.
-    /// Footnotes, endnotes and comments are not read, so their references are not in the runs.
+    /// Without <see cref="DocxReaderOptions.IncludeNotes"/> and <see cref="DocxReaderOptions.IncludeComments"/> the
+    /// footnotes, endnotes and comments are not read, so their references are not in the runs; with them, those parts
+    /// are read before the body (as <c>Load</c> reads them) and held until the enumeration ends.
     /// </para>
     /// <para>
     /// A styles, numbering, theme or settings part that is missing, cannot be opened or is not well-formed XML is listed
@@ -92,13 +97,79 @@ public sealed partial class DocxReader
         var ct = read.Token;
         var budget = _options.NewBudget();
         var styles = FormatDocument(ct, budget);
+
+        // D-387: notes and comments are read first, with Load's own readers, so the body's references resolve.
+        var load = new DocumentLoader.LoadContext(_skipped);
+        Document? stories = null;
+        if (_options.IncludeNotes || _options.IncludeComments)
+        {
+            stories = new Document(DocumentPreset.Minimal);
+            var options = _options.WithBudget(budget);
+            var noteMedia = new Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
+            if (_options.IncludeComments) DocumentLoader.LoadComments(_package, _documentUri, stories, load, options, ct, noteMedia);
+            if (_options.IncludeNotes) DocumentLoader.LoadNotes(_package, _documentUri, stories, load, options, ct, noteMedia);
+            foreach (var skip in stories.SkippedParts) RecordSkip(skip.PartName, skip.Reason, skip.Error);
+        }
+
         foreach (var uri in ReadOrder())
         {
-            var items = IsMainPart(uri) ? FormattedFromPart(uri, styles, ct, budget, story: false)
-                : ReadOptionalPart(uri, u => FormattedFromPart(u, styles, ct, budget, story: true));
+            var items = IsMainPart(uri) ? FormattedFromPart(uri, styles, ct, budget, story: false, load)
+                : ReadOptionalPart(uri, u => FormattedFromPart(u, styles, ct, budget, story: true, load));
             foreach (var item in items)
                 yield return item;
         }
+
+        if (stories is null) yield break;
+        if (_options.IncludeNotes)
+        {
+            // All footnotes are one list story, as are all endnotes (as Document.GetListLabels counts them).
+            foreach (var (notes, type) in new[] { (stories.Footnotes, "/footnotes"), (stories.Endnotes, "/endnotes") })
+            {
+                var part = RelatedPart(type) ?? type;
+                var counter = NewCounter(styles);
+                foreach (var note in notes)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var pending = new List<Pending>();
+                    foreach (var b in note.Blocks)
+                    {
+                        if (b is Paragraph p) pending.Add(new Pending(p, null) { Note = note });
+                        else if (b is DocTable t) CollectTable(t, pending, 0, note, null);
+                    }
+                    foreach (var item in Flush(pending, styles, part, _runStyleCache, counter, _options.IncludeTextBoxes)) yield return item;
+                }
+            }
+        }
+        if (_options.IncludeComments)
+        {
+            var part = RelatedPart("/comments") ?? "/comments";
+            foreach (var comment in stories.Comments)
+            {
+                ct.ThrowIfCancellationRequested();
+                var pending = new List<Pending>();
+                foreach (var b in comment.Blocks)
+                {
+                    if (b is Paragraph p) pending.Add(new Pending(p, null) { Comment = comment });
+                    else if (b is DocTable t) CollectTable(t, pending, 0, null, comment);
+                }
+                // Comments carry no list labels (Document.GetListLabels does not count them).
+                foreach (var item in Flush(pending, styles, part, _runStyleCache, counter: null, _options.IncludeTextBoxes)) yield return item;
+            }
+        }
+    }
+
+    /// <summary>One paragraph waiting to be resolved, with where it came from.</summary>
+    private sealed record Pending(Paragraph Paragraph, TableCellRef? Cell)
+    {
+        public Note? Note { get; init; }
+        public Comment? Comment { get; init; }
+    }
+
+    /// <summary>A list-label counter for one story (C2, D-387); its output is read and dropped item by item.</summary>
+    private static (ListNumbering.Counter Counter, Dictionary<Paragraph, ListLabel> Output) NewCounter(Document styles)
+    {
+        var output = new Dictionary<Paragraph, ListLabel>(ReferenceEqualityComparer.Instance);
+        return (new ListNumbering.Counter(styles, output), output);
     }
 
     /// <summary>
@@ -196,7 +267,7 @@ public sealed partial class DocxReader
     /// follow a block to its last paragraph; so every item is final when the caller sees it.
     /// </summary>
     private IEnumerable<DocxFormattedParagraph> FormattedFromPart(string uri, Document styles, CancellationToken ct,
-        ElementBudget? budget, bool story)
+        ElementBudget? budget, bool story, DocumentLoader.LoadContext load)
     {
         Stream? s = TryOpenPart(uri, ct);
         if (s is null) yield break;
@@ -206,8 +277,10 @@ public sealed partial class DocxReader
         // Pictures are read as Load reads them, but only kept while their paragraph is pending.
         var media = new Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
         var images = new DocumentLoader.ImageSource(_package, uri, _options, ct, media, _skipped);
-        var context = new DocumentLoader.StoryContext(new DocumentLoader.LoadContext(_skipped), images) { NoNoteReferences = story };
-        var pending = new List<(Paragraph Paragraph, TableCellRef? Cell)>();
+        var context = new DocumentLoader.StoryContext(load, images) { NoNoteReferences = story };
+        var pending = new List<Pending>();
+        var counter = NewCounter(styles); // one list story per part, as Document.GetListLabels
+        bool boxes = _options.IncludeTextBoxes;
 
         if (!r.Read()) yield break;
         while (!r.EOF)
@@ -219,9 +292,9 @@ public sealed partial class DocxReader
                     DocTable table;
                     using (var sub = r.LightSubtree()) table = DocumentLoader.LoadTable(sub, context);
                     r.Read();
-                    foreach (var item in Flush(pending, styles, uri, _runStyleCache)) yield return item;
+                    foreach (var item in Flush(pending, styles, uri, _runStyleCache, counter, boxes)) yield return item;
                     media.Clear();
-                    CollectTable(table, pending, 0);
+                    CollectTable(table, pending, 0, null, null);
                     continue;
                 }
                 if (r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd")
@@ -240,9 +313,9 @@ public sealed partial class DocxReader
                     Paragraph p;
                     using (var sub = r.LightSubtree()) p = DocumentLoader.LoadParagraph(sub, context);
                     r.Read();
-                    foreach (var item in Flush(pending, styles, uri, _runStyleCache)) yield return item;
+                    foreach (var item in Flush(pending, styles, uri, _runStyleCache, counter, boxes)) yield return item;
                     media.Clear();
-                    pending.Add((p, null));
+                    pending.Add(new Pending(p, null));
                     continue;
                 }
             }
@@ -250,11 +323,11 @@ public sealed partial class DocxReader
         }
         DocumentLoader.EnsureWellFormed(r, uri);
         context.Finish();
-        foreach (var item in Flush(pending, styles, uri, _runStyleCache)) yield return item;
+        foreach (var item in Flush(pending, styles, uri, _runStyleCache, counter, boxes)) yield return item;
     }
 
     /// <summary>A table's paragraphs in reading order: rows, then the cells that start in each row, then each cell's blocks.</summary>
-    private static void CollectTable(DocTable table, List<(Paragraph, TableCellRef?)> into, int depth)
+    private static void CollectTable(DocTable table, List<Pending> into, int depth, Note? note, Comment? comment)
     {
         if (depth > 512) return; // far beyond what MaxXmlDepth admits
         for (int r = 0; r < table.Rows.Count; r++)
@@ -265,8 +338,8 @@ public sealed partial class DocxReader
                 if (row.CellIfPresent(c) is not { } cell) continue; // a grid slot no cell starts in
                 foreach (var b in cell.Blocks)
                 {
-                    if (b is Paragraph p) into.Add((p, new TableCellRef(table, r, c)));
-                    else if (b is DocTable nested) CollectTable(nested, into, depth + 1);
+                    if (b is Paragraph p) into.Add(new Pending(p, new TableCellRef(table, r, c)) { Note = note, Comment = comment });
+                    else if (b is DocTable nested) CollectTable(nested, into, depth + 1, note, comment);
                 }
             }
         }
@@ -278,23 +351,67 @@ public sealed partial class DocxReader
         return false;
     }
 
-    /// <summary>Links numbering and resolves the effective formats of the pending paragraphs, in order, then clears them.</summary>
-    private static List<DocxFormattedParagraph> Flush(List<(Paragraph Paragraph, TableCellRef? Cell)> pending, Document styles, string part,
-        FormatResolver.RunStyleCache cache)
+    /// <summary>
+    /// Links numbering and resolves the effective formats of the pending paragraphs, in order, then clears them.
+    /// With <paramref name="textBoxes"/>, each paragraph's text-box paragraphs follow it (C3, D-387).
+    /// </summary>
+    private static List<DocxFormattedParagraph> Flush(List<Pending> pending, Document styles, string part,
+        FormatResolver.RunStyleCache cache, (ListNumbering.Counter Counter, Dictionary<Paragraph, ListLabel> Output)? counter, bool textBoxes)
     {
         var result = new List<DocxFormattedParagraph>(pending.Count);
-        foreach (var (p, cell) in pending)
+        foreach (var item in pending)
         {
+            var p = item.Paragraph;
             DocumentLoader.LinkParagraphNumbering(styles, p);
-            if (HasTextBox(p))
+            bool hasBox = HasTextBox(p);
+            if (hasBox)
                 foreach (var inner in DocumentSerializer.TextBoxParagraphs(p, 0, new HashSet<TextBox>()))
                     DocumentLoader.LinkParagraphNumbering(styles, inner);
-            var formats = new TextFormat[p.Runs.Count];
-            var key = formats.Length > 0 ? FormatResolver.ParagraphKey(styles, p, cell) : "";
-            for (int i = 0; i < formats.Length; i++) formats[i] = FormatResolver.ResolveRun(styles, p, p.Runs[i], cell, cache, key);
-            result.Add(new DocxFormattedParagraph(p, formats, FormatResolver.ResolveParagraph(styles, p, cell), part, cell));
+            ListLabel? label = null;
+            if (counter is { } c)
+            {
+                c.Counter.Item(p, item.Cell);
+                if (c.Output.Remove(p, out var l)) label = l;
+            }
+            result.Add(Resolve(styles, p, item.Cell, cache, part, label, item.Note, item.Comment, null, null));
+            if (textBoxes && hasBox) AddTextBoxes(result, styles, p, cache, part, item.Note, item.Comment, 0, new HashSet<TextBox>(ReferenceEqualityComparer.Instance));
         }
         pending.Clear();
         return result;
+    }
+
+    private static DocxFormattedParagraph Resolve(Document styles, Paragraph p, TableCellRef? cell, FormatResolver.RunStyleCache cache,
+        string part, ListLabel? label, Note? note, Comment? comment, TextBox? box, Paragraph? host)
+    {
+        var formats = new TextFormat[p.Runs.Count];
+        var key = formats.Length > 0 ? FormatResolver.ParagraphKey(styles, p, cell) : "";
+        for (int i = 0; i < formats.Length; i++) formats[i] = FormatResolver.ResolveRun(styles, p, p.Runs[i], cell, cache, key);
+        return new DocxFormattedParagraph(p, formats, FormatResolver.ResolveParagraph(styles, p, cell), part, cell, label, note, comment, box, host);
+    }
+
+    /// <summary>
+    /// The paragraphs of the text boxes in <paramref name="host"/>'s runs, in run order, each followed by the text boxes
+    /// of its own runs (the depth and repeat guards of <see cref="DocumentSerializer.TextBoxParagraphs"/>). Table
+    /// paragraphs inside a box carry their cell. No list labels: <see cref="Document.GetListLabel(Paragraph)"/> gives none.
+    /// </summary>
+    private static void AddTextBoxes(List<DocxFormattedParagraph> into, Document styles, Paragraph host, FormatResolver.RunStyleCache cache,
+        string part, Note? note, Comment? comment, int depth, HashSet<TextBox> seen)
+    {
+        if (depth > 8) return;
+        foreach (var r in host.Runs)
+        {
+            if (r.TextBox is not { } box || !seen.Add(box)) continue;
+            var inside = new List<Pending>();
+            foreach (var b in box.Blocks)
+            {
+                if (b is Paragraph bp) inside.Add(new Pending(bp, null));
+                else if (b is DocTable bt) CollectTable(bt, inside, 0, null, null);
+            }
+            foreach (var item in inside)
+            {
+                into.Add(Resolve(styles, item.Paragraph, item.Cell, cache, part, null, note, comment, box, host));
+                AddTextBoxes(into, styles, item.Paragraph, cache, part, note, comment, depth + 1, seen);
+            }
+        }
     }
 }

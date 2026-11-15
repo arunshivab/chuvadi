@@ -292,7 +292,7 @@ public sealed partial class Document
         // ---- remap paragraphs and runs ----
         foreach (var p in paragraphs)
         {
-            if (rename.Count > 0) p.StyleId = Map(p.StyleId);
+            if (rename.Count > 0 && Map(p.StyleId) is var mapped && mapped != p.StyleId) p.StyleId = mapped; // only a renamed style sets it (D-387)
             for (int i = 0; i < p.Runs.Count; i++)
             {
                 var r = p.Runs[i];

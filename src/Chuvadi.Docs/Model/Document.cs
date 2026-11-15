@@ -57,7 +57,7 @@ public sealed partial class Document
         StylesXml.AddBuiltIns(Styles);
         if (preset == DocumentPreset.Word)
         {
-            // D-374: Word's Header and Footer styles, used by header and footer paragraphs in Normal.
+            // D-374: Word's Header and Footer styles, used by header and footer paragraphs without a style (D-387).
             StylesXml.AddHeaderFooterStyles(Styles);
             Defaults.HeaderParagraphStyleId = "Header";
             Defaults.FooterParagraphStyleId = "Footer";
@@ -343,15 +343,15 @@ public sealed partial class Document
     }
 
     /// <summary>
-    /// The style a header or footer paragraph in Normal uses (<see cref="DocumentDefaults.HeaderParagraphStyleId"/>,
-    /// <see cref="DocumentDefaults.FooterParagraphStyleId"/>), or null: the paragraph is not in Normal, not in a
+    /// The style a header or footer paragraph without a style of its own uses (<see cref="DocumentDefaults.HeaderParagraphStyleId"/>,
+    /// <see cref="DocumentDefaults.FooterParagraphStyleId"/>), or null: the paragraph's style is set (<see cref="Paragraph.IsStyleSet"/>), it is not in a
     /// header or footer (table cells included), or the id is null or names no paragraph style of this document.
     /// </summary>
     internal string? HeaderFooterStyleOf(Paragraph p)
     {
         string? header = Defaults.HeaderParagraphStyleId, footer = Defaults.FooterParagraphStyleId;
         if (header is null && footer is null) return null;
-        if (p.StyleId != "Normal") return null;
+        if (p.IsStyleSet) return null; // an explicit style, Normal included, is honoured (D-387)
         foreach (var section in CachedSections())
             foreach (var (content, isHeader, _) in section.Slots())
             {
@@ -592,7 +592,8 @@ public sealed partial class Document
     /// <summary>Adds a paragraph of plain text with an optional style.</summary>
     public Paragraph AddParagraph(string text, ParagraphStyle style = ParagraphStyle.Normal, TextFormat? format = null)
     {
-        var p = new Paragraph(text, format) { Style = style };
+        var p = new Paragraph(text, format);
+        if (style != ParagraphStyle.Normal) p.Style = style; // a plain AddParagraph(text) leaves the style not set (D-387)
         _blocks.Add(p);
         return p;
     }

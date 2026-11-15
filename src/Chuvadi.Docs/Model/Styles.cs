@@ -321,16 +321,19 @@ public sealed class DocumentDefaults
     }
 
     /// <summary>
-    /// The paragraph style that header paragraphs in the <c>Normal</c> style use (2.3.0, D-374), as Word gives every
+    /// The paragraph style that header paragraphs without a style of their own use (2.3.0, D-374), as Word gives every
     /// header paragraph its Header style. <c>"Header"</c> in a <see cref="DocumentPreset.Word"/> document, which also
     /// has Word's Header style (no space after, single lines, a centre and a right tab stop); null in a
     /// <see cref="DocumentPreset.Minimal"/> document and in a loaded document (their header paragraphs keep their own
     /// style, as before).
     /// <para>It applies to the paragraphs of every section's headers, table cells included (not to text boxes), when
-    /// their style is <c>Normal</c> (the default) and the document has a paragraph style with this id; otherwise it is
-    /// ignored. Such a paragraph is saved with this style, and <see cref="Document.GetEffectiveParagraphFormat(Paragraph)"/>
-    /// and <see cref="Document.GetEffectiveRunFormat(Paragraph, Run)"/> resolve it through this style, so a paginator
-    /// sees what Word shows. A paragraph with any other style keeps it. Set null to give header paragraphs Normal.</para>
+    /// their style is not set (<see cref="Paragraph.IsStyleSet"/> false, the default for <c>new Paragraph(text)</c>)
+    /// and the document has a paragraph style with this id; otherwise it is ignored. Such a paragraph is saved with this
+    /// style, and <see cref="Document.GetEffectiveParagraphFormat(Paragraph)"/> and
+    /// <see cref="Document.GetEffectiveRunFormat(Paragraph, Run)"/> resolve it through this style, so a paginator sees
+    /// what Word shows. A paragraph whose style is set keeps it, an explicit <c>Style = ParagraphStyle.Normal</c>
+    /// included (since 2.4.0, D-387; in 2.3.0 an explicit Normal also took this style). Set null to give header
+    /// paragraphs Normal.</para>
     /// </summary>
     public string? HeaderParagraphStyleId { get; set; }
 

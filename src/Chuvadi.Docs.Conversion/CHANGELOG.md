@@ -1,5 +1,14 @@
 # Chuvadi.Docs.Conversion — Changelog
 
+## 2.4.0 (2026-11-15)
+
+Versioned with Chuvadi.Docs 2.4.0 (D-15, D-45): depends on **Chuvadi.Docs 2.4.0 and Chuvadi.Markup 1.2.0** (1.1.0 before; Markup 1.2.0 was released on 15 Nov). No Conversion code changed.
+- **No output change, measured.**
+  - **Docs 2.4.0:** imports build body paragraphs only, and exports read loaded documents, so the header-paragraph rule (O1: an explicit Normal on a header paragraph keeps Normal) doesn't reach them. All Conversion test outputs are the same as with 2.3.0.
+  - **Markup 1.2.0:** every input of Markup's gate data (10,423 inputs) was run through five Conversion modes (Markdown import with GFM, with CommonMark, with soft breaks as line breaks; HTML import; text import), and each whole result was compared: every docx part except docProps, the warnings and blocked resources, and the Markdown, HTML and text export. Docs 2.3.0 with Markup 1.1.0, Docs 2.3.0 with Markup 1.2.0 and Docs 2.4.0 with Markup 1.2.0 give the same result on all 52,115 runs.
+  - **Markup's stricter `data:image/` rule (D-303)** changes nothing either: Conversion's own image rules already refused `data:image/pngx` and `data:image/svg+xml` and kept `data:image/png`, in HTML and Markdown import, with both Markup versions.
+- **The new Docs 2.4.0 API** (`DocxReaderOptions.IncludeNotes`, `IncludeComments`, `IncludeTextBoxes`, `DocxFormattedParagraph.ListLabel`, `Note`, `Comment`, `TextBox`, `Host`, `Paragraph.IsStyleSet` and `ResetStyle()`) is in Chuvadi.Docs. See its CHANGELOG.
+
 ## 2.3.0 (2026-11-13)
 
 Versioned with Chuvadi.Docs 2.3.0 (D-15, D-45): depends on Chuvadi.Docs 2.3.0 and Chuvadi.Markup 1.1.0. No Conversion code changed. What it gets from Chuvadi.Docs 2.3.0:

@@ -252,7 +252,8 @@ public sealed partial class Document
                 if (!accept)
                 {
                     p.ReplaceFormat(pf.OldFormat);
-                    p.StyleId = pf.OldStyleId ?? "Normal";
+                    if (pf.OldStyleId is { } old) p.StyleId = old;
+                    else p.ResetStyle(); // the paragraph had no style before the change (D-387)
                 }
                 p.FormatChange = null;
             }
