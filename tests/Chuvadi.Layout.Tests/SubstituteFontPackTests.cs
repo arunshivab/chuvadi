@@ -108,9 +108,35 @@ public class SubstituteFontPackTests
     [Fact]
     public void The_pack_references_no_layout_engine()
     {
-        // D-195: a pure data pack. Its only reference beyond the BCL is Chuvadi.Fonts.
-        string[] refs = typeof(SubstituteFontPack).Assembly.GetReferencedAssemblies().Select(a => a.Name!).Where(n => n.StartsWith("Chuvadi", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(new[] { "Chuvadi.Fonts" }, refs);
+        // D-195: a pure data pack. Its references beyond the BCL are Chuvadi.Fonts and, since 0.2.0 (D-327),
+        // Chuvadi.Fonts.Liberation, itself a data pack.
+        string[] refs = typeof(SubstituteFontPack).Assembly.GetReferencedAssemblies().Select(a => a.Name!).Where(n => n.StartsWith("Chuvadi", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        Assert.Equal(new[] { "Chuvadi.Fonts", "Chuvadi.Fonts.Liberation" }, refs);
+    }
+
+    [Fact]
+    public void Liberation_files_are_served_from_Chuvadi_Fonts_Liberation()
+    {
+        // D-327: the 12 Liberation rows are LiberationPack's rows, their bytes and licence come from it, and this
+        // assembly embeds only the other 17 files and their 4 licences.
+        FontFileInfo[] liberation = SubstituteFontPack.Files.Where(f => f.FileName.StartsWith("Liberation", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(12, liberation.Length);
+        Assert.Equal(Chuvadi.Fonts.Liberation.LiberationPack.Files, liberation);
+        foreach (FontFileInfo f in liberation)
+        {
+            Assert.Equal(Chuvadi.Fonts.Liberation.LiberationPack.ReadAllBytes(f.FileName), SubstituteFontPack.ReadAllBytes(f.FileName));
+            Assert.Same(Chuvadi.Fonts.Liberation.LiberationPack.LicenseText, SubstituteFontPack.GetLicenseText(f.FileName));
+            Assert.True(SubstituteFontPack.TryOpen(f.FileName.ToUpperInvariant(), out Stream? s));
+            using (s)
+            {
+                Assert.Equal(f.Length, s!.Length);
+                Assert.False(s.CanWrite);
+            }
+        }
+        string[] resources = typeof(SubstituteFontPack).Assembly.GetManifestResourceNames().OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        Assert.Equal(21, resources.Length);
+        Assert.DoesNotContain(resources, r => r.Contains("Liberation", StringComparison.Ordinal));
+        Assert.Equal(17, resources.Count(r => r.EndsWith(".ttf", StringComparison.Ordinal)));
     }
 }
 

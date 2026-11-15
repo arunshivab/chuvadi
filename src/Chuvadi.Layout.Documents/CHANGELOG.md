@@ -1,5 +1,11 @@
 # Chuvadi.Layout.Documents — Changelog
 
+## 0.3.0 (2026-11-15)
+
+Dependency update (D-383). Requires Chuvadi.Layout.Docs 0.3.0 and Chuvadi.Layout.Sheets 0.3.0, so an application
+gets **Chuvadi.Docs 2.3.0** (with its Word preset for documents built in code) and **Chuvadi.Sheets 2.1.0**. No code
+change; see those two changelogs for what can look different.
+
 ## 0.2.0 (2026-11-12)
 
 - `AutoDetectLayout.Open` reports a missing or wrong password as `LayoutPasswordRequiredException` (D-253), with

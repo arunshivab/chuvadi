@@ -1,5 +1,13 @@
 # Chuvadi.Layout.Sheets — Changelog
 
+## 0.3.0 (2026-11-15)
+
+Dependency update (D-383). **Requires Chuvadi.Sheets 2.1.0** (was 2.0.5) and Chuvadi.Layout 0.3.0. No code change.
+
+- **What changes on the page:** Sheets 2.1.0 shows date and time formats on serials 0 to 1 as Excel does instead of
+  `########` (00/01/1900, 0-Jan-00, 00:00:00, 09:00:00). In the corpus that is one page, `x01-number-formats.xlsx`
+  page 1; every other workbook page is byte-identical. Built-in formats 14 and 22 follow the culture's short date.
+
 ## 0.2.0 (2026-11-12)
 
 - An encrypted workbook opened without a password, or with a wrong one, is `LayoutPasswordRequiredException` (a

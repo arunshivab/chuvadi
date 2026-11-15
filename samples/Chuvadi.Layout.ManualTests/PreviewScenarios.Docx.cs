@@ -11,7 +11,13 @@ namespace Chuvadi.Layout.ManualTests
             Document doc = new Document();
             doc.Page.Size = PageSize.A4;
             doc.Header.Add(new Paragraph().Text("Example Medical Center", TextFormat.BoldText).Tab().Text("Radiation Oncology"));
-            doc.Header[0].Configure(f => f.TabStops.Add(new TabStop(451, TabAlignment.Right)));
+            // D-376: Docs 2.3.0 gives a new document Word's Header style, whose centre tab (225.65 pt) would catch the
+            // one Tab; clearing it keeps "Radiation Oncology" on the right tab, as Word does with a cleared stop.
+            doc.Header[0].Configure(f =>
+            {
+                f.TabStops.Add(new TabStop(225.65, TabAlignment.Clear));
+                f.TabStops.Add(new TabStop(451, TabAlignment.Right));
+            });
             doc.Footer.Add(new Paragraph().PageNumber(includeTotal: true));
             doc.Footer[0].Alignment = ParagraphAlignment.Center;
             doc.Section.Watermark = new TextWatermark("CONFIDENTIAL");

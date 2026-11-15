@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Chuvadi.Fonts;
+using Chuvadi.Fonts.Liberation;
 
 namespace Chuvadi.Layout.Fonts
 {
@@ -14,6 +15,11 @@ namespace Chuvadi.Layout.Fonts
     /// so a PDF or print library can use the files too. No disk or network access. Thread-safe.
     /// </summary>
     /// <remarks>
+    /// Since 0.2.0 the 12 Liberation files are served from Chuvadi.Fonts.Liberation (<c>LiberationPack</c>) instead
+    /// of a second copy in this assembly (D-327). The pack still lists all 29 files, under the same names, with the
+    /// same bytes, lengths, hashes and licence text.
+    /// </remarks>
+    /// <remarks>
     /// To lay out with these fonts, add the pack to the layout options as a font source:
     /// <c>options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance))</c> (Chuvadi.Layout).
     /// </remarks>
@@ -21,6 +27,9 @@ namespace Chuvadi.Layout.Fonts
     {
         private const string FontPrefix = "Chuvadi.Layout.Fonts.";
         private const string LicensePrefix = "Chuvadi.Layout.Fonts.Licenses.";
+
+        // D-327: catalog rows with this licence are served by Chuvadi.Fonts.Liberation, not embedded here.
+        private const string LiberationLicense = "Liberation-OFL.txt";
 
         private static readonly Dictionary<string, (FontFileInfo File, string License)> ByName = BuildIndex();
         private static readonly Dictionary<string, string> LicenseCache = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -77,12 +86,15 @@ namespace Chuvadi.Layout.Fonts
         {
             ArgumentNullException.ThrowIfNull(fileName);
             stream = null;
-            FontFileInfo? f = Find(fileName);
-            if (f is null)
+            if (!ByName.TryGetValue(fileName, out (FontFileInfo File, string License) e))
             {
                 return false;
             }
-            stream = typeof(SubstituteFontPack).Assembly.GetManifestResourceStream(FontPrefix + f.FileName);
+            if (e.License == LiberationLicense)
+            {
+                return LiberationPack.TryOpen(e.File.FileName, out stream);
+            }
+            stream = typeof(SubstituteFontPack).Assembly.GetManifestResourceStream(FontPrefix + e.File.FileName);
             return stream is not null;
         }
 
@@ -109,6 +121,10 @@ namespace Chuvadi.Layout.Fonts
             if (!ByName.TryGetValue(fileName, out (FontFileInfo File, string License) e))
             {
                 throw new ArgumentException($"'{fileName}' is not a file of the substitute font pack.", nameof(fileName));
+            }
+            if (e.License == LiberationLicense)
+            {
+                return LiberationPack.LicenseText;
             }
             lock (LicenseCache)
             {

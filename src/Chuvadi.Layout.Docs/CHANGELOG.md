@@ -1,5 +1,18 @@
 # Chuvadi.Layout.Docs — Changelog
 
+## 0.3.0 (2026-11-15)
+
+Dependency update (D-383). **Requires Chuvadi.Docs 2.3.0** (was 2.1.0) and Chuvadi.Layout 0.3.0. No code change.
+
+- **What it brings:** Chuvadi.Docs 2.2.0 and 2.3.0 (faster `Load`, `DocxReader.FormattedParagraphs`, theme lookups,
+  and the Word preset for new documents). Loaded .docx files lay out exactly as with 0.2.0: all 56 .docx files of the
+  reference corpus and the test fixtures are byte-identical through the Viewer.
+- **What can look different: documents built in code.** In Chuvadi.Docs 2.3.0, `new Document()` uses Word's preset:
+  Word's paragraph spacing, and Word's Header and Footer styles (centre tab at 225.65 pt, right tab at 451.3 pt). A
+  header written as text, Tab, text with its own right tab now stops at the centre tab first, as in Word. To keep the
+  2.1.0 look: add `new TabStop(225.65, TabAlignment.Clear)` to that paragraph, use `new Document(DocumentPreset.Minimal)`,
+  or set `doc.Defaults.HeaderParagraphStyleId = null`.
+
 ## 0.2.0 (2026-11-12)
 
 Chuvadi.Docs 2.1.0 wiring (D-317; rule 5 list claude/layout-0.2.0-rule5.md). Requires Chuvadi.Docs 2.1.0.
