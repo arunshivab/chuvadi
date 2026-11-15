@@ -22,11 +22,11 @@ namespace Chuvadi.Zip.Tests
     /// </summary>
     public class ZipCryptoPasswordTests
     {
-        private const string GoodPassword = "hunter2";
-        private const string FailsCheckByte = "wrong-password-0";
+        internal const string GoodPassword = "hunter2";
+        internal const string FailsCheckByte = "wrong-password-0";
         private const string PassesCheckByte = "wrong-password-200051";
 
-        private static readonly byte[] Archive = Convert.FromBase64String(
+        internal static readonly byte[] Archive = Convert.FromBase64String(
             "UEsDBBQAAQAAAAAAIQDRzKTyggAAAHYAAAAKAAAAc3RvcmVkLnR4dPwlIlUplJYdiAfLerXWso659uWYBJLfQsFaC6s9uw/T" +
             "iUNTz5P6y7lgvwwd/RFUT4m8xrK0zgof7P/QgSk8m+pooh+R8tRVkeBtUwFpEH0DNWEaYIQz0k9kjBBge4Gx2Ghz8NN9k0Gp" +
             "WyDUYX35LB7kvkX25rP8W81bf8Zzgxq+/7tQSwMEFAABAAgAAAAhAKK4FAxWAAAA6AgAAAwAAABkZWZsYXRlZC50eHQsjY+O" +

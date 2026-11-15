@@ -1,6 +1,6 @@
 # Chuvadi.Zip: platform readiness
 
-What is verified and what is not, for a consumer that runs on more than Windows or trims or AOT-compiles its app. Status as of main after the trim flags change (D-227) and the `trim-aot` CI job (PR #79); the 1.0.0 package on the release page does not yet carry the trim and AOT metadata (it ships with the next release).
+What is verified and what is not, for a consumer that runs on more than Windows or trims or AOT-compiles its app. Status as of 1.0.1. The 1.0.0 package on the release page does not carry the trim and AOT metadata; 1.0.1 does (D-227).
 
 ## Verified
 
@@ -20,7 +20,7 @@ What is verified and what is not, for a consumer that runs on more than Windows 
 ## Not yet verified
 
 - **NativeAOT on other platforms:** verified on `linux-x64` only (CI job `trim-aot`). `win-x64`, `osx-arm64` and Android are not run.
-- **macOS and Android**: the tests have never run there. CI adds macOS and an Android build check next (D-217 item 3). Until then, treat both as expected to work (nothing platform-specific is used) but not proven.
+- **macOS and Android**: CI runs the Zip tests on macOS and builds a smoke library for the Android target framework on every change, but neither job is a required check yet (D-233), and nothing has run on a device. Treat both as expected to work (nothing platform-specific is used), not proven.
 - **ReadyToRun**: not tested.
 - **Browser WebAssembly**: out of scope.
 
