@@ -82,6 +82,34 @@ public sealed class DocxReaderOptions
     public bool IncludeHeadersAndFooters { get; set; } = true;
 
     /// <summary>
+    /// When true, <see cref="DocxReader.FormattedParagraphs()"/> also reads the footnotes and endnotes (2.4.0, D-387):
+    /// the body's footnote and endnote reference runs are kept, as <see cref="Document.Load(System.IO.Stream, string?)"/>
+    /// keeps them, and after the footers every note paragraph is yielded, footnotes then endnotes, in the parts' order,
+    /// with <see cref="DocxFormattedParagraph.Note"/> set. Default false: without it the notes parts are not read and the
+    /// reference runs are left out (the 2.2.0 stream). The notes are read before the body and held until the
+    /// enumeration ends; their elements count towards its <see cref="MaxElements"/>.
+    /// </summary>
+    public bool IncludeNotes { get; set; }
+
+    /// <summary>
+    /// When true, <see cref="DocxReader.FormattedParagraphs()"/> also reads the comments (2.4.0, D-387): the comment
+    /// reference runs are kept, as <see cref="Document.Load(System.IO.Stream, string?)"/> keeps them, and after the
+    /// notes every comment paragraph is yielded, in the part's order, with <see cref="DocxFormattedParagraph.Comment"/>
+    /// set (author, initials, date, done and the reply parent, as <c>Load</c> reads them). Default false. The comments
+    /// are read before the body and held until the enumeration ends; their elements count towards its
+    /// <see cref="MaxElements"/>.
+    /// </summary>
+    public bool IncludeComments { get; set; }
+
+    /// <summary>
+    /// When true, <see cref="DocxReader.FormattedParagraphs()"/> also yields the paragraphs of text boxes (2.4.0, D-387):
+    /// right after the paragraph that holds the box, in run order, with
+    /// <see cref="DocxFormattedParagraph.TextBox"/> and <see cref="DocxFormattedParagraph.Host"/> set. Default false:
+    /// the text boxes stay inside their host's runs (<see cref="Run.TextBox"/>), as before.
+    /// </summary>
+    public bool IncludeTextBoxes { get; set; }
+
+    /// <summary>
     /// Maximum number of entries in the zip container. Checked at open.
     /// Default <see cref="DefaultMaxEntries"/>; null = unlimited.
     /// </summary>
@@ -179,6 +207,14 @@ public sealed class DocxReaderOptions
         if (MaxElements is null) return this;
         var copy = (DocxReaderOptions)MemberwiseClone();
         copy.OperationBudget = new Chuvadi.Docs.Internal.ElementBudget(MaxElements.Value);
+        return copy;
+    }
+
+    /// <summary>A copy of these options carrying <paramref name="budget"/> as the operation's element count.</summary>
+    internal DocxReaderOptions WithBudget(Chuvadi.Docs.Internal.ElementBudget? budget)
+    {
+        var copy = (DocxReaderOptions)MemberwiseClone();
+        copy.OperationBudget = budget;
         return copy;
     }
 

@@ -554,7 +554,7 @@ internal static class DocumentLoader
     /// paragraphs and tables, by file id for the references in the body. Separators are not kept
     /// (they are written fresh).
     /// </summary>
-    private static void LoadNotes(OoxmlPackage pkg, string documentUri, Document doc, LoadContext loadContext,
+    internal static void LoadNotes(OoxmlPackage pkg, string documentUri, Document doc, LoadContext loadContext,
         DocxReaderOptions options, CancellationToken ct,
         System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> mediaCache)
     {
@@ -595,7 +595,7 @@ internal static class DocumentLoader
     /// Comments (word/comments.xml) with their content, and from commentsExtended.xml (Word 2013+)
     /// which are done and which reply to which. A malformed comments part loses its comments only.
     /// </summary>
-    private static void LoadComments(OoxmlPackage pkg, string documentUri, Document doc, LoadContext loadContext,
+    internal static void LoadComments(OoxmlPackage pkg, string documentUri, Document doc, LoadContext loadContext,
         DocxReaderOptions options, CancellationToken ct,
         System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?> mediaCache)
     {

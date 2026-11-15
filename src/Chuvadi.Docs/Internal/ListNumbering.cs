@@ -122,7 +122,7 @@ internal static class ListNumbering
         return result;
     }
 
-    private sealed class Counter
+    internal sealed class Counter
     {
         private readonly Document _doc;
         private readonly Dictionary<Paragraph, ListLabel> _out;

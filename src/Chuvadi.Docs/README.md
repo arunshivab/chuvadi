@@ -132,10 +132,11 @@ forWord.Defaults.ParagraphFormat.SpaceAfterPt = 6;        // or change one value
 forWord.Defaults.ParagraphFormat = new ParagraphFormat(); // or drop the spacing later (the same as Minimal)
 ```
 
-**Headers and footers** (D-374). As in Word, header and footer paragraphs do not take the body's spacing: a `Word` document has Word's Header and Footer styles (based on Normal, no space after, single lines, a centre tab at 225.65 pt and a right tab at 451.3 pt, the middle and end of an A4 page's text width with 1-inch margins), and every header or footer paragraph in Normal uses them, whether you add it with `Add`, `SetText` or in a table cell. It is saved with that style, and `GetEffectiveParagraphFormat` resolves it so, so Chuvadi.Layout lays it out as Word does. A paragraph with another style keeps it. Text boxes in headers keep Normal.
+**Headers and footers** (D-374). As in Word, header and footer paragraphs do not take the body's spacing: a `Word` document has Word's Header and Footer styles (based on Normal, no space after, single lines, a centre tab at 225.65 pt and a right tab at 451.3 pt, the middle and end of an A4 page's text width with 1-inch margins), and every header or footer paragraph whose style is not set uses them, whether you add it with `Add`, `SetText` or in a table cell. It is saved with that style, and `GetEffectiveParagraphFormat` resolves it so, so Chuvadi.Layout lays it out as Word does. A paragraph whose style you set keeps it, an explicit `Style = ParagraphStyle.Normal` included (2.4.0, D-387: `Paragraph.IsStyleSet` says which; `ResetStyle()` makes it "not set" again). Text boxes in headers keep Normal.
 
 ```csharp
-doc.Header.Add(new Paragraph("Clinic name"));          // written and resolved in Header: 0 pt after, single lines
+doc.Header.Add(new Paragraph("Clinic name"));          // style not set: written and resolved in Header (0 pt after, single lines)
+doc.Header.Add(new Paragraph("Address") { Style = ParagraphStyle.Normal }); // set to Normal: stays Normal (2.4.0)
 doc.Defaults.HeaderParagraphStyleId = null;           // header paragraphs in Normal instead
 doc.Defaults.FooterParagraphStyleId = "MyFooter";     // or your own paragraph style
 ```
@@ -146,6 +147,21 @@ The Header style's tab stops come first, as in Word (D-376). A header written as
 p.Configure(f => f.TabStops.Add(new TabStop(225.65, TabAlignment.Clear)));   // remove the centre tab for this paragraph
 doc.Defaults.HeaderParagraphStyleId = null;                                    // or keep header paragraphs in Normal
 ```
+
+**Other page sizes** (2.4.0, D-387). The Header and Footer tabs are the ones Word writes for a new A4 document, and they don't move when you change the page size or margins, as in Word, whose styles keep the tabs they were created with. For US Letter with 1-inch margins (468 pt of text width), set them once on the two styles:
+
+```csharp
+doc.Section.Page.Size = PageSize.Letter;                                  // 8.5 x 11 in; the margins stay 1 inch
+foreach (var id in new[] { "Header", "Footer" })
+{
+    var tabs = doc.Styles[id].ParagraphFormat.TabStops;
+    tabs.Clear();
+    tabs.Add(new TabStop(234, TabAlignment.Center));                      // the middle of 468 pt
+    tabs.Add(new TabStop(468, TabAlignment.Right));                       // the end
+}
+```
+
+For any other page, use half the text width (page width less the left and right margins) for the centre tab and the full width for the right tab.
 
 Use `Word` for documents people will open in Word. `Minimal` suits documents only shown through Chuvadi, or callers who set every paragraph's spacing themselves. The two presets differ only in this spacing and the Header and Footer styles (a `Minimal` document is the 2.2.0 output byte for byte): both have the other built-in styles, Calibri 11 pt and compatibility mode 15.
 
@@ -437,8 +453,14 @@ foreach (var item in r.FormattedParagraphs())
 }
 ```
 
-- **Order:** the body in document order, with the paragraphs of table cells (nested tables included) in place, then the headers, then the footers (`IncludeHeadersAndFooters`). Footnotes, endnotes and comments are not read, so their references are not among the runs.
-- **What each item holds:** `Paragraph` (the same model `Document.Load` builds: text, direct formatting, hyperlinks, fields, bookmarks, symbols, pictures, text boxes, tracked changes), `RunFormats` (one effective `TextFormat` per run, in order), `ParagraphFormat` (effective, list indents included), `Part` and `Cell` (`TableCellRef`, null outside tables). The objects are a read snapshot: changing them changes nothing.
+- **Order:** the body in document order, with the paragraphs of table cells (nested tables included) in place, then the headers, then the footers (`IncludeHeadersAndFooters`), then the footnotes and endnotes (`IncludeNotes`), then the comments (`IncludeComments`). With `IncludeTextBoxes`, each text box's paragraphs follow the paragraph that holds it.
+- **What each item holds:** `Paragraph` (the same model `Document.Load` builds: text, direct formatting, hyperlinks, fields, bookmarks, symbols, pictures, text boxes, tracked changes), `RunFormats` (one effective `TextFormat` per run, in order), `ParagraphFormat` (effective, list indents included), `ListLabel` ("1.", "a)", "•", as `Document.GetListLabel` gives it; 2.4.0), `Part` and `Cell` (`TableCellRef`, null outside tables). The objects are a read snapshot: changing them changes nothing.
+- **Notes, comments and text boxes (2.4.0, D-387), each off by default:**
+  - `IncludeNotes`: the footnotes and endnotes parts are read before the body, the body keeps its footnote and endnote reference runs, and every note paragraph is yielded after the footers (footnotes, then endnotes), with `item.Note` set.
+  - `IncludeComments`: the same for comments, with `item.Comment` (author, initials, date, done, the reply parent) and the comment reference and range runs in the body.
+  - `IncludeTextBoxes`: each text box's paragraphs are yielded right after their host paragraph, with `item.TextBox` and `item.Host` set (and `item.Cell` for a table inside the box).
+  - Without these options the stream is the 2.3.0 one: no notes, comments or reference runs, and text boxes stay inside their host's runs. With them, the notes and comments parts are held until the enumeration ends, and their elements count towards its `MaxElements`.
+- **List labels** are always given, counted as the stream goes, exactly as `Document.GetListLabels` counts them: one count for the body, one per header or footer part, one for all footnotes and one for all endnotes. Comments and text boxes have none, as in `GetListLabel`.
 - **Theme references** stay references, as in `Document`; `GetThemeFontName(ThemeFont)` and `GetThemeColorHex(ThemeColor, tint, shade)` turn them into names and colours from the file's theme and settings.
 - **Styles are read once:** the styles, numbering, theme and settings parts are read on the first call and kept for the reader's life. Their elements count towards that call's `MaxElements`; each call is one operation with its own count, as for the other read calls. Cancellation and errors follow the reader's rules.
 - **A missing or broken styles, numbering, theme or settings part** is listed in `SkippedParts` and the formatting falls back to the defaults without it. (`Document.Load` is stricter: it rejects malformed styles or numbering.)

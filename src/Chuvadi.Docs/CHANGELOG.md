@@ -1,5 +1,68 @@
 # Chuvadi.Docs — Changelog
 
+## 2.4.0 (2026-11-15)
+
+`DocxReader.FormattedParagraphs` can read footnotes, endnotes, comments and text boxes, and gives every paragraph its list label (D-387, from the 2.2.0 candidates C1–C3). A header or footer paragraph explicitly set to Normal keeps Normal (O1). Without the new options, the reader's stream and every saved document are the same as in 2.3.0.
+
+### New
+
+- **`DocxReaderOptions.IncludeNotes`** (default false): `FormattedParagraphs` reads the footnotes and endnotes before the body, with `Document.Load`'s own readers.
+  - The body keeps its footnote and endnote reference runs, as `Load` gives them. Without the option they are left out, as before: the reader never had the notes to attach them to.
+  - Every note paragraph is yielded after the footers, footnotes then endnotes, in the parts' order. `DocxFormattedParagraph.Note` is set (the `Note`, with its `Kind`), and `Part` names the notes part.
+- **`DocxReaderOptions.IncludeComments`** (default false): the same for comments.
+  - The body keeps its comment reference and range runs.
+  - Every comment paragraph is yielded after the notes, with `DocxFormattedParagraph.Comment` (author, initials, date, done and the reply parent, as `Load` reads them).
+- **`DocxReaderOptions.IncludeTextBoxes`** (default false): each text box's paragraphs are yielded right after the paragraph that holds the box, in run order.
+  - `DocxFormattedParagraph.TextBox` and `Host` are set on them, and `Cell` is set for a table inside the box.
+  - Without the option, boxes stay inside their host's runs (`Run.TextBox`), as before.
+- **`DocxFormattedParagraph.ListLabel`**, always given: the paragraph's label ("1.", "a)", "•"), exactly as `Document.GetListLabel` gives it after `Load`.
+  - It is counted as the stream goes, one count per story, as `GetListLabels` counts: the body, each header or footer part, all footnotes together, all endnotes together.
+  - Null outside lists, and for comment and text-box paragraphs (which `GetListLabels` doesn't count either).
+- **`Paragraph.IsStyleSet`** (read-only) and **`Paragraph.ResetStyle()`** (O1): whether the paragraph's style has been set, through `Style` or `StyleId` (even to Normal) or by a `w:pStyle` in a loaded file. `ResetStyle()` makes it "not set" again.
+
+### Behaviour changes
+
+- **A header or footer paragraph explicitly set to Normal keeps Normal** (O1, D-387).
+  - **Now (2.3.0):** in a Word-preset document, every header and footer paragraph whose style read Normal took the Header (Footer) style, even when the caller had set `Style = ParagraphStyle.Normal`.
+  - **2.4.0:** only paragraphs whose style is **not set** (`IsStyleSet` false: `new Paragraph(text)`, `SetText`, a paragraph after `ResetStyle()`) take it. An explicit Normal is written without a `pStyle` and resolved through Normal.
+  - **Edges handled with it:**
+    - `Document.AddParagraph(text, style)` sets the style only when it isn't Normal, so `AddParagraph(text)` leaves it not set. The output is the same: the body has no implied style.
+    - Merging another document's paragraphs keeps their state, and sets the style only when a style id is renamed.
+    - Rejecting a tracked style change with no old style makes the style not set, not an explicit Normal.
+  - **Unchanged:** paragraphs built the usual way (all 2.3.0 test documents are written exactly as before), Minimal documents and loaded documents.
+- **`DocxReader.FormattedParagraphs` items gain `ListLabel`.** The stream itself (items, runs and formats) is unchanged unless the new options are set.
+
+### Measured
+
+- **Speed and memory with the options off:** the same as 2.3.0, measured on the three D-98 files (2 cores, .NET 10, best of 3):
+
+  | File | 2.3.0 | 2.4.0 |
+  |---|---|---|
+  | text and tables | 1.92 s | 2.03 s |
+  | dense runs | 3.84 s | 3.90 s |
+  | Word-like | 3.12 s | 3.11 s |
+
+  The heap peak is about 130 MB on all three, before and after. With every option on, the same files give the same items in the same time (they have no notes or boxes).
+- **Equivalence:** with every option on, the reader gives the same paragraphs, runs (references included), effective run and paragraph formats and list labels as `Document.Load` on every .docx the Docs test suite writes: 501 files and 199,018 items.
+
+### Tests
+
+- **New group `FormattedParagraphsMore`** (8 checks, with an xUnit fact):
+  - the defaults (no extra items, no reference runs, labels always given);
+  - everything on, against `Load`, in order;
+  - each option alone;
+  - list labels against `GetListLabel` (nested levels, table cells, a restart, a header counted on its own, a list across footnotes);
+  - limits (the notes and comments count towards `MaxElements`), a broken notes part (listed, its references dropped, as `Load`) and cancellation during the notes;
+  - every .docx of the suite with every option on, against `Load`.
+- **`HeaderFooterStyles`:** one more check (O1): an explicit Normal kept, `IsStyleSet` and `ResetStyle`, `AddParagraph`, a rejected style change, and the loaded state.
+
+### Documentation
+
+- **README, Read documents:** the new options and `ListLabel`.
+- **README, Default spacing of a new document:**
+  - explicit Normal in headers (O1);
+  - **other page sizes** (O2): the Header and Footer tabs stay at their A4 positions when the page changes, as in Word, with the code that sets them for US Letter (234 pt and 468 pt, written as Word's own 4680 and 9360 twips).
+
 ## 2.3.0 (2026-11-13)
 
 New documents start with Word's paragraph spacing, so Latha's Tamil vowel signs are no longer cut in Word (S1, D-371), and their header and footer paragraphs use Word's Header and Footer styles (D-374). `DocxTemplate.Fill` marks complex-script values as `SaveTo` does (T1, D-349).

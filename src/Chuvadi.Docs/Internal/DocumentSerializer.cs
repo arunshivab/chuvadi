@@ -106,7 +106,7 @@ internal static class DocumentSerializer
 
         /// <summary>The header or footer style to write for <paramref name="p"/> instead of Normal, or null.</summary>
         public string? HeaderFooterStyleFor(Paragraph p)
-            => HeaderFooterStyleId is not null && HeaderFooterParagraphs!.Contains(p) && p.StyleId == "Normal" ? HeaderFooterStyleId : null;
+            => HeaderFooterStyleId is not null && HeaderFooterParagraphs!.Contains(p) && !p.IsStyleSet ? HeaderFooterStyleId : null;
 
         /// <summary>w14:paraId to write on paragraphs (the comments part names comments by their last paragraph).</summary>
         public Dictionary<Paragraph, string>? ParaIds { get; init; }

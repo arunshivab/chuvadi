@@ -20,19 +20,26 @@ namespace Chuvadi.Docs.Model;
 public sealed class DocxFormattedParagraph
 {
     internal DocxFormattedParagraph(Paragraph paragraph, IReadOnlyList<TextFormat> runFormats, ParagraphFormat paragraphFormat,
-        string part, TableCellRef? cell)
+        string part, TableCellRef? cell, ListLabel? listLabel, Note? note, Comment? comment, TextBox? textBox, Paragraph? host)
     {
         Paragraph = paragraph;
         RunFormats = runFormats;
         ParagraphFormat = paragraphFormat;
         Part = part;
         Cell = cell;
+        ListLabel = listLabel;
+        Note = note;
+        Comment = comment;
+        TextBox = textBox;
+        Host = host;
     }
 
     /// <summary>
     /// The paragraph with every run as <see cref="Document.Load(System.IO.Stream, string?)"/> reads it: text, direct
     /// formatting, hyperlinks, fields, bookmarks, symbols, pictures, text boxes and tracked changes
-    /// (<see cref="Run.IsDeleted"/>). Footnote, endnote and comment references are not included: those parts are not read.
+    /// (<see cref="Run.IsDeleted"/>). Footnote and endnote reference runs are included only with
+    /// <see cref="DocxReaderOptions.IncludeNotes"/>, and comment reference runs only with
+    /// <see cref="DocxReaderOptions.IncludeComments"/>: without them those parts are not read.
     /// </summary>
     public Paragraph Paragraph { get; }
 
@@ -50,6 +57,29 @@ public sealed class DocxFormattedParagraph
     /// row and the 0-based grid column of the cell's first column. Null for a paragraph outside tables.
     /// </summary>
     public TableCellRef? Cell { get; }
+
+    /// <summary>
+    /// The paragraph's list label ("1.", "a)", "•"), as <see cref="Document.GetListLabel(Paragraph)"/> gives it after
+    /// <c>Load</c>, counted as the stream goes (2.4.0, D-387): one count for the body, one per header or footer part,
+    /// one for all footnotes and one for all endnotes, as Word counts. Null for a paragraph that is not in a list, and
+    /// for comment and text-box paragraphs (as <c>GetListLabel</c>).
+    /// </summary>
+    public ListLabel? ListLabel { get; }
+
+    /// <summary>For a footnote or endnote paragraph (<see cref="DocxReaderOptions.IncludeNotes"/>), its note; null otherwise.</summary>
+    public Note? Note { get; }
+
+    /// <summary>For a comment paragraph (<see cref="DocxReaderOptions.IncludeComments"/>), its comment; null otherwise.</summary>
+    public Comment? Comment { get; }
+
+    /// <summary>
+    /// For a text-box paragraph (<see cref="DocxReaderOptions.IncludeTextBoxes"/>), the text box; null otherwise.
+    /// <see cref="Cell"/> is then the cell of a table inside the box, if any.
+    /// </summary>
+    public TextBox? TextBox { get; }
+
+    /// <summary>For a text-box paragraph, the paragraph whose run holds the box (<see cref="Run.TextBox"/>); null otherwise.</summary>
+    public Paragraph? Host { get; }
 
     /// <summary>The paragraph's text (<see cref="Paragraph.GetText()"/>).</summary>
     public string Text => Paragraph.GetText();

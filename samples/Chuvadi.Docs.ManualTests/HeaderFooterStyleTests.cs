@@ -150,6 +150,37 @@ public static class HeaderFooterStyleTests
             File.WriteAllBytes(Path.Combine(outDir, "header-footer-styles-minimal.docx"), bytes);
         });
 
+        Check("D-387: an explicit Normal is honoured; IsStyleSet and ResetStyle; AddParagraph(text) leaves the style not set; a rejected style change with no old style is not set", () =>
+        {
+            var d = new Document();
+            var plain = new Paragraph("plain");
+            var normal = new Paragraph("explicit normal") { Style = ParagraphStyle.Normal };
+            var byId = new Paragraph("normal by id") { StyleId = "Normal" };
+            var reset = new Paragraph("reset") { Style = ParagraphStyle.Normal };
+            reset.ResetStyle();
+            AssertTrue(!plain.IsStyleSet && normal.IsStyleSet && byId.IsStyleSet && !reset.IsStyleSet && reset.StyleId == "Normal", "the flag");
+            d.Header.Add(plain);
+            d.Header.Add(normal);
+            d.Header.Add(byId);
+            d.Header.Add(reset);
+            var tracked = new Paragraph("tracked") { Style = ParagraphStyle.Heading2 };
+            tracked.FormatChange = new ParagraphFormatChange(RevisionMark.Format("Reviewer", null), new ParagraphFormat(), null);
+            d.Footer.Add(tracked);
+            d.RejectAllRevisions();
+            AssertTrue(!tracked.IsStyleSet && tracked.StyleId == "Normal", "reject with no old style: not set");
+            var bytes = Save(d);
+            var header = HeaderPartWith(bytes, "plain");
+            AssertTrue(StyleOf(header, "plain") == "Header" && StyleOf(header, "reset") == "Header", "not set: Header");
+            AssertTrue(StyleOf(header, "explicit normal") == "none" && StyleOf(header, "normal by id") == "none", "explicit Normal: no pStyle");
+            AssertTrue(StyleOf(HeaderPartWith(bytes, "tracked"), "tracked") == "Footer", "the rejected paragraph: Footer");
+            AssertTrue(Spacing(d.GetEffectiveParagraphFormat(normal)) == "8|1.0792" && Spacing(d.GetEffectiveParagraphFormat(plain)) == "0|1", "resolved the same way");
+
+            AssertTrue(!d.AddParagraph("body").IsStyleSet && d.AddParagraph("heading", ParagraphStyle.Heading1).IsStyleSet
+                && !d.AddParagraph("normal arg", ParagraphStyle.Normal).IsStyleSet, "AddParagraph sets only a style other than Normal");
+            var loaded = Document.Load(new MemoryStream(bytes));
+            AssertTrue(loaded.Header.All(p => p.IsStyleSet == (p.GetText() is "plain" or "reset")), "loaded: set where the file has a pStyle");
+        });
+
         Check("loaded documents are unchanged: a file's header paragraph without pStyle stays Normal although the file has a Header style; a saved Word-preset header loads and saves in Header", () =>
         {
             var file = Package();

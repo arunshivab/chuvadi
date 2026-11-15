@@ -56,6 +56,7 @@ public class VerificationSuiteTests
     [Fact] public void Suite_DefaultSpacing() => DefaultSpacingTests.Run(FreshOutDir());
     [Fact] public void Suite_HeaderFooterStyles() => HeaderFooterStyleTests.Run(FreshOutDir());
     [Fact] public void Suite_FormattedParagraphs() => FormattedParagraphsTests.Run(FreshOutDir());
+    [Fact] public void Suite_FormattedParagraphsMore() => FormattedParagraphsMoreTests.Run(FreshOutDir());
 
     // ---- Focused tests ---------------------------------------------------------------
 
