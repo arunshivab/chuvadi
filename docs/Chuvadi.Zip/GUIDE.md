@@ -41,6 +41,26 @@ Seekable output: sizes and CRC are patched into the local header. Non-seekable o
 
 Writing ZipCrypto is refused (`ZipUnsupportedException`).
 
+## One entry from memory, with a password and limits
+
+The case of a viewer that gets an encrypted archive as bytes (an attachment) and shows one entry:
+
+1. Open from memory: `ZipReader.Open(byte[])`, `Open(ReadOnlyMemory<byte>)` or `Open(Stream)`. Nothing is written to disk.
+2. Set the limits on the options: `new ZipReaderOptions { Limits = ZipExtractionLimits.Untrusted }`, or your own `ZipExtractionLimits { MaxEntryBytes = ..., MaxCompressionRatio = ... }`. Limits count the bytes actually produced, not the sizes the header claims; the ratio limit does not apply to entries under 1 MiB.
+3. Find the entry (`FindEntry(name)` or `Entries`), then `ReadAllBytes(entry, password)`, or `OpenRead(entry, password)` for a stream. Read to the end before trusting the result.
+
+What to catch:
+
+| Exception | Meaning |
+|---|---|
+| `ZipPasswordRequiredException` | No password (`WrongPassword` false) or a wrong password (`WrongPassword` true). For a ZipCrypto entry it is also thrown, with `ZipIntegrityException` as `InnerException`, when a wrong password passes the format's one-byte check (about 1 time in 256) and the data then fails its CRC-32 or decompression. AES wrong passwords are detected reliably. |
+| `ZipLimitExceededException` | A limit was reached while reading. |
+| `ZipUnsupportedException` | The entry uses BZip2, LZMA, Deflate64, PPMd or strong encryption: it lists fine but cannot be read. |
+| `ZipIntegrityException` | The data is damaged (CRC-32 or AES authentication failed). |
+| `ZipFormatException` | The bytes are not a zip. All of the above derive from it. |
+
+Supported encryption: WinZip AES-128/192/256 (AE-1 and AE-2) and ZipCrypto, both for reading; the writer produces AES only.
+
 ## Limits (`ZipExtractionLimits`)
 
 `MaxEntries`, `MaxEntryBytes`, `MaxTotalBytes` (summed over everything one reader produces), `MaxCompressionRatio` (entries under 1 MiB exempt), `MaxPathDepth`, `MaxNameLength`, `MaxCentralDirectoryBytes`. `ZipExtractionLimits.None` (default) and `ZipExtractionLimits.Untrusted` presets. A violation throws `ZipLimitExceededException` with `Limit`, `Maximum` and `EntryName`.

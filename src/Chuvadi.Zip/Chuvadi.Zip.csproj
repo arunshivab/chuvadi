@@ -18,7 +18,7 @@
     <Description>Pure-BCL zip library for .NET: streaming read/write with bounded memory, Zip64, WinZip AES-256 (AE-1/AE-2) encryption, legacy ZipCrypto read, zip-slip protection, decompression-bomb limits, cancellation everywhere and in-memory operation. No NuGet dependencies.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

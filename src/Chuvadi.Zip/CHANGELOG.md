@@ -1,5 +1,13 @@
 # Chuvadi.Zip - Changelog
 
+## 1.0.1 (2026-11-15)
+
+Package metadata, tests and documentation only. No API change and no change in behaviour: the library code is the same as 1.0.0.
+
+- **Trimming and NativeAOT metadata (D-227):** the package now carries `IsTrimmable` and `IsAotCompatible`. The 1.0.0 package did not. The trim analyzers report 0 warnings, and CI publishes a small app that uses Zip with `TrimMode=full` and as NativeAOT (linux-x64), with warnings as errors, and runs it on every change. ReadyToRun is not tested.
+- **Tests:** new group `InMemoryPasswordEntryTests` (10 tests, 12 cases) pins the case of opening one entry of an encrypted archive held in memory: AES-128/192/256 from `byte[]`, `ReadOnlyMemory<byte>` and `Stream`; a missing or wrong password throws `ZipPasswordRequiredException` (`WrongPassword` false for a missing one) for both AES and ZipCrypto; `MaxEntryBytes`, `MaxCompressionRatio` and the `Untrusted` preset stop an entry with `ZipLimitExceededException` while a small entry in the same archive still reads; bytes that are not a zip throw `ZipFormatException`.
+- **Documentation:** `GUIDE.md` has a section "One entry from memory, with a password and limits"; `PLATFORMS.md` is brought up to date (the 1.0.0 package lacks the trim metadata; macOS and Android now run in CI, not yet as required checks).
+
 ## 1.0.0 (2026-11-06)
 
 First release. A complete zip engine written for this library (it does not wrap `ZipArchive`), built only from the BCL (`DeflateStream`, `Aes`, `Rfc2898DeriveBytes`, `HMAC`).
