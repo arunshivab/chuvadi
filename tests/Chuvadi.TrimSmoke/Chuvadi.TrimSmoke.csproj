@@ -5,6 +5,8 @@
     or NativeAOT publish proves they survive trimming. CI publishes it twice (see ci.yml, job "trim-aot"):
       dotnet publish -c Release -r linux-x64 -p:PublishTrimmed=true -p:TrimMode=full   (warnings are errors)
       dotnet publish -c Release -r linux-x64 -p:PublishAot=true                         (warnings are errors)
+    and, in a separate job that does not block a merge (r2r-smoke), a third time as ReadyToRun:
+      dotnet publish -c Release -r linux-x64 -p:PublishReadyToRun=true                  (warnings are errors)
     It is never packed or shipped, and it is not in Chuvadi.slnx, so a normal build does not publish it.
   -->
   <PropertyGroup>

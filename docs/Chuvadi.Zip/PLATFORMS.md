@@ -20,7 +20,7 @@ What is verified and what is not, for a consumer that runs on more than Windows 
 ## Not yet verified
 
 - **NativeAOT on other platforms:** verified on `linux-x64` only (CI job `trim-aot`). `win-x64`, `osx-arm64` and Android are not run.
-- **macOS and Android**: CI runs the Zip tests on macOS and builds a smoke library for the Android target framework on every change, but neither job is a required check yet (D-233), and nothing has run on a device. Treat both as expected to work (nothing platform-specific is used), not proven.
+- **macOS and Android**: CI runs the Zip tests on macOS and builds a smoke library for the Android target framework on every change, but only the Android build fails the workflow when it fails; the macOS job does not yet (D-233), and neither is a required branch-protection check. Nothing has run on a device. Treat both as expected to work (nothing platform-specific is used), not proven.
 - **ReadyToRun**: not tested.
 - **Browser WebAssembly**: out of scope.
 

@@ -6,10 +6,16 @@
 #
 # Usage:  bash tools/chuvadi-pdf/fetch.sh <chuvadi-pdf version> <folder>
 #
-# Inputs, both pinned in this repository:
+# Inputs, all pinned in this repository:
 #   tools/chuvadi-pdf/hashes/<version>.sha256   the 34 packages of that chuvadi-pdf release (sha256sum -c format)
-#   tools/chuvadi-pdf/hashes/fonts-1.0.0.sha256 Chuvadi.Fonts 1.0.0, which three Chuvadi.Pdf packages need and the
-#                                               chuvadi-pdf release does not carry; taken from our own fonts-v1.0.0 release
+#   tools/chuvadi-pdf/hashes/<version>.fonts    which of our own font packages that chuvadi-pdf release needs (one name per
+#                                               line, for example "fonts-1.1.0"). Optional: without the file the release is
+#                                               taken to need "fonts-1.0.0", as every chuvadi-pdf release up to 3.32.1 does.
+#   tools/chuvadi-pdf/hashes/<name>.sha256      one font package, for example fonts-1.0.0 (Chuvadi.Fonts 1.0.0),
+#                                               fonts-1.1.0 or fonts-liberation-1.0.0. The chuvadi-pdf release does not carry
+#                                               them; they are downloaded from our own release "<name with -v before the
+#                                               version>" (fonts-1.1.0 comes from fonts-v1.1.0, fonts-liberation-1.0.0 from
+#                                               fonts-liberation-v1.0.0).
 # A hash that does not match, or a file that is missing, stops the release. Nothing falls back to nuget.org for Chuvadi.*.
 # To use a new chuvadi-pdf release: add hashes/<version>.sha256 (the release's SHA256SUMS.txt, after checking it) in the
 # same pull request that changes ChuvadiPdfVersion.
@@ -19,12 +25,22 @@ VERSION="${1:?usage: fetch.sh <chuvadi-pdf version> <folder>}"
 DEST="${2:?usage: fetch.sh <chuvadi-pdf version> <folder>}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PDF_URL="https://github.com/arunshivab/chuvadi-pdf/releases/download/v${VERSION}"
-FONTS_URL="https://github.com/arunshivab/chuvadi/releases/download/fonts-v1.0.0"
+MONO_URL="https://github.com/arunshivab/chuvadi/releases/download"
 
 PDF_HASHES="$HERE/hashes/${VERSION}.sha256"
-FONTS_HASHES="$HERE/hashes/fonts-1.0.0.sha256"
 [ -f "$PDF_HASHES" ] || { echo "::error::No pinned hashes for chuvadi-pdf ${VERSION}: add tools/chuvadi-pdf/hashes/${VERSION}.sha256"; exit 1; }
-[ -f "$FONTS_HASHES" ] || { echo "::error::Missing tools/chuvadi-pdf/hashes/fonts-1.0.0.sha256"; exit 1; }
+
+# Which font packages this chuvadi-pdf release needs (default: Chuvadi.Fonts 1.0.0).
+FONT_NAMES=(fonts-1.0.0)
+if [ -f "$HERE/hashes/${VERSION}.fonts" ]; then
+  FONT_NAMES=()
+  while read -r line; do [ -n "$line" ] && FONT_NAMES+=("$line"); done < <(tr -d '\r' < "$HERE/hashes/${VERSION}.fonts")
+fi
+FONT_HASHES=()
+for name in "${FONT_NAMES[@]}"; do
+  [ -f "$HERE/hashes/${name}.sha256" ] || { echo "::error::Missing tools/chuvadi-pdf/hashes/${name}.sha256"; exit 1; }
+  FONT_HASHES+=("$HERE/hashes/${name}.sha256")
+done
 
 mkdir -p "$DEST"
 DEST="$(cd "$DEST" && pwd)"
@@ -42,13 +58,16 @@ verify_list() { # <hash file>
 
 echo "Fetching chuvadi-pdf ${VERSION} packages"
 fetch_list "$PDF_HASHES" "$PDF_URL"
-echo "Fetching Chuvadi.Fonts 1.0.0"
-fetch_list "$FONTS_HASHES" "$FONTS_URL"
+for name in "${FONT_NAMES[@]}"; do
+  tag="${name%-*}-v${name##*-}"   # fonts-1.1.0 -> fonts-v1.1.0, fonts-liberation-1.0.0 -> fonts-liberation-v1.0.0
+  echo "Fetching ${name} from our release ${tag}"
+  fetch_list "$HERE/hashes/${name}.sha256" "$MONO_URL/$tag"
+done
 
 echo "Checking every file against the pinned hashes"
 verify_list "$PDF_HASHES"
-verify_list "$FONTS_HASHES"
-echo "All $(cat "$PDF_HASHES" "$FONTS_HASHES" | tr -d '\r' | grep -c .) packages match."
+for h in "${FONT_HASHES[@]}"; do verify_list "$h"; done
+echo "All $(cat "$PDF_HASHES" "${FONT_HASHES[@]}" | tr -d '\r' | grep -c .) packages match."
 
 # Chuvadi.* comes from this folder only; everything else (xunit and the other test tools) from nuget.org.
 cat > "$DEST/nuget.ci.config" <<CFG

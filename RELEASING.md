@@ -14,6 +14,7 @@
 | `zip-v*` | Chuvadi.Zip | `src/Chuvadi.Zip/Chuvadi.Zip.csproj` |
 | `markup-v*` | Chuvadi.Markup | `src/Chuvadi.Markup/Chuvadi.Markup.csproj` |
 | `fonts-v*` | Chuvadi.Fonts | `src/Chuvadi.Fonts/Chuvadi.Fonts.csproj` |
+| `fonts-liberation-v*` | Chuvadi.Fonts.Liberation | `src/Chuvadi.Fonts.Liberation/Chuvadi.Fonts.Liberation.csproj` |
 | `layout-v*` | Chuvadi.Layout | `src/Chuvadi.Layout/Chuvadi.Layout.csproj` |
 | `layout-docs-v*` | Chuvadi.Layout.Docs | `src/Chuvadi.Layout.Docs/Chuvadi.Layout.Docs.csproj` |
 | `layout-sheets-v*` | Chuvadi.Layout.Sheets | `src/Chuvadi.Layout.Sheets/Chuvadi.Layout.Sheets.csproj` |
@@ -42,8 +43,9 @@ chuvadi-pdf repository. For these two tags the workflow, after building and test
 1. reads `ChuvadiPdfVersion` from the project (Layout.Pdf: `staging/src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`;
    Raster: its `.csproj`);
 2. runs `tools/chuvadi-pdf/fetch.sh <version> <folder>`, which downloads the 34 Chuvadi.Pdf packages of the
-   chuvadi-pdf GitHub release `v<version>` and Chuvadi.Fonts 1.0.0 from our `fonts-v1.0.0` release, and checks every
-   file against the hashes pinned in `tools/chuvadi-pdf/hashes/` (`<version>.sha256` and `fonts-1.0.0.sha256`).
+   chuvadi-pdf GitHub release `v<version>` and the font packages that release needs (Chuvadi.Fonts 1.0.0 by default; the
+   list is `hashes/<version>.fonts` when it exists) from our own `fonts-v*` and `fonts-liberation-v*` releases, and checks every
+   file against the hashes pinned in `tools/chuvadi-pdf/hashes/` (`<version>.sha256` and one `<font name>.sha256` per font package).
    A missing hash file, a missing asset or a different hash stops the release. Chuvadi.* never comes from nuget.org;
 3. builds and tests the staged project with `-p:RestoreConfigFile=<folder>/nuget.ci.config`, which replaces the
    per-project `nuget.config` files, so a developer's local feed is not used;
@@ -53,7 +55,10 @@ chuvadi-pdf repository. For these two tags the workflow, after building and test
 
 **Moving to a new chuvadi-pdf release.** In one pull request: add `tools/chuvadi-pdf/hashes/<version>.sha256`
 (the release's `SHA256SUMS.txt`, with every package downloaded and checked against it first), then change
-`ChuvadiPdfVersion`. Keep the older hash files; a staged project can still be rebuilt against them. A staged package
+`ChuvadiPdfVersion`. If that release needs other font packages than Chuvadi.Fonts 1.0.0 (3.33.0 and later need
+Chuvadi.Fonts 1.1.0 and Chuvadi.Fonts.Liberation 1.0.0), also add `hashes/<version>.fonts` naming them, and one
+`hashes/<name>.sha256` for each font package not yet pinned (read the needed versions from the nuspec of the
+Chuvadi.Pdf.Authoring, .Forms and .Rendering.Raster packages). Keep the older hash files; a staged project can still be rebuilt against them. A staged package
 whose version is stable (no hyphen) cannot depend on a pre-release Chuvadi.Print: `dotnet pack` refuses with NU5104.
 
 A longer prefix is listed before a shorter one that it starts with (`layout-documents-v*`,
@@ -72,7 +77,7 @@ dependencies; Chuvadi.Text.Shaping references Chuvadi.OpenType only:
 1. `zip-v*`
 2. `markup-v*`
 3. `docs-v*` (version pending Arun; Docs.Conversion needs Chuvadi.Markup released first)
-4. `fonts-v*`
+4. `fonts-v*`, then `fonts-liberation-v*` (Chuvadi.Fonts.Liberation needs the Chuvadi.Fonts version it is built against to be released first)
 5. `layout-v*`
 6. `layout-docs-v*`, `layout-sheets-v*`, `layout-fonts-v*`, `layout-markup-v*` (any order)
 7. `layout-documents-v*`
@@ -81,7 +86,10 @@ dependencies; Chuvadi.Text.Shaping references Chuvadi.OpenType only:
 9. `layout-pdf-v*` (after `layout-v*`, and the Chuvadi.Pdf release it is pinned to must be in `tools/chuvadi-pdf/hashes/`),
    and `print-pdf-raster-v*` (after the `print-v*` release it depends on)
 
-(`zip-v1.0.0` and `sheets-v2.0.1` are already released. `print-v*` is not scheduled: the Print packages are in progress.
+(Already released, latest first: `zip-v1.0.1`, `docs-v2.4.0`, `print-pdf-raster-v0.2.1`, `layout-v0.3.0` with `layout-docs-v0.3.0`,
+`layout-sheets-v0.3.0`, `layout-documents-v0.3.0` and `layout-fonts-v0.2.0`, `markup-v1.2.0`, `sheets-v2.1.0`, `print-v1.0.0-rc.5`,
+`layout-pdf-v0.1.0`, `fonts-liberation-v1.0.0`, `fonts-v1.1.0`, `layout-markup-v0.1.0`, `opentype-v0.1.0`; the list with
+sizes and digests is docs/COMPATIBILITY.md. Not tagged yet: `text-shaping-v0.1.0`. Print is in release-candidate state.
 Chuvadi.Print.Windows, .Ipp and .Remote depend on Chuvadi.Print, and they release with it.)
 Push one tag, wait for its Release workflow to finish green, then push the next. Create each tag
 on a commit whose `release.yml` already knows the prefix: a tag runs the workflow file that exists
@@ -117,8 +125,16 @@ AT the tagged commit.
    git push origin <prefix>-vX.Y.Z
    ```
 3. The `Release` workflow builds, runs the full test suite, packs, signs the package(s)
-   (when the certificate secrets are configured) and attaches the `.nupkg` file(s) to a
-   GitHub release.
+   (when the certificate secrets are configured), writes `SHA256SUMS.txt` and attaches the `.nupkg` file(s)
+   and `SHA256SUMS.txt` to a GitHub release.
+4. Check the release: download each asset, hash it yourself, and compare with `SHA256SUMS.txt` (on releases cut after
+   the checksum step merged) and with the row you add to docs/COMPATIBILITY.md.
+
+**`SHA256SUMS.txt`.** The release workflow writes one line per attached nupkg, `<lowercase sha256>  <file name>`
+(two spaces), after signing, and checks the file with `sha256sum --check --strict` before the release is created. A
+consumer verifies a download with `sha256sum -c SHA256SUMS.txt` in the folder that holds the nupkg(s). Releases cut before this
+step existed have no such file; their digests are in docs/COMPATIBILITY.md. The file is the same for every release
+of a tag, so a tag that releases several packages (`docs-v*`, `print-v*`) lists all of them.
 
 ## Verifying a release (consumers)
 
