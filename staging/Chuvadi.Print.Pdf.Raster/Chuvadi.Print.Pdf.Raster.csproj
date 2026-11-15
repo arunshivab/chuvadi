@@ -28,7 +28,7 @@
     <Company>Chuvadi</Company>
     <Version>0.2.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- NU5104: 0.2.x depends on Chuvadi.Print 1.0.0-rc.3, a pre-release (D-235 L1.5: tagged after print-v1.0.0-rc.3).
+    <!-- NU5104: 0.2.x depends on Chuvadi.Print, a pre-release (0.2.0 on 1.0.0-rc.3, 0.2.1 on 1.0.0-rc.5) (D-235 L1.5: tagged after print-v1.0.0-rc.3).
          NuGet allows it; the warning is turned off on purpose until Chuvadi.Print 1.0.0. -->
     <NoWarn>$(NoWarn);CS1591;NU5104</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
