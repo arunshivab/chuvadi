@@ -22,7 +22,7 @@ dotnet run -c Release --project staging\samples\Chuvadi.Layout.Viewer -- upload.
 | Chuvadi.Layout.Sheets | `SheetsLayout`: Excel workbooks through Chuvadi.Sheets | both |
 | Chuvadi.Layout.Documents | `AutoDetectLayout`: one call for docx, xlsx (encrypted too) and text, format detected | both |
 | Chuvadi.Fonts | `FontPack`: the LiPi Sans files (Latin and nine Indic scripts); Layout uses them as its built-in fonts | both |
-| Chuvadi.Layout.Fonts | `SubstituteFontPack`: OFL metric-compatible substitute faces, a pure data pack (add with `FontPackSource.For(SubstituteFontPack.Instance)`) | both |
+| Chuvadi.Layout.Fonts | `SubstituteFontPack`: OFL metric-compatible substitute faces, a pure data pack (add with `FontPackSource.For(SubstituteFontPack.Instance)`). Since 0.2.0 its 12 Liberation files come from Chuvadi.Fonts.Liberation (a dependency), the other 17 are embedded (D-327) | both |
 | Chuvadi.Layout.Markup | `MarkdownLayout` and `HtmlLayout`: Markdown, and sanitized HTML (mail, pages), into the same `LaidOutDocument` | both |
 | Chuvadi.Layout.Pdf | `PdfShaper` (Indic shaping), `ToPng`, `ToPdf`, `ToSvg` (delegates to `LayoutSvg`). Source in `staging/src/Chuvadi.Layout.Pdf` (D-37): it takes chuvadi-pdf as pinned packages, so it is built outside `Chuvadi.slnx` and CI until chuvadi-pdf joins the monorepo. Released as `layout-pdf-v*` right after `layout-v*` (D-214, D-304); the chuvadi-pdf packages come from the chuvadi-pdf release it names, `[3.31.2, 4.0.0)` | both |
 

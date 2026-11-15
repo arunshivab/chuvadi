@@ -1,9 +1,11 @@
 # Chuvadi.Layout.Fonts
 
-Substitute fonts for documents, as a pure data pack. It contains 29 SIL OFL 1.1 faces, embedded as resources:
-metric-compatible substitutes for fonts documents often name, and closer designs for Georgia and Segoe UI. The
-package lists the files and hands out their bytes and licences. It parses nothing, references no layout engine (only
-Chuvadi.Fonts, for the `IFontFilePack` interface), and reads nothing from disk or the network. So
+Substitute fonts for documents, as a pure data pack. It lists 29 SIL OFL 1.1 faces: metric-compatible substitutes
+for fonts documents often name, and closer designs for Georgia and Segoe UI. 17 are embedded in this package; the 12
+Liberation files come from the Chuvadi.Fonts.Liberation package, so the family carries one copy of them. The package
+lists the files and hands out their bytes and licences. It parses nothing, references no layout engine (only
+Chuvadi.Fonts, for the `IFontFilePack` interface, and Chuvadi.Fonts.Liberation), and reads nothing from disk or the
+network. So
 [Chuvadi.Layout](https://github.com/arunshivab/chuvadi), a PDF library or a print library can all use the same files.
 
 With Chuvadi.Layout, add the pack as a font source:
@@ -47,7 +49,7 @@ string licence = SubstituteFontPack.GetLicenseText("Carlito-Regular.ttf");  // t
 ## Contents
 
 - **Liberation Sans / Serif / Mono:** metric-compatible with Arial / Times New Roman / Courier New.
-  Four styles each.
+  Four styles each. Served from Chuvadi.Fonts.Liberation (`LiberationPack`); same names, bytes and licence.
 - **Carlito:** metric-compatible with Calibri. Four styles.
 - **Caladea:** the nearest design to Cambria, but not metric-compatible with the Cambria Word uses (6.5% wider);
   reported as `Substitute`. Four styles.

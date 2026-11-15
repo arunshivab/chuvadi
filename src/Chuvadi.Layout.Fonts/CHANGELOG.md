@@ -1,5 +1,20 @@
 # Chuvadi.Layout.Fonts — Changelog
 
+## 0.2.0 (2026-11-15)
+
+One copy of Liberation in the family (D-327, L1).
+
+- The 12 Liberation Sans, Serif and Mono files and `Liberation-OFL.txt` are no longer embedded here. `SubstituteFontPack`
+  serves them from **Chuvadi.Fonts.Liberation 1.0.0** (`LiberationPack`), a new dependency. They are byte-identical to
+  the files 0.1.0 carried.
+- **Unchanged for callers:** the pack still lists all 29 files, in the same order, with the same names, lengths, SHA-256
+  and licence text, through the same API (`Files`, `Find`, `FindFamily`, `Open`, `TryOpen`, `ReadAllBytes`,
+  `GetLicenseText`, `Instance`, name "Chuvadi.Layout.Fonts"). Layout output is unchanged (88 documents compared).
+- **Smaller:** the package drops about 2.4 MB. An application that also uses Chuvadi.Fonts.Liberation (for example
+  through chuvadi-pdf's PDF/A fonts) no longer ships the Liberation files twice.
+- **Only for code that bypassed the API:** the 12 files are no longer resources of the Chuvadi.Layout.Fonts assembly,
+  and `licenses/Liberation-OFL.txt` is now in the Chuvadi.Fonts.Liberation package.
+
 ## 0.1.0 (2026-11-09)
 
 First release: substitute fonts for documents, as a pure data pack (D-195, D-197).

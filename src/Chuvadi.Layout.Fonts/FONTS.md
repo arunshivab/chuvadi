@@ -3,9 +3,14 @@
 All fonts are licensed under the SIL Open Font License 1.1. The licence texts ship in the package's
 `licenses/` folder and in `Licenses/` in the repository.
 
+Since 0.2.0 the 12 Liberation files and their licence are not embedded here: `SubstituteFontPack` serves them from the
+Chuvadi.Fonts.Liberation package (`LiberationPack`, Liberation 2.1.5), byte for byte the files this package carried
+before (D-327). Their provenance is in that package's FONTS.md; their rows stay in the table below because the pack
+still lists all 29 files.
+
 | Files | Family | Version | Source |
 |---|---|---|---|
-| LiberationSans-*, LiberationSerif-*, LiberationMono-* (12) | Liberation Sans / Serif / Mono | 2.1.5 | Built TTFs from arunshivab/chuvadi-pdf `tools/fonts`; upstream github.com/liberationfonts/liberation-fonts (licence from commit 49e1358) |
+| LiberationSans-*, LiberationSerif-*, LiberationMono-* (12) | Liberation Sans / Serif / Mono | 2.1.5 | From Chuvadi.Fonts.Liberation 1.0.0 (not embedded here since 0.2.0); same files as before: built TTFs from arunshivab/chuvadi-pdf `tools/fonts`, upstream github.com/liberationfonts/liberation-fonts (licence from commit 49e1358) |
 | Carlito-* (4) | Carlito | 1.104 | github.com/googlefonts/carlito, `fonts/ttf`, commit 3a810ca |
 | Caladea-* (4) | Caladea | 1.001 | github.com/huertatipografica/Caladea, `fonts/ttf`, commit 336a529 |
 | Gelasio-Regular, -Bold, -Italic, -BoldItalic (4) | Gelasio | 1.008 | github.com/SorkinType/Gelasio, `fonts/ttf`, commit 7ab20e7 (licence `OFL.txt` as Gelasio-OFL.txt) |
@@ -35,7 +40,8 @@ The LiPi Sans Indic families (Chuvadi.Fonts) are script fallbacks, not metric su
 
 ## Files
 
-29 files, 8,264,644 bytes.
+29 files, 8,264,644 bytes: 17 embedded here (3,905,480 bytes) and the 12 Liberation files (4,359,164 bytes) from
+Chuvadi.Fonts.Liberation.
 
 | File | Bytes | SHA-256 |
 |---|---|---|

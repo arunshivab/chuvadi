@@ -1,5 +1,25 @@
 # Chuvadi.Layout — Changelog
 
+## 0.3.0 (2026-11-15)
+
+Released together with Layout.Docs, Layout.Sheets and Layout.Documents 0.3.0 and Layout.Fonts 0.2.0 (D-323, D-383).
+
+- **No change to this package's code or dependencies** (Chuvadi.Fonts 1.1.0). Its version moves with the family so
+  the four layout packages stay on one version.
+- **Dependency ranges in the family** (what an application now gets):
+  - Chuvadi.Layout.Docs 0.3.0 requires **Chuvadi.Docs 2.3.0** (was 2.1.0);
+  - Chuvadi.Layout.Sheets 0.3.0 requires **Chuvadi.Sheets 2.1.0** (was 2.0.5);
+  - Chuvadi.Layout.Fonts 0.2.0 requires **Chuvadi.Fonts.Liberation 1.0.0** (new) for its 12 Liberation files.
+- **Docs 2.3.0's Word preset:** `new Document()` in Chuvadi.Docs 2.3.0 starts from Word's styles, including Word's
+  Header and Footer styles with a centre tab at 225.65 pt and a right tab at 451.3 pt. Documents an application builds
+  in code and then lays out can therefore look different from 2.1.0 (a header "text, Tab, text" now centres the second
+  text, as Word does). Loaded .docx files are not affected: of the 88 corpus and fixture documents, all 56 .docx are byte-identical
+  (the one change is Sheets 2.1.0's x01 page). To keep
+  the old look, see Chuvadi.Docs 2.3.0's CHANGELOG (a clear tab, `DocumentPreset.Minimal`, or
+  `doc.Defaults.HeaderParagraphStyleId = null`).
+- **Manual tests:** the `docx-import` preview clears the Header style's centre tab, so "Radiation Oncology" stays at
+  the right edge (D-376, L5). Only that preview's three pages change.
+
 ## 0.2.0 (2026-11-12)
 
 Chuvadi.Docs 2.1.0 wiring (D-317), engine side:
