@@ -26,9 +26,9 @@
     <Description>Connects Chuvadi.Print to the Chuvadi PDF library: PdfPageRasterizer renders PDF pages (the crop box, as ISO 32000 says) for any Chuvadi.Print target (Windows printers, IPP, PNG preview), and PdfFontInspector tells a PrintRouter when a PDF can be sent to the printer as it is.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- NU5104: 0.2.0 depends on Chuvadi.Print 1.0.0-rc.3, a pre-release (D-235 L1.5: tagged after print-v1.0.0-rc.3).
+    <!-- NU5104: 0.2.x depends on Chuvadi.Print 1.0.0-rc.3, a pre-release (D-235 L1.5: tagged after print-v1.0.0-rc.3).
          NuGet allows it; the warning is turned off on purpose until Chuvadi.Print 1.0.0. -->
     <NoWarn>$(NoWarn);CS1591;NU5104</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

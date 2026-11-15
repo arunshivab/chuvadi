@@ -38,7 +38,7 @@ namespace Chuvadi.Print.Pdf.Raster
     /// <para>Annotations and form-field appearances are printed by flattening them into a copy of the
     /// document first (Chuvadi.Pdf <c>AnnotationFlattener</c>); hidden and no-view annotations are skipped.
     /// <see cref="RasterRequest.IncludeAnnotations"/> and <see cref="RasterRequest.IncludeFormFields"/> pick
-    /// what is flattened. Documents without annotations are not copied.</para>
+    /// what is flattened; with both off, none are printed. Documents without annotations are not copied.</para>
     /// <para>Anisotropic resolutions (DpiX different from DpiY) render at the larger one and are resampled.
     /// <see cref="RasterPixelFormat.BlackWhite1"/> requests are answered with Gray8; the print job applies
     /// its monochrome conversion (threshold, ordered dither or error diffusion).</para>
@@ -156,6 +156,10 @@ namespace Chuvadi.Print.Pdf.Raster
                     // Chuvadi.Pdf 3.32.0 renders the crop box by default; this adapter renders the whole media box
                     // and cuts out the box chosen by PageBox itself (crop, bleed, trim or art box).
                     DisplayBox = PdfDisplayBox.MediaBox,
+                    // The annotations and form fields the request asks for are already flattened into the page content
+                    // (PdfSource.For); the renderer draws none of its own. Without this, the renderer's default (View)
+                    // drew every annotation when IncludeAnnotations and IncludeFormFields were both off (0.2.1).
+                    AnnotationMode = AnnotationMode.None,
                 };
 
                 // The renderer draws the whole media box; the printed box is cut out of it afterwards.

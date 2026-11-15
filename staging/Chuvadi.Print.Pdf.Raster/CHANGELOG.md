@@ -1,5 +1,24 @@
 # Chuvadi.Print.Pdf.Raster — Changelog
 
+## 0.2.1 (2026-11-15)
+
+**Fix: with `IncludeAnnotations` and `IncludeFormFields` both off, annotations and form fields no longer print.**
+Chuvadi.Pdf floor unchanged (3.32.0); it still depends on Chuvadi.Print 1.0.0-rc.3 or later.
+
+- **Output change (rule 5), only when both are off.**
+  - In 0.2.0 the document was passed on unflattened in that case, and the renderer's own annotation drawing
+    (`RenderOptions.AnnotationMode`, View by default since Chuvadi.Pdf 3.31) drew every annotation: comments, stamps
+    and form fields.
+  - The adapter now sets `AnnotationMode = None`: what the request asks for is already flattened into the page, so
+    the renderer draws none of its own.
+- **Measured on 180 pages** (the L1 corpus, 91 PDFs and 174 pages, plus 6 annotation cases), in all four on/off
+  combinations at 72 dpi, on Chuvadi.Pdf 3.32.0 and 3.34.0:
+  - 709 of 720 renders are pixel-identical to 0.2.0.
+  - The 11 that change are the both-off renders of the pages with annotations (5 corpus pages, the 6 cases). Each
+    now equals the page's content alone.
+- **Tests: 52** (44 + 8). Every on/off combination for a comment and for a form field. The two both-off cases fail
+  on 0.2.0.
+
 ## 0.2.0 (2026-11-11)
 
 **Chuvadi.Pdf floor 3.32.0 (D-326 R1, D-259).** The package references Chuvadi.Pdf.Rendering and
