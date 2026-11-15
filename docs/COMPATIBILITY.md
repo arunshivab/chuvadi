@@ -122,7 +122,7 @@ Notes:
 - **Trimming and NativeAOT:**
   - The released DLLs of Chuvadi.Docs 2.4.0, Chuvadi.Docs.Conversion 2.4.0, Chuvadi.Markup 1.2.0, Chuvadi.Sheets 2.1.0, Chuvadi.Zip 1.0.1, Chuvadi.Layout 0.3.0, Chuvadi.Layout.Docs 0.3.0, Chuvadi.Layout.Sheets 0.3.0, Chuvadi.Layout.Documents 0.3.0, Chuvadi.Layout.Fonts 0.2.0, Chuvadi.OpenType 0.1.0, Chuvadi.Print 1.0.0-rc.5 and Chuvadi.Fonts.Liberation 1.0.0 carry the `IsTrimmable` and `IsAotCompatible` metadata (checked in the DLLs). **Chuvadi.Fonts 1.1.0 and Chuvadi.Print.Pdf.Raster 0.2.1 do not**: Chuvadi.Fonts carries the flags on `main` and they come with its next release. The other released DLLs were not checked.
   - CI publishes a small app that uses Zip, Fonts, Fonts.Liberation and the four Print packages with `TrimMode=full` and as NativeAOT (linux-x64), warnings as errors, and runs it. The other packages are not yet covered that way in CI.
-  - **ReadyToRun: not tested.** A non-gating CI job (`r2r-smoke`) now publishes the same app with ReadyToRun and runs it. Until that job has been green on the main branch, treat ReadyToRun as not tested.
+  - **ReadyToRun: verified on `linux-x64` only.** The non-gating CI job `r2r-smoke` publishes the same app with `PublishReadyToRun=true` (warnings are errors) and runs it. It was green on the main branch (run 43760060337, 16 November 2026) and on the pull request before it. Other platforms are not run, and the packages not used by that app are not covered.
 - See `docs/Chuvadi.Zip/PLATFORMS.md` and `docs/Chuvadi.Fonts/PLATFORMS.md` (when present) for what is verified for those two packages.
 
 ## Keeping this file correct
