@@ -114,6 +114,47 @@ public class PdfPageRasterizerTests
         }
     }
 
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public void A_comment_prints_only_with_IncludeAnnotations_whatever_IncludeFormFields_says(bool annotations, bool formFields, bool printed)
+    {
+        // 0.2.1: with both off the renderer drew the comment anyway (its own AnnotationMode defaulted to View).
+        byte[] pdf = Square(annotation: new Box(150, 10, 40, 30));
+        using RasterPage page = Render(pdf, new RasterRequest
+        {
+            DpiX = 72, DpiY = 72, PixelFormat = RasterPixelFormat.Gray8,
+            IncludeAnnotations = annotations, IncludeFormFields = formFields
+        });
+        Assert.Equal(printed, Gray(page, 170, 75) < 64);
+        Assert.True(Gray(page, 25, 25) < 64, "page content still there");
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, false)]
+    public void A_form_field_prints_only_with_IncludeFormFields_whatever_IncludeAnnotations_says(bool annotations, bool formFields, bool printed)
+    {
+        // A text field whose appearance is a black bar at x 150..190, y 10..40 (pixels 150..190 x 60..90).
+        const string ap = "0 g 0 0 40 30 re f";
+        byte[] pdf = PageBoxAndFontTests.Raw(
+            "/MediaBox [0 0 200 100] /Resources << >> /Annots [5 0 R]", "0 g 0 50 50 50 re f",
+            "/AcroForm << /Fields [5 0 R] >>",
+            "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [150 10 190 40] /F 4 /P 3 0 R /AP << /N 6 0 R >> >>",
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 40 30] /Resources << >> /Length " + ap.Length + " >>\nstream\n" + ap + "\nendstream");
+        using RasterPage page = Render(pdf, new RasterRequest
+        {
+            DpiX = 72, DpiY = 72, PixelFormat = RasterPixelFormat.Gray8,
+            IncludeAnnotations = annotations, IncludeFormFields = formFields
+        });
+        Assert.Equal(printed, Gray(page, 170, 75) < 64);
+        Assert.True(Gray(page, 25, 25) < 64, "page content still there");
+    }
+
     [Fact]
     public void HonoursCancellation()
     {
@@ -148,5 +189,14 @@ public class PdfPageRasterizerTests
         Assert.Equal(PrintJobStatus.Printed, result.Status);
         Assert.Equal(2, Directory.GetFiles(folder, "*.png").Length);
         Console.WriteLine("Preview PNGs: " + folder);
+
+        // 0.2.1: the same job with annotations and form fields both off; page 1 shows the square without the annotation.
+        string bothOff = Path.Combine(AppContext.BaseDirectory, "print-pdf-preview-both-off");
+        if (Directory.Exists(bothOff)) Directory.Delete(bothOff, true);
+        result = new PrintJob(pdf).WithRasterizer(new PdfPageRasterizer()).WithPaper(PaperSize.A5).WithAutoRotate()
+            .WithAnnotations(false).WithFormFields(false).PrintTo(new ImageFileTarget(bothOff).WithDpi(100).WithGuides());
+        Assert.Equal(PrintJobStatus.Printed, result.Status);
+        Assert.Equal(2, Directory.GetFiles(bothOff, "*.png").Length);
+        Console.WriteLine("Preview PNGs, both off: " + bothOff);
     }
 }

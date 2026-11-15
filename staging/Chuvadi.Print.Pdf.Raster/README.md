@@ -46,6 +46,8 @@ The package references Chuvadi.Pdf.Rendering and Chuvadi.Pdf.Operations at **`[3
 - **Chuvadi.Print.Pdf.Raster 0.1.0 must not be used with Chuvadi.Pdf 3.32.0 or later.** Its range allows them, but
   it doesn't set `DisplayBox`, so a page whose crop box differs from its media box prints enlarged and cut. Use 0.2.0
   with 3.32.0 or later, or keep 0.1.0 on 3.31.2 exactly.
+- **0.2.0 prints annotations and form fields even when `IncludeAnnotations` and `IncludeFormFields` are both off.**
+  0.2.1 fixes it; any other combination prints the same in both.
 - **Known limits (Chuvadi.Pdf ticket 42):** a pattern set before a form XObject is drawn is not passed into the form,
   and a soft mask set before it isn't applied to the form's content.
 - Earlier floors: 3.31.2 in 0.1.0, because 3.31.1 renders pages whose media box does not start at 0,0 blank (D-258).

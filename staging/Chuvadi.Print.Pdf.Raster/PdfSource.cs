@@ -10,7 +10,8 @@ namespace Chuvadi.Print.Pdf.Raster
 {
     /// <summary>
     /// One opened source PDF plus, on demand, copies with annotations and/or form fields baked into the page
-    /// content (Chuvadi.Pdf draws page content only, so annotations are printed by flattening them first).
+    /// content. Annotations are printed only by flattening them here; the renderer is told to draw none of its own
+    /// (<c>RenderOptions.AnnotationMode</c> None, 0.2.1).
     /// Documents with no annotations are never copied.
     /// </summary>
     internal sealed class PdfSource : IDisposable
