@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime;
+using System.Runtime.CompilerServices;
 using Chuvadi.Sheets.Model;
 
 namespace Chuvadi.Sheets.ManualTests;
@@ -14,7 +16,8 @@ namespace Chuvadi.Sheets.ManualTests;
 /// (about 1.75 million cells).
 ///
 /// Checked: the model and the streaming reader return the same values; the loaded model
-/// keeps at most 200 bytes per cell (1.7.0 kept about 383). Times are printed for
+/// keeps at most 200 bytes per cell (1.7.0 kept about 383), the lowest of three careful readings since
+/// 2.2.0 (S-2, D-401). Times are printed for
 /// information, against the 2 s target; only a generous 15 s limit fails the test, so a busy
 /// machine does not.
 ///
@@ -70,17 +73,20 @@ internal static class LoadBenchmarkTest
             Console.WriteLine($"          ({compared:N0} cells compared)");
         });
 
-        Check($"the loaded model keeps at most {MaxBytesPerCell:F0} bytes per cell", () =>
+        Check($"the loaded model keeps at most {MaxBytesPerCell:F0} bytes per cell (lowest of {MemoryReadings} careful readings)", () =>
         {
-            Workbook.Load(new MemoryStream(bytes, writable: false));   // warm-up
-            long before = Collect();
-            var wb = Workbook.Load(new MemoryStream(bytes, writable: false));
-            long after = Collect();
-            long cells = wb.Sheets.Sum(s => (long)s.PopulatedCells.Count());
-            double perCell = (after - before) / (double)cells;
-            Console.WriteLine($"          ({cells:N0} cells; {(after - before) / 1048576.0:F0} MB kept, {perCell:F0} bytes per cell)");
-            GC.KeepAlive(wb);
-            if (perCell > MaxBytesPerCell) throw new Exception($"{perCell:F0} bytes per cell");
+            // S-2 (D-401): one reading could count anything that happened to be alive at that moment (macOS run #138
+            // read 222 against about 127 on Linux and Windows). Each load runs in its own method, the large-object
+            // heap is compacted before every reading, and the lowest of three counts: noise only adds bytes, so a
+            // real regression (cells keeping more) still raises every reading.
+            LoadAndDrop(bytes);   // warm-up
+            var readings = new double[MemoryReadings];
+            long cells = 0;
+            for (int i = 0; i < readings.Length; i++) readings[i] = BytesPerCell(bytes, out cells);
+            double lowest = readings.Min();
+            Console.WriteLine($"          ({cells:N0} cells; readings {string.Join(", ", readings.Select(r => r.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)))} bytes per cell; lowest {lowest:F0})");
+            if (lowest > MaxBytesPerCell)
+                throw new Exception($"{lowest:F0} bytes per cell (readings {string.Join(", ", readings.Select(r => r.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)))})");
         });
 
         Check($"load times (target 2 s; fails only above {HardLimitMs / 1000:F0} s)", () =>
@@ -149,6 +155,43 @@ internal static class LoadBenchmarkTest
         Console.WriteLine($"  LoadBenchmarkTest: {pass} passed, {fail} failed.");
         Console.WriteLine();
         if (fail > 0) throw new Exception(failed.Summary($"LoadBenchmarkTest: {fail} check(s) failed."));
+    }
+
+    private const int MemoryReadings = 3;
+
+    /// <summary>The workbook being measured, held here (not in a local) while its memory is read.</summary>
+    private static Workbook? _measured;
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void LoadAndDrop(byte[] bytes) => Workbook.Load(new MemoryStream(bytes, writable: false));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void LoadAndHold(byte[] bytes) => _measured = Workbook.Load(new MemoryStream(bytes, writable: false));
+
+    /// <summary>One careful reading: memory with nothing loaded, then with the workbook held, per populated cell.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static double BytesPerCell(byte[] bytes, out long cells)
+    {
+        _measured = null;
+        long before = CompactingReading();
+        LoadAndHold(bytes);
+        long after = CompactingReading();
+        cells = _measured!.Sheets.Sum(s => (long)s.PopulatedCells.Count());
+        _measured = null;
+        return (after - before) / (double)cells;
+    }
+
+    /// <summary>A full, blocking, compacting collection with the large-object heap compacted too, twice, then the heap size.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static long CompactingReading()
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+        return GC.GetTotalMemory(forceFullCollection: true);
     }
 
     private static long Collect()

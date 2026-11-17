@@ -110,6 +110,7 @@ public sealed class VerificationSuiteTests : IDisposable
     [Fact] public void CellRef() => Items210Test.RunCellRef(_dir);
     [Fact] public void DisplayText() => Items210Test.RunDisplayText(_dir);
     [Fact] public void Limits() => Items210Test.RunLimits(_dir);
+    [Fact] public void Regional() => RegionalTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

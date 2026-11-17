@@ -3,7 +3,7 @@ using System;
 namespace Chuvadi.Sheets.ManualTests;
 
 /// <summary>
-/// The pass/fail bookkeeping the 2.1.0 groups share (saves, headers, streamreads, widths, cellref, displaytext,
+/// The pass/fail bookkeeping the 2.1.0 groups share (saves, headers, streamreads, widths, cellref, displaytext, regional,
 /// limits): each check prints PASS or FAIL, and <see cref="Finish"/> throws with the failed checks listed.
 /// </summary>
 internal sealed class TestGroup

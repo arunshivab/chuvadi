@@ -486,6 +486,33 @@ internal static class Layout17Test
         // full derivation on fast machines (about 1,000 ms on Arun's PC), where an ignored cancellation passed.
         long CancelLimitMs() => Math.Max(250, fullMs / 2);
 
+        // S-1 (D-388): the baseline above is timed once, so a shared CI runner that slows down between that timing and
+        // a check can make a cancellation that worked land over the limit (macOS, Docs 2.3.0 release: 640 ms against
+        // 423 ms; the rerun passed). On a miss the full derivation is timed again at once and the cancelled run is
+        // repeated once, against half of that fresh time (same 250 ms minimum). An ignored cancellation runs a whole
+        // derivation both times, so it still fails on every machine; a stop under the first limit costs nothing extra.
+        long TimeFullDerivation()
+        {
+            var sw = Stopwatch.StartNew();
+            EncryptedBytes(3_000_000, "x");
+            return sw.ElapsedMilliseconds;
+        }
+        void CheckStop(string what, Func<long> cancelledRunMs)
+        {
+            long stop = cancelledRunMs();
+            long limit = CancelLimitMs();
+            if (stop < limit)
+            {
+                Console.WriteLine($"          ({what}: cancel at 100 ms landed after {stop} ms; the full 3,000,000-spin derivation took {fullMs} ms)");
+                return;
+            }
+            long fresh = TimeFullDerivation();
+            long again = cancelledRunMs();
+            long freshLimit = Math.Max(250, fresh / 2);
+            Console.WriteLine($"          ({what}: {stop} ms was over the {limit} ms limit; a fresh full derivation took {fresh} ms, and the cancel landed after {again} ms against {freshLimit} ms)");
+            True(again < freshLimit, $"{what}: stopped in {stop} ms (limit {limit} ms, full derivation {fullMs} ms), then in {again} ms (limit {freshLimit} ms, fresh full derivation {fresh} ms)");
+        }
+
         Check("D-25: MaxSpinCount (default 500,000) rejects a higher declared spin count before key derivation", () =>
         {
             Eq(500_000, new XlsxReaderOptions().MaxSpinCount, "default");
@@ -510,17 +537,18 @@ internal static class Layout17Test
             EnsureBig();
             foreach (var model in new[] { true, false })
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-                var opts = new XlsxReaderOptions { MaxSpinCount = null, CancellationToken = cts.Token };
-                var sw = Stopwatch.StartNew();
-                Throws<OperationCanceledException>(() =>
+                CheckStop(model ? "Workbook.Load" : "XlsxReader.Open", () =>
                 {
-                    if (model) Workbook.Load(Mem(big!), "pw", opts);
-                    else XlsxReader.Open(Mem(big!), "pw", opts).Dispose();
-                }, model ? "model" : "streaming");
-                sw.Stop();
-                True(sw.ElapsedMilliseconds < CancelLimitMs(), $"{(model ? "model" : "streaming")}: stopped in {sw.ElapsedMilliseconds} ms; limit {CancelLimitMs()} ms (full derivation {fullMs} ms)");
-                Console.WriteLine($"          ({(model ? "Workbook.Load" : "XlsxReader.Open")}: cancel at 100 ms landed after {sw.ElapsedMilliseconds} ms; the full 3,000,000-spin derivation took {fullMs} ms)");
+                    using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+                    var opts = new XlsxReaderOptions { MaxSpinCount = null, CancellationToken = cts.Token };
+                    var sw = Stopwatch.StartNew();
+                    Throws<OperationCanceledException>(() =>
+                    {
+                        if (model) Workbook.Load(Mem(big!), "pw", opts);
+                        else XlsxReader.Open(Mem(big!), "pw", opts).Dispose();
+                    }, model ? "model" : "streaming");
+                    return sw.ElapsedMilliseconds;
+                });
             }
         });
 
@@ -528,16 +556,18 @@ internal static class Layout17Test
         {
             EnsureBig();
             var p = Path.Combine(outputDir, "f170_encrypt_cancel.xlsx");
-            using var cts = new CancellationTokenSource();
-            var w = XlsxWriter.Create(p, new XlsxWriterOptions { Encryption = new EncryptionOptions { Password = "pw", SpinCount = 3_000_000 } });
-            w.AddSheet("E").WriteRow("x");
-            cts.CancelAfter(100);
-            var sw = Stopwatch.StartNew();
-            Throws<OperationCanceledException>(() => w.SaveAsync(cts.Token).GetAwaiter().GetResult(), "SaveAsync");
-            sw.Stop();
-            try { w.Dispose(); } catch { /* the writer is unusable after a cancelled save */ }
-            True(sw.ElapsedMilliseconds < CancelLimitMs(), $"stopped in {sw.ElapsedMilliseconds} ms; limit {CancelLimitMs()} ms (full derivation {fullMs} ms)");
-            Console.WriteLine($"          (SaveAsync: cancel at 100 ms landed after {sw.ElapsedMilliseconds} ms; the full derivation took {fullMs} ms)");
+            CheckStop("SaveAsync", () =>
+            {
+                using var cts = new CancellationTokenSource();
+                var w = XlsxWriter.Create(p, new XlsxWriterOptions { Encryption = new EncryptionOptions { Password = "pw", SpinCount = 3_000_000 } });
+                w.AddSheet("E").WriteRow("x");
+                cts.CancelAfter(100);
+                var sw = Stopwatch.StartNew();
+                Throws<OperationCanceledException>(() => w.SaveAsync(cts.Token).GetAwaiter().GetResult(), "SaveAsync");
+                long ms = sw.ElapsedMilliseconds;
+                try { w.Dispose(); } catch { /* the writer is unusable after a cancelled save */ }
+                return ms;
+            });
         });
 
         Console.WriteLine();

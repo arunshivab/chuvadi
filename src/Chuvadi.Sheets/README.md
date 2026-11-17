@@ -25,7 +25,7 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Cell styling | `CellStyle`, `CellStyleBuilder` |
 | Column auto-fit | `sheet.AutoFitColumns()`, `SheetWriter.AutoFitColumns()`, `cfg.AutoFitColumns()` |
 | Number format rendering (display text) | `NumberFormatter.Format(value, formatCode)` |
-| Cell display text on read | `cell.DisplayText`, `row.GetDisplayString(col)` |
+| Cell display text on read | `cell.DisplayText`, `row.GetDisplayString(col)`; built-in dates 14 to 17 and 22 and `mmm` month names follow `DisplayCulture` as Excel shows them per region (14 and 22 since 2.1.0, the rest since 2.2.0) |
 | Page setup on read (print area, titles, paper, margins, breaks, header/footer) | `sheet.PageSetup`, streaming `sheetReader.ReadLayout().PageSetup` |
 | Page setup on write | `SheetWriter.PageSetup`, `sheet.PageSetup`, `cfg.PageSetup(p => ...)` |
 | Formulas on read (shared formulas expanded) with cached results | `row.GetFormula(col)`, `row.GetFormulaInfo(col)`, `cell.Formula`, `cell.CachedValue` |
@@ -344,6 +344,9 @@ dotnet build
   properties.
 - **Encrypted reads** decrypt the package into memory, so memory grows with file size times files open at once;
   `MaxTotalUncompressedBytes` bounds it.
+- **Android, run on a phone:** the 2.1.0 package in a Release (trimmed, AOT-compiled) app on a Samsung Galaxy M51,
+  Android 12: 12 of 12 checks passed (files, streams, both `TempStorage` modes, encryption, the streaming reader,
+  `ToXlsx<T>`/`ReadXlsx<T>`, cancellation, untrusted-input limits).
 
 ## Tests & CI
 
