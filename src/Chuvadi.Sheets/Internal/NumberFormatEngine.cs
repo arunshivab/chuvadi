@@ -1051,7 +1051,7 @@ internal static class NumberFormatEngine
                     {
                         1 => month.ToString(CultureInfo.InvariantCulture),
                         2 => month.ToString("00", CultureInfo.InvariantCulture),
-                        3 => dtf.AbbreviatedMonthNames[month - 1],
+                        3 => (ExcelLocaleData.AbbreviatedMonthNames(o.Culture.Name) ?? dtf.AbbreviatedMonthNames)[month - 1],   // 2.2.0 (C5)
                         5 => dtf.MonthNames[month - 1].Substring(0, 1),
                         _ => dtf.MonthNames[month - 1],
                     });

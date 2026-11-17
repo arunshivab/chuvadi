@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.1.0 (released 2026-11-12) |
+| Library version | Chuvadi.Sheets 2.2.0 (released 2026-11-17) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -246,7 +246,8 @@ header text.
 # 4 Upgrading from 1.x
 
 Chuvadi.Sheets 2.0.0 is a major version with three breaking changes; 2.0.1 to 2.0.5 are bug-fix releases on
-top of it (sections 4.5 to 4.9), and 2.1.0 adds to it without breaking anything (section 4.10). Values, styles, display text and saved
+top of it (sections 4.5 to 4.9), and 2.1.0 adds to it without breaking anything (section 4.10); 2.2.0 changes only the display text of a few
+built-in dates for a given culture (section 4.11). Values, styles, display text and saved
 output are the same as in 1.8.0; the public API is the same apart from the namespace and the obsolete zip types.
 
 ## 4.1 The namespace is now `Chuvadi.Sheets.Model`
@@ -391,6 +392,20 @@ the two Display text rows.
 
 A literal `null` in an existing call, such as `wb.SaveTo(path, null)` or `list.ToXlsx(path, null)`, binds to the
 same overload as before: the older overloads take priority over the new options overloads.
+
+## 4.11 Changes in 2.2.0
+
+2.2.0 has no API change. It changes display text only, and only when you pass a culture (`DisplayCulture` or
+`NumberFormatOptions.Culture`): the invariant default and en-US show exactly what they showed in 2.1.0.
+
+| Area | What changes | Section |
+|---|---|---|
+| Display text | built-in 15 and 16 (`d-mmm-yy`, `d-mmm`) take a two-digit day when the culture's short date has one; built-in 22 takes a two-digit hour when its short time has one; German (de-DE) uses Excel's own forms for 15 to 17 | 19.2 |
+| Display text | `mmm` shows Excel's month abbreviations for en-IN (`Sep`, not `Sept`), de-DE (`Mrz`, not `Mär`) and ta-IN (the full names) | 19.2 |
+| Platforms | the 2.1.0 package was run on an Android phone | 29.2 |
+
+All of it was measured in Excel with Windows set to each region, on 16 November 2026. Saved files, stored values and
+`Style.NumberFormat` are unchanged.
 
 # 5 Choosing a write API
 
@@ -1569,9 +1584,9 @@ repeat-fill character from a `*` code and where it goes, and whether a date or t
   en-US.
 - Built-in formats 14 (short date) and 22 (short date and time) follow `DisplayCulture`, since 2.1.0. Excel marks
   them "respond to changes in regional settings" and shows the system's short date, not their ECMA codes
-  (`mm-dd-yy`, `m/d/yy h:mm`). Chuvadi.Sheets uses the culture's `ShortDatePattern`, and for 22 adds `h:mm`. A code
-  the file itself declares for id 14 or 22 still wins, and the cell's `Style.NumberFormat` still reports the stored
-  code.
+  (`mm-dd-yy`, `m/d/yy h:mm`). Chuvadi.Sheets uses the culture's `ShortDatePattern`, and for 22 adds the time. A code
+  the file itself declares for any of the ids in this section still wins, and the cell's `Style.NumberFormat` still
+  reports the stored code.
 
 | `DisplayCulture` | Built-in 14 | Built-in 22 |
 |---|---|---|
@@ -1583,6 +1598,33 @@ repeat-fill character from a `*` code and where it goes, and whether a date or t
 
   Pass `CultureInfo.CurrentCulture` to show what Excel shows on the same machine; the invariant default is a
   US-style order. Before 2.1.0 both ids showed their ECMA codes ("05-18-03").
+- Built-in 15, 16 and 17 (`d-mmm-yy`, `d-mmm`, `mmm-yy`) and the hour of 22 follow the culture too, since 2.2.0, as
+  Excel showed them with Windows set to each region (16 November 2026):
+  - 15 and 16 take a two-digit day (`dd-mmm-yy`, `dd-mmm`) when the culture's short date has one (`dd-MM-yyyy`,
+    `dd/MM/yyyy`), and one digit when it has `d` (`M/d/yyyy`);
+  - 22 takes a two-digit hour (`hh:mm`) when the culture's short time has one (`HH:mm`), and one digit when it has
+    `h` (`h:mm tt`). It is always the 24-hour clock, without AM or PM: Excel showed `5/18/2023 14:05` in en-US too;
+  - German (de-DE) uses Excel's own German forms: 15 `05. Mrz 23`, 16 `05. Mrz`, 17 `Mrz 23`.
+  - The invariant default keeps `d-mmm-yy`, `d-mmm`, `mmm-yy` and `h:mm`.
+
+  For 5 March 2023 09:05:
+
+| `DisplayCulture` | 15 | 16 | 17 | 22 |
+|---|---|---|---|---|
+| Invariant (default) | 5-Mar-23 | 5-Mar | Mar-23 | 03/05/2023 9:05 |
+| en-US | 5-Mar-23 | 5-Mar | Mar-23 | 3/5/2023 9:05 |
+| Windows English (India)¹ | 05-Mar-23 | 05-Mar | Mar-23 | 05-03-2023 09:05 |
+| en-GB | 05-Mar-23 | 05-Mar | Mar-23 | 05/03/2023 09:05 |
+| de-DE | 05. Mrz 23 | 05. Mrz | Mrz 23 | 05.03.2023 09:05 |
+
+  ¹ `CultureInfo.CurrentCulture` on a PC with Windows set to English (India), short date `dd-MM-yyyy`, short time
+  `HH:mm`.
+
+- Month abbreviations (`mmm`, in any date code) are Excel's where Excel's differ from .NET's, since 2.2.0, for the
+  cultures measured in Excel: en-IN `Sep` (.NET `Sept`), de-DE `Mrz` (.NET `Mär`), ta-IN the full month names (as
+  Excel shows them; .NET abbreviates). Every other culture uses .NET's names; en-GB, for example, still shows `Sept`,
+  because it has not been checked in Excel. Full month names (`mmmm`) are .NET's, which matched Excel in every region
+  measured.
 - A date or time format on a serial from 0 to 1 shows as Excel shows it, since 2.1.0: 0.375 under `hh:mm:ss` is
   `09:00:00`, and 0 under `dd-mm-yyyy` is `00-01-1900`, Excel's "day 0". The reader returns such a value as a time
   on 30 December 1899, and `NumberFormatter.ToSerial` now maps that back to the time of day (0.375), where it gave a
@@ -2111,6 +2153,11 @@ Chuvadi.Sheets is one managed DLL with no native code, no font files and no NuGe
   same attribute; the analyzer says so (IL2091).
 - **Encrypted reads** decrypt the package into memory, so memory grows with the file size times the number of files
   open at once; `MaxTotalUncompressedBytes` bounds it (chapter 26).
+- **Android, run on a phone:** the 2.1.0 package, in a Release (trimmed, AOT-compiled) app on a Samsung Galaxy M51
+  with Android 12, passed all 12 checks (16 November 2026): file and stream round trips, both `TempStorage` modes,
+  encrypted save and read, the streaming reader, `ToXlsx<T>` and `ReadXlsx<T>`, `ReadXlsxSheet(Stream)`, cancellation
+  (a cancel at 100 ms stopped a 10.9 s key derivation after 138 ms) and `ForUntrustedInput`. A path in the app's own
+  folder and a temp folder in its cache both work; content URIs are read and written as streams.
 
 # 30 The zip API (obsolete)
 
@@ -2276,6 +2323,8 @@ a local function, such as an upload handler, are compiled but not run.
 
 ## 34.3 History
 
+- **2.2.0** (November 2026): updated for Chuvadi.Sheets 2.2.0 (section 4.11): built-in dates 15 to 17 and 22, and
+  month abbreviations, per culture as Excel shows them (19.2); the Android run (29.2).
 - **2.1.0** (November 2026): updated for Chuvadi.Sheets 2.1.0 (section 4.10): writer options on every save (6.4,
   11.3), `TempStorage` (7.6), widths in pixels and `CellReference` (6.2), the header check and a cancellation
   example (16.1, 16.3), stream reads (18.1), display text (19.2), errors (27.1), platforms, trimming and AOT (29.2).

@@ -35,7 +35,7 @@ dotnet run -c Release --project docs\Chuvadi.Sheets\tools\GuideRenderer
 - `--png <folder>` also writes each page as a 96 dpi PNG, so you can check it by eye.
 
 Like `staging/samples/Chuvadi.Layout.Viewer`, the renderer takes chuvadi-pdf as version-pinned packages:
-- the version is the `ChuvadiPdfVersion` in `staging/src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`, currently 3.30.2;
+- the version is the `ChuvadiPdfVersion` in `staging/src/Chuvadi.Layout.Pdf/ChuvadiPdf.props`, currently 3.31.2;
 - the packages come from the local feed `%USERPROFILE%/Documents/local-nuget`, set by the `nuget.config` here;
 - it needs the same packages as Chuvadi.Layout.Pdf, plus `Chuvadi.Pdf.Operations`.
 

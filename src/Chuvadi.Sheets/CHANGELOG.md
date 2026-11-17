@@ -1,5 +1,56 @@
 # Changelog
 
+## 2.2.0 (2026-11-17)
+
+A minor release (D-388, D-401, D-404): no API change. Display text changes for a few built-in date formats and for
+month abbreviations, **only when a culture is passed** (`DisplayCulture`, `NumberFormatOptions.Culture`); the
+invariant default and en-US show exactly what 2.1.0 showed. Sheets folders only; no shared change, and Layout's
+default output (invariant) is unchanged.
+
+### Display text
+
+Measured in Excel for Office 2021 with Windows set to each region (16 Nov 2026: English (India) with `dd-MM-yyyy`
+and `HH:mm`, English (United States), German (Germany), Tamil (India)).
+
+- **Built-in 15, 16 and 22 follow the culture's digits** (C3). 15 (`d-mmm-yy`) and 16 (`d-mmm`) take a two-digit
+  day when the culture's `ShortDatePattern` has one; 22 takes a two-digit hour when its `ShortTimePattern` has one,
+  always on the 24-hour clock without AM/PM, as Excel shows it in every region. 17 (`mmm-yy`) is unchanged.
+- **German (de-DE) uses Excel's own forms for 15 to 17** (C3): `dd. mmm yy`, `dd. mmm`, `mmm yy`.
+- **Month abbreviations (`mmm`) are Excel's** where they differ from .NET's, for the cultures measured (C5): en-IN
+  `Sep` (.NET `Sept`), de-DE `Mrz` (.NET `Mär`), ta-IN the full month names (.NET abbreviates). This applies to every
+  `mmm` in every date code, built-in or not. Other cultures keep .NET's names (en-GB still shows `Sept`, as it has not
+  been measured). The names are fixed in the library, so they do not depend on the ICU version.
+
+| Culture, 5 Mar 2023 09:05 / 5 Sep 2023 | 15 before → after | 16 before → after | 17 before → after | 22 before → after |
+|---|---|---|---|---|
+| Invariant (default), en-US | unchanged | unchanged | unchanged | unchanged |
+| Windows English (India), `dd-MM-yyyy`, `HH:mm` | 5-Mar-23 → 05-Mar-23; 5-Sept-23 → 05-Sep-23 | 5-Mar → 05-Mar | Sept-23 → Sep-23 | 05-03-2023 9:05 → 05-03-2023 09:05 |
+| en-GB | 5-Mar-23 → 05-Mar-23 | 5-Mar → 05-Mar | unchanged | 05/03/2023 9:05 → 05/03/2023 09:05 |
+| de-DE | 5-Mär-23 → 05. Mrz 23 | 5-Mär → 05. Mrz | Mär-23 → Mrz 23 | 05.03.2023 9:05 → 05.03.2023 09:05 |
+| ta-IN (.NET's data) | 5-மார்.-23 → 5-மார்ச்-23 | 5-மார். → 5-மார்ச் | மார்.-23 → மார்ச்-23 | unchanged |
+
+A code the file declares for an id still wins; `Style.NumberFormat` still reports the stored code; full month names
+(`mmmm`), stored values and saved files are unchanged.
+
+### Platforms
+
+- The 2.1.0 package ran on an Android phone (Samsung Galaxy M51, Android 12) in a Release (trimmed, AOT-compiled)
+  app: 12 of 12 checks passed (PR-6, D-388). README and guide 29.2.
+
+### Tests
+
+- New manual group `regional` (also an xUnit fact; Sheets 44 → 45): every cell of the approved before/after tables
+  for invariant, en-US, en-IN (Windows settings and .NET's data), en-GB, de-DE and ta-IN, from `Workbook.Load`,
+  `XlsxReader` and `NumberFormatter`, with the cultures pinned so the result does not depend on the ICU version; the
+  invariant default for ids 14 to 22; a declared code for 15 still wins; `Style.NumberFormat` unchanged. It also
+  prints the text under this PC's `CultureInfo.CurrentCulture`, to compare with Excel on the same PC.
+- Layout17's cancellation timing (S-1, D-388): a stop over the limit times a fresh full key derivation and tries once
+  more against half of it, so a CI runner that slows down between the two timings no longer fails a cancellation that
+  worked (macOS, 640 ms against 423 ms). An ignored cancellation still fails both times.
+- LoadBenchmarkTest's "at most 200 bytes per cell" (S-2, D-401): three careful readings (each load in its own method,
+  the large-object heap compacted before every reading), the lowest counts, all three printed. One noisy reading on
+  macOS (222) no longer fails it; a real regression still fails every reading.
+
 ## 2.1.0 (2026-11-12)
 
 A minor release (D-298, D-306, D-323, D-329): everything is additive, and existing calls compile and behave as before,

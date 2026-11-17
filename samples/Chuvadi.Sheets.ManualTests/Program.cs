@@ -108,6 +108,8 @@ public static class Program
                 Items210Test.RunDisplayText(outputDir);
             if (testName is "all" or "limits")
                 Items210Test.RunLimits(outputDir);
+            if (testName is "all" or "regional")
+                RegionalTest.Run(outputDir);
 
             if (testName is "all" or "perf")
                 LoadBenchmarkTest.Run(outputDir);
