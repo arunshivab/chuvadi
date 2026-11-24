@@ -39,6 +39,47 @@ internal static class PathSafety
         return true;
     }
 
+
+    /// <summary>
+    /// Whether extraction applies the Windows file-name rules. Defaults to the running OS; internal so the
+    /// tests can exercise the rules on any platform.
+    /// </summary>
+    internal static bool ApplyWindowsRules { get; set; } = OperatingSystem.IsWindows();
+
+    private static readonly string[] ReservedDeviceNames =
+    {
+        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "COM\u00B9", "COM\u00B2", "COM\u00B3", "LPT\u00B9", "LPT\u00B2", "LPT\u00B3",
+    };
+
+    /// <summary>
+    /// Returns why a normalised entry name is not safe to create on Windows, or null if it is fine:
+    /// a device name (CON, NUL, COM1 ..., also with an extension), a segment ending in a dot or a space
+    /// (Windows silently strips those, so the file lands under another name), or a character that is
+    /// invalid in Windows names.
+    /// </summary>
+    internal static string? WindowsReason(string normalized)
+    {
+        foreach (var seg in normalized.Split('/'))
+        {
+            if (seg.Length == 0) continue;
+            foreach (char c in seg)
+                if (c < ' ' || c == '<' || c == '>' || c == '"' || c == '|' || c == '?' || c == '*')
+                    return "Entry name contains a character that is not valid in Windows file names.";
+            char last = seg[seg.Length - 1];
+            if (last == '.' || last == ' ')
+                return "Entry name has a segment ending in a dot or a space, which Windows strips.";
+            int dot = seg.IndexOf('.');
+            string stem = (dot < 0 ? seg : seg.Substring(0, dot)).TrimEnd(' ');
+            foreach (var dev in ReservedDeviceNames)
+                if (string.Equals(stem, dev, StringComparison.OrdinalIgnoreCase))
+                    return "Entry name is a reserved Windows device name.";
+        }
+        return null;
+    }
+
     public static int Depth(string normalized)
     {
         int d = 0;

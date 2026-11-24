@@ -22,10 +22,10 @@ public sealed class ZipExtractionLimits
     /// <summary>Maximum size of the central directory in bytes.</summary>
     public long? MaxCentralDirectoryBytes { get; init; }
 
-    /// <summary>No caps at all. Only for trusted archives.</summary>
+    /// <summary>No caps at all. Only for trusted archives: set it explicitly, it is not the default.</summary>
     public static ZipExtractionLimits None { get; } = new();
 
-    /// <summary>Conservative preset for untrusted input.</summary>
+    /// <summary>Conservative preset for untrusted input. This is the default of <see cref="ZipReaderOptions.Limits"/> since 1.0.2.</summary>
     public static ZipExtractionLimits Untrusted { get; } = new()
     {
         MaxEntries = 10_000,

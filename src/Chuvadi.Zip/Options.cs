@@ -8,8 +8,18 @@ namespace Chuvadi.Zip;
 /// <summary>Options for opening an archive for reading.</summary>
 public sealed class ZipReaderOptions
 {
-    /// <summary>Resource caps. Default: <see cref="ZipExtractionLimits.None"/>.</summary>
-    public ZipExtractionLimits Limits { get; init; } = ZipExtractionLimits.None;
+    /// <summary>
+    /// Resource caps. Default: <see cref="ZipExtractionLimits.Untrusted"/> (since 1.0.2), so an archive from an
+    /// unknown source cannot fill the disk or memory with default options. For archives you trust, set
+    /// <see cref="ZipExtractionLimits.None"/> explicitly or your own <see cref="ZipExtractionLimits"/>.
+    /// Cannot be null.
+    /// </summary>
+    public ZipExtractionLimits Limits
+    {
+        get => _limits;
+        init => _limits = value ?? throw new ArgumentNullException(nameof(value), "Limits cannot be null; use ZipExtractionLimits.None for no caps.");
+    }
+    private readonly ZipExtractionLimits _limits = ZipExtractionLimits.Untrusted;
     /// <summary>Default password for encrypted entries (a per-call password overrides it).</summary>
     public string? Password { get; init; }
     /// <summary>Encoding of the password for legacy ZipCrypto. Default UTF-8. AES always uses UTF-8.</summary>
@@ -29,7 +39,8 @@ public sealed class ZipReaderOptions
 /// <summary>Options for extraction.</summary>
 public sealed class ZipExtractOptions
 {
-    public ZipOverwritePolicy Overwrite { get; init; } = ZipOverwritePolicy.Overwrite;
+    /// <summary>What to do when a target file exists. Default: <see cref="ZipOverwritePolicy.Fail"/> (since 1.0.2).</summary>
+    public ZipOverwritePolicy Overwrite { get; init; } = ZipOverwritePolicy.Fail;
     public ZipUnsafePathPolicy UnsafePaths { get; init; } = ZipUnsafePathPolicy.Throw;
     public ZipSymlinkPolicy Symlinks { get; init; } = ZipSymlinkPolicy.Skip;
     /// <summary>Password used for encrypted entries (overrides the reader's default).</summary>

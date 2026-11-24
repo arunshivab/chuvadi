@@ -1,6 +1,6 @@
 # Chuvadi.Zip: platform readiness
 
-What is verified and what is not, for a consumer that runs on more than Windows or trims or AOT-compiles its app. Status as of 1.0.1. The 1.0.0 package on the release page does not carry the trim and AOT metadata; 1.0.1 does (D-227).
+What is verified and what is not, for a consumer that runs on more than Windows or trims or AOT-compiles its app. Status as of 1.0.2. The 1.0.0 package on the release page does not carry the trim and AOT metadata; 1.0.1 and later do (D-227). Since 1.0.2 the resource limits are on by default; on Windows, extraction also refuses device names, names ending in a dot or space, and invalid characters.
 
 ## Verified
 
@@ -9,7 +9,7 @@ What is verified and what is not, for a consumer that runs on more than Windows 
 | Managed code only? | Yes. No P/Invoke, no native library, no `unsafe`. | Source review of `src/Chuvadi.Zip` and `shared/Chuvadi.Internal`. |
 | Third-party packages? | None. Pure BCL. | CI scans `src/` and `shared/` for package references. |
 | Cryptography | BCL only (`System.Security.Cryptography`: AES, HMAC, PBKDF2). .NET uses the operating system's crypto library for these, so they work wherever .NET does. | Source review. |
-| Windows-only APIs? | None. `OperatingSystem.IsWindows()` only selects Unix file-mode handling and the case rule for names. | Source review. |
+| Windows-only APIs? | None. `OperatingSystem.IsWindows()` only selects Unix file-mode handling, the case rule for names and (since 1.0.2) the Windows file-name rules on extraction. | Source review. |
 | Target framework | Plain `net10.0`, no `-windows` suffix. | `Chuvadi.Zip.csproj`. |
 | Trim analyzers | 0 warnings with `IsTrimmable` and `IsAotCompatible` on; the build treats warnings as errors. | `dotnet build -c Release`. |
 | Real trimmed publish | A self-contained `linux-x64` publish with `TrimMode=full` of a small app using Zip and Fonts built with no warnings and ran correctly. | Run in the build sandbox, 6 Nov 2026. |

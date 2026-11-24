@@ -62,11 +62,11 @@ public enum ZipHostSystem
 /// <summary>What to do when an extraction target file already exists.</summary>
 public enum ZipOverwritePolicy
 {
-    /// <summary>Replace the existing file.</summary>
+    /// <summary>Replace the existing file. Not the default: set it on purpose.</summary>
     Overwrite = 0,
     /// <summary>Leave the existing file and skip the entry.</summary>
     Skip = 1,
-    /// <summary>Throw <see cref="System.IO.IOException"/>.</summary>
+    /// <summary>Throw <see cref="System.IO.IOException"/> ("File already exists"). This is the default of <see cref="ZipExtractOptions.Overwrite"/> since 1.0.2.</summary>
     Fail = 2,
 }
 

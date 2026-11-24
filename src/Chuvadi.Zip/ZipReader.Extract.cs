@@ -144,6 +144,12 @@ public sealed partial class ZipReader
         string norm = entry.NormalizedName!;
         if (norm.Length == 0) return null;                       // "./" - the root itself
 
+        if (PathSafety.ApplyWindowsRules && PathSafety.WindowsReason(norm) is string winReason)
+        {
+            if (options.UnsafePaths == ZipUnsafePathPolicy.Skip) { result.SkippedUnsafe.Add(entry.Name); return null; }
+            throw new ZipUnsafePathException(entry.Name, $"Refusing to extract entry '{entry.Name}': {winReason}");
+        }
+
         if (entry.IsSymlink)
         {
             switch (options.Symlinks)

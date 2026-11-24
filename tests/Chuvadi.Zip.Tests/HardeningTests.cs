@@ -130,7 +130,7 @@ namespace Chuvadi.Zip.Tests
         public void Hostile_declared_size_does_not_cause_huge_allocation()
         {
             var e = RawZip.Deflated("liar.bin", new byte[100], declaredSize: 4_000_000_000L);
-            using var r = ZipReader.Open(RawZip.Build(new[] { e }), new ZipReaderOptions { VerifyCrc = false });
+            using var r = ZipReader.Open(RawZip.Build(new[] { e }), new ZipReaderOptions { VerifyCrc = false, Limits = ZipExtractionLimits.None });
             Assert.IsAssignableFrom<ZipFormatException>(Record.Exception(() => Bounded(() => r.ReadAllBytes(r.Entries[0]))));
         }
 
@@ -138,7 +138,7 @@ namespace Chuvadi.Zip.Tests
         public void Implausible_but_array_sized_declaration_fails_as_integrity_error()
         {
             var e = RawZip.Deflated("liar.bin", new byte[100], declaredSize: 1_500_000_000L);
-            using var r = ZipReader.Open(RawZip.Build(new[] { e }), new ZipReaderOptions { VerifyCrc = false });
+            using var r = ZipReader.Open(RawZip.Build(new[] { e }), new ZipReaderOptions { VerifyCrc = false, Limits = ZipExtractionLimits.None });
             Assert.IsType<ZipIntegrityException>(Record.Exception(() => Bounded(() => r.ReadAllBytes(r.Entries[0]))));
         }
 
@@ -157,7 +157,7 @@ namespace Chuvadi.Zip.Tests
             var dir = Path.Combine(Path.GetTempPath(), "czip-dup-" + Guid.NewGuid().ToString("N"));
             try
             {
-                r.ExtractTo(dir);
+                r.ExtractTo(dir, new ZipExtractOptions { Overwrite = ZipOverwritePolicy.Overwrite });
                 Assert.Equal("second", File.ReadAllText(Path.Combine(dir, "dup.txt")));
                 Assert.Throws<IOException>(() => r.ExtractTo(Path.Combine(dir, "again"), new ZipExtractOptions { Overwrite = ZipOverwritePolicy.Fail }));
             }

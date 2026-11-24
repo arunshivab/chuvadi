@@ -46,7 +46,7 @@ Writing ZipCrypto is refused (`ZipUnsupportedException`).
 The case of a viewer that gets an encrypted archive as bytes (an attachment) and shows one entry:
 
 1. Open from memory: `ZipReader.Open(byte[])`, `Open(ReadOnlyMemory<byte>)` or `Open(Stream)`. Nothing is written to disk.
-2. Set the limits on the options: `new ZipReaderOptions { Limits = ZipExtractionLimits.Untrusted }`, or your own `ZipExtractionLimits { MaxEntryBytes = ..., MaxCompressionRatio = ... }`. Limits count the bytes actually produced, not the sizes the header claims; the ratio limit does not apply to entries under 1 MiB.
+2. The limits are on by default (the `Untrusted` values, since 1.0.2). Pass your own to change them: `new ZipReaderOptions { Limits = new ZipExtractionLimits { MaxEntryBytes = ..., MaxCompressionRatio = ... } }`. Limits count the bytes actually produced, not the sizes the header claims; the ratio limit does not apply to entries under 1 MiB.
 3. Find the entry (`FindEntry(name)` or `Entries`), then `ReadAllBytes(entry, password)`, or `OpenRead(entry, password)` for a stream. Read to the end before trusting the result.
 
 What to catch:
@@ -63,7 +63,22 @@ Supported encryption: WinZip AES-128/192/256 (AE-1 and AE-2) and ZipCrypto, both
 
 ## Limits (`ZipExtractionLimits`)
 
-`MaxEntries`, `MaxEntryBytes`, `MaxTotalBytes` (summed over everything one reader produces), `MaxCompressionRatio` (entries under 1 MiB exempt), `MaxPathDepth`, `MaxNameLength`, `MaxCentralDirectoryBytes`. `ZipExtractionLimits.None` (default) and `ZipExtractionLimits.Untrusted` presets. A violation throws `ZipLimitExceededException` with `Limit`, `Maximum` and `EntryName`.
+`MaxEntries`, `MaxEntryBytes`, `MaxTotalBytes` (summed over everything one reader produces), `MaxCompressionRatio` (entries under 1 MiB exempt), `MaxPathDepth`, `MaxNameLength`, `MaxCentralDirectoryBytes`. Two presets: `ZipExtractionLimits.Untrusted` and `ZipExtractionLimits.None`.
+
+**The default is `Untrusted` (since 1.0.2).** A reader opened without limits set refuses, with `ZipLimitExceededException` (`Limit`, `Maximum`, `EntryName`): more than 10,000 entries, an entry over 512 MiB, more than 2 GiB in total, a ratio over 200 on an entry of 1 MiB or more, names deeper than 32 folders or longer than 1,024 characters, and a central directory over 64 MiB. This holds for every way of reading: from a path, from memory (`byte[]`, `ReadOnlyMemory<byte>`, `Stream`), the extension methods, `OpenRead`, `ReadAllBytes`, `ReadAllText`, `CopyTo`, `Verify` and all `Extract*` methods.
+
+For an archive you trust (one you made yourself, say), opt out on purpose:
+
+```csharp
+var trusted = new ZipReaderOptions { Limits = ZipExtractionLimits.None };
+using var reader = ZipReader.Open("backup.zip", trusted);
+```
+
+`Limits` cannot be null. Know the ceiling: the total cap is 2 GiB and entries under 1 MiB are exempt from the ratio check, so a small archive of thousands of such entries can still expand to about 2 GiB (hundreds of times its size). If your app can only afford less, set your own `MaxTotalBytes`.
+
+**Existing files (since 1.0.2).** `ZipExtractOptions.Overwrite` defaults to `ZipOverwritePolicy.Fail`: extracting an entry whose file already exists throws `IOException` and leaves the file alone, so an archive cannot silently replace what is in the target folder. Choose on purpose: `Overwrite` replaces, `Skip` keeps the existing file and lists the entry in `SkippedExisting`. An archive with two entries of the same name fails on the second one under `Fail`.
+
+**Windows file names.** On Windows, extraction also refuses (or skips, with `ZipUnsafePathPolicy.Skip`) names with a device-name segment (`CON`, `NUL`, `COM1`, `LPT1`, also with an extension), a segment ending in a dot or a space, and characters that are not valid in Windows names. Entries that differ only in letter case share one file on Windows and macOS; `ZipOverwritePolicy` decides which wins.
 
 ## Exceptions
 
