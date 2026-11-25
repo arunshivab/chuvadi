@@ -27,10 +27,11 @@ using (var zip = ZipWriter.Create("out.zip", new ZipWriterOptions { Password = "
 }
 
 // Read
+// Resource limits are on by default (the Untrusted values). For an archive you trust:
+//   new ZipReaderOptions { Limits = ZipExtractionLimits.None }
 using var reader = ZipReader.Open("out.zip", new ZipReaderOptions
 {
     Password = "s3cret",
-    Limits = ZipExtractionLimits.Untrusted,
 });
 foreach (var e in reader.Entries)
     Console.WriteLine($"{e.Name}  {e.Size} bytes  {e.Encryption}");

@@ -272,7 +272,7 @@ namespace Chuvadi.Zip.ManualTests
             {
                 for (int i = 0; i < n; i++) w.AddBytes("f" + i, ReadOnlySpan<byte>.Empty, new ZipEntryOptions { Method = ZipCompressionMethod.Stored });
             });
-            using var r = ZipReader.Open(bytes);
+            using var r = ZipReader.Open(bytes, new ZipReaderOptions { Limits = ZipExtractionLimits.None });   // 70,000 entries is over the default cap of 10,000
             Check(r.Count == n && r.IsZip64, "70000 entries via Zip64 EOCD (count=" + r.Count + ")");
             Check(r.FindEntry("f69999") is not null, "last entry present");
             Throws<ZipLimitExceededException>(() => ZipWriter.ToBytes(w =>
@@ -604,7 +604,7 @@ namespace Chuvadi.Zip.ManualTests
                 var skip = r.ExtractTo(target, new ZipExtractOptions { Overwrite = ZipOverwritePolicy.Skip });
                 Check(File.ReadAllText(Path.Combine(target, "a.txt")) == "old" && skip.SkippedExisting.Count == 1, "Skip keeps existing");
                 Throws<IOException>(() => r.ExtractTo(target, new ZipExtractOptions { Overwrite = ZipOverwritePolicy.Fail }));
-                var ow = r.ExtractTo(target);
+                var ow = r.ExtractTo(target, new ZipExtractOptions { Overwrite = ZipOverwritePolicy.Overwrite });
                 Check(File.ReadAllText(Path.Combine(target, "a.txt")) == "new" && ow.FilesExtracted == 2, "Overwrite replaces");
 
                 var filtered = r.ExtractTo(Path.Combine(dir, "f"), new ZipExtractOptions { Filter = e => e.Name.StartsWith("sub/") });
