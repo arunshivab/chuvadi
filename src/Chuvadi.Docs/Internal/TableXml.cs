@@ -258,9 +258,19 @@ internal static class TableXml
     /// <summary>
     /// Reads a w:tbl subtree (reader on the tbl element) into a <see cref="DocTable"/> with full
     /// table/row/cell properties and cell content, nested tables included (the XML depth limit
-    /// bounds nesting). The grid column count is the larger of tblGrid and the widest row.
+    /// and MaxNestingDepth bound nesting). The grid column count is the larger of tblGrid and the widest row.
     /// </summary>
-    public static DocTable Read(XmlReader sub, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker = null)
+    public static DocTable Read(XmlReader sub, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker = null,
+        NestingGuard? nesting = null, string? part = null)
+    {
+        // Each table is one level of the load's content nesting (MaxNestingDepth, 2.4.1): checked before reading it.
+        nesting?.Enter(part);
+        try { return ReadCore(sub, loadParagraph, marker, nesting, part); }
+        finally { nesting?.Exit(); }
+    }
+
+    private static DocTable ReadCore(XmlReader sub, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker,
+        NestingGuard? nesting, string? part)
     {
         var format = new TableFormat();
         var gridWidths = new List<double>();
@@ -290,12 +300,12 @@ internal static class TableXml
                     }
                     break;
                 case "tr":
-                    using (var tr = sub.LightSubtree()) rows.Add(ReadRow(tr, loadParagraph, marker));
+                    using (var tr = sub.LightSubtree()) rows.Add(ReadRow(tr, loadParagraph, marker, nesting, part));
                     break;
                 case "sdt":
                 case "customXml":
                     // Rows wrapped in content controls / custom XML: read the rows inside.
-                    using (var wrap = sub.LightSubtree()) ReadWrapped(wrap, "tr", el => rows.Add(ReadRow(el, loadParagraph, marker)));
+                    using (var wrap = sub.LightSubtree()) ReadWrapped(wrap, "tr", el => rows.Add(ReadRow(el, loadParagraph, marker, nesting, part)), nesting, part);
                     break;
                 default:
                     if (marker is not null && IsRangeMarker(sub)) marker(sub);
@@ -414,7 +424,8 @@ internal static class TableXml
     /// <summary>Range markers (bookmarks) that may sit between rows and cells; the caller places them.</summary>
     private static bool IsRangeMarker(XmlReader r) => r.NamespaceURI == W && r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd";
 
-    private static PendingRow ReadRow(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker)
+    private static PendingRow ReadRow(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker,
+        NestingGuard? nesting, string? part)
     {
         var row = new PendingRow();
         if (!r.Read()) return row;
@@ -428,12 +439,12 @@ internal static class TableXml
                     using (var tp = r.LightSubtree()) ReadRowPr(tp, row.Props);
                     break;
                 case "tc":
-                    using (var tc = r.LightSubtree()) row.Cells.Add(ReadCell(tc, loadParagraph, marker));
+                    using (var tc = r.LightSubtree()) row.Cells.Add(ReadCell(tc, loadParagraph, marker, nesting, part));
                     break;
                 case "sdt":
                 case "customXml":
                     // Cells wrapped in content controls / custom XML: read the cells inside.
-                    using (var wrap = r.LightSubtree()) ReadWrapped(wrap, "tc", el => row.Cells.Add(ReadCell(el, loadParagraph, marker)));
+                    using (var wrap = r.LightSubtree()) ReadWrapped(wrap, "tc", el => row.Cells.Add(ReadCell(el, loadParagraph, marker, nesting, part)), nesting, part);
                     break;
                 default:
                     // tblPrEx (row-level table property exceptions): not modelled.
@@ -478,7 +489,8 @@ internal static class TableXml
         }
     }
 
-    private static PendingCell ReadCell(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker)
+    private static PendingCell ReadCell(XmlReader r, Func<XmlReader, Paragraph> loadParagraph, Action<XmlReader>? marker,
+        NestingGuard? nesting, string? part)
     {
         var pc = new PendingCell();
         var cell = pc.Cell;
@@ -501,7 +513,7 @@ internal static class TableXml
                     using (var p = r.LightSubtree()) cell.Paragraphs.Add(loadParagraph(p));
                     break;
                 case "tbl":
-                    using (var t = r.LightSubtree()) cell.AppendNestedTable(Read(t, loadParagraph, marker));
+                    using (var t = r.LightSubtree()) cell.AppendNestedTable(Read(t, loadParagraph, marker, nesting, part));
                     break;
                 case "bookmarkStart":
                 case "bookmarkEnd":
@@ -580,7 +592,7 @@ internal static class TableXml
     /// subtree reader for every w:<paramref name="target"/> inside it, descending through
     /// sdtContent and nested wrappers but never into the targets themselves.
     /// </summary>
-    private static void ReadWrapped(XmlReader wrap, string target, Action<XmlReader> read)
+    private static void ReadWrapped(XmlReader wrap, string target, Action<XmlReader> read, NestingGuard? nesting, string? part)
     {
         if (!wrap.Read()) return;
         int childDepth = wrap.Depth + 1;
@@ -595,7 +607,10 @@ internal static class TableXml
             else if (wrap.LocalName is "sdtContent" or "sdt" or "customXml")
             {
                 using var inner = wrap.LightSubtree();
-                ReadWrapped(inner, target, read);
+                // Wrappers inside wrappers are read by recursion: each is a nesting level (2.4.1).
+                nesting?.Enter(part);
+                try { ReadWrapped(inner, target, read, nesting, part); }
+                finally { nesting?.Exit(); }
             }
             else if (!wrap.IsEmptyElement)
             {

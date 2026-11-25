@@ -189,7 +189,7 @@ public sealed partial class DocxReader : IDisposable
             buffered?.Dispose();
             input.Dispose();
             if (ex is DocxFormatException or DocxSecurityLimitException or DocxPasswordRequiredException
-                or OperationCanceledException)
+                or OperationCanceledException || DocxErrors.IsFatal(ex))
                 throw;
             throw new DocxFormatException("Could not open the file as a docx package: " + ex.Message, ex);
         }
@@ -779,7 +779,7 @@ public sealed partial class DocxReader : IDisposable
         {
             raw = _package.OpenPart(uri);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !DocxErrors.IsFatal(ex))
         {
             if (isMain)
                 throw new DocxFormatException($"The main document part '{uri}' is corrupt and cannot be read.", ex);

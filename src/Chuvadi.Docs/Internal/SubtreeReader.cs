@@ -31,12 +31,16 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
 
     private readonly XmlReader _r;
     private readonly int _root;
+    // The subtree reader this one was opened on, when it reads that reader's outer reader directly (2.4.1): the
+    // few node-state changes the old chain made in the outer subtree readers on the way through are made here.
+    private readonly SubtreeReader? _parent;
     private State _state;
     private bool _empty; // positioned on the empty sentinel node (Initial, EndOfFile, Closed, or the inner reader ran out)
 
-    private SubtreeReader(XmlReader reader)
+    private SubtreeReader(XmlReader reader, SubtreeReader? parent = null)
     {
         _r = reader;
+        _parent = parent;
         _root = reader.Depth;
         _state = State.Initial;
         _empty = true;
@@ -47,10 +51,31 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
     {
         if (reader.NodeType != XmlNodeType.Element)
             throw new InvalidOperationException("ReadSubtree() can be called only if the reader is on an element node.");
+        // A subtree of a subtree reads the outermost reader directly (2.4.1): while the inner reader is in use it
+        // stays strictly inside the outer subtree, where the outer one only passes every call through. Without
+        // this, nested subtrees formed a chain and every Read went down the whole chain, so stack and time grew
+        // with the nesting depth (a stack overflow at about 240 nested hyperlinks on a 256 KB thread).
+        if (reader is SubtreeReader { Active: true, _empty: false } outer)
+            return new SubtreeReader(outer._r, outer);
         return new SubtreeReader(reader);
     }
 
     private bool Active => _state == State.Interactive;
+
+    // The outer subtree readers of a chain move together: all on the node, or all on the empty node after the
+    // innermost read ran out of input (an error). Only that error case ever sets them empty, so the common path
+    // costs one field test. As in the old chain, a call stops at the first outer reader that is no longer
+    // interactive (one a failed content read put into the Error state). Iterative: no stack per level.
+    private void ParentsOnNode()
+    {
+        if (_parent is not { _empty: true, Active: true }) return;
+        for (var p = _parent; p is { Active: true }; p = p._parent) p._empty = false;
+    }
+
+    private void ParentsRanOut()
+    {
+        for (var p = _parent; p is { Active: true }; p = p._parent) p._empty = true;
+    }
 
     public override XmlNodeType NodeType => _empty ? XmlNodeType.None : _r.NodeType;
     public override string Name => _empty ? string.Empty : _r.Name;
@@ -107,6 +132,7 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
     {
         if (!Active) return false;
         _empty = false; // as the BCL reader: back on the outer reader's node, even after a failed Read
+        ParentsOnNode();
         return _r.MoveToElement();
     }
     public override bool ReadAttributeValue() => Active && _r.ReadAttributeValue();
@@ -124,6 +150,7 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
                 return true;
             case State.Interactive:
                 _empty = false;
+                ParentsOnNode();
                 _r.MoveToElement();
                 if (_r.Depth == _root && (_r.NodeType == XmlNodeType.EndElement || (_r.NodeType == XmlNodeType.Element && _r.IsEmptyElement)))
                 {
@@ -133,6 +160,7 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
                 }
                 if (_r.Read()) return true;
                 _empty = true;
+                ParentsRanOut();
                 return false;
             default:
                 return false;
@@ -148,11 +176,16 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
                 return;
             case State.Interactive:
                 _empty = false;
+                ParentsOnNode();
                 _r.MoveToElement();
                 if (_r.Depth == _root)
                 {
-                    if (_r.NodeType == XmlNodeType.Element && !_r.IsEmptyElement && _r.Read())
-                        while (_r.NodeType != XmlNodeType.EndElement && _r.Depth > _root) _r.Skip();
+                    if (_r.NodeType == XmlNodeType.Element && !_r.IsEmptyElement)
+                    {
+                        if (_r.Read())
+                            while (_r.NodeType != XmlNodeType.EndElement && _r.Depth > _root) _r.Skip();
+                        else ParentsRanOut();
+                    }
                     _state = State.EndOfFile;
                     _empty = true;
                     return;
@@ -170,10 +203,16 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
     {
         if (_state != State.Interactive) return string.Empty;
         _empty = false;
+        ParentsOnNode();
         // Delegated to the outer reader, as the BCL reader does, so a failure puts every subtree reader
         // in the chain into the Error state.
         try { return _r.ReadContentAsString(); }
-        catch { _state = State.Error; throw; }
+        catch
+        {
+            _state = State.Error;
+            for (var p = _parent; p is { Active: true }; p = p._parent) p._state = State.Error;
+            throw;
+        }
     }
 
     public override void Close()
@@ -183,14 +222,18 @@ internal sealed class SubtreeReader : XmlReader, IXmlLineInfo, IXmlNamespaceReso
         {
             if (_state != State.EndOfFile)
             {
+                ParentsOnNode();
                 _r.MoveToElement();
-                if (_r.Depth == _root && _r.NodeType == XmlNodeType.Element && !_r.IsEmptyElement) _r.Read();
-                while (_r.Depth > _root && _r.Read()) { }
+                bool ok = true;
+                if (_r.Depth == _root && _r.NodeType == XmlNodeType.Element && !_r.IsEmptyElement) ok = _r.Read();
+                while (ok && _r.Depth > _root) ok = _r.Read();
+                if (!ok) ParentsRanOut();
             }
         }
-        catch
+        catch (Exception ex) when (!DocxErrors.IsFatal(ex))
         {
             // As the BCL subtree reader: the outer reader keeps the error (ReadState.Error) for its caller.
+            // Out of memory and stack exhaustion are never swallowed (2.4.1).
         }
         finally
         {

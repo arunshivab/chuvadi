@@ -8,8 +8,12 @@ namespace Chuvadi.Docs.Model;
 /// what to read, and the resource limits applied to untrusted input.
 ///
 /// <para><b>Security limits.</b> Every limit is a nullable property; <c>null</c> disables that
-/// check. The defaults are generous enough for any real Word document but stop
-/// decompression bombs, pathological nesting and key-derivation stalls. Exceeding a limit
+/// check. The defaults are safe for files from anywhere (2.4.1): they stop decompression bombs,
+/// memory amplification (<see cref="MaxElements"/>, 2,000,000), pathological nesting
+/// (<see cref="MaxNestingDepth"/>, 64) and key-derivation stalls, and still open documents of
+/// several hundred pages. Three presets: <see cref="ForUntrustedInput"/> (tighter, for uploads and
+/// mail attachments), <see cref="ForTrustedInput"/> (the 2.4.0 defaults, for very large documents
+/// from a trusted source) and <see cref="CreateUnrestricted"/> (every limit off). Exceeding a limit
 /// throws <see cref="DocxSecurityLimitException"/> (which derives from
 /// <see cref="DocxFormatException"/>) naming the limit, the observed value and the cap.
 /// The package-level limits (<see cref="MaxEntries"/>, <see cref="MaxTotalUncompressedBytes"/>,
@@ -36,8 +40,17 @@ public sealed class DocxReaderOptions
     /// <summary>Default for <see cref="MaxTotalUncompressedBytes"/>: 1 GiB.</summary>
     public const long DefaultMaxTotalUncompressedBytes = 1L << 30;
 
-    /// <summary>Default for <see cref="MaxCompressionRatio"/>: 1,000 : 1.</summary>
-    public const int DefaultMaxCompressionRatio = 1_000;
+    /// <summary>
+    /// Default for <see cref="MaxCompressionRatio"/>: 200 : 1 (2.4.1; 1,000 : 1 before). Real Word documents stay
+    /// near 15 : 1 or below; every entry of 1 MB or more above 200 : 1 in a survey of 571 files was a synthetic bomb.
+    /// </summary>
+    public const int DefaultMaxCompressionRatio = 200;
+
+    /// <summary>Default for <see cref="MaxElements"/>: 2,000,000 XML elements per operation (2.4.1; no limit before).</summary>
+    public const int DefaultMaxElements = 2_000_000;
+
+    /// <summary>Default for <see cref="MaxNestingDepth"/>: 64 levels (2.4.1).</summary>
+    public const int DefaultMaxNestingDepth = 64;
 
     /// <summary>Default for <see cref="CompressionRatioThresholdBytes"/>: 1 MiB.</summary>
     public const long DefaultCompressionRatioThresholdBytes = 1L << 20;
@@ -126,7 +139,7 @@ public sealed class DocxReaderOptions
     /// <summary>
     /// Maximum uncompressed : compressed ratio for any single entry whose uncompressed size is
     /// at least <see cref="CompressionRatioThresholdBytes"/>. Real Word XML compresses roughly
-    /// 5–50 : 1; bombs exceed 1,000 : 1. Checked at open. Default
+    /// 5–50 : 1; bombs exceed 300 : 1. Checked at open. Default
     /// <see cref="DefaultMaxCompressionRatio"/>; null = unlimited.
     /// </summary>
     public int? MaxCompressionRatio { get; set; } = DefaultMaxCompressionRatio;
@@ -167,15 +180,39 @@ public sealed class DocxReaderOptions
     /// million empty paragraphs takes about 1.1 GB to load, though it passes every byte limit. Breaches throw
     /// <see cref="DocxSecurityLimitException"/> with <see cref="DocxLimit.Elements"/> while reading, before most
     /// of the memory is used.</para>
-    /// <para>Default null (no limit). <see cref="ForUntrustedInput"/> sets 1,000,000.</para>
+    /// <para>Default <see cref="DefaultMaxElements"/> (2,000,000; measured worst case about 1 GB for Load, while the
+    /// streaming reader stays near 175 MB), since 2.4.1; null before. <see cref="ForUntrustedInput"/> sets 1,000,000;
+    /// <see cref="ForTrustedInput"/> and <see cref="CreateUnrestricted"/> set null (no limit). A document over the
+    /// default (roughly 1,000+ pages of dense formatting) opens with <see cref="ForTrustedInput"/>.</para>
     /// </summary>
-    public int? MaxElements { get; set; }
+    public int? MaxElements { get; set; } = DefaultMaxElements;
+
+    /// <summary>
+    /// Maximum content nesting (2.4.1): the levels <see cref="Document.Load(System.IO.Stream, string?)"/> and
+    /// <see cref="DocxReader.FormattedParagraphs()"/> read by recursion, counted together — each table (a nested
+    /// table, and rows or cells inside nested content controls or custom XML) and each hyperlink, tracked change
+    /// (ins, del, moveTo, moveFrom) or simple field inside another in a paragraph count one level; each text box counts
+    /// four, as it takes about four times the stack (so the default admits 16 text boxes inside each other). Content
+    /// controls, smart tags and custom XML around runs are read without recursion and do not count. Checked before each level is read;
+    /// breaches throw <see cref="DocxSecurityLimitException"/> with <see cref="DocxLimit.NestingDepth"/>.
+    /// <para>Recursion that goes too deep ends in a stack overflow, which .NET cannot catch: it ends the whole
+    /// process. The default <see cref="DefaultMaxNestingDepth"/> (64) keeps loading, saving and converting a loaded
+    /// document safe on a 256 KB thread stack (the stack of an IIS worker thread); real documents nest 1–5 levels.
+    /// <see cref="ForUntrustedInput"/> sets 32, <see cref="ForTrustedInput"/> 64, <see cref="CreateUnrestricted"/> null
+    /// (no limit). With no limit, each level still checks the stack that is left, so a file nested too deep for the
+    /// thread throws <see cref="InsufficientExecutionStackException"/> instead of ending the process.</para>
+    /// <para>Templates (<c>DocxTemplate</c>) and the plain readers (<see cref="DocxReader.Paragraphs()"/>,
+    /// <see cref="DocxReader.Tables()"/>, <see cref="DocxReader.ExtractText()"/>) read without recursion and are bounded
+    /// by <see cref="MaxXmlDepth"/> instead.</para>
+    /// </summary>
+    public int? MaxNestingDepth { get; set; } = DefaultMaxNestingDepth;
 
     /// <summary>
     /// Limits suitable for files from untrusted sources (uploads, e-mail attachments, a shared server):
     /// 50 MB package, 256 MB uncompressed in total, 64 MB per part, compression ratio 200:1 (for entries of
-    /// 1 MB or more), 10,000 zip entries, XML depth 128, spin count 500,000 and 1,000,000 XML elements per
-    /// operation (<see cref="MaxElements"/>). Measured worst case about 600 MB and a few seconds per load; a
+    /// 1 MB or more), 10,000 zip entries, XML depth 128, spin count 500,000, 1,000,000 XML elements per
+    /// operation (<see cref="MaxElements"/>) and content nesting 32 (<see cref="MaxNestingDepth"/>, 2.4.1).
+    /// Measured worst case about 600 MB and a few seconds per load; a
     /// Word document of about 23,000 paragraphs (roughly 900–1,000 pages) still loads. Returns a new instance
     /// on every call; adjust as needed. The same name as Chuvadi.Sheets' and Chuvadi.Layout's presets.
     /// </summary>
@@ -189,6 +226,29 @@ public sealed class DocxReaderOptions
         MaxXmlDepth = 128,
         MaxSpinCount = 500_000,
         MaxElements = 1_000_000,
+        MaxNestingDepth = 32,
+    };
+
+    /// <summary>
+    /// Limits for very large documents from a trusted source (2.4.1): exactly the defaults of 2.4.0 — 1 GiB package,
+    /// 1 GiB uncompressed in total, no per-part cap, compression ratio 1,000:1 (for entries of 1 MB or more),
+    /// 10,000 zip entries, XML depth 256, spin count 500,000 and no element limit — plus content nesting 64
+    /// (<see cref="MaxNestingDepth"/>, which 2.4.0 did not have; it keeps the process safe from stack overflow).
+    /// Use it when a document is refused by the defaults' <see cref="MaxElements"/> or <see cref="MaxCompressionRatio"/>
+    /// and you trust where it came from: memory then grows with the document (measured about 1 GB for a 28 MB,
+    /// 5-million-element document). Returns a new instance on every call.
+    /// </summary>
+    public static DocxReaderOptions ForTrustedInput() => new()
+    {
+        MaxPackageBytes = DefaultMaxPackageBytes,
+        MaxTotalUncompressedBytes = DefaultMaxTotalUncompressedBytes,
+        MaxPartBytes = null,
+        MaxCompressionRatio = 1_000,
+        MaxEntries = DefaultMaxEntries,
+        MaxXmlDepth = DefaultMaxXmlDepth,
+        MaxSpinCount = DefaultMaxSpinCount,
+        MaxElements = null,
+        MaxNestingDepth = DefaultMaxNestingDepth,
     };
 
     /// <summary>
@@ -233,6 +293,7 @@ public sealed class DocxReaderOptions
         MaxXmlDepth = null,
         MaxSpinCount = null,
         MaxElements = null,
+        MaxNestingDepth = null,
     };
 }
 
@@ -255,6 +316,8 @@ public enum DocxLimit
     PackageBytes,
     /// <summary><see cref="DocxReaderOptions.MaxElements"/> (since 2.1.0).</summary>
     Elements,
+    /// <summary><see cref="DocxReaderOptions.MaxNestingDepth"/> (since 2.4.1).</summary>
+    NestingDepth,
 }
 
 /// <summary>
@@ -286,6 +349,9 @@ public sealed class DocxSecurityLimitException : DocxFormatException
         PartName = partName;
     }
 
+    /// <summary>The way out for a large document from a trusted source (2.4.1), added to the limits the 2.4.1 defaults tightened.</summary>
+    private const string Trusted = " If the document comes from a trusted source, open it with DocxReaderOptions.ForTrustedInput().";
+
     private static string BuildMessage(DocxLimit limit, long actual, long allowed, string? partName)
     {
         var where = partName is null ? "" : $" in '{partName}'";
@@ -293,12 +359,13 @@ public sealed class DocxSecurityLimitException : DocxFormatException
         {
             DocxLimit.EntryCount => $"Document has {actual:N0} zip entries; the limit is {allowed:N0}.",
             DocxLimit.TotalUncompressedBytes => $"Document would decompress to {actual:N0} bytes; the limit is {allowed:N0}.",
-            DocxLimit.CompressionRatio => $"Entry{where} has a compression ratio of {actual:N0}:1; the limit is {allowed:N0}:1 (possible decompression bomb).",
+            DocxLimit.CompressionRatio => $"Entry{where} has a compression ratio of {actual:N0}:1; the limit is {allowed:N0}:1 (possible decompression bomb).{Trusted}",
             DocxLimit.XmlDepth => $"XML nesting depth {actual:N0}{where} exceeds the limit of {allowed:N0}.",
             DocxLimit.SpinCount => $"Encrypted document declares a key-derivation spin count of {actual:N0}; the limit is {allowed:N0}.",
             DocxLimit.PartBytes => $"Part{where} decompresses to more than {allowed:N0} bytes (read {actual:N0}).",
             DocxLimit.PackageBytes => $"Input is {actual:N0} bytes; the limit is {allowed:N0}.",
-            DocxLimit.Elements => $"Document has more than {allowed:N0} XML elements (the limit was passed{where}).",
+            DocxLimit.Elements => $"Document has more than {allowed:N0} XML elements (the limit was passed{where}).{Trusted}",
+            DocxLimit.NestingDepth => $"Content{where} is nested {actual:N0} levels deep (tables, text boxes, hyperlinks, tracked changes and simple fields inside each other); the limit is {allowed:N0}.",
             _ => $"Document exceeds a security limit ({limit}): {actual:N0} > {allowed:N0}{where}.",
         };
     }

@@ -185,7 +185,9 @@ public static class EncryptedSaveTests
                 spoolPath = SpoolFile(spool).Name;
                 onDisk = RawBytes(spool);
                 AssertTrue(onDisk.Length == plain.Length, "same length (counter mode)");
-                AssertTrue(!(onDisk[0] == 'P' && onDisk[1] == 'K'), "not a zip on disk");
+                // The four-byte local-file-header signature PK 03 04 (2.4.1): two bytes of ciphertext are "PK" about
+                // once in 65,536 runs, four bytes about once in four billion.
+                AssertTrue(!(onDisk.Length >= 4 && onDisk[0] == 'P' && onDisk[1] == 'K' && onDisk[2] == 3 && onDisk[3] == 4), "not a zip on disk");
                 AssertTrue(IndexOf(onDisk, Encoding.ASCII.GetBytes("word/document.xml")) < 0, "no part names on disk");
                 AssertTrue(IndexOf(onDisk, Encoding.ASCII.GetBytes("[Content_Types].xml")) < 0, "no content types on disk");
                 spool.Position = 0;
