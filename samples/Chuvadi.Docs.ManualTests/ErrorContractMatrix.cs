@@ -154,7 +154,8 @@ public static class ErrorContractMatrix
 
     // ---- package editing ----------------------------------------------------------------
 
-    public static bool IsZip(byte[] b) => b.Length > 4 && b[0] == 'P' && b[1] == 'K';
+    /// <summary>Starts with the zip local-file-header signature PK 03 04 (2.4.1: all four bytes).</summary>
+    public static bool IsZip(byte[] b) => b.Length >= 4 && b[0] == 'P' && b[1] == 'K' && b[2] == 3 && b[3] == 4;
 
     public static string HeaderPart(byte[] package)
     {

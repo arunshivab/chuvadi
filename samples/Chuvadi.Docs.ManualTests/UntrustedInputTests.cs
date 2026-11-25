@@ -33,7 +33,7 @@ public static class UntrustedInputTests
 
     private static void Preset()
     {
-        Check("ForUntrustedInput: the D-284 values, a new instance on every call; MaxElements is off by default and in CreateUnrestricted", () =>
+        Check("ForUntrustedInput: the D-284 values plus nesting 32 (2.4.1), a new instance on every call; MaxElements is 2,000,000 by default (2.4.1) and off in CreateUnrestricted", () =>
         {
             var p = DocxReaderOptions.ForUntrustedInput();
             AssertTrue(p.MaxPackageBytes == 50L * 1024 * 1024, "package 50 MB");
@@ -44,8 +44,9 @@ public static class UntrustedInputTests
             AssertTrue(p.MaxXmlDepth == 128, "depth 128");
             AssertTrue(p.MaxSpinCount == 500_000, "spin count 500,000");
             AssertTrue(p.MaxElements == 1_000_000, "elements 1,000,000");
+            AssertTrue(p.MaxNestingDepth == 32, "nesting 32 (2.4.1)");
             AssertTrue(!ReferenceEquals(p, DocxReaderOptions.ForUntrustedInput()), "a new instance on every call");
-            AssertTrue(new DocxReaderOptions().MaxElements is null, "MaxElements off by default");
+            AssertTrue(new DocxReaderOptions().MaxElements == 2_000_000, "MaxElements 2,000,000 by default (2.4.1)");
             AssertTrue(DocxReaderOptions.CreateUnrestricted().MaxElements is null, "off in CreateUnrestricted");
         });
 

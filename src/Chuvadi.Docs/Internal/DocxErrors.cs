@@ -22,7 +22,16 @@ internal static class DocxErrors
            or DocxTemplateException
            or DocxLimitExceededException      // an IOException, but a limit: never wrapped
            or OperationCanceledException
-           or ObjectDisposedException;        // using a disposed reader is a caller mistake
+           or ObjectDisposedException         // using a disposed reader is a caller mistake
+        || IsFatal(ex);
+
+    /// <summary>
+    /// Out of memory and stack exhaustion (2.4.1): never wrapped as <see cref="DocxFormatException"/>, never
+    /// recorded as a skipped part and never swallowed, so a valid file is not reported as a bad one.
+    /// (A real stack overflow cannot be caught at all; <see cref="InsufficientExecutionStackException"/> is the
+    /// catchable early warning the loader raises before one.)
+    /// </summary>
+    public static bool IsFatal(Exception ex) => ex is OutOfMemoryException or InsufficientExecutionStackException;
 
     /// <summary>Wraps a non-contract failure in a <see cref="DocxFormatException"/>.</summary>
     public static DocxFormatException Wrap(Exception ex, string message) => new(message + " " + ex.Message, ex);

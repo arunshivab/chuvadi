@@ -21,4 +21,5 @@ public class ConversionSuiteTests
     [Fact] public void Suite_RoundTrip() => RoundTripTests.Run(FreshOutDir());
     [Fact] public void Suite_ReviewFixes() => ReviewFixesTests.Run(FreshOutDir());
     [Fact] public void Suite_InputLimits() => InputLimitTests.Run(FreshOutDir());
+    [Fact] public void Suite_DeepDocuments() => DeepDocumentTests.Run(FreshOutDir());
 }

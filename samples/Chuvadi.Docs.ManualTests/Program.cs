@@ -58,6 +58,7 @@ public static class Program
             ("HeaderFooterStyles", HeaderFooterStyleTests.Run),
             ("FormattedParagraphs", FormattedParagraphsTests.Run),
             ("FormattedParagraphsMore", FormattedParagraphsMoreTests.Run),
+            ("SecurityDefaults", SecurityDefaultsTests.Run),
         };
 
         var filter = args.Length > 0 ? args[0] : null;

@@ -1,5 +1,13 @@
 # Chuvadi.Docs.Conversion — Changelog
 
+## 2.4.1 (2026-11-25)
+
+Versioned with Chuvadi.Docs 2.4.1 (D-15, D-45; the `docs-v*` tag releases both at one version): depends on **Chuvadi.Docs 2.4.1** and Chuvadi.Markup 1.2.0. No Conversion code changed.
+- **What it gets from Chuvadi.Docs 2.4.1:** the safe default reader limits (compression ratio 200:1, 2,000,000 XML elements, content nesting 64) apply when you load the `Document` you convert. Conversion itself never loads a .docx: imports build a new document and exports take the one you pass.
+- **Every document the defaults admit converts on a 256 KB thread stack** (the stack of an IIS worker thread): new test group `DeepDocuments` (5 checks, with an xUnit fact) exports 64 nested tables, hyperlinks and insertions, 32 tables with 32 hyperlinks inside, and 16 nested text boxes to HTML, the HTML preview, Markdown and text.
+- **No output change:** every file the Conversion verification suite writes is the same as with Docs 2.4.0, apart from docProps.
+- **The new Docs 2.4.1 API** (`DocxReaderOptions.ForTrustedInput()`, `MaxNestingDepth`, `DocxLimit.NestingDepth`) is in Chuvadi.Docs. See its CHANGELOG.
+
 ## 2.4.0 (2026-11-15)
 
 Versioned with Chuvadi.Docs 2.4.0 (D-15, D-45): depends on **Chuvadi.Docs 2.4.0 and Chuvadi.Markup 1.2.0** (1.1.0 before; Markup 1.2.0 was released on 15 Nov). No Conversion code changed.

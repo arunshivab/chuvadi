@@ -42,7 +42,7 @@ internal static class DocumentLoader
             foreach (var img in reader.Images(ct))
                 doc.AddLoadedImage(img);
         }
-        catch (Exception ex) when (ex is not (DocxSecurityLimitException or OperationCanceledException))
+        catch (Exception ex) when (ex is not (DocxSecurityLimitException or OperationCanceledException) && !DocxErrors.IsFatal(ex))
         {
             // Image extraction is best-effort; a malformed drawing must not fail document load.
             // Security-limit breaches and cancellation are never swallowed.
@@ -161,10 +161,10 @@ internal static class DocumentLoader
         var mediaCache = new System.Collections.Generic.Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
         doc.LoadedMediaCache = mediaCache;
         var bodyImages = new ImageSource(pkg, documentUri, options, ct, mediaCache, doc.SkippedPartsList);
-        var loadContext = new LoadContext(doc.SkippedPartsList);
+        var loadContext = new LoadContext(doc.SkippedPartsList, options.MaxNestingDepth);
         LoadComments(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
         LoadNotes(pkg, documentUri, doc, loadContext, options, ct, mediaCache);
-        var body = new StoryContext(loadContext, bodyImages);
+        var body = new StoryContext(loadContext, bodyImages) { PartUri = documentUri };
 
         if (!r.Read()) return doc;
         while (!r.EOF)
@@ -633,7 +633,7 @@ internal static class DocumentLoader
                 loadContext.Comments[id] = c;
                 doc.Comments.AddLoaded(c);
                 if (r.IsEmptyElement) continue;
-                var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
+                var story = new StoryContext(loadContext, images) { NoNoteReferences = true, PartUri = commentsUri };
                 using (var n = r.LightSubtree())
                 {
                     n.Read();
@@ -725,7 +725,7 @@ internal static class DocumentLoader
                 byId[id] = note;
                 collection.AddLoaded(note);
                 if (r.IsEmptyElement) continue;
-                var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
+                var story = new StoryContext(loadContext, images) { NoNoteReferences = true, PartUri = uri };
                 using (var n = r.LightSubtree())
                 {
                     n.Read();
@@ -781,7 +781,7 @@ internal static class DocumentLoader
             EnsureWellFormed(wr, uri);
         }
         var images = new ImageSource(pkg, uri, options, ct, mediaCache, loadContext.Skipped);
-        var story = new StoryContext(loadContext, images) { NoNoteReferences = true };
+        var story = new StoryContext(loadContext, images) { NoNoteReferences = true, PartUri = uri };
         using var r = GuardedXmlReader.Create(new MemoryStream(bytes, false), options.MaxXmlDepth, options.OperationBudget, ct, uri);
         if (!r.Read()) return (content, watermark);
         while (!r.EOF)
@@ -954,7 +954,14 @@ internal static class DocumentLoader
     /// <summary>Document-wide load state: open bookmarks by file id, notes by file id.</summary>
     internal sealed class LoadContext
     {
-        public LoadContext(System.Collections.Generic.List<DocxSkippedPart> skipped) => Skipped = skipped;
+        public LoadContext(System.Collections.Generic.List<DocxSkippedPart> skipped, int? maxNestingDepth)
+        {
+            Skipped = skipped;
+            Nesting = new NestingGuard(maxNestingDepth);
+        }
+
+        /// <summary>The operation's content nesting (MaxNestingDepth, 2.4.1), shared by every story it reads.</summary>
+        public readonly NestingGuard Nesting;
 
         /// <summary>The document's skipped-part list (Document.SkippedParts, D-310).</summary>
         public readonly System.Collections.Generic.List<DocxSkippedPart> Skipped;
@@ -969,6 +976,8 @@ internal static class DocumentLoader
     {
         public StoryContext(LoadContext doc, ImageSource? images) { Doc = doc; Images = images; }
         public LoadContext Doc { get; }
+        /// <summary>The part being read, for limit messages (2.4.1).</summary>
+        public string? PartUri { get; init; }
         public ImageSource? Images { get; }
         /// <summary>A note, header or footer: note references inside it are dropped (Word does not allow them).</summary>
         public bool NoNoteReferences { get; init; }
@@ -1138,7 +1147,9 @@ internal static class DocumentLoader
                     using (var rv = sub.LightSubtree())
                     {
                         rv.Read();
-                        LoadParagraphContent(rv, p, ctx, link, mark, insertion);
+                        ctx.Doc.Nesting.Enter(ctx.PartUri);
+                        try { LoadParagraphContent(rv, p, ctx, link, mark, insertion); }
+                        finally { ctx.Doc.Nesting.Exit(); }
                     }
                     break;
                 }
@@ -1174,7 +1185,9 @@ internal static class DocumentLoader
                     using (var h = sub.LightSubtree())
                     {
                         h.Read();
-                        LoadParagraphContent(h, p, ctx, inner, revision, outerInsertion);
+                        ctx.Doc.Nesting.Enter(ctx.PartUri);
+                        try { LoadParagraphContent(h, p, ctx, inner, revision, outerInsertion); }
+                        finally { ctx.Doc.Nesting.Exit(); }
                     }
                     break;
                 }
@@ -1226,7 +1239,9 @@ internal static class DocumentLoader
                         using (var fs = sub.LightSubtree())
                         {
                             fs.Read();
-                            LoadParagraphContent(fs, p, ctx, link, revision, outerInsertion);
+                            ctx.Doc.Nesting.Enter(ctx.PartUri);
+                            try { LoadParagraphContent(fs, p, ctx, link, revision, outerInsertion); }
+                            finally { ctx.Doc.Nesting.Exit(); }
                         }
                     p.AddRun(Run.FieldMarkRun(field, FieldMarkType.End));
                     break;
@@ -1315,7 +1330,7 @@ internal static class DocumentLoader
         {
             pkg.OpenPart(documentUri).Dispose();   // opens the entry only; nothing is decompressed
         }
-        catch (Exception ex) when (ex is not OperationCanceledException and not DocxFormatException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not DocxFormatException && !DocxErrors.IsFatal(ex))
         {
             // Any other failure to open the entry (for example a corrupt entry header) means the
             // body cannot be read at all (D-194, 5e).
@@ -1348,30 +1363,36 @@ internal static class DocumentLoader
     private static void LoadTextBoxContent(XmlReader r, TextBox box, StoryContext outer)
     {
         if (!r.Read()) return;
-        var story = new StoryContext(outer.Doc, outer.Images);
-        int childDepth = r.Depth + 1;
-        bool more = r.Read();
-        while (more)
+        var story = new StoryContext(outer.Doc, outer.Images) { PartUri = outer.PartUri };
+        var nesting = outer.Doc.Nesting;
+        nesting.Enter(outer.PartUri, NestingGuard.TextBoxWeight);
+        try
         {
-            if (r.NodeType == XmlNodeType.Element && r.Depth == childDepth && r.NamespaceURI == W)
+            int childDepth = r.Depth + 1;
+            bool more = r.Read();
+            while (more)
             {
-                if (r.LocalName == "p")
+                if (r.NodeType == XmlNodeType.Element && r.Depth == childDepth && r.NamespaceURI == W)
                 {
-                    using (var sub = r.LightSubtree()) box.Paragraphs.Add(LoadParagraph(sub, story));
-                    more = r.Read();
-                    continue;
+                    if (r.LocalName == "p")
+                    {
+                        using (var sub = r.LightSubtree()) box.Paragraphs.Add(LoadParagraph(sub, story));
+                        more = r.Read();
+                        continue;
+                    }
+                    if (r.LocalName == "tbl")
+                    {
+                        using (var sub = r.LightSubtree()) box.AppendTable(LoadTable(sub, story));
+                        more = r.Read();
+                        continue;
+                    }
+                    if (r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd" && BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
                 }
-                if (r.LocalName == "tbl")
-                {
-                    using (var sub = r.LightSubtree()) box.AppendTable(LoadTable(sub, story));
-                    more = r.Read();
-                    continue;
-                }
-                if (r.LocalName is "bookmarkStart" or "bookmarkEnd" or "commentRangeStart" or "commentRangeEnd" && BookmarkMarker(r, story) is { } marker) story.Pending.Add(marker);
+                more = r.Read();
             }
-            more = r.Read();
+            story.Finish();
         }
-        story.Finish();
+        finally { nesting.Exit(NestingGuard.TextBoxWeight); }
     }
 
     /// <summary>Where run text goes while fields are open.</summary>
@@ -1872,7 +1893,7 @@ internal static class DocumentLoader
         => TableXml.Read(sub, s => LoadParagraph(s, story), m =>
         {
             if (BookmarkMarker(m, story) is { } marker) story.Pending.Add(marker);
-        });
+        }, story.Doc.Nesting, story.PartUri);
 
     /// <summary>The media a part's pictures refer to (r:embed → bytes and type), read once each, within the part-size limit.</summary>
     internal sealed class ImageSource

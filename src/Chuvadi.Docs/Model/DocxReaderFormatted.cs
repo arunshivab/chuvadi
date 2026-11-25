@@ -99,7 +99,7 @@ public sealed partial class DocxReader
         var styles = FormatDocument(ct, budget);
 
         // D-387: notes and comments are read first, with Load's own readers, so the body's references resolve.
-        var load = new DocumentLoader.LoadContext(_skipped);
+        var load = new DocumentLoader.LoadContext(_skipped, _options.MaxNestingDepth);
         Document? stories = null;
         if (_options.IncludeNotes || _options.IncludeComments)
         {
@@ -277,7 +277,7 @@ public sealed partial class DocxReader
         // Pictures are read as Load reads them, but only kept while their paragraph is pending.
         var media = new Dictionary<string, (byte[] Bytes, string ContentType)?>(StringComparer.Ordinal);
         var images = new DocumentLoader.ImageSource(_package, uri, _options, ct, media, _skipped);
-        var context = new DocumentLoader.StoryContext(load, images) { NoNoteReferences = story };
+        var context = new DocumentLoader.StoryContext(load, images) { NoNoteReferences = story, PartUri = uri };
         var pending = new List<Pending>();
         var counter = NewCounter(styles); // one list story per part, as Document.GetListLabels
         bool boxes = _options.IncludeTextBoxes;

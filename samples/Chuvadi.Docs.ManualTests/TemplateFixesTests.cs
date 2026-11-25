@@ -416,9 +416,13 @@ public static class TemplateFixesTests
             var deep = new Document();
             deep.AddParagraph(string.Concat(Enumerable.Repeat("{{?a}}", 300_000)) + string.Concat(Enumerable.Repeat("{{/a}}", 300_000)));
             var deepTpl = Save(outDir, "fix2-deep", deep);
-            AssertTrue(DocxTemplate.CheckTemplate(deepTpl).Any(x => x.Contains("no partner")), "check reports, no crash");
-            DocxTemplate.GetPlaceholders(deepTpl);
-            AssertThrows<DocxTemplateException>(() => FillFile(deepTpl, "fix2-deep", new TemplateData().SetFlag("a", true)), "fill: deeper than MaxBlockDepth");
+            // 3.6 MB of one repeated tag compresses at 213:1: since 2.4.1 the default ratio limit (200:1) refuses it,
+            // so the template engine's own guards are checked with the trusted preset (the 2.4.0 limits).
+            AssertThrows<DocxSecurityLimitException>(() => DocxTemplate.CheckTemplate(deepTpl), "the 2.4.1 default refuses a 213:1 part");
+            var trusted = DocxReaderOptions.ForTrustedInput();
+            AssertTrue(DocxTemplate.CheckTemplate(deepTpl, null, trusted).Any(x => x.Contains("no partner")), "check reports, no crash");
+            DocxTemplate.GetPlaceholders(deepTpl, null, trusted);
+            AssertThrows<DocxTemplateException>(() => FillFile(deepTpl, "fix2-deep", new TemplateData().SetFlag("a", true), new TemplateOptions { ReadOptions = trusted }), "fill: deeper than MaxBlockDepth");
 
             // Stray opens never closed are left as text in a non-strict fill, however many.
             var stray = new Document();

@@ -1,5 +1,59 @@
 # Chuvadi.Docs — Changelog
 
+## 2.4.1 (2026-11-25)
+
+Security patch (D-406, D-410; Audit B's SEC-02). Files from anywhere are now safe to open with the default options: memory bombs are refused, deep nesting can no longer crash the process, and out of memory is no longer reported as a bad file. Very large documents from a trusted source open with the new `DocxReaderOptions.ForTrustedInput()`, which gives exactly the 2.4.0 limits.
+
+### Behaviour change (security)
+
+- **The default compression-ratio limit is 200:1** (`DocxReaderOptions.DefaultMaxCompressionRatio`; it was 1,000:1). It applies to entries of 1 MB or more, as before.
+  - **Why:** a 35 KB file of four million empty paragraphs (683:1) took 1.85 GB to load with the 2.4.0 defaults, and a 95 KB one (685:1) ran out of memory at 4.5 GB. Both are now refused at open, in no measurable time, at about 32 MB.
+  - **Real documents are not affected:** in a survey of 571 .docx files, real documents stay near 15:1 or below; every entry of 1 MB or more above 200:1 was a synthetic bomb or a test fixture.
+- **`MaxElements` defaults to 2,000,000 XML elements per operation** (`DocxReaderOptions.DefaultMaxElements`; there was no limit). The same default applies to `Document.Load`, the streaming reader and the template calls.
+  - **Why:** a loaded document's memory follows its number of elements (up to about 470 bytes each), so the ratio alone does not bound it: at 200:1 a 5 MB file can still hold well over a hundred million elements. With 2,000,000 the measured worst case for `Load` is about 1 GB (966 MB for 11 million empty paragraphs, refused after 2.3 s), and the streaming reader stays near 175 MB.
+  - **What it refuses:** documents of roughly 1,000+ pages of dense formatting. The three D-98 benchmark documents (10–28 MB, 3.2–7.9 million elements) are refused by default and load as before with `ForTrustedInput()`.
+- **Both messages say what to do:** "If the document comes from a trusted source, open it with DocxReaderOptions.ForTrustedInput()."
+- **New limit `MaxNestingDepth`, 64 by default** (see New). A document nested deeper is refused with `DocxSecurityLimitException` (`DocxLimit.NestingDepth`); in 2.4.0 248 nested hyperlinks or tracked changes crashed the whole process with a stack overflow on a 256 KB thread (the stack of an IIS worker thread), and about 5,000 on a normal 1 MB stack with the limits off. Real documents nest 1–5 levels.
+- **Out of memory and stack exhaustion pass through** (2a). `OutOfMemoryException` (and `InsufficientMemoryException`) and `InsufficientExecutionStackException` are thrown as themselves from every reading entry point.
+  - **Before:** `Document.Load` reported an out-of-memory as `DocxFormatException: Not a valid docx package: Exception of type 'System.OutOfMemoryException' was thrown.`, so a valid but huge file was reported as a bad one.
+  - They are also no longer swallowed by `Load`'s best-effort picture pass, recorded as an unreadable part, or swallowed while a subtree reader is closed.
+
+### New
+
+- **`DocxReaderOptions.ForTrustedInput()`**: limits for very large documents from a trusted source. Exactly the 2.4.0 defaults: 1 GiB package, 1 GiB uncompressed in total, no per-part cap, ratio 1,000:1, 10,000 entries, XML depth 256, spin count 500,000, no element limit. Plus `MaxNestingDepth` 64, which 2.4.0 did not have, so the process stays safe from stack overflow. A new instance on every call.
+- **`DocxReaderOptions.MaxNestingDepth`** (default `DefaultMaxNestingDepth`, 64; `ForUntrustedInput()` 32; `ForTrustedInput()` 64; `CreateUnrestricted()` null). It counts the levels `Document.Load` and `DocxReader.FormattedParagraphs()` read by recursion, together:
+  - one level for each table (a nested table, and rows or cells inside nested content controls or custom XML);
+  - one level for each hyperlink, tracked change (`w:ins`, `w:del`, `w:moveTo`, `w:moveFrom`) or simple field inside another in a paragraph;
+  - four levels for each text box: a nested text box takes about four times the stack of a table (about 9 KB against 2 KB), so the default admits 16 text boxes inside each other.
+  - Content controls, smart tags and custom XML around runs are read without recursion and don't count: 1,000 of them inside each other load.
+  - Checked before each level is read, so a breach is a catchable `DocxSecurityLimitException` (`Limit` `NestingDepth`, `Actual`, `Allowed`, `PartName`) long before the stack runs out. Every document the default admits loads, saves, reloads and converts (HTML, Markdown, text) on a 256 KB thread stack; measured, 64 nested tables need about 160 KB.
+  - With a raised limit or none, every level beyond 64 also checks the stack that is left, so a file too deep for the thread ends in a catchable `InsufficientExecutionStackException` instead of a process crash (20,000 nested hyperlinks on a 1 MB thread with `CreateUnrestricted()`).
+  - Templates (`DocxTemplate`) and the plain readers (`Paragraphs()`, `Tables()`, `ExtractText()`) read without recursion and are bounded by `MaxXmlDepth`; a part at the default XML depth fills and streams on a 256 KB thread.
+- **`DocxLimit.NestingDepth`** (appended to the enum; the other values keep their numbers).
+- **Constants** `DocxReaderOptions.DefaultMaxElements` (2,000,000) and `DefaultMaxNestingDepth` (64).
+
+### Fixes
+
+- **Nested subtree readers no longer form a chain** (2b). Since 2.2.0, `Load` read each nested element (paragraph, hyperlink, tracked change, table, row, cell) through a light subtree reader opened on the one above it, and every `Read` went down the whole chain: stack and time grew with the nesting. A subtree opened on a subtree now reads the outermost reader directly; 100,000 nested subtrees read on a 256 KB thread. Checked against the BCL `ReadSubtree` step by step, as in 2.2.0 (6 documents × 1,000 random walks, well-formed and truncated, with and without an element limit).
+
+### Effect on other packages
+
+- **Chuvadi.Docs.Conversion:** no change and no new release; it takes a loaded `Document`. Its own tests now check that every document the defaults admit converts on a 256 KB thread.
+- **Chuvadi.Layout.Docs:** it sets its own package, part, total, depth and element limits, so of the new defaults only the ratio (200:1) and `MaxNestingDepth` (64, or 32 from Layout's untrusted preset) reach it. Layout's tests are unchanged and pass.
+
+### Tests
+
+- **New group `SecurityDefaults`** (28 checks, with an xUnit fact): the defaults and the three presets; the ratio default with a 1.8 MB part at about 290:1 (refused, the message, the streaming reader, `ForTrustedInput()` loads it); the element default at exactly 2,000,000 and one over; `MaxNestingDepth` at 64 and 65 for hyperlinks, insertions, mixed tracked changes and simple fields, tables, rows in nested custom XML, and tables with hyperlinks inside, plus the untrusted 32, a custom limit, `FormattedParagraphs` and text boxes (16 load, 17 are refused); every shape at the limit on a 256 KB thread through `Load`, save and reload, list labels, the streaming readers and a template fill; 20,000 levels with no limits ending in `InsufficientExecutionStackException`; the subtree reader at 100,000 levels on a 256 KB thread; and the exception contract for out of memory and stack exhaustion.
+- **Chuvadi.Docs.Conversion, new group `DeepDocuments`** (5 checks, with an xUnit fact): 64 nested tables, hyperlinks and insertions, 32 tables with 32 hyperlinks inside, and 16 nested text boxes export to HTML, the HTML preview, Markdown and text on a 256 KB thread.
+- **`UntrustedInput`:** the preset check includes nesting 32 and the new element default.
+- **`TemplateFixes`:** the 3.6 MB one-tag template (213:1) is now refused by default; its template-engine checks run with `ForTrustedInput()`.
+- **T2 and `ErrorContractMatrix.IsZip`** (the Zip chat's ask) check the four-byte zip signature PK 03 04 instead of two bytes. The spool test checks ciphertext, which began with "PK" about once in 65,536 runs.
+
+### Documentation
+
+- **README, Untrusted input:** the new defaults, the three presets, `MaxNestingDepth` and the 256 KB stack.
+- **README, Errors:** out of memory and stack exhaustion are not wrapped.
+
 ## 2.4.0 (2026-11-15)
 
 `DocxReader.FormattedParagraphs` can read footnotes, endnotes, comments and text boxes, and gives every paragraph its list label (D-387, from the 2.2.0 candidates C1–C3). A header or footer paragraph explicitly set to Normal keeps Normal (O1). Without the new options, the reader's stream and every saved document are the same as in 2.3.0.

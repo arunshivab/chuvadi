@@ -8,7 +8,7 @@ Part of the [Chuvadi](https://github.com/arunshivab/chuvadi) document library fa
 
 - **Zero dependencies.** Nothing to audit but this library and the .NET runtime. No transitive supply chain.
 - **Real encryption.** Password protection uses OOXML Agile Encryption ([MS-OFFCRYPTO]): AES-256-CBC, iterated SHA-512 key derivation (100,000 rounds), and HMAC-SHA512 integrity that is **verified on read** — a tampered file is rejected, not silently opened.
-- **Hardened reading.** Decompression caps (`MaxPartBytes`) for untrusted input, DTD processing prohibited, no XXE surface.
+- **Hardened reading.** Safe defaults for files from anywhere (2.4.1): decompression-bomb, memory and nesting limits on by default, DTD processing prohibited, no XXE surface; presets for untrusted and for very large trusted files.
 - **Template-first report generation.** Design the document in Word; fill `{{Placeholders}}` from code with everything — styles, images, themes — preserved.
 
 ## Write a report
@@ -470,25 +470,30 @@ foreach (var item in r.FormattedParagraphs())
 
 ## Untrusted input (mail attachments, uploads)
 
-For files from untrusted sources (uploads on a shared server, mail attachments), start from the preset:
+**The defaults are safe for files from anywhere** (2.4.1): they refuse decompression and memory bombs and nesting deep enough to crash the process, and still open documents of several hundred pages. Three presets cover the rest:
 
 ```csharp
-var options = DocxReaderOptions.ForUntrustedInput();      // adjust as needed; a new instance on every call
-var doc = Document.Load(upload, password: null, options, cancellationToken);
+var strict  = DocxReaderOptions.ForUntrustedInput();   // uploads on a shared server, mail attachments: tighter
+var big     = DocxReaderOptions.ForTrustedInput();     // a very large document you trust: the 2.4.0 limits
+var nothing = DocxReaderOptions.CreateUnrestricted();  // every limit off
+var doc = Document.Load(upload, password: null, strict, cancellationToken);   // each preset: a new instance, adjust as needed
 ```
 
 Every open applies resource limits **before anything is decompressed**, and the same limits guard `Document.Load` and `DocxTemplate.Fill`:
 
-| Limit (`DocxReaderOptions`) | Default | `ForUntrustedInput()` | Checked |
-|---|---|---|---|
-| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | 50 MiB | at open |
-| `MaxEntries` | 10,000 zip entries | 10,000 | at open |
-| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | 256 MiB | at open |
-| `MaxCompressionRatio` | 1,000 : 1 for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | 200 : 1 | at open |
-| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | 500,000 | at open |
-| `MaxXmlDepth` | 256 nested elements | 128 | while reading |
-| `MaxPartBytes` | none | 64 MiB | while reading |
-| `MaxElements` (2.1.0) | none | 1,000,000 XML elements | while reading, per operation |
+| Limit (`DocxReaderOptions`) | Default | `ForUntrustedInput()` | `ForTrustedInput()` (2.4.1) | Checked |
+|---|---|---|---|---|
+| `MaxPackageBytes` | 1 GiB (the input file/stream itself) | 50 MiB | 1 GiB | at open |
+| `MaxEntries` | 10,000 zip entries | 10,000 | 10,000 | at open |
+| `MaxTotalUncompressedBytes` | 1 GiB (sum of declared sizes — a hard ceiling the runtime enforces) | 256 MiB | 1 GiB | at open |
+| `MaxCompressionRatio` | **200 : 1** (2.4.1; 1,000 : 1 before) for entries ≥ `CompressionRatioThresholdBytes` (1 MiB) | 200 : 1 | 1,000 : 1 | at open |
+| `MaxSpinCount` | 500,000 (encrypted files; checked before key derivation, which the `CancellationToken` interrupts) | 500,000 | 500,000 | at open |
+| `MaxXmlDepth` | 256 nested elements | 128 | 256 | while reading |
+| `MaxPartBytes` | none | 64 MiB | none | while reading |
+| `MaxElements` (2.1.0) | **2,000,000** XML elements (2.4.1; none before) | 1,000,000 | none | while reading, per operation |
+| `MaxNestingDepth` (2.4.1) | **64** levels | 32 | 64 | while reading, before each level |
+
+`ForTrustedInput()` is exactly the 2.4.0 defaults, plus `MaxNestingDepth`. When the defaults refuse a document for its ratio or its element count, the exception's message says so and names `ForTrustedInput()`; use it when you trust where the file came from (memory then grows with the document: about 1 GB for a 28 MB document of 5 million elements).
 
 **Why `MaxElements`:** a loaded document's memory follows its number of XML elements, not its size in bytes. Measured on .NET 10:
 - **A Word-like document:** about 200 bytes per element. 20,000 paragraphs (about 800 pages, 860,000 elements) load in 225 MB.
@@ -499,9 +504,16 @@ Every open applies resource limits **before anything is decompressed**, and the 
 - one template call;
 - each `DocxReader` read call (each enumeration of `Paragraphs()`/`Tables()`).
 
-It stops the operation as soon as the count passes the limit, before most of the memory is used. With the preset, the worst case measured was about 600 MB and a few seconds.
+It stops the operation as soon as the count passes the limit, before most of the memory is used. With the default (2,000,000), the worst case measured was about 1 GB and two seconds for `Load` (the streaming reader stays near 175 MB); with the untrusted preset, about 600 MB and a few seconds.
 
-`DocxTemplate.Fill` applies the same defaults; its options overload takes `DocxReaderOptions` and a `CancellationToken`. A breach throws `DocxSecurityLimitException` (a `DocxFormatException`) with `Limit`, `Actual`, `Allowed` and `PartName`. Set any limit to `null` to disable it, or start from `DocxReaderOptions.CreateUnrestricted()` for trusted input.
+**Why `MaxNestingDepth`** (2.4.1): `Document.Load` reads nested content by recursion, and recursion that goes too deep ends in a stack overflow, which .NET cannot catch: it ends the whole process. 248 nested hyperlinks did that in 2.4.0 on a 256 KB thread (the stack of an IIS worker thread). The limit counts, together:
+- one level for each table (nested tables, and rows or cells inside nested content controls or custom XML);
+- one level for each hyperlink, tracked change or simple field inside another;
+- four levels for each text box (a text box takes about four times the stack), so the default admits 16 text boxes inside each other.
+
+It is checked before each level is read, so a breach is a catchable `DocxSecurityLimitException`. Every document the default admits loads, saves and converts on a 256 KB stack (64 nested tables need about 160 KB). Real documents nest 1–5 levels. With a raised limit or none, each level beyond 64 checks the stack that is left and throws `InsufficientExecutionStackException` rather than crashing. Templates and the plain readers (`Paragraphs`, `Tables`, `ExtractText`) don't recurse; `MaxXmlDepth` bounds them.
+
+`DocxTemplate.Fill` applies the same defaults; its options overload takes `DocxReaderOptions` and a `CancellationToken`. A breach throws `DocxSecurityLimitException` (a `DocxFormatException`) with `Limit`, `Actual`, `Allowed` and `PartName`. Set any limit to `null` to disable it, or start from `DocxReaderOptions.ForTrustedInput()` or `CreateUnrestricted()` for trusted input.
 
 **Active content is detected, never executed or fetched:**
 
@@ -535,6 +547,7 @@ Every reading entry point — `Document.Load`, `DocxReader.Open` and its readers
 | `DocxPasswordRequiredException` | The file is encrypted and the password is missing or wrong. Without a password the container is not read, so a damaged encrypted file also asks for one. |
 | `DocxTemplateException` | A fill problem: a strict fill with missing values, or a template limit (`MaxGeneratedItems`, …). Lists every problem. |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
+| `OutOfMemoryException`, `InsufficientExecutionStackException` | The process ran out of memory, or (with `MaxNestingDepth` raised or off) the thread out of stack. Thrown as themselves, never wrapped (2.4.1; before, an out-of-memory was reported as `DocxFormatException`). |
 
 Caller mistakes keep their own types: `ArgumentException` / `ArgumentNullException` for bad arguments, `FileNotFoundException` and other file-system errors when opening or writing a file by path (`SaveImages` writing a picture, for example), `ObjectDisposedException` for a disposed reader. `DocxReader` lazy readers (`Paragraphs()`, `Tables()`) throw while being enumerated, not when called.
 
