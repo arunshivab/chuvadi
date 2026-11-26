@@ -1,5 +1,27 @@
 # Chuvadi.Layout.Sheets — Changelog
 
+## 0.3.1 (2026-11-26)
+
+Security patch (D-406, D-413). Requires **Chuvadi.Sheets 2.2.1** (was 2.1.0) and Chuvadi.Layout 0.3.1.
+
+- **SEC-08 and SEC-S1: no more stack overflows from a workbook.** Chuvadi.Sheets 2.2.1 limits formula nesting to 256
+  and shape-group nesting to 256. A conditional format nested 10,000 deep (a 1.6 KB file that killed the process in
+  0.3.0, also through `AutoDetectLayout`) now lays out with a `ConditionalFormatNotEvaluated` warning; 20,000 nested
+  shape groups are a `LayoutFormatException`.
+- **Conditional formats honour the cancellation token.** Layout passes its token to
+  `ConditionalFormatOptions.CancellationToken`, so cancelling stops inside one rule's evaluation, not only between
+  rows. Sheets' own evaluation budget (100,000,000 cell reads and steps per sheet) also applies.
+- **Cells are counted while reading (D-413).** `LayoutLimits.MaxCellsPerSheet` is passed as Sheets'
+  `XlsxReaderOptions.MaxCells`, which counts the whole workbook as it reads: 1,000,000 by default, 5,000,000 under
+  `ForTrustedInput()`. That is stricter than Sheets' own 4,000,000 and stops a large workbook before its cells are in
+  memory (a 2.7 MB workbook of 1,000,000 cells used 543 MB in 0.3.0). **Behaviour change:** a workbook of more than
+  1,000,000 cells in all, even if no sheet has that many, now throws `LayoutLimitExceededException` ("MaxCells") by
+  default; open it with `ForTrustedInput()` if you trust it. Styled empty cells count, as they are laid out.
+- **Workbooks are read with Chuvadi.Sheets' safe defaults (S2c):** 20,000 entries, 1,048,576 rows, spin count
+  500,000, and a 200:1 compression ratio as for .docx (0.3.0 used 1,000:1 and 50,000 entries), with Layout's limits on
+  top. `ForTrustedInput()` keeps the 0.3.0 values. Measured on 0.3.0: a 10.6 MB workbook of 4,000,000 cells used
+  1.6 GB with the defaults; now it is refused at once.
+
 ## 0.3.0 (2026-11-15)
 
 Dependency update (D-383). **Requires Chuvadi.Sheets 2.1.0** (was 2.0.5) and Chuvadi.Layout 0.3.0. No code change.

@@ -67,6 +67,7 @@ Layout uses the real font whenever it is installed and the application turns on 
 | Spaces between Tamil words | As the characters' slot | The ordinary font | Same |
 | The slot's font has no Tamil letters | Standard silent | Vijaya, even with Nirmala UI and Latha installed | **LiPi Sans Tamil, the same on every machine** (D-191; docs/DIFFERENCES.md L-4) |
 | The theme's Tamil font (`a:font script="Taml"`) | Not said for WordprocessingML text | Never used (18 cases) | Not used |
+| Tamil laid out without a shaper (`LayoutOptions.Shaper` not set) | Shaping is required for Indic scripts (OpenType) | Shaped | **Not shaped:** nominal glyphs in typed order (for example ை after ச, and டு drawn as ட plus ு), with a `ComplexScriptNotShaped` warning. Set `Shaper` (Layout.Pdf's `PdfShaper`); the Viewer does. The plain manual-test preview is not shaped, so judge Tamil in the Viewer (D-392; until L8 lets the engine shape Indic scripts itself) |
 
 ## Floating tables (`w:tblpPr`, §17.4.57; `w:tblOverlap`, §17.4.56)
 

@@ -1,5 +1,21 @@
 # Chuvadi.Layout.Docs — Changelog
 
+## 0.3.1 (2026-11-26)
+
+Security patch (D-406, SEC-03). Requires **Chuvadi.Docs 2.4.1** (was 2.3.0) and Chuvadi.Layout 0.3.1.
+
+- **The element cap is checked while reading and bounds memory (S2b).** Chuvadi.Docs now gets the smaller of five
+  elements per `MaxBlocks` and one per KiB of `MaxLayoutBytes`: 262,144 by default, 524,288 under
+  `LayoutLimits.ForTrustedInput()` (was 10,000,000 by default and 1,000,000 untrusted). Measured on 0.3.0: a 22 KB file of
+  empty paragraphs used 2.5 GB with the defaults, and a 5.3 MB file 747 MB even with `ForUntrustedInput()`; now they stop
+  at the compression ratio (at once) and at 262,145 elements (about 190 MB), before the model grows.
+- **Docs' untrusted preset is the default** (compression ratio 200:1, 10,000 entries, spin count 500,000), with Layout's
+  limits on top; `ForTrustedInput()` uses Docs' own `ForTrustedInput()`, the 2.4.0 defaults that 0.3.0 read with
+  (D-406; before, the preset was the opt-in). Docs' content-nesting limit of 2.4.1 also applies (32, trusted 64), as
+  `LayoutLimitExceededException` ("DocxNestingDepth").
+- **Behaviour change:** a .docx of more than about 262,000 XML elements (about 33,000 blocks or more) needs
+  `ForTrustedInput()`. All 56 .docx files of the reference corpus and fixtures lay out as before.
+
 ## 0.3.0 (2026-11-15)
 
 Dependency update (D-383). **Requires Chuvadi.Docs 2.3.0** (was 2.1.0) and Chuvadi.Layout 0.3.0. No code change.

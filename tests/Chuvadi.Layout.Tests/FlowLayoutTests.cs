@@ -653,13 +653,14 @@ public class PaperAndConcurrencyTests
     }
 
     [Fact]
-    public void Untrusted_limits_are_tighter_than_the_defaults()
+    public void Trusted_limits_are_wider_than_the_safe_defaults()
     {
+        // D-406: the defaults are the safe limits (ForUntrustedInput); ForTrustedInput is the wider, named opt-in.
         LayoutLimits d = new LayoutLimits();
-        LayoutLimits u = LayoutLimits.ForUntrustedInput();
-        Assert.True(u.MaxPages < d.MaxPages && u.MaxSourceBytes < d.MaxSourceBytes && u.MaxLayoutBytes < d.MaxLayoutBytes);
+        LayoutLimits t = LayoutLimits.ForTrustedInput();
+        Assert.True(d.MaxPages < t.MaxPages && d.MaxSourceBytes < t.MaxSourceBytes && d.MaxLayoutBytes < t.MaxLayoutBytes);
         LayoutOptions o = Flow.Options();
-        o.Limits = u;
+        o.Limits = LayoutLimits.ForUntrustedInput();
         o.Limits.MaxPages = 3;
         string text = string.Join("\n", Enumerable.Range(1, 1000).Select(i => "Line " + i));
         using LaidOutDocument doc = DocumentLayout.OpenText(text, null, o);

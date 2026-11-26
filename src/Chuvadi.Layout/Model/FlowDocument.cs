@@ -191,20 +191,30 @@ namespace Chuvadi.Layout.Model
         {
         }
 
+        /// <summary>
+        /// Blocks, table rows and cell blocks at every level. Walks with its own stack, not by recursion, so a model with
+        /// tables nested to any depth is counted and then refused by <see cref="LayoutLimits.MaxNestingDepth"/>, instead
+        /// of overflowing the thread's stack first (D-406 S5).
+        /// </summary>
         internal static long Count(IEnumerable<FlowBlock> blocks)
         {
             long n = 0;
-            foreach (FlowBlock b in blocks)
+            Stack<IEnumerable<FlowBlock>> pending = new Stack<IEnumerable<FlowBlock>>();
+            pending.Push(blocks);
+            while (pending.Count > 0)
             {
-                n++;
-                if (b is FlowTable t)
+                foreach (FlowBlock b in pending.Pop())
                 {
-                    foreach (FlowTableRow r in t.Rows)
+                    n++;
+                    if (b is FlowTable t)
                     {
-                        n++;
-                        foreach (FlowTableCell c in r.Cells)
+                        foreach (FlowTableRow r in t.Rows)
                         {
-                            n += Count(c.Blocks);
+                            n++;
+                            foreach (FlowTableCell c in r.Cells)
+                            {
+                                pending.Push(c.Blocks);
+                            }
                         }
                     }
                 }

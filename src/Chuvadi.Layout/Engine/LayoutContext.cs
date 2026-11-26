@@ -13,6 +13,10 @@ namespace Chuvadi.Layout.Engine
         private readonly List<LayoutWarning> _warnings = new List<LayoutWarning>();
         private readonly HashSet<(string, string?)> _warned = new HashSet<(string, string?)>();
 
+        /// <summary>The token of the call now driving the engine (set by <see cref="LaidOutDocument"/> under its lock;
+        /// D-406). Long loops inside one paragraph or glyph check it.</summary>
+        public CancellationToken Cancellation { get; set; }
+
         public LayoutContext(LayoutOptions options, FontResolver fonts)
         {
             Options = options;
@@ -150,5 +154,9 @@ namespace Chuvadi.Layout.Engine
         /// part name, for example <c>/word/header1.xml</c>. One warning per part.
         /// </summary>
         public const string DocxPartSkipped = "DocxPartSkipped";
+
+        /// <summary>A glyph's composite outline data is too deep (over 8 levels), too large (over 256 components) or
+        /// refers back to itself, so it is drawn without outlines (D-406 S4). Location: the font's full name.</summary>
+        public const string FontGlyphOutlineInvalid = "FontGlyphOutlineInvalid";
     }
 }

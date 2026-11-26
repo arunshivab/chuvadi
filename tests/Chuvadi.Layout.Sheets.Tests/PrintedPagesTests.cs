@@ -100,10 +100,10 @@ public class PrintedPagesTests
         Assert.Equal("A1:XFD1048576", area.Area.ToString());
         Assert.Equal((long)doc.PageCount, area.Count);
 
-        // Building past MaxPages (10,000 by default) throws with the page count and where it is.
-        LayoutLimitExceededException ex = Assert.Throws<LayoutLimitExceededException>(() => doc.GetPage(10_000));
+        // Building past MaxPages (2,000 by default since 0.3.1, D-406) throws with the page count and where it is.
+        LayoutLimitExceededException ex = Assert.Throws<LayoutLimitExceededException>(() => doc.GetPage(2_000));
         Assert.Equal(nameof(LayoutLimits.MaxPages), ex.LimitName);
-        Assert.Equal(10_000, ex.Limit);
+        Assert.Equal(2_000, ex.Limit);
         Assert.Equal(doc.PageCount, ex.Actual);
         Assert.Equal("Sheet1!A1:XFD1048576", ex.Location);
         Assert.Contains("Sheet1!A1:XFD1048576 prints as", ex.Message, StringComparison.Ordinal);

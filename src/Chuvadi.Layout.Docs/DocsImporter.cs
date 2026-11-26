@@ -75,24 +75,36 @@ namespace Chuvadi.Layout.Docs
         }
 
         /// <summary>
-        /// The Chuvadi.Docs reader limits for <paramref name="limits"/>: Docs' untrusted preset when the limits come from
-        /// <see cref="LayoutLimits.ForUntrustedInput"/> (D-317 U1), with Layout's own limits on top; and an element cap of
-        /// five per block (D-282 (b), D-317 E1).
+        /// The Chuvadi.Docs reader limits for <paramref name="limits"/>: Docs' untrusted preset unless the limits come from
+        /// <see cref="LayoutLimits.ForTrustedInput"/> (D-406; D-317 U1), with Layout's own limits on top; and an element
+        /// cap checked while reading (D-406 S2b, D-282 (b)).
         /// </summary>
         internal static D.DocxReaderOptions ReaderOptions(LayoutLimits limits, bool headersAndFooters)
         {
-            D.DocxReaderOptions r = limits.FromUntrustedPreset ? D.DocxReaderOptions.ForUntrustedInput() : new D.DocxReaderOptions();
+            D.DocxReaderOptions r = limits.Trusted ? D.DocxReaderOptions.ForTrustedInput() : D.DocxReaderOptions.ForUntrustedInput();
             r.MaxPackageBytes = limits.MaxSourceBytes;
             r.MaxPartBytes = limits.MaxSourceBytes;
             r.MaxTotalUncompressedBytes = limits.MaxLayoutBytes;
             r.MaxXmlDepth = Math.Max(64, limits.MaxNestingDepth * 16);
-            r.MaxElements = ElementsFor(limits.MaxBlocks);
+            r.MaxElements = ElementsFor(limits.MaxBlocks, limits.MaxLayoutBytes);
             r.IncludeHeadersAndFooters = headersAndFooters;
             return r;
         }
 
-        /// <summary>The element cap for a block limit: five elements per block, within 1 and <see cref="int.MaxValue"/>.</summary>
-        internal static int ElementsFor(long maxBlocks) => (int)Math.Clamp(maxBlocks * 5, 1, int.MaxValue);
+        /// <summary>Bytes of layout memory allowed per Docs element (D-406 S2b): the model costs up to about 0.8 KB per
+        /// element.</summary>
+        internal const long BytesPerElement = 1024;
+
+        /// <summary>
+        /// The element cap: the smaller of five elements per block (D-317 E1) and one element per KiB of layout memory
+        /// (D-406 S2b), within 1 and <see cref="int.MaxValue"/>.
+        /// </summary>
+        internal static int ElementsFor(long maxBlocks, long maxLayoutBytes)
+        {
+            long byBlocks = maxBlocks > long.MaxValue / 5 ? long.MaxValue : Math.Max(0, maxBlocks) * 5;
+            long byMemory = Math.Max(0, maxLayoutBytes) / BytesPerElement;
+            return (int)Math.Clamp(Math.Min(byBlocks, byMemory), 1, int.MaxValue);
+        }
 
         /// <summary>D-253: a missing or wrong password as <see cref="LayoutPasswordRequiredException"/>.</summary>
         internal static LayoutPasswordRequiredException PasswordError(string? password, Exception inner)

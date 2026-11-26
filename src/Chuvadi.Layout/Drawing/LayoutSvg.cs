@@ -290,7 +290,7 @@ namespace Chuvadi.Layout.Drawing
                 bool open = false;
                 foreach (PositionedGlyph g in run.Glyphs)
                 {
-                    string d = outlines.PathData(g.GlyphId);
+                    string d = outlines.PathData(g.GlyphId, _ct);
                     if (d.Length == 0)
                     {
                         continue; // space and other blank glyphs

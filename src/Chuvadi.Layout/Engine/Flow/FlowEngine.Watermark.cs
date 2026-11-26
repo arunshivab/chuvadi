@@ -84,7 +84,13 @@ namespace Chuvadi.Layout.Engine.Flow
                         $"The watermark font '{face.FullName}' has CFF outlines, which cannot be drawn rotated; the watermark is not drawn.");
                     return;
                 }
-                List<PathSegment> segments = ToPage(outlines.PathData(gid), (fx, fy) => Map(gx + (fx * scale), ascent + gy - (fy * scale)));
+                List<PathSegment> segments = ToPage(outlines.PathData(gid, _ctx.Cancellation), (fx, fy) => Map(gx + (fx * scale), ascent + gy - (fy * scale)));
+                if (outlines.IsInvalid(gid))
+                {
+                    _ctx.Warn(LayoutWarningCodes.FontGlyphOutlineInvalid, LayoutWarningSeverity.Fidelity,
+                        $"Glyph {gid} of the watermark font '{face.FullName}' has composite data that is too deep, too large or refers back to itself; it is not drawn.",
+                        face.FullName);
+                }
                 if (segments.Count > 0)
                 {
                     ops.Add(new PathOp { Segments = segments, Fill = fill });

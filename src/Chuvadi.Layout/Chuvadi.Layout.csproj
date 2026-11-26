@@ -18,7 +18,7 @@
     <Description>Pure-BCL page layout engine for .NET: paginates flow documents (Word-style) and spreadsheet grids (Excel-style) into fixed pages with a neutral, immutable page display list, and lays out plain text. The docx and xlsx importers ship separately as Chuvadi.Layout.Docs and Chuvadi.Layout.Sheets (Chuvadi.Layout.Documents detects the format). Font core (TrueType/OpenType/TTC, metrics, cmap, kerning), font resolution with reported substitution, lazy per-page layout, cancellation and hard limits for untrusted input. No NuGet dependencies; no PDF dependency (PDF/SVG/PNG output ships separately as Chuvadi.Layout.Pdf).</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -34,8 +34,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- D-317 U1: LayoutLimits.FromUntrustedPreset, read by Layout.Docs to start from Chuvadi.Docs' untrusted preset. -->
+    <!-- D-317 U1, D-406: LayoutLimits.Trusted, read by Layout.Docs and Layout.Sheets to choose the readers' presets. -->
     <InternalsVisibleTo Include="Chuvadi.Layout.Docs" />
+    <InternalsVisibleTo Include="Chuvadi.Layout.Sheets" />
     <InternalsVisibleTo Include="Chuvadi.Layout.ManualTests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Tests" />
     <InternalsVisibleTo Include="Chuvadi.Layout.Docs.Tests" />

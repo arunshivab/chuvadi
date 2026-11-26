@@ -1,5 +1,42 @@
 # Chuvadi.Layout — Changelog
 
+## 0.3.1 (2026-11-26)
+
+Security patch (D-406; Audit B). Released together with Layout.Docs, Layout.Sheets and Layout.Documents 0.3.1,
+Layout.Markup 0.1.1 and Layout.Pdf 0.1.1, so every Layout package requires this engine.
+
+### Security
+
+- **Safe limits are the default (S2a, Rule 6).** `new LayoutLimits()` and `new LayoutOptions()` now have the values of
+  `ForUntrustedInput()`: 2,000 pages, 50 MiB of source, 1,000,000 cells per sheet, 200,000 blocks, nesting depth 8,
+  16 MiB per image or font, 256 MiB of layout memory, 200,000 characters per paragraph or cell; the readers start from
+  their untrusted presets. **New `LayoutLimits.ForTrustedInput()`** gives the 0.3.0 defaults (10,000 pages, 256 MiB,
+  5,000,000 cells, 2,000,000 blocks, depth 32, 64 MiB, 512 MiB, 1,000,000 characters) for large files you made or
+  trust. **Behaviour change:** a file over a safe limit that opened with 0.3.0's defaults now throws
+  `LayoutLimitExceededException` naming the limit; open it with `ForTrustedInput()` if you trust it.
+  `ForUntrustedInput()` stays and equals the default.
+- **SEC-04: a long run of spaces is measured in linear time.** 0.3.0 scanned the whole run once per space (40,000
+  spaces 1.3 s; 900,000 about 11 minutes). Now 900,000 spaces take about 0.3 s (under `ForTrustedInput()`; the default
+  refuses a 900,000-character paragraph). Output is unchanged.
+- **Cancellation inside one paragraph.** Measuring a paragraph checks the caller's token every 4,096 characters and
+  fitting its lines every 64 lines; before, a token was checked only between paragraphs and pages.
+- **SEC-11: composite glyphs are capped.** A glyph's composite outline may nest 8 levels and use 256 components in
+  all; a component that refers back to the glyph or to one it is part of is cut. Such a glyph is drawn without
+  outlines, a text watermark reports the new warning `FontGlyphOutlineInvalid` (Fidelity), and the walk checks the
+  token. A font whose "A" is 12 copies of itself took 87 s in `LayoutSvg.ToSvg` and 90 s to build a watermarked page;
+  now milliseconds. Real fonts (51 in the repository, at most 7 components and depth 3) are unchanged.
+- **SEC-08 and SEC-S1 (in Chuvadi.Sheets):** through Layout.Sheets 0.3.1, which requires Chuvadi.Sheets 2.2.1, a
+  conditional format nested 10,000 deep lays out with a warning and 20,000 nested shape groups are a format error;
+  both killed the process in 0.3.0. Layout.Docs 0.3.1 requires Chuvadi.Docs 2.4.1, with its own nesting limit.
+- **S5: no recursion on input without a guard.** `FlowDocument.CountBlocks` walks with its own stack: a model with
+  tables nested 100,000 deep overflowed the stack in 0.3.0 and now gets `LayoutLimitExceededException`
+  (`MaxNestingDepth`). The table of every recursive walk and its guard is in DESIGN.md section 17.
+
+### Also
+
+- The manual tests' docx-import preview says, in its code and in FILE-FIDELITY.md, that it is not shaped, so Tamil is
+  judged in the Viewer (D-392, L8a).
+
 ## 0.3.0 (2026-11-15)
 
 Released together with Layout.Docs, Layout.Sheets and Layout.Documents 0.3.0 and Layout.Fonts 0.2.0 (D-323, D-383).

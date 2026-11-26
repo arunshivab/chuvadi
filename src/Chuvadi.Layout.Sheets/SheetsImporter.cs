@@ -88,23 +88,46 @@ namespace Chuvadi.Layout.Sheets
             return Import(wb, options, layoutOptions, warning, cancellationToken);
         }
 
+        /// <summary>
+        /// The Chuvadi.Sheets reader limits for <paramref name="limits"/> (D-406 S2c): Sheets' safe defaults (its untrusted
+        /// preset) with a 200:1 compression ratio, as for .docx, unless the limits come from
+        /// <see cref="LayoutLimits.ForTrustedInput"/> (then the 0.3.0 values: ratio 1,000:1, 50,000 entries). Layout's size
+        /// limits on top, and <see cref="LayoutLimits.MaxCellsPerSheet"/> as Sheets' workbook-wide
+        /// <see cref="XlsxReaderOptions.MaxCells"/>, counted while reading (D-413): the stricter reading of a per-sheet
+        /// limit, so a workbook needing more memory stops before its cells are in memory.
+        /// </summary>
+        internal static XlsxReaderOptions ReaderOptions(LayoutLimits limits)
+        {
+            XlsxReaderOptions ro;
+            if (limits.Trusted)
+            {
+                ro = new XlsxReaderOptions { MaxCompressionRatio = 1000, MaxPackageEntries = 50_000, MaxRowsPerSheet = 1_048_576 };
+            }
+            else
+            {
+                ro = XlsxReaderOptions.ForUntrustedInput();
+                ro.MaxCompressionRatio = UntrustedCompressionRatio;
+            }
+            ro.MaxPartBytes = limits.MaxSourceBytes;
+            ro.MaxTotalUncompressedBytes = limits.MaxLayoutBytes;
+            ro.MaxCells = limits.MaxCellsPerSheet;
+            return ro;
+        }
+
+        /// <summary>The compression ratio allowed for workbooks under the safe limits, the same as Chuvadi.Docs' untrusted
+        /// preset (D-406 S2c).</summary>
+        internal const int UntrustedCompressionRatio = 200;
+
         /// <summary>Loads a workbook with Chuvadi.Sheets under <paramref name="layoutOptions"/>' limits, mapping its errors to Layout's.</summary>
         internal static Workbook Load(Stream source, SheetsImportOptions? options, LayoutOptions layoutOptions, CancellationToken cancellationToken)
         {
             options ??= new SheetsImportOptions();
             LayoutLimits limits = layoutOptions.Limits;
-            XlsxReaderOptions ro = new XlsxReaderOptions
-            {
-                IncludeStyledEmptyCells = true,
-                LoadImageData = options.LoadImages,
-                CancellationToken = cancellationToken,
-                MaxPartBytes = limits.MaxSourceBytes,
-                MaxTotalUncompressedBytes = limits.MaxLayoutBytes,
-                MaxCompressionRatio = 1000,
-                MaxPackageEntries = 50_000,
-                MaxRowsPerSheet = 1_048_576,
-                DisplayCulture = options.DisplayCulture ?? layoutOptions.Culture,
-            };
+            XlsxReaderOptions ro = ReaderOptions(limits);
+            ro.IncludeStyledEmptyCells = true;
+            ro.LoadImageData = options.LoadImages;
+            ro.CancellationToken = cancellationToken;
+            ro.DisplayCulture = options.DisplayCulture ?? layoutOptions.Culture;
             Workbook wb;
             try
             {
@@ -656,7 +679,7 @@ namespace Chuvadi.Layout.Sheets
             private void ApplyConditionalFormats(Sheet sh, GridSheet g, CellRange used, bool showZeros, PrintErrors errors)
             {
                 DateTime today = (_o.Today ?? _lo.Now?.DateTime ?? DateTime.Today).Date;
-                ConditionalFormatEvaluator ev = sh.EvaluateConditionalFormats(new ConditionalFormatOptions { Today = today, Date1904 = _wb.Date1904 });
+                ConditionalFormatEvaluator ev = sh.EvaluateConditionalFormats(new ConditionalFormatOptions { Today = today, Date1904 = _wb.Date1904, CancellationToken = _ct });
                 // Every cell of every formatted range inside the used range (zebra stripes and blank rules colour empty cells too).
                 HashSet<(int, int)> seen = new HashSet<(int, int)>();
                 long budget = _o.MaxConditionalFormatCells;

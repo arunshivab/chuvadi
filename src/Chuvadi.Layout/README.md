@@ -15,7 +15,7 @@ own packages, so an app takes only what it needs:
 
 PDF, SVG and PNG output ships separately as Chuvadi.Layout.Pdf; SVG is also in this package (`LayoutSvg`).
 
-Status: **0.3.0 (preview).** Word documents (Chuvadi.Docs 2.3.0), Excel workbooks (Chuvadi.Sheets 2.1.0) and plain
+Status: **0.3.1 (preview).** Word documents (Chuvadi.Docs 2.4.1), Excel workbooks (Chuvadi.Sheets 2.2.1) and plain
 text; Markdown and HTML through Chuvadi.Layout.Markup. Limits and decisions: `docs/Chuvadi.Layout/DESIGN.md` in the
 repository.
 
@@ -101,5 +101,7 @@ docx, an xlsx or an encrypted file, throws `LayoutFormatException` naming the pa
 
 - **Memory-only.** Nothing is written to disk. Nothing is read from disk or the network unless you
   add a directory or system font source.
-- **Untrusted input.** Malformed fonts throw `FontFormatException`. `LayoutLimits` bound the work.
+- **Untrusted input, safe by default.** Malformed fonts throw `FontFormatException`. `LayoutLimits` bound the work,
+  and the defaults are the safe limits (since 0.3.1); `LayoutLimits.ForTrustedInput()` widens them for large files you
+  made or trust. Every long loop honours the cancellation token.
 - **The input is never modified.**

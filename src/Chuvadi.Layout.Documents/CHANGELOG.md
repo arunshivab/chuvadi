@@ -1,5 +1,10 @@
 # Chuvadi.Layout.Documents — Changelog
 
+## 0.3.1 (2026-11-26)
+
+Security patch (D-406). Requires Chuvadi.Layout.Docs 0.3.1 and Chuvadi.Layout.Sheets 0.3.1, so `AutoDetectLayout` gets
+the safe defaults and every fix of Layout 0.3.1. No code change.
+
 ## 0.3.0 (2026-11-15)
 
 Dependency update (D-383). Requires Chuvadi.Layout.Docs 0.3.0 and Chuvadi.Layout.Sheets 0.3.0, so an application
