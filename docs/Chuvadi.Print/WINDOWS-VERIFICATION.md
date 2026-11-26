@@ -14,14 +14,15 @@ PowerShell 5.x: run each command line on its own (no `&&`).
 
 1. **Code.** The release candidate branches are merged into `main`: A3, A4, A6, A5, Layout docs, rc.1, the D-48 removal,
    the package split, Phase 1 part 1 (rc.2), Phase 4 parts 1 to 3 (rc.3), printer defaults, auto-rotation on the
-   as-is route and the printer list (rc.4), and private and memory-only jobs (rc.5). Update your clone:
+   as-is route and the printer list (rc.4), private and memory-only jobs (rc.5), and the security limits (rc.6).
+   Update your clone:
    ```powershell
-   cd C:\src\chuvadi-monorepo\chuvadi
+   cd C:\Users\aruns\Documents\chuvadi-monorepo\chuvadi
    git checkout main
    git pull
    git log --oneline -3
    ```
-   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.5</Version>`.
+   Expected: `src\Chuvadi.Print\Chuvadi.Print.csproj` says `<Version>1.0.0-rc.6</Version>`.
 2. **Local feed.** Chuvadi.Print.Pdf.Raster takes Chuvadi.Pdf 3.32.0 (the floor of its range) from the local feed: the folder `local-nuget` next to the folder that holds your clones (see
    `staging/README.md`), for example `C:\Users\<you>\Documents\local-nuget`. Chuvadi.Fonts 1.0.0 or later must be
    there too.
@@ -49,7 +50,7 @@ PowerShell 5.x: run each command line on its own (no `&&`).
    dotnet build Chuvadi.slnx -c Release
    dotnet test Chuvadi.slnx -c Release --no-build
    ```
-   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 420). No "Access is denied" from
+   Expected: 0 warnings. All Sheets, Docs and Print tests pass (Print: 458). No "Access is denied" from
    HttpListener: the IPP and hub tests listen on `localhost` without a URL reservation. If Windows Firewall
    asks about "dotnet", choose Cancel; the traffic is loopback only.
 6. **ManualTests.**
@@ -319,9 +320,11 @@ output to a file, so no save dialog appears and the output can be opened afterwa
 12. **Record the result.** All steps that apply are PASS on both PCs. Note the PC names and Windows builds
     (`winver`) in the PR description.
 13. **Release commit.** On a branch from `main`:
-    - Set `<Version>1.0.0</Version>` in `src\Chuvadi.Print\Chuvadi.Print.csproj`.
-    - In `src\Chuvadi.Print\CHANGELOG.md`, rename the `1.0.0-rc.1 (unreleased)` heading to
-      `1.0.0 (<date>)`.
+    - Set `<Version>1.0.0</Version>` in the four project files: `src\Chuvadi.Print\Chuvadi.Print.csproj`,
+      `src\Chuvadi.Print.Ipp\Chuvadi.Print.Ipp.csproj`, `src\Chuvadi.Print.Remote\Chuvadi.Print.Remote.csproj` and
+      `src\Chuvadi.Print.Windows\Chuvadi.Print.Windows.csproj`.
+    - In `src\Chuvadi.Print\CHANGELOG.md`, add a `## 1.0.0 (<date>)` heading above the latest
+      `## 1.0.0-rc.N` heading, saying what changed since that release candidate.
     - Build, test, open the PR and merge it.
 14. **Tag.** After the merge:
     ```powershell

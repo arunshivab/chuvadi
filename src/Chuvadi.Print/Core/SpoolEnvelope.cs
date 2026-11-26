@@ -119,17 +119,52 @@ namespace Chuvadi.Print
                 throw new InvalidDataException("Truncated spool envelope.", ex);
             }
             if (bodyLength < 0) throw new InvalidDataException("Corrupt spool envelope (negative length).");
-            byte[] body = r.ReadBytes(bodyLength);
-            if (body.Length != bodyLength) throw new InvalidDataException("Truncated spool envelope.");
+            byte[] body = ReadBody(source, bodyLength);
             if (Crc32.Compute(body) != expectedCrc) throw new InvalidDataException("Checksum mismatch (corrupt spool).");
             try
             {
                 return ParseBody(body, version);
             }
-            catch (EndOfStreamException ex)
+            catch (Exception ex) when (ex is EndOfStreamException or FormatException or ArgumentException or OverflowException)
             {
+                // Every corrupt body gives the same exception type, whatever part of it is wrong (rc.6).
                 throw new InvalidDataException("Corrupt spool envelope body.", ex);
             }
+        }
+
+        /// <summary>
+        /// The body, read without allocating more than the source holds (rc.6, P-03): a declared length is checked
+        /// against what a seekable source has left before anything is allocated, and a non-seekable source is read in
+        /// chunks, so memory grows only with bytes that actually arrive.
+        /// </summary>
+        private static byte[] ReadBody(Stream source, int bodyLength)
+        {
+            long remaining = -1;
+            if (source.CanSeek)
+            {
+                try { remaining = source.Length - source.Position; }
+                catch (NotSupportedException) { remaining = -1; }
+            }
+
+            if (remaining >= 0)
+            {
+                if (bodyLength > remaining) throw new InvalidDataException("Truncated spool envelope.");
+                byte[] body = new byte[bodyLength];
+                try { source.ReadExactly(body); }
+                catch (EndOfStreamException ex) { throw new InvalidDataException("Truncated spool envelope.", ex); }
+                return body;
+            }
+
+            using var chunks = new MemoryStream();
+            byte[] chunk = new byte[81920];
+            while (chunks.Length < bodyLength)
+            {
+                int read = source.Read(chunk, 0, (int)Math.Min(chunk.Length, bodyLength - chunks.Length));
+                if (read == 0) throw new InvalidDataException("Truncated spool envelope.");
+                chunks.Write(chunk, 0, read);
+            }
+
+            return chunks.ToArray();
         }
 
         public static SpoolEnvelope FromArray(byte[] data)
@@ -237,6 +272,8 @@ namespace Chuvadi.Print
             long pdfLength = r.ReadInt64();
             if (pdfLength < 0 || pdfLength > int.MaxValue)
                 throw new InvalidDataException("Invalid PDF length in spool envelope.");
+            // Checked before allocating: the CRC doesn't stop a crafted length, since anyone can compute it.
+            if (pdfLength > ms.Length - ms.Position) throw new InvalidDataException("Truncated PDF payload.");
             byte[] pdf = r.ReadBytes((int)pdfLength);
             if (pdf.Length != pdfLength) throw new InvalidDataException("Truncated PDF payload.");
             return new SpoolEnvelope(pdf, settings)

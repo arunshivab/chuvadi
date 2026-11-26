@@ -1,5 +1,59 @@
 # Chuvadi.Print — Changelog
 
+## 1.0.0-rc.6 (2026-11-24)
+
+All four packages move to 1.0.0-rc.6. A security release (D-406, D-410): four kinds of input that could crash a
+process or fill its memory with the defaults now fail with an ordinary exception instead. Valid input gives exactly
+the results it gave in rc.5.
+
+### Security
+
+- **IPP collections nested too deep** (SEC-09, Chuvadi.Print.Ipp). A printer reply of 320 KB with 20,000 nested
+  collections overflowed the stack and ended the process.
+  - Reading (`IppMessage.Parse`, `ReadFrom`, and so every printer reply, the CUPS queue list and saved capabilities)
+    now refuses collections nested more than 32 deep: `IppFormatException` "IPP collections are nested more than
+    32 deep.". Through `IppClient` it arrives as `IppException` "The printer sent an invalid IPP response: …", and
+    `IppCapabilityCache.LoadFrom` ignores such saved capabilities, as it ignores any it can't decode.
+  - Writing has the same limit (`InvalidOperationException`), so a collection that contains itself fails instead of
+    overflowing the stack.
+  - Printers nest 2 to 4 deep (`media-col`, `media-size`, `media-col-database`). The limit is fixed.
+- **IPP responses of any size** (Chuvadi.Print.Ipp). `IppClient` read a whole response into memory, so a broken or
+  hostile printer could send gigabytes.
+  - New `IppClientOptions.MaxResponseBytes`, default 16 MB (16,777,216 bytes), settable from 1 byte to
+    `Array.MaxLength`. A longer response fails with `IppException` "The printer's response is larger than N bytes
+    (IppClientOptions.MaxResponseBytes).", before more is read; a declared length over the limit fails before
+    anything is read. The client's `Timeout` still covers the whole exchange, body included.
+  - New `IppMessage.ReadFrom(Stream, long maxBytes, out byte[])` for reading IPP from outside with a limit
+    (`IppFormatException` "The IPP message is longer than N bytes."). The existing `ReadFrom(Stream, out byte[])` is
+    unchanged.
+- **An unknown attribute-group tag** (P-04, Chuvadi.Print.Ipp). A reply whose group delimiter was 0x00 gave
+  `ArgumentOutOfRangeException` from `IppAttributeGroup`, and through `IppClient` it escaped as that. It is now
+  `IppFormatException` "Unknown IPP attribute-group tag 0x00.", so through `IppClient` it is the usual `IppException`
+  "The printer sent an invalid IPP response: …". The reserved delimiters 0x0B to 0x0F are read as before. A mutation
+  fuzz of a million replies now gives only `IppFormatException`.
+- **Spool lengths** (P-03, Chuvadi.Print). A 14-byte spool file made `PrintJob.LoadSpool` allocate 2 GB.
+  - `LoadSpool` and `SpoolEnvelope.Deserialize` / `FromArray` check a declared length against what the file, array or
+    stream actually holds before allocating anything ("Truncated spool envelope."), and read a stream that can't
+    seek in chunks, so memory grows only with bytes that arrive.
+  - The PDF length inside the body is checked the same way ("Truncated PDF payload."). The checksum doesn't guard
+    against a crafted length, because anyone can compute it.
+  - A body that is corrupt in any other way (a page selection, number or setting that doesn't parse) now always
+    gives `InvalidDataException` "Corrupt spool envelope body.", with the cause as the inner exception. Before, some
+    gave `FormatException`, `ArgumentException` or `OverflowException`.
+  - The envelope format is unchanged (versions 1 to 4).
+- **Page ranges expanded in full** (P-03b, Chuvadi.Print). `PageSelection.Range("1-2147483647")`, from a user's page
+  range or from a spool, took 4 GB and then failed with `OutOfMemoryException`.
+  - A range is now kept as its intervals and listed only up to the document's page count in `Resolve`, so it costs
+    no more than the document's pages. `Resolve`'s results, `ToCanonicalString` and the error messages are
+    unchanged.
+
+### Docs
+
+- GUIDE: the limits above, and a note that `PrintHubMessageHandler` reads each request body whole, so the web host's
+  request size limit applies (Kestrel's default is 30 MB).
+- WINDOWS-VERIFICATION: step 1 names the real clone folder and rc.6; step 5 Print 458; step 13 describes the 1.0.0
+  release commit for all four packages.
+
 ## 1.0.0-rc.5 (2026-11-13)
 
 All four packages move to 1.0.0-rc.5. Two privacy changes (D-349, decided in D-355), for documents that must exist

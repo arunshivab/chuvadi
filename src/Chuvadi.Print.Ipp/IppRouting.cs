@@ -298,7 +298,8 @@ namespace Chuvadi.Print.Ipp
                 IppVersion = o.IppVersion,
                 Timeout = o.Timeout,
                 Credentials = o.Credentials,
-                AcceptAnyServerCertificate = o.AcceptAnyServerCertificate
+                AcceptAnyServerCertificate = o.AcceptAnyServerCertificate,
+                MaxResponseBytes = o.MaxResponseBytes
             };
             foreach (string pin in o.PinnedCertificates) copy.PinnedCertificates.Add(pin);
             return copy;
