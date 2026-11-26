@@ -44,7 +44,15 @@ namespace Chuvadi.Layout.ManualTests
                 n++;
             }
             Check(n == 29, "expected 29 bundled faces, got " + n);
-            Check(FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).GetFaces().Count == 22, "expected 22 built-in LiPi faces");
+            // 22 LiPi Sans faces and, since Chuvadi.Fonts 1.2.0, Noto Emoji (D-418); every one loads as its catalog says.
+            int builtIn = 0;
+            foreach (FontFaceDescriptor d in FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).GetFaces())
+            {
+                FontFace f = FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).LoadFace(d);
+                Check(f.FamilyName == d.FamilyName && f.Weight == d.Weight && f.IsItalic == d.IsItalic, "built-in catalog mismatch for " + d.Key);
+                builtIn++;
+            }
+            Check(builtIn == 23, "expected 23 built-in faces (22 LiPi Sans and Noto Emoji), got " + builtIn);
         }
 
         private static void L1_OfficeFontsResolveToMetricCompatibleSubstitutes()

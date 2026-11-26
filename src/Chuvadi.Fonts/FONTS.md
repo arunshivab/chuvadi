@@ -1,11 +1,13 @@
 # Chuvadi.Fonts — font provenance
 
-All files are licensed under the SIL Open Font License 1.1. The licence text ships in the package's `licenses/`
-folder, in `Licenses/` in the repository, and as `FontPack.LicenseText`.
+All files are licensed under the SIL Open Font License 1.1, each with its own copyright notice. The licence texts
+ship in the package's `licenses/` folder and in `Licenses/` in the repository, and `FontPack.GetLicenseText(fileName)`
+returns the one that comes with a file:
 
-| Files | Family | Version | Source |
-|---|---|---|---|
-| LiPi-Sans-* (22) | LiPi Sans, LiPi Sans &lt;Script&gt; | from LiPi Sans v1.0 | Static instances of the LiPi Sans variable WOFF2 fonts in arunshivab/chuvadi-pdf `assets/fonts/lipi-sans` (Inter + Noto Sans) |
+| Files | Family | Version | Licence file | Source |
+|---|---|---|---|---|
+| LiPi-Sans-* (22) | LiPi Sans, LiPi Sans &lt;Script&gt; | from LiPi Sans v1.0 | `LiPiSans-OFL.txt` (also `FontPack.LicenseText`) | Static instances of the LiPi Sans variable WOFF2 fonts in arunshivab/chuvadi-pdf `assets/fonts/lipi-sans` (Inter + Noto Sans) |
+| NotoEmoji-Regular.ttf (1, since 1.2.0) | Noto Emoji | 3.002 | `NotoEmoji-OFL.txt` (Copyright 2013 Google LLC) | Static weight-400 instance of the monochrome Noto Emoji variable font from google/fonts; see "Noto Emoji" below |
 
 The files moved here unchanged from Chuvadi.Layout.Fonts (D-113); the hashes below are those of the files that
 package carried.
@@ -28,9 +30,50 @@ The following were then set so that the face identity is correct:
 The STAT table was removed. Glyph outlines, metrics, cmap, GSUB and GPOS are those of the
 instanced design.
 
+## Noto Emoji (1.2.0, D-418, D-420)
+
+The monochrome (black-and-white outline) Noto Emoji face, added **unchanged**, byte for byte as the Pdf chat
+delivered it with its PROVENANCE.md (v2, 26 Nov 2026). chuvadi-pdf 3.36.0 reads the same file from this package.
+
+- **Font:** family "Noto Emoji", Regular, "Version 3.002" (name ID 5). It is a static TrueType instance at weight 400
+  with `glyf` outlines only: no COLR, CBDT or sbix, and no variation tables. It has unitsPerEm 2048 and 1,891 glyphs,
+  and fsType 0 (installable embedding). Its names are left exactly as Google ships them.
+- **Licence:** SIL Open Font License 1.1, in `Licenses/NotoEmoji-OFL.txt`, which is the upstream `OFL.txt` byte for
+  byte (4,330 bytes, SHA-256 `500bb1ccf43df7bbb522112f9133a52b16e1c35e809632f5d8609b179152de5b`). Name IDs 13 and 14
+  carry the OFL text and `http://scripts.sil.org/OFL`.
+- **No Reserved Font Name.** The copyright line of `OFL.txt` is exactly "Copyright 2013 Google LLC", with no "with
+  Reserved Font Name …" clause, and name ID 0 is the same line. The phrase "Reserved Font Name" in `OFL.txt` appears
+  only in the licence's own definitions. The weight-400 instance is a Modified Version under the OFL, but because no
+  name is reserved it keeps the family name "Noto Emoji". This was checked at the pinned commit by the Pdf chat
+  (D-420), which corrected the first PROVENANCE.md on this point.
+- **Pinned source:**
+  - google/fonts, path `ofl/notoemoji/NotoEmoji[wght].ttf` (the variable font, weight axis 300 to 700), commit
+    `6ebe737e44fd64ee736bbc6feed6136a6dbfd222`;
+  - URL
+    `https://raw.githubusercontent.com/google/fonts/6ebe737e44fd64ee736bbc6feed6136a6dbfd222/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf`;
+  - SHA-256 `de6c18832938afc99caf132b39d6a30a19bac7f2e812e28db2535b4608d27551`.
+  - The monochrome build repository is googlefonts/emoji-bw, whose v3.000 release was the original source; Google
+    Fonts distributes the same family as 3.002, which is what is pinned.
+- **How the static face was made** (fontTools 4.67.0; reproducible, same bytes on every run):
+
+```
+from fontTools.ttLib import TTFont
+from fontTools.varLib import instancer
+f = TTFont("NotoEmoji[wght].ttf", recalcTimestamp=False)
+instancer.instantiateVariableFont(f, {"wght": 400}, inplace=True)
+f.save("NotoEmoji-Regular.ttf")
+```
+
+  `recalcTimestamp=False` keeps `head.modified` from the source, so the output does not depend on the build time.
+  The first delivery (SHA-256 `b97ef098…`) was made without it and differed only in `head.modified` and the
+  checksum; it was replaced before release.
+- **Delivered file:** `NotoEmoji-Regular.ttf`, 886,628 bytes, SHA-256
+  `1ada997ccb67bf2404828e25528e5257d6db10c80287e77684abf6737a5d198f`. `FontPackTests` and the manual test F6 check
+  it.
+
 ## Files
 
-22 files, 4,083,976 bytes. `FontPackTests` checks every row against the embedded file.
+23 files, 4,970,604 bytes: the 22 LiPi Sans files (4,083,976 bytes) and Noto Emoji. `FontPackTests` checks every row against the embedded file.
 
 | File | Family | Style | Bytes | SHA-256 |
 |---|---|---|---|---|
@@ -56,3 +99,4 @@ instanced design.
 | LiPi-Sans-Tamil-Regular.ttf | LiPi Sans Tamil | Regular | 82,452 | `a5d9fb05ca958067823bea30eec091bd47051c540f505c2c4fb8e693345906d7` |
 | LiPi-Sans-Telugu-Bold.ttf | LiPi Sans Telugu | Bold | 209,248 | `003fa8317915832f090a9e139ec321f6218fd40f4ea4dca8642960b55e7208d7` |
 | LiPi-Sans-Telugu-Regular.ttf | LiPi Sans Telugu | Regular | 208,712 | `b39f0daff7c7c118e1c2a050136a4a3564509c244ad4983c0b7e31601df99ae7` |
+| NotoEmoji-Regular.ttf | Noto Emoji | Regular | 886,628 | `1ada997ccb67bf2404828e25528e5257d6db10c80287e77684abf6737a5d198f` |

@@ -30,6 +30,7 @@ namespace Chuvadi.Fonts
             new FontPackFile("LiPi-Sans-Tamil-Regular.ttf", "LiPi Sans Tamil", "Regular", "LiPi Sans Tamil", "LiPiSansTamil-Regular", 400, false, FontScript.Tamil, 82452, "a5d9fb05ca958067823bea30eec091bd47051c540f505c2c4fb8e693345906d7"),
             new FontPackFile("LiPi-Sans-Telugu-Bold.ttf", "LiPi Sans Telugu", "Bold", "LiPi Sans Telugu Bold", "LiPiSansTelugu-Bold", 700, false, FontScript.Telugu, 209248, "003fa8317915832f090a9e139ec321f6218fd40f4ea4dca8642960b55e7208d7"),
             new FontPackFile("LiPi-Sans-Telugu-Regular.ttf", "LiPi Sans Telugu", "Regular", "LiPi Sans Telugu", "LiPiSansTelugu-Regular", 400, false, FontScript.Telugu, 208712, "b39f0daff7c7c118e1c2a050136a4a3564509c244ad4983c0b7e31601df99ae7"),
+            new FontPackFile("NotoEmoji-Regular.ttf", "Noto Emoji", "Regular", "Noto Emoji Regular", "NotoEmoji-Regular", 400, false, FontScript.Emoji, 886628, "1ada997ccb67bf2404828e25528e5257d6db10c80287e77684abf6737a5d198f"),
         };
     }
 }

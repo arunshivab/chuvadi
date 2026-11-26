@@ -105,7 +105,7 @@ public class BundledFontsTests
     public void Built_in_faces_load_and_match_the_font_pack()
     {
         IReadOnlyList<FontFaceDescriptor> faces = FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).GetFaces();
-        Assert.Equal(22, faces.Count);
+        Assert.Equal(23, faces.Count); // 22 LiPi Sans faces and, since Chuvadi.Fonts 1.2.0, Noto Emoji (D-418)
         foreach (FontFaceDescriptor d in faces)
         {
             FontFace f = FontPackSource.For(Chuvadi.Fonts.FontPack.Instance).LoadFace(d);

@@ -32,11 +32,14 @@ namespace Chuvadi.Fonts
 
         /// <summary>Telugu (LiPi Sans Telugu).</summary>
         Telugu,
+
+        /// <summary>Emoji, drawn in one colour (Noto Emoji). Since 1.2.0.</summary>
+        Emoji,
     }
 
     /// <summary>One font file of the pack, described from its own tables.</summary>
-    /// <param name="FileName">The file name, for example "LiPi-Sans-Tamil-Bold.ttf".</param>
-    /// <param name="FamilyName">The family (name ID 1), for example "LiPi Sans Tamil".</param>
+    /// <param name="FileName">The file name, for example "LiPi-Sans-Tamil-Bold.ttf" or "NotoEmoji-Regular.ttf".</param>
+    /// <param name="FamilyName">The family (name ID 1), for example "LiPi Sans Tamil" or "Noto Emoji".</param>
     /// <param name="StyleName">The style (name ID 2): Regular, Bold, Italic or Bold Italic.</param>
     /// <param name="FullName">The full name (name ID 4).</param>
     /// <param name="PostScriptName">The PostScript name (name ID 6).</param>
