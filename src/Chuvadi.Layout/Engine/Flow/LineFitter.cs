@@ -72,6 +72,10 @@ namespace Chuvadi.Layout.Engine.Flow
             bool first = true;
             while (true)
             {
+                if ((lines.Count & 63) == 63)
+                {
+                    m.Cancellation.ThrowIfCancellationRequested(); // D-406 S3: one paragraph can make many lines
+                }
                 FittedLine line = FitLine(m, s, first, pf.LeftIndent + (first ? pf.FirstLineIndent : 0), maxX, defaultTabStop, true)!;
                 lines.Add(line);
                 if (line.IsLastLine)

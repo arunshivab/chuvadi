@@ -1,5 +1,11 @@
 # Chuvadi.Layout.Markup — Changelog
 
+## 0.1.1 (2026-11-26)
+
+Dependency update (D-406, L7). Requires **Chuvadi.Layout 0.3.1** (the security patch: safe default limits and the
+fixes for SEC-03, SEC-04 and SEC-11) and **Chuvadi.Markup 1.2.0** (was 1.1.0). No code change. 65 Markdown files
+(398 pages) lay out byte-identically on Markup 1.1.0 and 1.2.0.
+
 ## 0.1.0 (2026-11-09)
 
 - Trim- and NativeAOT-compatible: `IsTrimmable` and `IsAotCompatible` are set, so the analyzers check every build (D-217,

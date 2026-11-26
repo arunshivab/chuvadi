@@ -139,11 +139,14 @@ public sealed class Docs210WiringTests
     }
 
     [Fact]
-    public void W4_the_element_cap_is_five_per_block()
+    public void W4_the_element_cap_is_five_per_block_and_one_per_KiB_of_layout_memory()
     {
-        Assert.Equal(10_000_000, DocsImporter.ReaderOptions(new LayoutLimits(), true).MaxElements);
-        Assert.Equal(1_000_000, DocsImporter.ReaderOptions(LayoutLimits.ForUntrustedInput(), true).MaxElements);
-        Assert.Equal(int.MaxValue, DocsImporter.ElementsFor(long.MaxValue / 2));
+        // D-406 S2b: the smaller of five per block (D-317 E1) and MaxLayoutBytes / 1 KiB.
+        Assert.Equal(262_144, DocsImporter.ReaderOptions(new LayoutLimits(), true).MaxElements);
+        Assert.Equal(262_144, DocsImporter.ReaderOptions(LayoutLimits.ForUntrustedInput(), true).MaxElements);
+        Assert.Equal(524_288, DocsImporter.ReaderOptions(LayoutLimits.ForTrustedInput(), true).MaxElements);
+        Assert.Equal(int.MaxValue, DocsImporter.ElementsFor(long.MaxValue / 2, long.MaxValue));
+        Assert.Equal(1, DocsImporter.ElementsFor(0, 0));
 
         // A document of many empty paragraphs is refused by the element cap while it is read.
         Document many = new Document();
@@ -161,10 +164,17 @@ public sealed class Docs210WiringTests
     }
 
     [Fact]
-    public void W5_untrusted_limits_start_from_the_Docs_preset_and_keep_it_when_cloned_or_changed()
+    public void W5_safe_limits_start_from_the_Docs_preset_and_trusted_ones_keep_it_off_when_cloned_or_changed()
     {
-        DocxReaderOptions plain = DocsImporter.ReaderOptions(new LayoutLimits(), true);
-        Assert.Equal(DocxReaderOptions.DefaultMaxCompressionRatio, plain.MaxCompressionRatio);
+        // D-406: the Docs untrusted preset is the default; ForTrustedInput (and its clones) uses Docs' ForTrustedInput,
+        // the Docs 2.4.0 defaults that Layout 0.3.0 read with (ratio 1,000:1), with Docs 2.4.1's nesting limit of 64.
+        LayoutLimits trusted = LayoutLimits.ForTrustedInput();
+        trusted.MaxPages = 50;
+        DocxReaderOptions plain = DocsImporter.ReaderOptions(trusted.Clone(), true);
+        Assert.Equal(1_000, plain.MaxCompressionRatio);
+        Assert.Equal(DocxReaderOptions.ForTrustedInput().MaxNestingDepth, plain.MaxNestingDepth);
+        Assert.Equal(524_288, plain.MaxElements);
+        Assert.Equal(DocxReaderOptions.ForUntrustedInput().MaxCompressionRatio, DocsImporter.ReaderOptions(new LayoutLimits(), true).MaxCompressionRatio);
 
         LayoutLimits untrusted = LayoutLimits.ForUntrustedInput();
         untrusted.MaxPages = 50;
@@ -173,8 +183,9 @@ public sealed class Docs210WiringTests
         Assert.Equal(docs.MaxCompressionRatio, r.MaxCompressionRatio); // 200:1
         Assert.Equal(docs.MaxEntries, r.MaxEntries);
         Assert.Equal(docs.MaxSpinCount, r.MaxSpinCount);
-        Assert.Equal(docs.MaxElements, r.MaxElements);
+        Assert.Equal(262_144, r.MaxElements); // D-406 S2b: tighter than the preset's 1,000,000
         Assert.Equal(docs.MaxXmlDepth, r.MaxXmlDepth);
+        Assert.Equal(docs.MaxNestingDepth, r.MaxNestingDepth); // 32
         Assert.Equal(untrusted.MaxSourceBytes, r.MaxPackageBytes); // Layout's own limits on top
         Assert.Equal(untrusted.MaxSourceBytes, r.MaxPartBytes);
         Assert.Equal(untrusted.MaxLayoutBytes, r.MaxTotalUncompressedBytes);

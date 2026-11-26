@@ -159,7 +159,7 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
     cts.CancelAfter(TimeSpan.FromSeconds(20));                     // wall-clock budget per attachment
     var options = new LayoutOptions
     {
-        Limits = LayoutLimits.ForUntrustedInput(),                 // see the table below
+        // Limits: the defaults are the safe limits since 0.3.1 (D-406); see the table below.
         AllowSystemFonts = false,                                  // same output on every server, no font probing
         Culture = CultureInfo.GetCultureInfo("en-IN"),             // or the mailbox owner's culture
         Shaper = new PdfShaper(),
@@ -181,9 +181,12 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
 
 ### Limits
 
-`LayoutLimits.ForUntrustedInput()` gives:
+Since 0.3.1 the defaults are the safe limits (D-406, Rule 6): `new LayoutLimits()` and `new LayoutOptions()` are the same
+as `LayoutLimits.ForUntrustedInput()`. For very large files you made or trust, use `LayoutLimits.ForTrustedInput()`,
+the defaults before 0.3.1. Never use it for files from other people: a crafted 22 KB .docx then used 2.5 GB before a
+limit stopped it (SEC-03, measured on 0.3.0).
 
-| Limit | Untrusted | Default |
+| Limit | Default (= `ForUntrustedInput()`) | `ForTrustedInput()` |
 |---|---|---|
 | MaxSourceBytes | 50 MiB | 256 MiB |
 | MaxPages | 2,000 | 10,000 |
@@ -197,13 +200,21 @@ public static async Task<IReadOnlyList<byte[]>> RenderAsync(byte[] upload, int m
 Tighten them further with `Clone()` and set the values you need. Compressed packages are bounded as they are read:
 - for xlsx, each decompressed part is capped at `MaxSourceBytes` (passed to Chuvadi.Sheets as `MaxPartBytes`), and
   each picture at `MaxResourceBytes`;
+- for xlsx, Chuvadi.Sheets starts from its own safe defaults (20,000 entries, 1,048,576 rows, spin count 500,000)
+  with a 200:1 compression ratio, and Layout's limits on top; under `ForTrustedInput()` the 0.3.0 values (1,000:1,
+  50,000 entries) apply (D-406 S2c). `MaxCellsPerSheet` is also Sheets' `MaxCells`, counted for the whole workbook
+  while it is read, styled empty cells included, so a workbook of more cells stops before they are in memory (D-413);
+  conditional formats are evaluated with the caller's token and Sheets' own evaluation budget;
 - for docx, Chuvadi.Docs gets `MaxSourceBytes` as its package and part caps, `MaxLayoutBytes` as its total
-  uncompressed cap and five XML elements per `MaxBlocks` as its element cap (10,000,000 by default, 1,000,000
-  untrusted; D-317 E1). Its own zip-bomb, XML-depth and spin-count checks also apply. With `ForUntrustedInput()`,
-  Chuvadi.Docs starts from its own untrusted preset (compression ratio 200:1, 10,000 entries, spin count 500,000) and
-  Layout's limits apply on top (D-317 U1). The element cap matters because a document's memory follows its number of
-  elements, not its size in bytes: Chuvadi.Docs measured up to about 520 bytes per element, so the default cap still
-  allows about 5 GB; use `ForUntrustedInput()` for files you do not trust.
+  uncompressed cap, and an element cap checked while reading, before the model grows: the smaller of five elements per
+  `MaxBlocks` and one per KiB of `MaxLayoutBytes` (262,144 by default, 524,288 under `ForTrustedInput()`; D-406 S2b,
+  D-317 E1). A document's memory follows its number of elements, not its size in bytes: the model costs up to about
+  0.8 KB per element. Its own zip-bomb, XML-depth and spin-count checks also apply. By default Chuvadi.Docs starts from
+  its own untrusted preset (compression ratio 200:1, 10,000 entries, spin count 500,000), with Layout's limits on top;
+  under `ForTrustedInput()` from its plain options (D-406; D-317 U1).
+- every long loop checks the caller's cancellation token, also inside one paragraph and while walking a glyph's
+  outline (D-406 S3, S4); a composite glyph that is too deep, too large or refers back to itself is not drawn and is
+  reported as `FontGlyphOutlineInvalid`.
 - a .docx part that Chuvadi.Docs could not use (a broken header, missing styles) is left out and reported as
   `DocxPartSkipped`, with the part name as its location (B11).
 
@@ -277,7 +288,7 @@ policy.ResourceResolver = new DelegateResourceResolver(r =>
     r.Url.StartsWith("cid:") ? FindCidPartAsDataUri(r.Url.Substring(4)) : null);
 SanitizeResult mail = HtmlSanitizer.Sanitize(htmlPartBytes, policy, mimeCharsetEncoding, ct);
 
-var options = new LayoutOptions { Culture = userCulture, Limits = LayoutLimits.ForUntrustedInput() };
+var options = new LayoutOptions { Culture = userCulture }; // the defaults are the safe limits (D-406)
 options.FontSources.Add(FontPackSource.For(SubstituteFontPack.Instance));
 options.Shaper = new PdfShaper();                          // Indic mail
 using LaidOutDocument doc = HtmlLayout.Open(mail, new HtmlImportOptions { Title = subject }, options, ct);

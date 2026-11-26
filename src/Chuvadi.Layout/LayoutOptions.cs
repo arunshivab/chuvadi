@@ -8,76 +8,94 @@ namespace Chuvadi.Layout
 {
     /// <summary>
     /// Hard limits that bound the work and memory spent on one document. Every limit throws
-    /// <see cref="LayoutLimitExceededException"/> before it is exceeded. Defaults suit interactive viewing
-    /// of ordinary office documents; tighten them for untrusted input on shared servers.
+    /// <see cref="LayoutLimitExceededException"/> before it is exceeded.
+    /// <para>The defaults are safe for files from anyone (D-406, Rule 6): <c>new LayoutLimits()</c> has the same values
+    /// as <see cref="ForUntrustedInput"/>, and the readers start from their own untrusted presets. For very large files
+    /// you made or trust (over 2,000 pages, 50 MiB, 200,000 blocks or 1,000,000 cells per sheet), use
+    /// <see cref="ForTrustedInput"/>.</para>
     /// </summary>
     public sealed class LayoutLimits
     {
         /// <summary>
-        /// Maximum number of pages that may be built. Default 10,000. A flow document (docx, text, markup) stops paginating
-        /// here. A workbook opens whatever its page count, since its pages are computed only when asked for, and
-        /// building, exporting or printing a page at or past this limit throws <see cref="LayoutLimitExceededException"/>
-        /// with the workbook's page count and the sheet and range in <see cref="LayoutLimitExceededException.Location"/>
-        /// (D-291). A workbook of more than <see cref="int.MaxValue"/> pages is refused at open.
+        /// Maximum number of pages that may be built. Default 2,000 (<see cref="ForTrustedInput"/>: 10,000). A flow
+        /// document (docx, text, markup) stops paginating here. A workbook opens whatever its page count, since its pages
+        /// are computed only when asked for, and building, exporting or printing a page at or past this limit throws
+        /// <see cref="LayoutLimitExceededException"/> with the workbook's page count and the sheet and range in
+        /// <see cref="LayoutLimitExceededException.Location"/> (D-291). A workbook of more than <see cref="int.MaxValue"/>
+        /// pages is refused at open.
         /// </summary>
-        public int MaxPages { get; set; } = 10_000;
+        public int MaxPages { get; set; } = 2_000;
 
-        /// <summary>Maximum number of populated cells per sheet that will be laid out. Default 5,000,000.</summary>
-        public long MaxCellsPerSheet { get; set; } = 5_000_000;
+        /// <summary>Maximum number of populated cells per sheet that will be laid out. Default 1,000,000
+        /// (<see cref="ForTrustedInput"/>: 5,000,000).</summary>
+        public long MaxCellsPerSheet { get; set; } = 1_000_000;
 
         /// <summary>
-        /// Maximum number of blocks (paragraphs, tables, rows) in a flow document. Default 2,000,000.
-        /// <para>For a .docx it also caps the XML elements Chuvadi.Docs reads, at five per block (D-282 (b), D-317 E1):
-        /// 10,000,000 by default and 1,000,000 under <see cref="ForUntrustedInput"/>, Chuvadi.Docs' own untrusted preset.
-        /// Real documents have about 6 to 8 elements per block, so a large document may reach the element cap before this
-        /// one. Worst case: Chuvadi.Docs measured up to about 520 bytes per element (a file of empty paragraphs), so the
-        /// default cap still allows a document model of about 5 GB; use <see cref="ForUntrustedInput"/> for files you do
-        /// not trust.</para>
+        /// Maximum number of blocks (paragraphs, tables, rows) in a flow document. Default 200,000
+        /// (<see cref="ForTrustedInput"/>: 2,000,000).
+        /// <para>For a .docx it also caps the XML elements Chuvadi.Docs reads while reading, before the document model is
+        /// built (D-406 S2b): the smaller of five per block and one per KiB of <see cref="MaxLayoutBytes"/>. That is
+        /// 262,144 elements by default and 524,288 under <see cref="ForTrustedInput"/>. Real documents have about 6 to 8
+        /// elements per block, so the default opens documents of about 33,000 blocks or more; the model costs up to about
+        /// 0.8 KB per element (measured with a file of empty paragraphs).</para>
         /// </summary>
-        public long MaxBlocks { get; set; } = 2_000_000;
+        public long MaxBlocks { get; set; } = 200_000;
 
-        /// <summary>Maximum nesting depth of tables within tables. Default 32.</summary>
-        public int MaxNestingDepth { get; set; } = 32;
+        /// <summary>Maximum nesting depth of tables within tables. Default 8 (<see cref="ForTrustedInput"/>: 32).</summary>
+        public int MaxNestingDepth { get; set; } = 8;
 
-        /// <summary>Maximum bytes of a single image or font program. Default 64 MiB.</summary>
-        public long MaxResourceBytes { get; set; } = 64L * 1024 * 1024;
+        /// <summary>Maximum bytes of a single image or font program. Default 16 MiB (<see cref="ForTrustedInput"/>:
+        /// 64 MiB).</summary>
+        public long MaxResourceBytes { get; set; } = 16L * 1024 * 1024;
 
-        /// <summary>Approximate cap on memory retained by the layout (cached pages, measured lines). Default 512 MiB.</summary>
-        public long MaxLayoutBytes { get; set; } = 512L * 1024 * 1024;
+        /// <summary>Approximate cap on memory retained by the layout (cached pages, measured lines). Default 256 MiB
+        /// (<see cref="ForTrustedInput"/>: 512 MiB).</summary>
+        public long MaxLayoutBytes { get; set; } = 256L * 1024 * 1024;
 
-        /// <summary>Maximum bytes read from a source stream. Default 256 MiB.</summary>
-        public long MaxSourceBytes { get; set; } = 256L * 1024 * 1024;
+        /// <summary>Maximum bytes read from a source stream. Default 50 MiB (<see cref="ForTrustedInput"/>:
+        /// 256 MiB).</summary>
+        public long MaxSourceBytes { get; set; } = 50L * 1024 * 1024;
 
-        /// <summary>Maximum characters in one paragraph or one cell. Default 1,000,000.</summary>
-        public int MaxCharactersPerBlock { get; set; } = 1_000_000;
+        /// <summary>Maximum characters in one paragraph or one cell. Default 200,000 (<see cref="ForTrustedInput"/>:
+        /// 1,000,000).</summary>
+        public int MaxCharactersPerBlock { get; set; } = 200_000;
 
         /// <summary>Returns a copy.</summary>
         public LayoutLimits Clone() => (LayoutLimits)MemberwiseClone();
 
-        /// <summary>True for an instance made by <see cref="ForUntrustedInput"/> (or cloned from one): readers then start
-        /// from their own untrusted presets (D-317 U1).</summary>
-        internal bool FromUntrustedPreset { get; private init; }
+        /// <summary>True for an instance made by <see cref="ForTrustedInput"/> (or cloned from one): readers then start
+        /// from their plain options instead of their untrusted presets (D-406; before 0.3.1 the untrusted preset was the
+        /// opt-in, D-317 U1).</summary>
+        internal bool Trusted { get; private init; }
 
         /// <summary>
-        /// Tighter limits for documents from untrusted senders on a shared server: 2,000 pages, 50 MiB of
-        /// source, 1,000,000 cells per sheet, 200,000 blocks, nesting depth 8, 16 MiB per image or font, 256 MiB of
-        /// layout memory, 200,000 characters per paragraph or cell. Adjust as needed.
-        /// <para>A .docx is then read with Chuvadi.Docs' own untrusted preset (<c>DocxReaderOptions.ForUntrustedInput</c>:
-        /// compression ratio 200:1, 10,000 entries, spin count 500,000, 1,000,000 elements), with these limits applied on
-        /// top (D-282 (b), D-317 U1). The preset is remembered by this instance and its <see cref="Clone"/>, also after
-        /// values are changed.</para>
+        /// The safe limits, the same as <c>new LayoutLimits()</c> since 0.3.1 (D-406): 2,000 pages, 50 MiB of source,
+        /// 1,000,000 cells per sheet, 200,000 blocks, nesting depth 8, 16 MiB per image or font, 256 MiB of layout
+        /// memory, 200,000 characters per paragraph or cell. The readers start from their own untrusted presets
+        /// (Chuvadi.Docs: <c>DocxReaderOptions.ForUntrustedInput</c>, compression ratio 200:1, 10,000 entries, spin count
+        /// 500,000), with these limits applied on top. Kept so code written for 0.2 and 0.3.0 reads the same.
         /// </summary>
-        public static LayoutLimits ForUntrustedInput() => new LayoutLimits
+        public static LayoutLimits ForUntrustedInput() => new LayoutLimits();
+
+        /// <summary>
+        /// Wider limits for very large files you made or trust (D-406): 10,000 pages, 256 MiB of source, 5,000,000 cells
+        /// per sheet, 2,000,000 blocks, nesting depth 32, 64 MiB per image or font, 512 MiB of layout memory, 1,000,000
+        /// characters per paragraph or cell; the readers start from their plain options (compression ratio 1,000:1).
+        /// These were the defaults before 0.3.1. Do not use them for files from other people: a small crafted file can
+        /// then use gigabytes of memory before a limit stops it.
+        /// The choice is remembered by this instance and its <see cref="Clone"/>, also after values are changed.
+        /// </summary>
+        public static LayoutLimits ForTrustedInput() => new LayoutLimits
         {
-            FromUntrustedPreset = true,
-            MaxPages = 2_000,
-            MaxSourceBytes = 50L * 1024 * 1024,
-            MaxCellsPerSheet = 1_000_000,
-            MaxBlocks = 200_000,
-            MaxNestingDepth = 8,
-            MaxResourceBytes = 16L * 1024 * 1024,
-            MaxLayoutBytes = 256L * 1024 * 1024,
-            MaxCharactersPerBlock = 200_000,
+            Trusted = true,
+            MaxPages = 10_000,
+            MaxSourceBytes = 256L * 1024 * 1024,
+            MaxCellsPerSheet = 5_000_000,
+            MaxBlocks = 2_000_000,
+            MaxNestingDepth = 32,
+            MaxResourceBytes = 64L * 1024 * 1024,
+            MaxLayoutBytes = 512L * 1024 * 1024,
+            MaxCharactersPerBlock = 1_000_000,
         };
 
         /// <summary>Throws when <paramref name="value"/> exceeds <paramref name="limit"/>.</summary>

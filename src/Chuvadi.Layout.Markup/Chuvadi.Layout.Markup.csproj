@@ -18,7 +18,7 @@
     <Description>Markdown (CommonMark + GFM) and HTML print and export for Chuvadi.Layout: turns Chuvadi.Markup's Markdown AST and sanitized HTML DOM (mail and pages, with inline CSS) into Chuvadi.Layout's flow document, so they paginate into the same page display list as docx and text (SVG, PNG and PDF through Chuvadi.Layout.Pdf). Pure BCL; an optional add-on so the core layout package does not depend on Chuvadi.Markup.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

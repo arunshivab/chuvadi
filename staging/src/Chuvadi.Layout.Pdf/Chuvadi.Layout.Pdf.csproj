@@ -25,7 +25,7 @@
     <Description>PDF, SVG and PNG output for Chuvadi.Layout pages (whole documents or one page at a time, memory-only), and PdfShaper: complex-script (Indic) shaping through Chuvadi.Pdf.Text.Shaping as a Chuvadi.Layout IShaper. Pure BCL; built on chuvadi-pdf.</Description>
     <Authors>Arun</Authors>
     <Company>Chuvadi</Company>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

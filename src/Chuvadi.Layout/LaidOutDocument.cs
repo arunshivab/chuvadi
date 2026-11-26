@@ -173,11 +173,11 @@ namespace Chuvadi.Layout
                         return _source.KnownPageCount;
                     }
                     int before = _source.KnownPageCount;
-                    _source.EnsurePages(before + 1, cancellationToken);
+                    Ensure(before + 1, cancellationToken);
                     if (_source.KnownPageCount == before && !_source.IsPageCountFinal)
                     {
                         // No progress is impossible for a correct engine; finish in one go rather than spin.
-                        _source.EnsurePages(int.MaxValue, cancellationToken);
+                        Ensure(int.MaxValue, cancellationToken);
                     }
                 }
             }
@@ -207,12 +207,12 @@ namespace Chuvadi.Layout
                         return node.Value;
                     }
                 }
-                _source.EnsurePages(index + 1, cancellationToken);
+                Ensure(index + 1, cancellationToken);
                 if (index >= _source.KnownPageCount)
                 {
                     throw new ArgumentOutOfRangeException(nameof(index), $"The document has {_source.KnownPageCount} page(s).");
                 }
-                LaidOutPage page = _source.BuildPage(index, cancellationToken);
+                LaidOutPage page = Build(index, cancellationToken);
                 _lru.AddFirst(page);
                 while (_lru.Count > _cacheSize)
                 {
@@ -231,7 +231,7 @@ namespace Chuvadi.Layout
                 lock (_gate)
                 {
                     ThrowIfDisposed();
-                    _source.EnsurePages(i + 1, cancellationToken);
+                    Ensure(i + 1, cancellationToken);
                     exists = i < _source.KnownPageCount;
                 }
                 if (!exists)
@@ -239,6 +239,36 @@ namespace Chuvadi.Layout
                     yield break;
                 }
                 yield return GetPage(i, cancellationToken);
+            }
+        }
+
+        // D-406 S3/S4: the engine's long loops (measuring a paragraph, fitting its lines, walking glyph outlines) read the
+        // caller's token from the context, so a cancelled call stops inside one huge paragraph or glyph. Called under _gate.
+        private void Ensure(int count, CancellationToken cancellationToken)
+        {
+            CancellationToken previous = _context.Cancellation;
+            _context.Cancellation = cancellationToken;
+            try
+            {
+                _source.EnsurePages(count, cancellationToken);
+            }
+            finally
+            {
+                _context.Cancellation = previous;
+            }
+        }
+
+        private LaidOutPage Build(int index, CancellationToken cancellationToken)
+        {
+            CancellationToken previous = _context.Cancellation;
+            _context.Cancellation = cancellationToken;
+            try
+            {
+                return _source.BuildPage(index, cancellationToken);
+            }
+            finally
+            {
+                _context.Cancellation = previous;
             }
         }
 

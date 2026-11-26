@@ -43,6 +43,7 @@ document is the reference for the library; changes to it go through a PR like co
 | D-195, D-197 | Chuvadi.Layout.Fonts is a pure data pack (`SubstituteFontPack`), like Chuvadi.Fonts: it lists its files and hands out their bytes and licences, and references only Chuvadi.Fonts, for the `IFontFilePack` interface and `FontFileInfo` record added in Chuvadi.Fonts 1.1.0. The engine turns any `IFontFilePack` into a font source with the public `FontPackSource` (`FontPackSource.For(pack)` shares one parsed source per pack); the built-in fonts are `FontPackSource.For(FontPack.Instance)`. So Pdf and Print can use the substitute fonts without the engine. Layout output unchanged. |
 | D-327 | Chuvadi.Layout.Fonts 0.2.0 no longer embeds the 12 Liberation files: `SubstituteFontPack` serves them from Chuvadi.Fonts.Liberation 1.0.0 (`LiberationPack`), byte-identical, so the family carries one copy. The pack still lists all 29 files with the same names, bytes, hashes and licence text through the same API; Layout output unchanged. Its references are Chuvadi.Fonts and Chuvadi.Fonts.Liberation, both data packs. |
 | D-383 | Layout, Layout.Docs, Layout.Sheets and Layout.Documents 0.3.0 move together with raised minimums: Chuvadi.Docs 2.3.0 (its Word preset for documents built in code) and Chuvadi.Sheets 2.1.0. No engine change; loaded documents lay out as with 0.2.0. |
+| D-406 | Layout 0.3.1, security patch (Audit B: SEC-03, SEC-04, SEC-08, SEC-11). Safe limits are the default and `LayoutLimits.ForTrustedInput()` is the named opt-in for large trusted files (S2a); the .docx element cap is checked while reading, the smaller of five per block and one per KiB of `MaxLayoutBytes` (S2b); workbooks are read with Sheets' untrusted preset and a 200:1 ratio (S2c); a run of spaces is measured in linear time, and cancellation is honoured inside one paragraph (S3); composite glyphs are capped at depth 8 and 256 components, with cycles cut, and `FontGlyphOutlineInvalid` (S4); the recursion and cancellation sweep in section 17 (S5). |
 | — | Docs/Sheets coupling: one `Chuvadi.Layout` package with ProjectReferences to Docs and Sheets (added when the importers land), plus a public IR. Sheets was added in L7 (Chuvadi.Sheets 1.6.1). |
 | — | Fonts: a separate `Chuvadi.Layout.Fonts` OFL pack; system fonts opt-in; Layout's own internal sfnt core, to be promoted to `shared/Chuvadi.Internal/Fonts` later; Excel max-digit width follows the documented rule. |
 | — | Shaping: `IShaper`, with the Pdf shaper supplied through the adapter. Arabic/Hebrew bidi, Thai-family breaking and East Asian doc-grid are out of 1.0 and produce warnings. |
@@ -290,6 +291,7 @@ tuned when a Word/Excel reference corpus is available. None of them moves a line
 | SvgImageFormat | (LayoutSvg) TIFF, EMF, WMF or an unknown image became a placeholder box. |
 | SvgLinkDropped | (LayoutSvg) A link with a disallowed scheme, or an internal link without an href, was dropped. |
 | TextWrapApproximated | Wrapping was approximated: through wrapping laid out as tight, or a table moved below a floating object instead of flowing beside it. |
+| FontGlyphOutlineInvalid | A glyph's composite outline is too deep (over 8 levels), too large (over 256 components) or refers back to itself, so it is not drawn (D-406 S4). Raised for text watermarks; SVG output leaves such glyphs blank. Location: the font's full name. |
 | DocxPartSkipped | A .docx part Chuvadi.Docs could not use was left out; Location is the part name. ContentLoss for a header, footer, notes or picture (it would have printed), Fidelity for styles, numbering, theme, settings or fonts (B11, D-317 W1). |
 
 ## 12. Known gaps in 1.0
@@ -493,3 +495,24 @@ importer of the same package (§16).
   two HTML-to-text libraries, and 420 documentation pages on the build machine) lay out into 2,502 pages. The one
   failure is a clean `MarkupMaxInputChars` limit error (a 15 MB page against the strict 8 MB). No file has content
   clipped as taller than a page.
+
+## 17. Recursion and long loops on input (D-406 S5)
+
+Every method in Layout's own folders that recurses on input, and every loop that can run long on one input item, with
+its guard. Checked on 24 Nov 2026 by a scan for self-calls and by probes with nesting of 100,000 levels.
+
+| Where | What it walks | Guard |
+|---|---|---|
+| `FlowBlock.Count` (`FlowDocument.CountBlocks`) | Nested tables of any model | Iterative since 0.3.1 (an app-built model nested 100,000 deep overflowed the stack in 0.3.0); then `MaxNestingDepth` |
+| `FlowEngine` table layout (`EmitTable` and the table passes) | Nested tables | `MaxNestingDepth` (8; trusted 32), checked before descending |
+| Docs import, tables (`DocsImport.Tables`) | `w:tbl` inside `w:tc` | `MaxNestingDepth`, and Chuvadi.Docs 2.4.1's `MaxNestingDepth` (32; trusted 64) and `MaxXmlDepth` (128; trusted 512) while reading |
+| Markdown import (`MarkdownImporter.Blocks`, `Inlines`) | Block quotes, lists, emphasis, links | Chuvadi.Markup's `MaxNestingDepth` (4 × `MaxNestingDepth`, 16 to 512); 100,000 nested quotes, emphases or brackets lay out or stop at a limit, never a crash |
+| HTML import (`HtmlImporter`, `HtmlImport.Tables.Measure`) | Elements, nested tables | Chuvadi.Markup's parser work cap, and `MaxNestingDepth` for tables (deeper ones become paragraphs) |
+| Sheets drawings (`SheetsImporter.ImportDrawing`, `GridEngine.DrawItem`) | Shape groups | Chuvadi.Sheets 2.2.1's group-depth limit (256; deeper is `LayoutFormatException`; 20,000 levels tested) |
+| Conditional formats | Formulas | Chuvadi.Sheets 2.2.1's formula-depth limit (256), its evaluation budget (100,000,000) and Layout's token in `ConditionalFormatOptions.CancellationToken` (SEC-08; 10,000 levels tested through `SheetsLayout` and `AutoDetectLayout`) |
+| Workbook cells | Cells while reading | `MaxCellsPerSheet` as Chuvadi.Sheets' workbook-wide `MaxCells` (D-413) |
+| `GlyphOutlines.Append` | Composite glyphs | Depth 8, 256 components, cycles cut, token at every component (SEC-11) |
+| `ParagraphMeasurer.Measure` | One paragraph's clusters | Linear space check; token every 4,096 clusters (SEC-04) |
+| `LineFitter.Fit` | One paragraph's lines | Token every 64 lines |
+| Pagination (`EnsurePages`, `BuildPage`) | Pages | Token per page; `MaxPages` |
+

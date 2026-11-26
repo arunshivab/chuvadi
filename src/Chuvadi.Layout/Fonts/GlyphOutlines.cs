@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using Chuvadi.Layout.Fonts.Internal;
 
 namespace Chuvadi.Layout.Fonts
@@ -11,6 +12,10 @@ namespace Chuvadi.Layout.Fonts
     /// TrueType glyph outlines ('glyf'/'loca', simple and composite glyphs) as SVG path data in font units (y up).
     /// Paths are built on first use and cached per face; safe to use from several threads. Malformed glyph data
     /// gives an empty path. CFF outlines are not read (<see cref="HasOutlines"/> is false).
+    /// <para>D-406 S4 (SEC-11): a composite glyph may nest at most <see cref="MaxDepth"/> levels and use at most
+    /// <see cref="MaxComponents"/> components in all; a component that refers back to the glyph itself or to one of the
+    /// glyphs it is part of is skipped. Past either limit the glyph is drawn without outlines and
+    /// <see cref="IsInvalid"/> is true. Walking a glyph checks the cancellation token at every component.</para>
     /// </summary>
     internal sealed class GlyphOutlines
     {
@@ -21,6 +26,26 @@ namespace Chuvadi.Layout.Fonts
         private readonly bool _longLoca;
         private readonly int _glyphCount;
         private readonly Dictionary<int, string> _paths = new Dictionary<int, string>();
+        private readonly HashSet<int> _invalid = new HashSet<int>();
+
+        /// <summary>Deepest composite nesting drawn (D-406 S4). The 51 fonts in the repository reach 3.</summary>
+        internal const int MaxDepth = 8;
+
+        /// <summary>Most components, at all levels together, in one glyph (D-406 S4). The 51 fonts in the repository reach
+        /// 7.</summary>
+        internal const int MaxComponents = 256;
+
+        private sealed class Walk
+        {
+            public readonly int[] Path = new int[MaxDepth + 2];
+            public int Components;
+            public bool Invalid;
+            public CancellationToken Cancellation;
+        }
+
+        private sealed class TooManyComponentsException : Exception
+        {
+        }
 
         private GlyphOutlines(FontFace face)
         {
@@ -44,25 +69,49 @@ namespace Chuvadi.Layout.Fonts
         /// <summary>True when the face has TrueType outlines this reader can draw.</summary>
         public bool HasOutlines => _glyf is not null && _loca is not null;
 
-        public string PathData(int glyph)
+        /// <summary>The glyph's outline as SVG path data in font units; empty for a blank, malformed or invalid glyph.</summary>
+        /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled while the glyph
+        /// was being walked; nothing is cached then.</exception>
+        public string PathData(int glyph, CancellationToken cancellationToken = default)
         {
             lock (_paths)
             {
                 if (!_paths.TryGetValue(glyph, out string? d))
                 {
                     StringBuilder sb = new StringBuilder();
+                    Walk walk = new Walk { Cancellation = cancellationToken };
                     try
                     {
-                        Append(sb, glyph, 1, 0, 0, 1, 0, 0, 0);
+                        Append(sb, glyph, 1, 0, 0, 1, 0, 0, 0, walk);
                     }
                     catch (Exception ex) when (ex is FontFormatException or IndexOutOfRangeException or ArgumentOutOfRangeException)
                     {
                         sb.Clear();
                     }
+                    catch (TooManyComponentsException)
+                    {
+                        sb.Clear();
+                        walk.Invalid = true;
+                    }
+                    if (walk.Invalid)
+                    {
+                        sb.Clear();
+                        _invalid.Add(glyph);
+                    }
                     d = sb.ToString();
                     _paths[glyph] = d;
                 }
                 return d;
+            }
+        }
+
+        /// <summary>True when the glyph's composite data broke a D-406 S4 limit (too deep, too many components, or a
+        /// component that refers back to itself), so it is drawn without outlines. Valid after <see cref="PathData"/>.</summary>
+        public bool IsInvalid(int glyph)
+        {
+            lock (_paths)
+            {
+                return _invalid.Contains(glyph);
             }
         }
 
@@ -76,12 +125,18 @@ namespace Chuvadi.Layout.Fonts
             return (loca.U16(2L * glyph) * 2L, loca.U16(2L * (glyph + 1)) * 2L);
         }
 
-        private void Append(StringBuilder sb, int glyph, double a, double b, double c, double d, double dx, double dy, int depth)
+        private void Append(StringBuilder sb, int glyph, double a, double b, double c, double d, double dx, double dy, int depth, Walk walk)
         {
-            if (_glyf is null || _loca is null || glyph < 0 || glyph >= _glyphCount || depth > 8)
+            if (_glyf is null || _loca is null || glyph < 0 || glyph >= _glyphCount)
             {
                 return;
             }
+            if (depth > MaxDepth)
+            {
+                walk.Invalid = true;
+                return;
+            }
+            walk.Path[depth] = glyph;
             BigEndian g = _glyf.Value;
             (long start, long end) = Range(glyph);
             if (end <= start)
@@ -268,7 +323,19 @@ namespace Chuvadi.Layout.Fonts
                 double na = (a * ca) + (c * cb), nb = (b * ca) + (d * cb);
                 double nc = (a * cc) + (c * cd), nd = (b * cc) + (d * cd);
                 double ndx = (a * ox) + (c * oy) + dx, ndy = (b * ox) + (d * oy) + dy;
-                Append(sb, component, na, nb, nc, nd, ndx, ndy, depth + 1);
+                walk.Cancellation.ThrowIfCancellationRequested();
+                if (++walk.Components > MaxComponents)
+                {
+                    throw new TooManyComponentsException();
+                }
+                if (Array.IndexOf(walk.Path, component, 0, depth + 1) >= 0)
+                {
+                    walk.Invalid = true; // refers back to itself or to a glyph it is part of: skipped
+                }
+                else
+                {
+                    Append(sb, component, na, nb, nc, nd, ndx, ndy, depth + 1, walk);
+                }
                 if ((flags & 0x20) == 0)
                 {
                     break;

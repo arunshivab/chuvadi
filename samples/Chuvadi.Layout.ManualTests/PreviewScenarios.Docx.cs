@@ -46,6 +46,9 @@ namespace Chuvadi.Layout.ManualTests
             t.AddRow("Pelvic nodes", "50.4", "28", "VMAT");
             TableRow total = t.AddRow("Total treatment time", "", "", "6 weeks");
             total.Cell(0).ColumnSpan = 3;
+            // D-392 (L8a): this preview runs without a complex-script shaper, so the Tamil line is drawn with nominal glyphs
+            // (ை after ச, டு as ட plus ு) and the report says ComplexScriptNotShaped. Judge Tamil in the Viewer, which uses
+            // PdfShaper (docs/Chuvadi.Layout/FILE-FIDELITY.md).
             doc.AddParagraph("Tamil: \u0B9A\u0BBF\u0B95\u0BBF\u0B9A\u0BCD\u0B9A\u0BC8 \u0BAE\u0BC1\u0B9F\u0BBF\u0BA8\u0BCD\u0BA4\u0BA4\u0BC1.")
                 .Configure(f => f.SpaceBeforePt = 12);
 

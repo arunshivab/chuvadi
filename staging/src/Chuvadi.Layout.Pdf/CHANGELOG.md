@@ -1,5 +1,11 @@
 # Chuvadi.Layout.Pdf — Changelog
 
+## 0.1.1 (2026-11-26)
+
+Dependency update (D-406). Requires **Chuvadi.Layout 0.3.1** (was 0.2.0), so an application that references only
+Layout.Pdf gets the security patch: safe default limits and the fixes for SEC-03, SEC-04 and SEC-11. No code change;
+the Chuvadi.Pdf range stays `[3.31.2, 4.0.0)`.
+
 ## 0.1.0 (2026-11-12)
 
 First release (D-214, D-304). Tagged as `layout-pdf-v0.1.0` right after `layout-v0.2.0`, so its dependency floor is

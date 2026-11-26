@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Chuvadi.Layout.Drawing;
 using Chuvadi.Layout.Fonts;
 using Chuvadi.Layout.Model;
@@ -87,6 +88,9 @@ namespace Chuvadi.Layout.Engine.Flow
 
         /// <summary>Footnote and endnote references by text index (the label's first character); null when none.</summary>
         public List<(int Index, FlowNote Note)>? Notes { get; init; }
+
+        /// <summary>The token of the call that measured this paragraph (D-406): line fitting checks it.</summary>
+        public CancellationToken Cancellation { get; init; }
 
         public double Width(int start, int end) => Prefix[end] - Prefix[start];
 
@@ -242,6 +246,11 @@ namespace Chuvadi.Layout.Engine.Flow
             FontSlot memoSlot = FontSlot.Ascii;
             FontResolution? memoRes = null;
             double memoSize = 0;
+            // D-406 S3: the spaces of one run share their neighbours, so the run is looked at once, not once per space.
+            int betweenFrom = -1, betweenTo = -1;
+            bool betweenValue = false;
+            CancellationToken ct = ctx.Cancellation;
+            int sinceCheck = 0;
             foreach (Piece piece in pieces)
             {
                 int start = offset;
@@ -260,6 +269,11 @@ namespace Chuvadi.Layout.Engine.Flow
                     int srEnd = sr.Start + sr.Length;
                     while (i < srEnd)
                     {
+                        if (++sinceCheck >= CancellationStride)
+                        {
+                            sinceCheck = 0;
+                            ct.ThrowIfCancellationRequested();
+                        }
                         int clusterEnd = i + 1;
                         while (clusterEnd < srEnd && !clusterStart[clusterEnd])
                         {
@@ -267,7 +281,7 @@ namespace Chuvadi.Layout.Engine.Flow
                         }
                         int cp = GraphemeClusters.Decode(text, i, out _);
                         FontSlot slot = SlotOf(cp, piece.Format.ComplexScriptRun);
-                        if (piece.Format.ComplexScriptRun is null && slot == FontSlot.Ascii && cp is ' ' or '\u00A0' && BetweenComplex(text, i))
+                        if (piece.Format.ComplexScriptRun is null && slot == FontSlot.Ascii && cp is ' ' or '\u00A0' && BetweenComplex(text, i, ref betweenFrom, ref betweenTo, ref betweenValue))
                         {
                             // A space between two complex-script words takes the complex-script font and size, as the
                             // words around it do (reference corpus d04: LibreOffice spaces Tamil words by the Tamil font).
@@ -427,6 +441,7 @@ namespace Chuvadi.Layout.Engine.Flow
 
             return new MeasuredParagraph
             {
+                Cancellation = ct,
                 Source = p,
                 Text = text,
                 Advance = advance,
@@ -471,9 +486,20 @@ namespace Chuvadi.Layout.Engine.Flow
             ctx.Warn(LayoutWarningCodes.EmbeddedFontMissingGlyphs, LayoutWarningSeverity.Fidelity, message, family);
         }
 
-        /// <summary>Whether the spaces around index i have a complex-script character on both sides.</summary>
-        private static bool BetweenComplex(string text, int i)
+        /// <summary>How many clusters are measured between two checks of the cancellation token (D-406 S3).</summary>
+        internal const int CancellationStride = 4096;
+
+        /// <summary>
+        /// Whether the spaces around index i have a complex-script character on both sides. The answer is the same for
+        /// every space of one run, so it is kept for the run [from, to) and reused (D-406 S3: it used to scan the whole
+        /// run for each space, n²/2 steps for a run of n spaces).
+        /// </summary>
+        private static bool BetweenComplex(string text, int i, ref int from, ref int to, ref bool value)
         {
+            if (i >= from && i < to)
+            {
+                return value;
+            }
             int a = i - 1;
             while (a >= 0 && text[a] is ' ' or '\u00A0')
             {
@@ -484,16 +510,20 @@ namespace Chuvadi.Layout.Engine.Flow
             {
                 b++;
             }
+            from = a + 1;
+            to = b;
             if (a < 0 || b >= text.Length)
             {
+                value = false;
                 return false;
             }
             if (char.IsLowSurrogate(text[a]) && a > 0)
             {
                 a--;
             }
-            return SlotOf(GraphemeClusters.Decode(text, a, out _)) == FontSlot.Complex
+            value = SlotOf(GraphemeClusters.Decode(text, a, out _)) == FontSlot.Complex
                 && SlotOf(GraphemeClusters.Decode(text, b, out _)) == FontSlot.Complex;
+            return value;
         }
 
         private static void AddText(List<Piece> pieces, string text, CharacterFormat format, string? uri, string? anchor, FieldInline? field = null)
