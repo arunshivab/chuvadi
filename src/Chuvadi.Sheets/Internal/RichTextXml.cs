@@ -150,11 +150,21 @@ internal static class RichTextXml
     {
         if (r.IsEmptyElement) return;
         int depth = r.Depth;
+        int start = sb.Length;
         while (r.Read())
         {
-            if (r.NodeType == XmlNodeType.EndElement && r.Depth == depth) return;
+            if (r.NodeType == XmlNodeType.EndElement && r.Depth == depth) break;
             if (r.NodeType is XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.SignificantWhitespace or XmlNodeType.Whitespace)
                 sb.Append(r.Value);
+        }
+        // 2.2.1 (P8): turn _xHHHH_ escapes back into their characters (only this <t>'s text).
+        for (int i = start; i + 1 < sb.Length; i++)
+        {
+            if (sb[i] != '_' || sb[i + 1] != 'x') continue;
+            var decoded = XString.Decode(sb.ToString(start, sb.Length - start));
+            sb.Length = start;
+            sb.Append(decoded);
+            break;
         }
     }
 
@@ -187,7 +197,7 @@ internal static class RichTextXml
             w.WriteStartElement("t", SsNs);
             if (run.Text.Length > 0 && (char.IsWhiteSpace(run.Text[0]) || char.IsWhiteSpace(run.Text[^1])))
                 w.WriteAttributeString("xml", "space", null, "preserve");
-            w.WriteString(run.Text);
+            w.WriteString(XString.Encode(run.Text));   // 2.2.1 (P8)
             w.WriteEndElement();
             w.WriteEndElement();
         }

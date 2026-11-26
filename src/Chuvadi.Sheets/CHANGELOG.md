@@ -1,5 +1,123 @@
 # Changelog
 
+## 2.2.1 (2026-11-25)
+
+A security patch (D-406, D-410), from Audit B's security pass. Reading a hostile file could kill the process, hang
+it or use gigabytes of memory; it now gets a clean exception or a "not evaluated" rule instead. Five additive members
+(below) and safer defaults; existing calls compile. Sheets folders only; no shared change.
+
+### Behaviour change (security)
+
+Read this section before upgrading.
+
+- **The read limits are on by default** (P4, S-02). `new XlsxReaderOptions()`, and so every one-line reader
+  (`Workbook.Load(path)`, `ReadXlsx`, `XlsxReader.Open(path)`), now has the limits `ForUntrustedInput()` always had:
+
+  | Option | 2.2.0 default | 2.2.1 default |
+  |---|---|---|
+  | `MaxPartBytes` | none | 256 MB |
+  | `MaxTotalUncompressedBytes` | none | 1 GB |
+  | `MaxCompressionRatio` | none | 500 |
+  | `MaxPackageEntries` | none | 20,000 |
+  | `MaxRowsPerSheet` | none | 1,048,576 (Excel's maximum) |
+  | `MaxSpinCount` | 500,000 | 500,000 |
+  | `MaxCells` (new) | none | 4,000,000 |
+
+  Every real workbook under 1 GB uncompressed, 1,048,576 rows per sheet and 4 million cells loads as before. A file
+  over a limit throws `XlsxLimitExceededException` (`InvalidDataException` for `MaxPartBytes`, unchanged until 3.0).
+  To open bigger files you trust, pass **`XlsxReaderOptions.ForTrustedInput()`** (new), which turns every limit off,
+  as in 2.2.0. `ForUntrustedInput()` stays, and returns the same values as the defaults.
+  - S-02: the audit's 416 KB file (400 MB of spaces inside a sheet) allocated 1,604 MB with 2.2.0's defaults. A file
+    of the same shape (409 KB) is now refused with 0.1 MB allocated.
+- **`Workbook.Load` keeps at most 4,000,000 cells** (P5, SEC-01): new `XlsxReaderOptions.MaxCells`, counted over the
+  whole workbook as it reads, so a small file that would need gigabytes stops early. A cell takes about 127 to 155 bytes
+  in the model, depending on its value, so the default is about 500 to 620 MB.
+  - SEC-01, 300,000 rows × 20 cells: with no limits (2.2.0's defaults) the model keeps 931 MB (1,327 MB peak);
+    2.2.1 refuses it at the 4,000,001st cell (877 MB peak, nothing kept). The message names the sheet and cell and says to use the streaming reader.
+  - The streaming `XlsxReader` keeps constant memory, so `MaxCells` does not apply to it (`MaxRowsPerSheet` does).
+- **Too-deep formulas and shape groups no longer crash the process** (P1, SEC-08, SEC-S1). 2.2.0 died with a stack
+  overflow, which no `catch` can stop, on a 10 KB file with 10,000 nested brackets in a conditional format, and on a
+  9.7 KB file with 20,000 nested shape groups (`Workbook.Load` itself).
+  - A formula may nest 256 levels (brackets, function calls and `+`/`-` signs count together; `%` too). Deeper rules
+    come back as "not evaluated" (`ConditionalFormatResult.NotEvaluated`), as unsupported functions already do.
+    Excel itself allows 64 nested functions, so no formula Excel writes comes near it. Long flat chains
+    (`1+1+…`, `A1&B1&…`) do not nest and have no limit.
+  - A drawing may nest 256 shape groups; deeper is `XlsxFormatException`.
+  - **Deeply nested XML no longer stalls the reader** (found in this patch's own tests). .NET builds an element tree
+    in time that grows with the square of the nesting depth: 100,000 nested elements in styles, the theme, a
+    drawing, a chart or the sheet's extension XML took about two minutes per part, from a file of a few hundred KB.
+    Those parts now refuse nesting deeper than 1,000 levels as malformed XML (`XlsxFormatException`, or a skipped
+    optional part when `StrictXml` is off); real files nest a few dozen. Sheet data, shared strings and comments
+    are read in one pass and are not affected by depth.
+  - All 256 levels work on a 256 KB thread stack (thread pool, Android): when the stack runs low, the work continues
+    on a fresh 1 MB stack, as .NET's own Regex parser does. The stack check stays as the second guard (WebAssembly,
+    where no thread can start, gets "not evaluated").
+- **Wildcards no longer hang** (P2, SEC-10). SEARCH and the COUNTIF/SUMIF/AVERAGEIF criteria (`?`, `*`, `~`) used a
+  backtracking regex: `SEARCH("*a*a*a*a*b")` over 300 letters ran over 120 s and could not be stopped. A matcher of
+  their own now takes at most text length × pattern length steps (7 ms for that case). Its results are the regex's,
+  checked on 10,000 random patterns and texts, including case (as `RegexOptions.IgnoreCase | CultureInvariant`) and
+  `?` and `*` not matching a line break.
+- **Conditional-format evaluation is bounded and can be cancelled** (P3): new `ConditionalFormatOptions.MaxCellsVisited`
+  (default 100,000,000 cell reads and formula steps per evaluator; null = no limit) and
+  `ConditionalFormatOptions.CancellationToken`. Past the budget, the remaining rules report "not evaluated" instead of
+  running for hours; a cancelled token throws `OperationCanceledException`. The largest count in the Layout corpus,
+  the test fixtures and the manual-test outputs (198 workbooks, 28 sheets with conditional formats) is 1,465, against
+  a budget of 100,000,000.
+- **Text with control characters saves** (P8, S-13). A character XML cannot hold (U+0001, U+000B pasted from Word, a
+  lone surrogate) made the save throw `ArgumentException` at the end, with no hint of which cell. It is now written
+  as Excel writes it, `_x000B_`, and read back as the character, so the value round-trips unchanged. A literal
+  `_x0041_` in a text is written `_x005F_x0041_`, as Excel does, so it too reads back exactly.
+  - This covers cell text (shared strings, inline strings, rich-text runs, cached formula strings), comment text and
+    authors, headers and footers, data-validation titles and messages, hyperlink tooltips and display text, and
+    table column names. Text without such characters or patterns is written byte for byte as before.
+  - Reading: these fields now decode `_xHHHH_`, as Excel does, so a file from Excel with `_x000B_` in a cell reads
+    as the character (2.2.0 showed the six characters `_x000B_`).
+- **An empty encryption password throws before anything is written** (P7, S-15): `Workbook.SaveTo(path or stream,
+  EncryptionOptions)` with `Password = ""` wrote an 11,776-byte file no one could open; it now throws
+  `ArgumentException`, as `XlsxWriterOptions` already did. A null password still throws `ArgumentNullException`, now
+  also before writing.
+- **Malformed files raise only the documented types** (P9, SEC-05). These came out as other types and are now
+  `XlsxFormatException`, with the original as `InnerException`:
+  - a damaged value in an encrypted file's header (S-16, was `FormatException`);
+  - two sheets with the same name, or an empty one (was `InvalidOperationException` / `ArgumentException` from
+    `Workbook.Load`);
+  - nesting deeper than the stack can hold (see above).
+  - A new fuzz test reads 3,000 mutated workbooks through every read entry point, and only `XlsxFormatException`,
+    `XlsxLimitExceededException`, `XlsxPasswordRequiredException` and the `MaxPartBytes` `InvalidDataException` come out.
+- **A Word or PowerPoint file is an error** (P10, S-14): a .docx loaded as a workbook with no sheets. A package whose
+  main part is not a `<workbook>` now throws `XlsxFormatException` ("not a spreadsheet").
+
+### Known issue
+
+- A carriage return (`\r`) in text does not round-trip: `"a\rb"` and `"a\r\nb"` read back as `"a\nb"`, as in 2.2.0
+  and earlier (XML normalises line breaks). Excel writes `\r` as `_x000D_`; the next version will too (D-414). Until
+  then, text that must keep its carriage returns can't rely on this.
+
+### New API
+
+- `XlsxReaderOptions.MaxCells` and `XlsxReaderOptions.ForTrustedInput()` (P4, P5).
+- `ConditionalFormatOptions.MaxCellsVisited` and `ConditionalFormatOptions.CancellationToken` (P3).
+- **`XlsxWriter.IsSaved`** (P6, S-01): true once `Save` or `SaveAsync` has completed. A writer disposed without
+  `Save` writes nothing (no bytes to a stream, the target path untouched); that is deliberate, so a workbook whose
+  writing failed half-way is never saved as if it were complete. The XML docs and the guide now say so plainly.
+
+### For Chuvadi.Layout.Sheets
+
+- Pass Layout's cancellation token into `ConditionalFormatOptions.CancellationToken`. Layout maps its own
+  `MaxCellsPerSheet` onto `MaxCells`; its other limits are set explicitly, so the new defaults do not change it.
+
+### Tests
+
+- New manual group `security` (also an xUnit fact; Sheets 45 → 46), with every reproduction from the audit:
+  256 nesting levels on a 256 KB thread; 100,000-deep brackets, `-` and `NOT(` chains; 100,000-deep XML in every part
+  type (sheet, cell, styles, shared strings, drawing, theme, chart, comments and VML), each within 10 s; 256 and 257 and 20,000 shape groups; the
+  wildcard matcher against the 2.2.0 regex on 10,000 random pairs; SEC-10's patterns; cancellation and the budget
+  (1,000 COUNTIFs over a million rows stop in about 3 s); the defaults; S-02's bomb; MaxCells across sheets and the
+  streaming reader; SEC-01's 6 million cells; S-01; S-15; S-13 for every field above, with inline strings too; Excel's
+  `_x000B_`; byte-for-byte output for plain text; S-14; S-16; duplicate sheet names; and the 3,000-file fuzz test.
+- ReadSafetyTest's zip-bomb check now starts from `ForTrustedInput()` to isolate each limit (the defaults would stop
+  the bomb first), and checks that the defaults refuse it too.
+
 ## 2.2.0 (2026-11-17)
 
 A minor release (D-388, D-401, D-404): no API change. Display text changes for a few built-in date formats and for

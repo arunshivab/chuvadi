@@ -29,7 +29,7 @@ internal static class ChartReader
         {
             using var s = book.OpenPartLimited(partUri);
             using var x = XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, CloseInput = false });
-            doc = XDocument.Load(x);
+            doc = XDocument.Load(new DepthLimitedXmlReader(x, partUri));   // 2.2.1: XLinq trees cost depth squared
             StrictOoxml.Normalize(doc);
         }
         catch (XmlException) { return null; }

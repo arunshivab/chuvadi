@@ -30,6 +30,82 @@ public sealed class ConditionalFormatOptions
 
     /// <summary>The workbook uses the 1904 date system (dates compare as 1904 serials). The model sets this from the file.</summary>
     public bool? Date1904 { get; set; }
+
+    /// <summary>
+    /// Stops evaluation: <see cref="ConditionalFormatEvaluator.Evaluate"/> throws <see cref="OperationCanceledException"/>
+    /// once it is cancelled, checked at every cell read and formula step (2.2.1, P3).
+    /// </summary>
+    public System.Threading.CancellationToken CancellationToken { get; set; }
+
+    /// <summary>
+    /// The most units of work one evaluator may do: every cell value read (a range in COUNTIF, SUM, a top/bottom or
+    /// duplicate rule, a colour scale…) and every formula step counts one. Past it, every rule still to evaluate is
+    /// reported in <see cref="ConditionalFormatResult.NotEvaluated"/> instead of running on. Default 100,000,000
+    /// (2.2.1, P3: a rule such as COUNTIF($A:$A,A1) over a million rows would otherwise need 10¹² reads);
+    /// null means no limit. Must be positive.
+    /// </summary>
+    public long? MaxCellsVisited
+    {
+        get => _maxCellsVisited;
+        set
+        {
+            if (value is <= 0) throw new ArgumentOutOfRangeException(nameof(value), value, "MaxCellsVisited must be positive, or null for no limit.");
+            _maxCellsVisited = value;
+        }
+    }
+
+    private long? _maxCellsVisited = DefaultMaxCellsVisited;
+
+    /// <summary>The default <see cref="MaxCellsVisited"/>: 100,000,000.</summary>
+    internal const long DefaultMaxCellsVisited = 100_000_000;
+}
+
+/// <summary>
+/// 2.2.1 (P3): counts the work of one evaluator and checks its cancellation token. Every cell read through the
+/// evaluator's source and every formula step calls <see cref="Add"/>.
+/// </summary>
+internal sealed class EvaluationBudget
+{
+    private readonly long? _max;
+    private readonly System.Threading.CancellationToken _token;
+    private long _used;
+
+    public EvaluationBudget(long? max, System.Threading.CancellationToken token) { _max = max; _token = token; }
+
+    public long Used => _used;
+
+    /// <summary>Only the cancellation check: used where running out of budget must not escape (Evaluate's entry).</summary>
+    public void ThrowIfCancelled() => _token.ThrowIfCancellationRequested();
+
+    public void Add(long units)
+    {
+        _token.ThrowIfCancellationRequested();
+        _used += units;
+        if (_max is long m && _used > m)
+            throw new FormulaNotSupportedException($"The evaluation budget of {m:N0} cell reads and formula steps (ConditionalFormatOptions.MaxCellsVisited) is used up.");
+    }
+
+    /// <summary>The caller's source, with every value read counted.</summary>
+    public ICellValueSource Wrap(ICellValueSource source) => new CountingSource(source, this);
+
+    private sealed class CountingSource : ICellValueSource
+    {
+        private readonly ICellValueSource _inner;
+        private readonly EvaluationBudget _budget;
+        public CountingSource(ICellValueSource inner, EvaluationBudget budget) { _inner = inner; _budget = budget; }
+
+        public object? GetValue(int row, int column) { _budget.Add(1); return _inner.GetValue(row, column); }
+
+        public IEnumerable<(int Row, int Column, object? Value)> GetValues(int firstRow, int firstColumn, int lastRow, int lastColumn)
+        {
+            _budget.Add(1);
+            foreach (var t in _inner.GetValues(firstRow, firstColumn, lastRow, lastColumn))
+            {
+                _budget.Add(1);
+                yield return t;
+            }
+        }
+    }
 }
 
 /// <summary>A data bar to draw in a cell (metadata; the renderer draws it).</summary>
@@ -168,6 +244,7 @@ public sealed class ConditionalFormatEvaluator
 {
     private readonly List<RuleState> _rules = new();
     private readonly ICellValueSource _source;
+    private readonly EvaluationBudget _budget;
     private readonly DateTime _today;
     private readonly bool _date1904;
 
@@ -175,7 +252,10 @@ public sealed class ConditionalFormatEvaluator
                                       ICellValueSource values, ConditionalFormatOptions? options = null)
     {
         if (formats is null) throw new ArgumentNullException(nameof(formats));
-        _source = values ?? throw new ArgumentNullException(nameof(values));
+        if (values is null) throw new ArgumentNullException(nameof(values));
+        _budget = new EvaluationBudget(options is null ? ConditionalFormatOptions.DefaultMaxCellsVisited : options.MaxCellsVisited,
+                                       options?.CancellationToken ?? default);
+        _source = _budget.Wrap(values);
         _today = (options?.Today ?? DateTime.Today).Date;
         _date1904 = options?.Date1904 ?? (values is SheetValueSource m && m.Date1904);
         int order = 0;
@@ -192,12 +272,16 @@ public sealed class ConditionalFormatEvaluator
             : a.Order.CompareTo(b.Order));
     }
 
+    /// <summary>2.2.1 (P3): the cell reads and formula steps used so far, for tests and the gate's corpus report.</summary>
+    internal long WorkUsed => _budget.Used;
+
     /// <summary>
     /// What the conditional formats change for the cell at the 1-based row and column; null
     /// when no rule covers the cell.
     /// </summary>
     public ConditionalFormatResult? Evaluate(int row, int column)
     {
+        _budget.ThrowIfCancelled();   // P3; running out of budget is reported per rule, below
         ConditionalFormatResult? res = null;
         object? value = null;
         bool valueRead = false;
@@ -205,10 +289,10 @@ public sealed class ConditionalFormatEvaluator
         {
             if (!st.Covers(row, column)) continue;
             res ??= new ConditionalFormatResult();
-            if (!valueRead) { value = MiniFormula.Normalize(_source.GetValue(row, column), _date1904); valueRead = true; }
             bool matched;
             try
             {
+                if (!valueRead) { value = MiniFormula.Normalize(_source.GetValue(row, column), _date1904); valueRead = true; }
                 matched = Apply(st, row, column, value, res);
             }
             catch (FormulaNotSupportedException)
@@ -368,7 +452,7 @@ public sealed class ConditionalFormatEvaluator
     internal MiniFormula.EvalContext Context(int row, int col, int anchorRow, int anchorCol) => new()
     {
         Source = _source, Row = row, Column = col, AnchorRow = anchorRow, AnchorColumn = anchorCol,
-        Today = _today, Date1904 = _date1904,
+        Today = _today, Date1904 = _date1904, Budget = _budget,
     };
 
     internal IEnumerable<object?> RangeValues(Box[] boxes)

@@ -33,7 +33,7 @@ internal static class StyleTableParser
     public static CellStyleTable ParseStyles(Stream stream)
     {
         XDocument doc;
-        using (var r = XmlReader.Create(stream, Settings)) doc = XDocument.Load(r);
+        using (var r = XmlReader.Create(stream, Settings)) doc = XDocument.Load(new DepthLimitedXmlReader(r, "styles.xml"));   // 2.2.1
         var root = doc.Root ?? throw new XlsxFormatException("styles.xml has no root element.");
         var ns = root.Name.Namespace;
         var table = new CellStyleTable();
@@ -333,7 +333,7 @@ internal static class StyleTableParser
     public static ThemeInfo ParseTheme(Stream stream)
     {
         XDocument doc;
-        using (var r = XmlReader.Create(stream, Settings)) doc = XDocument.Load(r);
+        using (var r = XmlReader.Create(stream, Settings)) doc = XDocument.Load(new DepthLimitedXmlReader(r, "theme"));   // 2.2.1
         var root = doc.Root ?? throw new XlsxFormatException("Theme part has no root element.");
         XNamespace a = root.Name.NamespaceName == DrawingMlStrict ? DrawingMlStrict : DrawingMl;
 

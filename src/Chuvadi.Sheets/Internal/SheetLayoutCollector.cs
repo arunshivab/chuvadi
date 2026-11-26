@@ -106,7 +106,7 @@ internal sealed class SheetLayoutCollector
             {
                 var reference = x.GetAttribute("ref");
                 if (!string.IsNullOrEmpty(reference))
-                    RawHyperlinks.Add((reference, StrictOoxml.GetRelAttribute(x), x.GetAttribute("location"), x.GetAttribute("tooltip"), x.GetAttribute("display")));
+                    RawHyperlinks.Add((reference, StrictOoxml.GetRelAttribute(x), x.GetAttribute("location"), DecodeOrNull(x.GetAttribute("tooltip")), DecodeOrNull(x.GetAttribute("display"))));
                 break;
             }
             case "tabColor":
@@ -268,8 +268,11 @@ internal sealed class SheetLayoutCollector
         }
     }
 
+    private static string? DecodeOrNull(string? s) => s is null ? null : XString.Decode(s);
+
     private void StoreHeaderFooter(string element, string text)
     {
+        text = XString.Decode(text);   // 2.2.1 (P8)
         var h = Page.HeaderFooter;
         switch (element)
         {
@@ -340,7 +343,7 @@ internal sealed class SheetLayoutCollector
     private static XElement? Subtree(XmlReader x)
     {
         using var sub = x.ReadSubtree();
-        var e = XElement.Load(sub);
+        var e = XElement.Load(new DepthLimitedXmlReader(sub, "worksheet"));   // 2.2.1: XLinq trees cost depth squared
         StrictOoxml.Normalize(e);
         return e;
     }

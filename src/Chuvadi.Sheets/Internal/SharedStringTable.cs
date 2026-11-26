@@ -124,7 +124,7 @@ internal sealed class SharedStringTable
             if (HasSignificantWhitespace(s))
                 writer.WriteAttributeString("xml", "space", null, "preserve");
 
-            writer.WriteString(s);
+            writer.WriteString(XString.Encode(s));   // 2.2.1 (P8): _xHHHH_ for characters XML cannot hold
             writer.WriteEndElement(); // </t>
             writer.WriteEndElement(); // </si>
         }

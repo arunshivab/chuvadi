@@ -679,7 +679,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             _xml.WriteStartElement("t", SsNs);
             if (HasSignificantWhitespace(value))
                 _xml.WriteAttributeString("xml", "space", null, "preserve");
-            _xml.WriteString(value);
+            _xml.WriteString(XString.Encode(value));   // 2.2.1 (P8)
             _xml.WriteEndElement();
             _xml.WriteEndElement();
             _xml.WriteEndElement();
@@ -728,7 +728,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         }
         _xml.WriteString(formula);
         _xml.WriteEndElement();
-        if (text is not null) WriteValue(text);
+        if (text is not null) WriteValue(type == "str" ? XString.Encode(text) : text);   // 2.2.1 (P8): a cached text result
         _xml.WriteEndElement();
     }
 
@@ -895,9 +895,9 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
                 if (hl.Location is not null)
                     _xml.WriteAttributeString("location", hl.Location);
                 if (hl.Tooltip is not null)
-                    _xml.WriteAttributeString("tooltip", hl.Tooltip);
+                    _xml.WriteAttributeString("tooltip", XString.Encode(hl.Tooltip));   // 2.2.1 (P8)
                 if (hl.Display is not null)
-                    _xml.WriteAttributeString("display", hl.Display);
+                    _xml.WriteAttributeString("display", XString.Encode(hl.Display));
                 _xml.WriteEndElement();
             }
             _xml.WriteEndElement();
@@ -1006,7 +1006,7 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
             {
                 if (text is null) return;
                 _xml.WriteStartElement(element, SsNs);
-                _xml.WriteString(text);
+                _xml.WriteString(XString.Encode(text));   // 2.2.1 (P8)
                 _xml.WriteEndElement();
             }
             Text("oddHeader", h.OddHeader);
@@ -1081,15 +1081,15 @@ public sealed class SheetWriter : IDisposable, IAsyncDisposable, IRowSink
         if (showError || v.ErrorTitle is not null || v.ErrorMessage is not null)
         {
             if (showError) _xml.WriteAttributeString("showErrorMessage", "1");
-            if (v.ErrorTitle is not null) _xml.WriteAttributeString("errorTitle", v.ErrorTitle);
-            if (v.ErrorMessage is not null) _xml.WriteAttributeString("error", v.ErrorMessage);
+            if (v.ErrorTitle is not null) _xml.WriteAttributeString("errorTitle", XString.Encode(v.ErrorTitle));   // 2.2.1 (P8)
+            if (v.ErrorMessage is not null) _xml.WriteAttributeString("error", XString.Encode(v.ErrorMessage));
         }
         bool showInput = v.ShowInputMessage ?? (v.PromptTitle is not null || v.PromptMessage is not null);
         if (showInput || v.PromptTitle is not null || v.PromptMessage is not null)
         {
             if (showInput) _xml.WriteAttributeString("showInputMessage", "1");
-            if (v.PromptTitle is not null) _xml.WriteAttributeString("promptTitle", v.PromptTitle);
-            if (v.PromptMessage is not null) _xml.WriteAttributeString("prompt", v.PromptMessage);
+            if (v.PromptTitle is not null) _xml.WriteAttributeString("promptTitle", XString.Encode(v.PromptTitle));
+            if (v.PromptMessage is not null) _xml.WriteAttributeString("prompt", XString.Encode(v.PromptMessage));
         }
         _xml.WriteAttributeString("sqref", range);
 

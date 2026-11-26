@@ -111,6 +111,9 @@ public sealed class VerificationSuiteTests : IDisposable
     [Fact] public void DisplayText() => Items210Test.RunDisplayText(_dir);
     [Fact] public void Limits() => Items210Test.RunLimits(_dir);
     [Fact] public void Regional() => RegionalTest.Run(_dir);
+
+    // 2.2.1, the security patch (D-410): P1 to P10 and the audit's reproductions, with the 3,000-file fuzz test.
+    [Fact] public void Security() => SecurityTest.Run(_dir);
 }
 
 /// <summary>Targeted unit tests for behaviors worth asserting independently of the groups.</summary>

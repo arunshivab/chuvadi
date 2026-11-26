@@ -340,9 +340,11 @@ public sealed class XlsxReader : IDisposable
             if (workbookUri is null)
                 throw new XlsxFormatException("Package has no officeDocument relationship; not a valid xlsx.");
 
+            // 2.2.1 (P10, S-14): workbook.xml first, so another kind of package (a .docx or .pptx renamed, whose main
+            // part is not a <workbook>) is rejected before any of its parts is read as a spreadsheet part.
+            var wb = LoadWorkbookPart(pkg, workbookUri, options, budget);
             var sst = TryLoadSharedStrings(pkg, workbookUri, options, budget, out var sstRich);
             var styleTable = TryLoadStyleTable(pkg, workbookUri, options, budget);
-            var wb = LoadWorkbookPart(pkg, workbookUri, options, budget);
             bool macros = DetectMacros(pkg);
 
             if (sstRich is not null)
@@ -545,9 +547,17 @@ public sealed class XlsxReader : IDisposable
         using (var s = Limit(OpenRequiredPart(pkg, workbookUri), workbookUri, options, budget))
         using (var r = XmlReader.Create(s, new XmlReaderSettings { IgnoreWhitespace = true, IgnoreComments = true, CloseInput = false, DtdProcessing = DtdProcessing.Prohibit }))
         {
+            bool rootSeen = false;
             while (r.Read())
             {
                 if (r.NodeType != XmlNodeType.Element) continue;
+                if (!rootSeen)
+                {
+                    rootSeen = true;
+                    if (r.LocalName != "workbook")
+                        throw new XlsxFormatException($"The file is not a spreadsheet: its main part '{workbookUri}' is a <{r.LocalName}>, not a workbook "
+                            + "(a Word or PowerPoint file, for example).");
+                }
                 switch (r.LocalName)
                 {
                     case "workbook" when r.Depth == 0:
@@ -605,6 +615,7 @@ public sealed class XlsxReader : IDisposable
                     }
                 }
             }
+            if (!rootSeen) throw new XlsxFormatException($"The file is not a spreadsheet: its main part '{workbookUri}' is empty.");
         }
         return info;
     }
@@ -1274,7 +1285,7 @@ internal sealed class RowEnumerator : IEnumerator<RowReader>
                 throw SharedStringError("has a shared-string reference that is not a number.");
             }
             case "str":
-                return rawValue;
+                return Chuvadi.Sheets.Internal.XString.Decode(rawValue);   // 2.2.1 (P8)
             case "b":
                 return rawValue == "1";
             case "e":
