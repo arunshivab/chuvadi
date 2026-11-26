@@ -60,6 +60,27 @@ namespace Chuvadi.Print.Ipp
         /// client is created; not used with a caller-supplied HttpClient. Default empty.
         /// </summary>
         public IList<string> PinnedCertificates { get; } = new List<string>();
+
+        private const long DefaultMaxResponseBytes = 16L * 1024 * 1024;
+
+        private long _maxResponseBytes = DefaultMaxResponseBytes;
+
+        /// <summary>
+        /// The largest response read from a printer or CUPS server, in bytes (rc.6). A longer response fails with
+        /// <see cref="IppException"/> before more of it is read, so a broken or hostile printer can't fill the
+        /// process's memory. A printer's full attributes are tens of KB and a large CUPS server's queue list a few
+        /// MB. Default 16 MB (16,777,216 bytes); 1 to <see cref="Array.MaxLength"/>.
+        /// </summary>
+        public long MaxResponseBytes
+        {
+            get => _maxResponseBytes;
+            set
+            {
+                if (value < 1 || value > Array.MaxLength)
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "MaxResponseBytes must be 1 to " + Array.MaxLength + " bytes.");
+                _maxResponseBytes = value;
+            }
+        }
     }
 
     /// <summary>
@@ -175,19 +196,30 @@ namespace Chuvadi.Print.Ipp
             byte[] head = request.ToArray();
             var body = new IppRequestContent(head, document);
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, HttpUri) { Content = body };
+            long limit = Options.MaxResponseBytes;
+            // The response body is read here, not buffered by HttpClient, so that no more than the limit is ever held.
+            // The client's Timeout still covers the whole exchange, body included, as it did with a buffered read.
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (_http.Timeout != System.Threading.Timeout.InfiniteTimeSpan) timeout.CancelAfter(_http.Timeout);
             try
             {
-                using HttpResponseMessage httpResponse = _http.Send(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken);
+                using HttpResponseMessage httpResponse = _http.Send(httpRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
                 if (!httpResponse.IsSuccessStatusCode)
                     throw new IppException("HTTP " + (int)httpResponse.StatusCode + " " + httpResponse.ReasonPhrase + " from " + HttpUri);
-                using Stream stream = httpResponse.Content.ReadAsStream(cancellationToken);
-                return IppMessage.ReadFrom(stream, out _);
+                if (httpResponse.Content.Headers.ContentLength is long declared && declared > limit) throw TooLarge(limit);
+                using Stream stream = httpResponse.Content.ReadAsStream(timeout.Token);
+                byte[] data = IppMessage.ReadAtMost(stream, limit, timeout.Token) ?? throw TooLarge(limit);
+                return IppMessage.Parse(data);
             }
             catch (HttpRequestException ex)
             {
                 throw new IppException("Could not reach the printer at " + HttpUri + ": " + ex.Message, innerException: ex);
             }
-            catch (System.Threading.Tasks.TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new IppException("Timed out waiting for " + HttpUri, innerException: ex);
+            }
+            catch (IOException ex) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 throw new IppException("Timed out waiting for " + HttpUri, innerException: ex);
             }
@@ -196,6 +228,10 @@ namespace Chuvadi.Print.Ipp
                 throw new IppException("The printer sent an invalid IPP response: " + ex.Message, innerException: ex);
             }
         }
+
+        private static IppException TooLarge(long limit)
+            => new("The printer's response is larger than " + limit.ToString(CultureInfo.InvariantCulture)
+                   + " bytes (IppClientOptions.MaxResponseBytes).");
 
         // ------------------------------------------------------------------ operations
 

@@ -42,6 +42,10 @@ in [PRINTING-REPORTS.md](PRINTING-REPORTS.md).
 
 `PrintSettings.Clone()` gives an independent copy.
 
+`PageSelection.Range` checks its text at once, so a bad range fails fast, and keeps it as intervals (1.0.0-rc.6): a
+range such as "1-2147483647", typed by a user or read from a spool, costs nothing, and `Resolve(pageCount)` lists at
+most the document's pages.
+
 ### Leaving settings to the printer's defaults (1.0.0-rc.4)
 
 ```csharp
@@ -158,6 +162,10 @@ the job metadata (JobId, title, user, tenant) in one checksummed package (format
 agent that would keep its title. Every other job is still written as v2, byte for byte as before. It is
 how a job travels to another machine (P04: the PDF travels, never bitmaps).
 
+Loading is safe on untrusted input (1.0.0-rc.6): each length in the envelope is checked against what the file, array
+or stream actually holds before anything is allocated, and a stream that can't seek is read in chunks, so memory
+grows only with bytes that arrive. Every corrupt or truncated envelope gives `InvalidDataException`.
+
 ## 3. Windows printers (A3, `Chuvadi.Print.Windows`)
 
 ```csharp
@@ -195,6 +203,14 @@ job.PrintTo(raster);                                       // PWG Raster, laid o
 
 - **Building blocks**: a complete RFC 8010 encoder and decoder (`IppMessage`), `IppClient` (every common
   operation, plus raw `Send`), `IppPrinterCapabilities`, and a PWG Raster writer and reader.
+- **Limits on what a printer sends** (1.0.0-rc.6):
+  - Collections nested more than 32 deep are refused when reading (`IppFormatException`) and when writing
+    (`InvalidOperationException`). Printers nest 2 to 4 deep. The limit is fixed.
+  - `IppClient` reads at most `IppClientOptions.MaxResponseBytes` of a response (default 16 MB; up to
+    `Array.MaxLength`). A longer response fails with `IppException` before more is read. A printer's attributes are
+    tens of KB and a large CUPS server's queue list a few MB, so raise it only for a very large CUPS server.
+  - For IPP read from elsewhere, `IppMessage.ReadFrom(stream, maxBytes, out trailing)` takes the same kind of limit.
+    `ReadFrom(stream, out trailing)` reads the whole stream, for input you trust.
 - **Job ticket mapping**: settings IPP cannot express are listed in `LastApproximations`, or fail the job
   when `IppJobOptions.Strict` is set.
 - **AutoRotate when the printer lays out the PDF** (`IppDocumentTarget`, and the PdfAsIs and CUPS routes, since
@@ -434,6 +450,9 @@ hub.JobFinished += (_, e) => Notify(e.Job.JobId, e.Job.State);
 - **Mounting**: map `"/print-hub/{**path}"` in your web stack and forward each request to
   `hub.HandleAsync(new HubRequest(method, path) { … })`; the README has the full ASP.NET Core snippet.
   `PrintHubMessageHandler` runs hub and agent in one process.
+- **Request size**: the hub takes each request body whole (`HubRequest.Body`), so the limit on its size is the web
+  host's. Agents send small JSON reports, so keep the host's limit (Kestrel's `MaxRequestBodySize` defaults to
+  30 MB) rather than raising it for the hub's path.
 - **Host API**: `GetJob`, `ListJobs`, `ListAgents`, `Cancel` (immediate when queued; reaches a printing
   agent within a third of the lease), `ExpireLeases`, and the events `JobFinished` and `BackgroundError`.
 - **Job store**: `FileJobStore` is durable. It writes with atomic renames and recovers after a restart.

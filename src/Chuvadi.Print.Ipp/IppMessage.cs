@@ -2,7 +2,9 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Text;
+using System.Threading;
 
 namespace Chuvadi.Print.Ipp
 {
@@ -19,6 +21,14 @@ namespace Chuvadi.Print.Ipp
     /// </summary>
     public sealed class IppMessage
     {
+        /// <summary>
+        /// How deep collections may nest, for reading and writing (rc.6, SEC-09). Printers nest 2 to 4 deep
+        /// (media-col, media-size, media-col-database); deeper input is refused instead of exhausting the stack.
+        /// </summary>
+        internal const int MaxCollectionDepth = 32;
+
+        private static readonly string TooDeep = "IPP collections are nested more than " + MaxCollectionDepth + " deep.";
+
         private readonly List<IppAttributeGroup> _groups = new();
 
         public IppMessage(short code, int requestId, byte versionMajor = 2, byte versionMinor = 0)
@@ -109,21 +119,24 @@ namespace Chuvadi.Print.Ipp
 
         private static void WriteAttribute(Writer w, string name, IReadOnlyList<IppValue> values)
         {
-            for (int i = 0; i < values.Count; i++) WriteValue(w, i == 0 ? name : string.Empty, values[i]);
+            for (int i = 0; i < values.Count; i++) WriteValue(w, i == 0 ? name : string.Empty, values[i], 0);
         }
 
-        private static void WriteValue(Writer w, string name, IppValue value)
+        // depth: how many collections enclose this value. A collection that contains itself, or nests past the
+        // limit, is refused rather than recursing until the stack runs out.
+        private static void WriteValue(Writer w, string name, IppValue value, int depth)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(name);
             if (value.Value is IppCollection collection)
             {
+                if (depth >= MaxCollectionDepth) throw new InvalidOperationException(TooDeep);
                 w.Header(IppTag.BeginCollection, nameBytes);
                 w.Length(0);
                 foreach (IppAttribute member in collection.Members)
                 {
                     w.Header(IppTag.MemberAttrName, Array.Empty<byte>());
                     w.Blob(Encoding.UTF8.GetBytes(member.Name));
-                    foreach (IppValue memberValue in member.Values) WriteValue(w, string.Empty, memberValue);
+                    foreach (IppValue memberValue in member.Values) WriteValue(w, string.Empty, memberValue, depth + 1);
                 }
                 w.Header(IppTag.EndCollection, Array.Empty<byte>());
                 w.Length(0);
@@ -189,7 +202,10 @@ namespace Chuvadi.Print.Ipp
 
         // ------------------------------------------------------------------ decoding
 
-        /// <summary>Decodes a message from the start of <paramref name="data"/>.</summary>
+        /// <summary>
+        /// Decodes a message from the start of <paramref name="data"/>. Collections nested more than 32 deep are refused
+        /// with <see cref="IppFormatException"/>.
+        /// </summary>
         public static IppMessage Parse(ReadOnlySpan<byte> data) => Parse(data, out _);
 
         /// <summary>Decodes a message; <paramref name="length"/> is where any trailing document data begins.</summary>
@@ -210,6 +226,9 @@ namespace Chuvadi.Print.Ipp
                 if (tag == (byte)IppTag.EndOfAttributes) break;
                 if (tag < 0x10)
                 {
+                    // 0x00 is no delimiter (RFC 8010 §3.5.1); 0x0B to 0x0F are reserved delimiters and are kept as
+                    // before. Refused here rather than by IppAttributeGroup's argument check (rc.6, P-04).
+                    if (tag == 0x00) throw new IppFormatException("Unknown IPP attribute-group tag 0x" + tag.ToString("X2", CultureInfo.InvariantCulture) + ".");
                     group = message.AddGroup((IppTag)tag);
                     current = null;
                     continue;
@@ -217,7 +236,7 @@ namespace Chuvadi.Print.Ipp
                 if (group is null) throw new IppFormatException("Attribute before any attribute group.");
 
                 string name = r.String(r.Int16Length(), utf8: true);
-                IppValue value = ReadValue(ref r, (IppTag)tag);
+                IppValue value = ReadValue(ref r, (IppTag)tag, 0);
                 if (name.Length == 0)
                 {
                     if (current is null) throw new IppFormatException("Additional value without an attribute.");
@@ -235,7 +254,8 @@ namespace Chuvadi.Print.Ipp
 
         /// <summary>
         /// Reads a whole stream (an IPP response, or a small request) and decodes the message;
-        /// <paramref name="trailingData"/> receives any bytes after it (document data).
+        /// <paramref name="trailingData"/> receives any bytes after it (document data). The whole stream is read
+        /// into memory, however long it is: for input from outside, use the overload with a size limit.
         /// </summary>
         public static IppMessage ReadFrom(Stream input, out byte[] trailingData)
         {
@@ -248,12 +268,50 @@ namespace Chuvadi.Print.Ipp
             return message;
         }
 
-        private static IppValue ReadValue(ref Reader r, IppTag tag)
+        /// <summary>
+        /// Reads a stream of at most <paramref name="maxBytes"/> bytes (the message and any document data after it)
+        /// and decodes the message; <paramref name="trailingData"/> receives any bytes after it. A longer stream is
+        /// refused with <see cref="IppFormatException"/> once the limit is passed, before the rest is read.
+        /// </summary>
+        /// <param name="input">The stream to read to its end.</param>
+        /// <param name="maxBytes">The most bytes read: 1 to <see cref="Array.MaxLength"/>.</param>
+        /// <param name="trailingData">The bytes after the message (document data), or empty.</param>
+        public static IppMessage ReadFrom(Stream input, long maxBytes, out byte[] trailingData)
+        {
+            if (input is null) throw new ArgumentNullException(nameof(input));
+            if (maxBytes < 1 || maxBytes > Array.MaxLength)
+                throw new ArgumentOutOfRangeException(nameof(maxBytes), maxBytes, "The limit must be 1 to " + Array.MaxLength + " bytes.");
+            byte[]? all = ReadAtMost(input, maxBytes, CancellationToken.None);
+            if (all is null) throw new IppFormatException("The IPP message is longer than " + maxBytes.ToString(CultureInfo.InvariantCulture) + " bytes.");
+            IppMessage message = Parse(all, out int length);
+            trailingData = length < all.Length ? all.AsSpan(length).ToArray() : Array.Empty<byte>();
+            return message;
+        }
+
+        /// <summary>The whole stream, or null as soon as it is longer than <paramref name="maxBytes"/>.</summary>
+        internal static byte[]? ReadAtMost(Stream input, long maxBytes, CancellationToken cancellationToken)
+        {
+            using var buffer = new MemoryStream();
+            byte[] chunk = new byte[81920];
+            while (true)
+            {
+                int read = cancellationToken.CanBeCanceled
+                    ? input.ReadAsync(chunk.AsMemory(), cancellationToken).AsTask().GetAwaiter().GetResult()
+                    : input.Read(chunk, 0, chunk.Length);
+                if (read == 0) return buffer.ToArray();
+                if (buffer.Length + read > maxBytes) return null;
+                buffer.Write(chunk, 0, read);
+            }
+        }
+
+        // depth: how many collections enclose this value.
+        private static IppValue ReadValue(ref Reader r, IppTag tag, int depth)
         {
             if (tag == IppTag.BeginCollection)
             {
+                if (depth >= MaxCollectionDepth) throw new IppFormatException(TooDeep);
                 r.Skip(r.Int16Length()); // begCollection carries an empty value
-                return IppValue.Collection(ReadCollection(ref r));
+                return IppValue.Collection(ReadCollection(ref r, depth + 1));
             }
 
             int length = r.Int16Length();
@@ -309,7 +367,7 @@ namespace Chuvadi.Print.Ipp
             }
         }
 
-        private static IppCollection ReadCollection(ref Reader r)
+        private static IppCollection ReadCollection(ref Reader r, int depth)
         {
             var collection = new IppCollection();
             IppAttribute? member = null;
@@ -327,23 +385,23 @@ namespace Chuvadi.Print.Ipp
                 {
                     member = null;
                     string memberName = r.String(r.Int16Length(), utf8: true);
-                    IppValue first = ReadMemberValue(ref r);
+                    IppValue first = ReadMemberValue(ref r, depth);
                     member = new IppAttribute(memberName, first);
                     collection.Add(member);
                     continue;
                 }
                 if (member is null) throw new IppFormatException("Collection value without a member name.");
-                member.Add(ReadValue(ref r, tag));
+                member.Add(ReadValue(ref r, tag, depth));
             }
         }
 
-        private static IppValue ReadMemberValue(ref Reader r)
+        private static IppValue ReadMemberValue(ref Reader r, int depth)
         {
             var tag = (IppTag)r.Byte();
             if (r.Int16Length() != 0) throw new IppFormatException("Collection member values must have empty names.");
             if (tag is IppTag.EndCollection or IppTag.MemberAttrName)
                 throw new IppFormatException("Collection member without a value.");
-            return ReadValue(ref r, tag);
+            return ReadValue(ref r, tag, depth);
         }
 
         private static void Expect(int actual, int expected, IppTag tag)

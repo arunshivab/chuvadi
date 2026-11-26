@@ -18,14 +18,16 @@ namespace Chuvadi.Print
         private readonly Kind _kind;
         private readonly int _n;                 // Current page, or count for First/Last
         private readonly string? _spec;          // Range expression
+        private readonly (int Start, int End)[]? _ranges;   // Range expression, parsed: never expanded to pages
         private readonly int[]? _list;           // Explicit pages
 
-        private PageSelection(Kind kind, int n = 0, string? spec = null, int[]? list = null)
+        private PageSelection(Kind kind, int n = 0, string? spec = null, int[]? list = null, (int, int)[]? ranges = null)
         {
             _kind = kind;
             _n = n;
             _spec = spec;
             _list = list;
+            _ranges = ranges;
         }
 
         public static PageSelection All { get; } = new(Kind.All);
@@ -59,11 +61,14 @@ namespace Chuvadi.Print
             return new PageSelection(Kind.Explicit, list: (int[])pageNumbers.Clone());
         }
 
+        /// <summary>
+        /// A range expression such as "1-4, 7". It is checked now, so a bad one fails fast, and kept as its intervals:
+        /// a range such as "1-2147483647" costs nothing until <see cref="Resolve"/> lists the pages of a document.
+        /// </summary>
         public static PageSelection Range(string spec)
         {
             if (spec is null) throw new ArgumentNullException(nameof(spec));
-            ParseRange(spec); // validate now so bad specs fail fast
-            return new PageSelection(Kind.Range, spec: spec);
+            return new PageSelection(Kind.Range, spec: spec, ranges: ParseRange(spec));
         }
 
         /// <summary>Resolves to sorted, distinct, 1-based page numbers within [1, pageCount].</summary>
@@ -98,7 +103,9 @@ namespace Chuvadi.Print
                         foreach (int p in _list) if (p >= 1 && p <= pageCount) set.Add(p);
                     break;
                 case Kind.Range:
-                    foreach (int p in ParseRange(_spec!)) if (p >= 1 && p <= pageCount) set.Add(p);
+                    // Each interval is cut to the document first, so this lists at most pageCount pages.
+                    foreach ((int start, int end) in _ranges!)
+                        for (long p = start, last = Math.Min(end, pageCount); p <= last; p++) set.Add((int)p);
                     break;
             }
             var result = new int[set.Count];
@@ -162,9 +169,9 @@ namespace Chuvadi.Print
             }
         }
 
-        private static IEnumerable<int> ParseRange(string spec)
+        private static (int Start, int End)[] ParseRange(string spec)
         {
-            var pages = new List<int>();
+            var ranges = new List<(int, int)>();
             foreach (string rawToken in spec.Split(','))
             {
                 string token = rawToken.Trim();
@@ -172,17 +179,18 @@ namespace Chuvadi.Print
                 int dash = token.IndexOf('-');
                 if (dash < 0)
                 {
-                    pages.Add(ParsePositive(token));
+                    int page = ParsePositive(token);
+                    ranges.Add((page, page));
                 }
                 else
                 {
                     int start = ParsePositive(token.Substring(0, dash).Trim());
                     int end = ParsePositive(token.Substring(dash + 1).Trim());
                     if (end < start) throw new FormatException("Range end before start: " + token);
-                    for (int p = start; p <= end; p++) pages.Add(p);
+                    ranges.Add((start, end));
                 }
             }
-            return pages;
+            return ranges.ToArray();
         }
 
         private static int ParsePositive(string s)
