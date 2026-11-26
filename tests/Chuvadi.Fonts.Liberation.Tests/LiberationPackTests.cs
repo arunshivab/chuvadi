@@ -143,8 +143,8 @@ public class LiberationPackTests
         {
             Assert.Same(LiberationPack.LicenseText, pack.GetLicenseText(f.FileName));
         }
-        // Not the LiPi Sans pack: Chuvadi.Fonts keeps its own 22 files.
-        Assert.Equal(22, FontPack.Files.Count);
+        // Not the LiPi Sans pack: Chuvadi.Fonts keeps its own files (22 LiPi Sans and, since 1.2.0, Noto Emoji).
+        Assert.Equal(23, FontPack.Files.Count);
         Assert.Null(FontPack.Find("LiberationSans-Regular.ttf"));
     }
 

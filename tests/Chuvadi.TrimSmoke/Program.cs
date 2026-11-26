@@ -37,7 +37,8 @@ internal static class Program
 
     private static void FontsCheck()
     {
-        Require(FontPack.Files.Count == 22, "expected 22 font files, got " + FontPack.Files.Count);
+        Require(FontPack.Files.Count == 23, "expected 23 font files, got " + FontPack.Files.Count);
+        Require(FontPack.GetLicenseText("NotoEmoji-Regular.ttf").Contains("Google", StringComparison.Ordinal), "Noto Emoji licence text");
         // Every embedded font is found by name, has the length and SHA-256 its catalog states, and opens as a stream.
         foreach (var f in FontPack.Files)
         {

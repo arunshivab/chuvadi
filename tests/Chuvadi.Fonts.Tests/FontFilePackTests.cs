@@ -6,7 +6,7 @@ namespace Chuvadi.Fonts.Tests;
 public class FontFilePackTests
 {
     [Fact]
-    public void Instance_lists_the_same_22_files_as_FontPack()
+    public void Instance_lists_the_same_23_files_as_FontPack()
     {
         IFontFilePack pack = FontPack.Instance;
         Assert.Equal("Chuvadi.Fonts", pack.Name);
@@ -41,6 +41,8 @@ public class FontFilePackTests
         Assert.False(s.CanWrite);
         Assert.Equal(FontPack.Find("LiPi-Sans-Tamil-Regular.ttf")!.Length, s.Length);
         Assert.Same(FontPack.LicenseText, pack.GetLicenseText("LiPi-Sans-Tamil-Regular.ttf"));
+        Assert.Same(FontPack.GetLicenseText("NotoEmoji-Regular.ttf"), pack.GetLicenseText("NotoEmoji-Regular.ttf"));
+        Assert.NotEqual(FontPack.LicenseText, pack.GetLicenseText("NotoEmoji-Regular.ttf"));
         Assert.Throws<ArgumentException>(() => pack.Open("Carlito-Regular.ttf"));
         Assert.Throws<ArgumentException>(() => pack.GetLicenseText("Carlito-Regular.ttf"));
         Assert.Throws<ArgumentNullException>(() => pack.Open(null!));
