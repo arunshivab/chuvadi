@@ -32,7 +32,8 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Formulas on write with cached results, array formulas | `rb.Formula(f, cachedValue)`, `rb.ArrayFormula(range, f, cached)`, `XlsxWriterOptions.FullCalculationOnLoad` |
 | Layout for renderers (widths, merges, row attributes, effective styles) | `ReadLayout()`, `row.Attributes`, `row.GetStyle(col)`, `row.GetEffectiveStyleIndex(col, layout)`, `sheet.GetEffectiveStyle(r, c)` |
 | Encrypted streaming read | `XlsxReader.Open(path, password, options)` |
-| Hostile-input limits, cancellation | `XlsxReaderOptions.ForUntrustedInput()`, `MaxRowsPerSheet`, `MaxSpinCount`, `CancellationToken` |
+| Hostile-input limits (on by default since 2.2.1), cancellation | `XlsxReaderOptions` defaults, `MaxCells`, `MaxRowsPerSheet`, `MaxSpinCount`, `CancellationToken`, `ForTrustedInput()` to turn them off |
+| Bounded, cancellable conditional-format evaluation (2.2.1) | `ConditionalFormatOptions.MaxCellsVisited`, `ConditionalFormatOptions.CancellationToken` |
 | Macro detection (never executed) | `reader.HasMacros`, `wb.HasMacros` |
 | Tables, hyperlinks, comments | `SheetWriter.AddTable/Hyperlink/Comment` |
 | Freeze panes, merges, autofilter | `SheetWriter.FreezeRows/MergeCells/AutoFilter` |
@@ -62,7 +63,7 @@ Part of the **Chuvadi** family (alongside `Chuvadi.Pdf`).
 | Streaming export + encryption | `XlsxWriter` with `XlsxWriterOptions.Encryption` |
 | Read encrypted xlsx | `Workbook.Load(path, password)` |
 | Zip create/extract (obsolete since 2.0.0; use the Chuvadi.Zip package) | `Chuvadi.Sheets.Zip.*` |
-| Hostile-input caps | `XlsxReaderOptions.MaxPartBytes` and the 1.4.0 limits |
+| Hostile-input caps | `XlsxReaderOptions.MaxPartBytes` and the 1.4.0 limits, on by default since 2.2.1 |
 
 \* Since 1.6.0 the style of a `CellIs` rule is written as a differential format and shows in
 Excel (earlier versions wrote none).
@@ -116,8 +117,8 @@ double widthB = sh.Columns[2].Width;  bool hidden5 = sh.Rows[5].Hidden;
 patients.ToXlsx("fit.xlsx", cfg => cfg.AutoFilter().AutoFitColumns());
 sheet.AutoFitColumns(new AutoFitOptions { MaxWidth = 40 });     // Workbook model, computed at save
 
-// Untrusted upload: limits, cancellation, password, display text
-var opts = XlsxReaderOptions.ForUntrustedInput();
+// Untrusted upload: limits (the defaults since 2.2.1), cancellation, password, display text
+var opts = new XlsxReaderOptions();
 opts.CancellationToken = requestAborted;
 using (var upload = XlsxReader.Open(uploadStream, password, opts))
     foreach (var row in upload.Sheet(1).Rows)
@@ -218,7 +219,9 @@ foreach (var run in book.Sheets[0].FindCell(1, 1)?.RichText?.Runs ?? Array.Empty
 - Reading an encrypted file decrypts the whole package into memory before it is read, so memory
   grows with the file size, and on a server with the number of encrypted files open at once.
   `XlsxReaderOptions.MaxTotalUncompressedBytes` caps the encrypted file's size before it is
-  decrypted (`ForUntrustedInput()` sets 1 GiB); use it for untrusted input.
+  decrypted (1 GiB by default since 2.2.1; `ForTrustedInput()` turns it off).
+- An empty password throws `ArgumentException` before anything is written (since 2.2.1 also from
+  `Workbook.SaveTo(…, EncryptionOptions)`, which wrote a file no one could open before).
 - Wrong password and missing password both throw `XlsxPasswordRequiredException`. A damaged
   container or a failed integrity check throws `XlsxFormatException` (see Errors below).
 - Encryption is available on both the `Workbook` model and the streaming `XlsxWriter`
@@ -248,9 +251,17 @@ open-password (`EncryptionOptions`).
   `Save`, leaves an existing file untouched. A replaced file keeps its permissions (and on Windows
   its attributes and security settings); a symbolic link is kept. A save to a stream leaves the
   stream open.
-- Decompression caps for untrusted input are opt-in: `XlsxReaderOptions.MaxPartBytes` and
-  the other read limits (`XlsxReaderOptions.ForUntrustedInput()`) for reading xlsx. Set them whenever
-  the input source is not fully trusted. Defaults are unlimited for compatibility.
+- **Since 2.2.1 the read limits are on by default** (they were opt-in): 256 MB per part, 1 GB in total,
+  500:1 compression, 20,000 zip entries, 1,048,576 rows per sheet, 500,000 key-derivation spins, and
+  4,000,000 cells in a loaded workbook (`MaxCells`, new). `ForUntrustedInput()` returns the same values.
+  For bigger files you trust, pass `XlsxReaderOptions.ForTrustedInput()`, which turns every limit off,
+  or raise just the one you need. The streaming reader is not limited by `MaxCells`.
+- Since 2.2.1 a hostile file cannot crash the process with a stack overflow (formulas nested beyond
+  256 levels are "not evaluated"; shape groups nested beyond 256 levels are `XlsxFormatException`), and
+  wildcard criteria cannot hang it. Conditional-format evaluation has a work budget
+  (`ConditionalFormatOptions.MaxCellsVisited`, 100 million) and a `CancellationToken`.
+- A streaming `XlsxWriter` disposed without `Save` writes nothing, by design, so a half-written workbook
+  is never saved as if it were complete; `writer.IsSaved` (2.2.1) tells you.
 - See [SECURITY.md](SECURITY.md) for the vulnerability-disclosure process and the full
   security model.
 - Zip password protection is intentionally not provided (classic ZipCrypto is broken
@@ -263,9 +274,11 @@ readers throw is one of these:
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, whether or not `[Content_Types].xml` declares it; since 2.0.2 also when it does not), a damaged relationship (`.rels`) entry, a truncated part, a text cell whose shared-string reference does not exist (2.0.2), or (with a password given) a damaged encrypted container or a failed integrity check. **Since 2.0.5 also an old binary file** (an Excel 97-2003 .xls, or another compound file that is not an encrypted xlsx), named in the message, for example "This is an Excel 97-2003 binary file (.xls), not an Office Open XML package, and it is not encrypted."; it asked for a password before. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, `FileNotFoundException`, ...), when there is one. |
+| `XlsxFormatException` | **The file is malformed:** not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, whether or not `[Content_Types].xml` declares it; since 2.0.2 also when it does not), a damaged relationship (`.rels`) entry, a truncated part, a text cell whose shared-string reference does not exist (2.0.2), or (with a password given) a damaged encrypted container or a failed integrity check. **Since 2.2.1 also** a package
+whose main part is not a workbook (a .docx or .pptx), two sheets with the same name or an empty one, shape groups
+nested deeper than 256 levels, and a damaged value in an encrypted file's header (it was `FormatException`). **Since 2.0.5 also an old binary file** (an Excel 97-2003 .xls, or another compound file that is not an encrypted xlsx), named in the message, for example "This is an Excel 97-2003 binary file (.xls), not an Office Open XML package, and it is not encrypted."; it asked for a password before. `InnerException` holds the original error (`XmlException`, `InvalidDataException`, `FileNotFoundException`, ...), when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. Without a password the encrypted container is not read, so damage to it is found only once a password is supplied. |
-| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. Since 2.1.0 it also has a constructor with an inner exception, as Chuvadi.Docs' `DocxLimitExceededException`. |
+| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`, `MaxCells` (2.2.1). Since 2.1.0 it also has a constructor with an inner exception, as Chuvadi.Docs' `DocxLimitExceededException`. |
 | `InvalidDataException` | `MaxPartBytes` was exceeded (a limit, as in 1.x; not a malformed file). |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 | `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |

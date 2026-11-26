@@ -62,7 +62,7 @@ internal static class LegacyDrawingReader
                     while (r.Read() && !(r.NodeType == XmlNodeType.EndElement && r.Depth == d))
                         if (r.NodeType is XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.Whitespace or XmlNodeType.SignificantWhitespace) sb.Append(r.Value);
                 }
-                authors.Add(sb.ToString());
+                authors.Add(XString.Decode(sb.ToString()));   // 2.2.1 (P8)
             }
             else if (r.LocalName == "comment")
             {

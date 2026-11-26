@@ -111,6 +111,10 @@ public static class Program
             if (testName is "all" or "regional")
                 RegionalTest.Run(outputDir);
 
+            // 2.2.1, the security patch (D-410).
+            if (testName is "all" or "security")
+                SecurityTest.Run(outputDir);
+
             if (testName is "all" or "perf")
                 LoadBenchmarkTest.Run(outputDir);
 

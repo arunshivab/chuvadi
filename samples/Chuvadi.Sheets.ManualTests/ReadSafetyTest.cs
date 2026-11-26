@@ -196,13 +196,17 @@ internal static class ReadSafetyTest
 
         Check("C4: zip-bomb guards (ratio, declared total, entries) before reading", () =>
         {
-            var ratio = Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath, new XlsxReaderOptions { MaxCompressionRatio = 500 }).Dispose(), "ratio");
+            // Since 2.2.1 every limit is on by default: each check starts from ForTrustedInput() and sets only its own limit.
+            static XlsxReaderOptions Only(Action<XlsxReaderOptions> set) { var o = XlsxReaderOptions.ForTrustedInput(); set(o); return o; }
+            var ratio = Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath, Only(o => o.MaxCompressionRatio = 500)).Dispose(), "ratio");
             Eq("MaxCompressionRatio", ratio.LimitName, "ratio name");
-            var total = Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath, new XlsxReaderOptions { MaxTotalUncompressedBytes = 10_000_000 }).Dispose(), "total");
+            var total = Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath, Only(o => o.MaxTotalUncompressedBytes = 10_000_000)).Dispose(), "total");
             Eq("MaxTotalUncompressedBytes", total.LimitName, "total name");
-            var entries = Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath, new XlsxReaderOptions { MaxPackageEntries = 3 }).Dispose(), "entries");
+            var entries = Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath, Only(o => o.MaxPackageEntries = 3)).Dispose(), "entries");
             Eq("MaxPackageEntries", entries.LimitName, "entries name");
-            Throws<InvalidDataException>(() => XlsxReader.Open(bombPath, new XlsxReaderOptions { MaxPartBytes = 1_000_000 }).Dispose(), "MaxPartBytes keeps InvalidDataException");
+            Throws<InvalidDataException>(() => XlsxReader.Open(bombPath, Only(o => o.MaxPartBytes = 1_000_000)).Dispose(), "MaxPartBytes keeps InvalidDataException");
+            // And the defaults refuse the bomb on their own (2.2.1, P4).
+            Throws<XlsxLimitExceededException>(() => XlsxReader.Open(bombPath).Dispose(), "defaults");
         });
 
         Check("C4: ForUntrustedInput reads normal files; non-seekable input works", () =>

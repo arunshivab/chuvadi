@@ -259,10 +259,12 @@ internal static class SheetExtrasParser
             v.ShowDropdown = !Bool(d, "showDropDown", false);   // stored inverted: 1 = hide the arrow
             v.ShowErrorMessage = Bool(d, "showErrorMessage", false);
             v.ShowInputMessage = Bool(d, "showInputMessage", false);
-            v.ErrorTitle = (string?)d.Attribute("errorTitle");
-            v.ErrorMessage = (string?)d.Attribute("error");
-            v.PromptTitle = (string?)d.Attribute("promptTitle");
-            v.PromptMessage = (string?)d.Attribute("prompt");
+            // 2.2.1 (P8): _xHHHH_ escapes back into their characters.
+            v.ErrorTitle = Dec((string?)d.Attribute("errorTitle"));
+            v.ErrorMessage = Dec((string?)d.Attribute("error"));
+            v.PromptTitle = Dec((string?)d.Attribute("promptTitle"));
+            v.PromptMessage = Dec((string?)d.Attribute("prompt"));
+            static string? Dec(string? s) => s is null ? null : XString.Decode(s);
             v.ImeMode = (string?)d.Attribute("imeMode");
             v.ErrorStyle = (string?)d.Attribute("errorStyle") switch
             {

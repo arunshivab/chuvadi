@@ -18,6 +18,9 @@ internal static class WorkbookLoader
         var styles = reader.StyleTable;
         var includeStyledEmpty = reader.Options.IncludeStyledEmptyCells;
         var ct = reader.Options.CancellationToken;
+        // 2.2.1 (P5, SEC-01): the whole workbook's cells, so a small file that would need gigabytes stops early.
+        long maxCells = reader.Options.MaxCells ?? long.MaxValue;
+        long cellsBefore = 0;   // cells in the sheets already loaded
         var wb = new Workbook
         {
             StyleTable = styles,
@@ -42,8 +45,14 @@ internal static class WorkbookLoader
             return boxes[index];
         }
 
+        var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         foreach (var sheetInfo in reader.Sheets)
         {
+            // 2.2.1 (P9, SEC-05): a damaged sheet list is a malformed file, not the caller's InvalidOperationException.
+            if (sheetInfo.Name.Length == 0)
+                throw new XlsxFormatException("The file is not a valid xlsx workbook: a sheet in workbook.xml has an empty name.");
+            if (!names.Add(sheetInfo.Name))
+                throw new XlsxFormatException($"The file is not a valid xlsx workbook: workbook.xml lists two sheets named '{sheetInfo.Name}' (names are case-insensitive).");
             var sheet = wb.AddSheet(sheetInfo.Name);
             sheet.Visibility = sheetInfo.Visibility;
             var sr = reader.Sheet(sheetInfo.Name);
@@ -64,6 +73,11 @@ internal static class WorkbookLoader
                     if (v is null && formula is null && !(includeStyledEmpty && styleIndex > 0)) continue;
 
                     var cell = sheet.Cell(row.RowNumber, colIdx + 1);
+                    if (cellsBefore + sheet.CellCount > maxCells)
+                        throw new XlsxLimitExceededException("MaxCells", maxCells, cellsBefore + sheet.CellCount,
+                            $"Sheet '{sheetInfo.Name}', cell {CellAddress.ToA1(row.RowNumber, colIdx + 1)}: the workbook has more cells than "
+                            + "XlsxReaderOptions.MaxCells allows in memory. Read it with the streaming XlsxReader, or raise MaxCells "
+                            + "(or use XlsxReaderOptions.ForTrustedInput()) for a file you trust.");
                     if (formula is not null)
                         cell.SetLoadedFormula(formula.Text, v, formula.Kind == FormulaKind.Array ? formula.Range : null);
                     else if (row.GetRichText(colIdx) is { } rich && v is string)
@@ -91,6 +105,7 @@ internal static class WorkbookLoader
             if (layout.DrawingRelId is not null)
                 sheet.SetLoadedDrawings(DrawingReader.Read(reader, sheetInfo.PartUri, layout.DrawingRelId, eager: true, reader.Options.LoadImageData));
             PrintNames.Apply(sheet.PageSetup, reader.DefinedNames, sheetInfo.WorkbookIndex);
+            cellsBefore += sheet.CellCount;
         }
 
         foreach (var si in reader.Sheets)

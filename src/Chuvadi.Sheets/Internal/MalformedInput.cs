@@ -28,6 +28,8 @@ internal static class MalformedInput
         XmlException => true,                               // malformed XML in a part
         InvalidDataException ide => !ide.Data.Contains(LimitMarker),   // corrupt zip, missing part, corrupt encrypted package
         EndOfStreamException => true,                       // truncated data
+        FormatException => true,                            // 2.2.1 (S-16): a value the file stores in the wrong form (base64, number)
+        InsufficientExecutionStackException => true,        // 2.2.1 (P1): nesting the stack cannot hold (see FreshStack)
         _ => false,
     };
 

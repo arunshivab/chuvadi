@@ -7,7 +7,7 @@ Excel workbooks with no NuGet dependencies.
 
 | Item | Value |
 |---|---|
-| Library version | Chuvadi.Sheets 2.2.0 (released 2026-11-17) |
+| Library version | Chuvadi.Sheets 2.2.1 (released 2026-11-25) |
 | Namespace | `Chuvadi.Sheets.Model` |
 | Target | .NET 10 |
 | Author | Dr. Arun Shiva B |
@@ -407,6 +407,24 @@ same overload as before: the older overloads take priority over the new options 
 All of it was measured in Excel with Windows set to each region, on 16 November 2026. Saved files, stored values and
 `Style.NumberFormat` are unchanged.
 
+## 4.12 Changes in 2.2.1
+
+2.2.1 is a security patch. Reading a hostile file could kill the process, hang it or use gigabytes of memory; it now
+gets a clean exception or a "not evaluated" rule. Existing calls compile, but some defaults change: read this table
+before upgrading.
+
+| Area | What changes | Section |
+|---|---|---|
+| Read limits | on by default: `new XlsxReaderOptions()` and every one-line reader have the limits `ForUntrustedInput()` had; new `ForTrustedInput()` turns them all off | 26.1 |
+| Loaded workbooks | new `MaxCells`: `Workbook.Load` keeps at most 4,000,000 cells by default; the streaming reader is not limited | 17, 26.1 |
+| Formulas and drawings | nesting beyond 256 levels is "not evaluated" (formulas) or `XlsxFormatException` (shape groups), never a stack overflow | 26.4 |
+| Wildcards | SEARCH and the COUNTIF/SUMIF/AVERAGEIF criteria no longer use a regex, and no pattern can hang | 26.4 |
+| Conditional formats | new `ConditionalFormatOptions.MaxCellsVisited` (default 100 million) and `CancellationToken` | 21.2 |
+| Text | control characters save as Excel writes them (`_x000B_`) and read back unchanged, instead of failing the save | 8.1 |
+| Encryption | an empty password throws before anything is written | 25.1 |
+| Errors | a Word or PowerPoint file, duplicate sheet names and a damaged encryption header are `XlsxFormatException` | 27.1 |
+| Streaming writer | new `XlsxWriter.IsSaved`; a writer disposed without `Save` writes nothing, by design | 7.1 |
+
 # 5 Choosing a write API
 
 All three write APIs produce the same kind of file and share the same styles, formats and sheet features. They
@@ -607,6 +625,9 @@ using (var writer = XlsxWriter.Create("export.xlsx"))
 - Rows are written top to bottom. Sheet settings (widths, freeze panes, filters, merges, page setup, protection,
   validation, conditional formats, tables) may be set at any time before `Save`.
 - `Save` assembles the package and writes it to the output. After `Save` the writer accepts no more changes.
+- **Without `Save` nothing is written.** A writer disposed without it leaves a path target untouched and writes no
+  bytes at all to a stream. This is deliberate: if an exception stops the export half-way, you never get a file that
+  looks complete but is not. `writer.IsSaved` (since 2.2.1) is true once `Save` or `SaveAsync` has completed.
 
 ## 7.2 Per-cell control with `RowBuilder`
 
@@ -793,6 +814,16 @@ Excel stores dates as serial numbers in the 1900 date system; the writer always 
 counts a fictitious 29 February 1900, so 1 January 1900 is serial 1 and 1 March 1900 is serial 61; the writer and the
 readers use the same rule (since 2.0.5), so a date before 1 March 1900 round-trips unchanged. .NET's
 `DateTime.ToOADate` is one day ahead for those dates; don't use it to compare with stored serials.
+
+Some characters cannot appear in XML at all: the control characters other than tab, line feed and carriage return
+(U+000B, a line break pasted from Word, is the usual one), a lone surrogate, U+FFFE and U+FFFF. Since 2.2.1 the
+writers store them as Excel does, `_x000B_`, and the readers turn them back, so the value round-trips unchanged
+(before, the save threw `ArgumentException` at the end). A literal `_x0041_` in your text is stored as
+`_x005F_x0041_` for the same reason. This applies to cell text, rich-text runs, cached formula text, comments,
+headers and footers, data-validation messages, hyperlink tooltips and display text, and table column names; any
+other text is written byte for byte as before. One known gap in 2.2.1: a carriage return (`\r`) is still written as is, and XML
+turns it into a line feed on reading, so `"a\rb"` reads back as `"a\nb"`. The next version writes it as `_x000D_`,
+as Excel does.
 
 ## 8.2 Reading
 
@@ -1463,7 +1494,9 @@ outside the 1,048,576 × 16,384 grid that some third-party writers produce. The 
 `SheetReader.OutOfGridCells`, `OutOfGridRows` and `FirstOutOfGridReference`.
 
 For read-only access to large files, prefer `XlsxReader`: the model holds every populated cell. A 10 MB workbook
-of 1.75 million cells loads in about 1.4 to 2 s and keeps about 127 bytes per cell (chapter 28).
+of 1.75 million cells loads in about 1.4 to 2 s and keeps about 127 bytes per cell (chapter 28). Since 2.2.1
+`Workbook.Load` keeps at most `MaxCells` cells, 4,000,000 by default; past it, it throws
+`XlsxLimitExceededException` naming the sheet and cell (26.1).
 
 # 18 Typed and table reads
 
@@ -1752,6 +1785,22 @@ scales, data bars, icon sets, top/bottom, averages, duplicates, text, blanks, er
 (`ConditionalFormatOptions.Today` fixes "today" for tests). Rules it cannot evaluate, such as formulas that refer to
 other sheets or use unsupported functions, are listed in `result.NotEvaluated` so a renderer can say so.
 
+Since 2.2.1 the evaluator has a work budget and can be cancelled (26.4):
+
+```csharp
+var sheet = Workbook.Load("conditional.xlsx")["Scores"];
+using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+var bounded = sheet.EvaluateConditionalFormats(new ConditionalFormatOptions
+{
+    MaxCellsVisited = 10_000_000,            // default 100,000,000; null = no limit
+    CancellationToken = stop.Token,          // throws OperationCanceledException when cancelled
+});
+var first = bounded.Evaluate(2, 1);          // past the budget, the rules come back in NotEvaluated
+```
+
+The budget counts every cell read and formula step, for the evaluator as a whole. No real workbook in the test
+corpus comes near the default; a hostile one stops there instead of running for hours.
+
 For the streaming reader, construct a `ConditionalFormatEvaluator` from `layout.ConditionalFormats`,
 `reader.StyleTable` and your own `ICellValueSource` over the rows you hold.
 
@@ -1905,6 +1954,10 @@ Excel asks for the password when it opens either file. The encryption is the for
 `EncryptionOptions.SpinCount` sets the key-derivation iterations: 100,000 by default, as modern Excel writes.
 Higher is slower to attack and slower to open; do not go below 50,000.
 
+The password must not be empty. Since 2.2.1 `Workbook.SaveTo(…, EncryptionOptions)` checks it before anything is
+written, as `XlsxWriterOptions` always has: an empty password throws `ArgumentException` and a null one
+`ArgumentNullException`. (Before, an empty password wrote a file that no one could open.)
+
 The streaming writer encrypts in 4,096-byte segments with an incrementally computed HMAC, so a large export is
 never held in memory as plaintext. Its temporary files are encrypted with a one-time key held only in memory
 (section 7.6). A save to a stream writes from the stream's current position and works on a non-seekable stream.
@@ -1961,7 +2014,9 @@ result was cached. For uploads, read the bytes into memory and open a `MemoryStr
 ## 26.1 Limits
 
 A few kilobytes of xlsx can legally inflate to gigabytes, declare a billion rows, or demand an expensive key
-derivation. For files you did not create, set limits:
+derivation. Since 2.2.1 the readers have limits against that by default, so `new XlsxReaderOptions()` and the
+one-line readers are safe for uploads. `ForUntrustedInput()` returns the same values; it stays for code that wants
+to say so:
 
 ```csharp
 void HandleUpload(Stream upload, string? password, CancellationToken requestAborted)
@@ -1995,17 +2050,26 @@ void HandleUpload(Stream upload, string? password, CancellationToken requestAbor
 }
 ```
 
-| Limit | `ForUntrustedInput()` | On excess |
+| Limit | Default, and `ForUntrustedInput()` | On excess |
 |---|---|---|
 | `MaxPartBytes`: decompressed size of one part | 256 MB | `InvalidDataException` (see 26.2) |
 | `MaxTotalUncompressedBytes`: decompressed size of the whole package, and the size of an encrypted file | 1 GB | `XlsxLimitExceededException` |
 | `MaxCompressionRatio`: per entry larger than 1 MB | 500:1 | `XlsxLimitExceededException` |
 | `MaxPackageEntries`: zip entries | 20,000 | `XlsxLimitExceededException` |
 | `MaxRowsPerSheet`: rows read from one sheet | 1,048,576 (Excel's maximum) | `XlsxLimitExceededException` |
-| `MaxSpinCount`: key-derivation iterations of an encrypted file | 500,000 (also the plain default) | `XlsxLimitExceededException` |
+| `MaxSpinCount`: key-derivation iterations of an encrypted file | 500,000 | `XlsxLimitExceededException` |
+| `MaxCells` (2.2.1): cells `Workbook.Load` keeps, for the whole workbook | 4,000,000 | `XlsxLimitExceededException` |
 
-Without `ForUntrustedInput()` the limits are off (null), except `MaxSpinCount`, for compatibility with trusted
-input. Sizes are checked twice: against what the zip declares, before anything is read, and against the bytes
+Before 2.2.1 the defaults had no limits apart from `MaxSpinCount`. For files you created yourself or otherwise trust,
+`XlsxReaderOptions.ForTrustedInput()` turns every limit off, as before; a hostile file can then use as much memory
+and time as it asks for, so never use it for uploads or e-mail attachments. To raise one limit, set just that one:
+`new XlsxReaderOptions { MaxCells = 10_000_000 }`.
+
+`MaxCells` exists because a loaded cell takes about 127 to 155 bytes in the model, depending on its value (28.1): 6
+million small cells compress to a small file, pass every size limit, and still need about 1 GB. The default, 4
+million, is about 500 to 620 MB. The count stops the load at the first cell over the
+limit, and the message names the sheet and the cell. It does not apply to the streaming `XlsxReader`, which keeps
+constant memory whatever the size; read big trusted files that way. Sizes are checked twice: against what the zip declares, before anything is read, and against the bytes
 actually inflated while reading, because declared sizes can lie. `XlsxLimitExceededException` derives from
 `IOException` and names the limit in `LimitName`, with `Limit` and `Actual`.
 
@@ -2028,15 +2092,45 @@ the limit is checked. It is how the library, and your code, tell this size limit
 `reader.HasMacros` and `wb.HasMacros` report a VBA project or Excel 4.0 macro sheets. Macros are never run, and
 saving a loaded workbook writes a macro-free `.xlsx`.
 
+## 26.4 Formulas, drawings and evaluation
+
+Since 2.2.1 nothing nested in a file can overflow the stack, which would end the process without any `catch` being
+able to stop it.
+
+- **Formulas** (conditional formats, and through them Chuvadi.Layout) may nest 256 levels: brackets, function calls
+  and `+`/`-` signs count together, and so do `%` signs. A deeper rule is "not evaluated", as an unsupported function
+  is. Excel itself allows 64 nested functions, so no formula Excel writes comes near the limit. Long flat chains
+  such as `1+1+1…` or `A1&B1&C1…` do not nest and have no limit.
+- **Shape groups** in a drawing may nest 256 levels; a deeper drawing is `XlsxFormatException`.
+- **Deep XML.** The parts the reader keeps as element trees (styles, the theme, drawings, charts, and the sheet's
+  extension XML) may nest 1,000 levels; deeper is malformed XML, reported as `XlsxFormatException` or, for an
+  optional part with `StrictXml` off, skipped. (.NET builds such trees in time that grows with the square of the
+  depth: before 2.2.1, 100,000 levels took about two minutes per part.) Real files nest a few dozen levels. Sheet
+  data, shared strings and comments are read in one pass, at any depth.
+- **Small stacks.** Thread-pool, Windows and Android threads can have 256 KB of stack or less, which holds fewer than
+  256 levels. When the stack runs low, the work continues on a fresh 1 MB thread while the calling thread waits, as
+  .NET's own Regex parser does; this happens only for input nested far deeper than real files. Where no thread can be
+  started (WebAssembly), a rule that does not fit is "not evaluated".
+- **Wildcards.** SEARCH and the COUNTIF/SUMIF/AVERAGEIF criteria match `?`, `*` and `~` with a matcher that takes at
+  most text length × pattern length steps. (Before 2.2.1 a regex was used, and `"*a*a*a*a*b"` over 300 letters ran
+  for minutes.) The results are the same as before.
+- **Evaluation budget.** Even simple rules can ask for a lot of work: `COUNTIF($A:$A,A1)` on every cell of a million
+  rows is 10¹² cell reads. `ConditionalFormatOptions.MaxCellsVisited` (default 100 million cell reads and formula
+  steps per evaluator) bounds it; past it, the rest of the rules are "not evaluated". `ConditionalFormatOptions.CancellationToken`
+  stops evaluation with `OperationCanceledException`. See 21.2.
+
 # 27 Errors
 
 ## 27.1 What the readers throw
 
 | Exception | When |
 |---|---|
-| `XlsxFormatException` | The file is malformed: not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, declared or not), a damaged relationship entry, a truncated part, a text cell whose shared-string reference does not exist, or, with a password given, a damaged encrypted container or a failed integrity check. Since 2.0.5 also an old binary file, such as an Excel 97-2003 .xls, or another compound file that is not an encrypted xlsx: the message names the old format, for example "This is an Excel 97-2003 binary file (.xls), not an Office Open XML package, and it is not encrypted." (before 2.0.5 it asked for a password). `InnerException` holds the original error, when there is one. |
+| `XlsxFormatException` | The file is malformed: not a zip or a damaged zip, malformed XML in any part, a missing required part (the workbook part or a worksheet part, declared or not), a damaged relationship entry, a truncated part, a text cell whose shared-string reference does not exist, or, with a password given, a damaged encrypted container or a failed integrity check. Since 2.2.1 also a package
+whose main part is not a workbook (a .docx or .pptx, which loaded as a workbook with no sheets before), two sheets with
+the same name or an empty one, shape groups nested deeper than 256 levels (26.4), and a damaged value in an encrypted
+file's header (before, `FormatException`). Since 2.0.5 also an old binary file, such as an Excel 97-2003 .xls, or another compound file that is not an encrypted xlsx: the message names the old format, for example "This is an Excel 97-2003 binary file (.xls), not an Office Open XML package, and it is not encrypted." (before 2.0.5 it asked for a password). `InnerException` holds the original error, when there is one. |
 | `XlsxPasswordRequiredException` | The file is encrypted and no password was given, or the password is wrong. |
-| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`. `LimitName`, `Limit` and `Actual` say which. Since 2.1.0 a second constructor also takes an inner exception, for code that rethrows a limit with its cause, as Chuvadi.Docs' `DocxLimitExceededException` does. |
+| `XlsxLimitExceededException` (an `IOException`) | A read limit was exceeded: `MaxRowsPerSheet`, `MaxTotalUncompressedBytes`, `MaxCompressionRatio`, `MaxPackageEntries`, `MaxSpinCount`, `MaxCells` (2.2.1). `LimitName`, `Limit` and `Actual` say which. Since 2.1.0 a second constructor also takes an inner exception, for code that rethrows a limit with its cause, as Chuvadi.Docs' `DocxLimitExceededException` does. |
 | `InvalidDataException` with `Data["Chuvadi.Sheets.ReadLimit"]` | `MaxPartBytes` was exceeded (a limit, not a malformed file). |
 | `OperationCanceledException` | The `CancellationToken` was cancelled. |
 | `ArgumentException`, `ArgumentNullException`, `KeyNotFoundException`, `InvalidCastException`, `InvalidOperationException` | Caller mistakes: a bad argument, no sheet with that name, a typed getter on a value of another type, a call in the wrong state. |
@@ -2060,8 +2154,8 @@ catch (XlsxFormatException ex)
 
 ## 27.2 Writers
 
-The writers throw `ArgumentException` and its relatives for invalid input, such as an empty password or a page
-setting out of range, and `InvalidOperationException` for a call in the wrong state, such as `AutoFitColumns` after
+The writers throw `ArgumentException` and its relatives for invalid input, such as an empty password (since 2.2.1
+also from `Workbook.SaveTo(…, EncryptionOptions)`, before anything is written) or a page setting out of range, and `InvalidOperationException` for a call in the wrong state, such as `AutoFitColumns` after
 rows were written, or a save with no visible sheet or with a hidden active sheet.
 
 # 28 Performance
@@ -2114,6 +2208,10 @@ are independent.
 | Two threads each with their own `XlsxReader` over the same file | Safe: each opens its own stream |
 | Sharing a `CellStyle` between threads | Safe: it is an immutable value |
 | `NumberFormatter` | Safe: parsed format codes are cached thread-safely |
+
+Since 2.2.1, evaluating a formula or reading a drawing nested far deeper than real files may continue on a fresh
+1 MB thread while your thread waits (26.4). The work stays sequential, your thread's culture is used, and no other
+code of yours runs on that thread.
 
 The asynchronous methods (`WriteRowAsync`, `SaveAsync`, `DisposeAsync`) make I/O non-blocking but add no
 concurrency: one call at a time per writer. For a pipeline, feed one writer from a queue:
@@ -2183,14 +2281,16 @@ broken and AES zip is not in the base class library. To protect a spreadsheet, e
 | `IncludeStyledEmptyCells` | `false` | `Workbook.Load`: load empty cells that carry a style |
 | `LoadImageData` | `true` | `Workbook.Load`: read picture bytes into memory |
 | `DisplayCulture` | `null` (invariant, as Excel en-US) | Culture for display text |
-| `MaxPartBytes` | `null` | Decompressed bytes per part |
-| `MaxTotalUncompressedBytes` | `null` | Decompressed bytes for the package; also the size of an encrypted file |
-| `MaxCompressionRatio` | `null` | Per entry larger than 1 MB |
-| `MaxPackageEntries` | `null` | Zip entries |
-| `MaxRowsPerSheet` | `null` | Rows read per sheet |
+| `MaxPartBytes` | 256 MB (2.2.1; `null` before) | Decompressed bytes per part |
+| `MaxTotalUncompressedBytes` | 1 GB (2.2.1; `null` before) | Decompressed bytes for the package; also the size of an encrypted file |
+| `MaxCompressionRatio` | 500 (2.2.1; `null` before) | Per entry larger than 1 MB |
+| `MaxPackageEntries` | 20,000 (2.2.1; `null` before) | Zip entries |
+| `MaxRowsPerSheet` | 1,048,576 (2.2.1; `null` before) | Rows read per sheet |
 | `MaxSpinCount` | `500,000` | Key-derivation iterations accepted from an encrypted file |
+| `MaxCells` | 4,000,000 (new in 2.2.1) | Cells `Workbook.Load` keeps for the whole workbook; not the streaming reader |
 | `CancellationToken` | none | Cancels opening, decryption and row reading |
-| `ForUntrustedInput()` | — | 256 MB per part, 1 GB total, 500:1, 20,000 entries, 1,048,576 rows |
+| `ForUntrustedInput()` | — | The defaults (since 2.2.1): 256 MB per part, 1 GB total, 500:1, 20,000 entries, 1,048,576 rows, 500,000 spins, 4,000,000 cells |
+| `ForTrustedInput()` | — | 2.2.1: every limit off (`null`), for files you trust |
 
 ## 31.2 `XlsxWriterOptions`
 
@@ -2212,7 +2312,7 @@ broken and AES zip is not in the base class library. To protect a spreadsheet, e
 | `EncryptionOptions` | `Password` (required), `SpinCount` (100,000) |
 | `AutoFitOptions` | `MinWidth`, `MaxWidth`, `MaxRowsToMeasure`, `ExtraWidth`, `AllowForFilterButton`, `Columns`, `Format` |
 | `NumberFormatOptions` | `Culture`, `Date1904` |
-| `ConditionalFormatOptions` | `Today`, `Date1904` |
+| `ConditionalFormatOptions` | `Today`, `Date1904`, `MaxCellsVisited` (100,000,000; 2.2.1), `CancellationToken` (2.2.1) |
 | `SheetProtectionOptions` | `AllowSelectLockedCells`, `AllowSelectUnlockedCells`, `AllowFormatCells`, `AllowFormatColumns`, `AllowFormatRows`, `AllowInsertColumns`, `AllowInsertRows`, `AllowInsertHyperlinks`, `AllowDeleteColumns`, `AllowDeleteRows`, `AllowSort`, `AllowAutoFilter`, `AllowPivotTables`, `AllowEditObjects`, `AllowEditScenarios` |
 | `PageSetup` | Chapter 13 |
 | `SheetView` | Chapter 12 |

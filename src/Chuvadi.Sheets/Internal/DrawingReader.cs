@@ -42,7 +42,7 @@ internal static class DrawingReader
         XDocument doc;
         using (var s = book.OpenPartLimited(drawingUri))
         using (var x = XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, CloseInput = false }))
-            doc = XDocument.Load(x);
+            doc = XDocument.Load(new DepthLimitedXmlReader(x, drawingUri));   // 2.2.1: XLinq trees cost depth squared
         StrictOoxml.Normalize(doc);
         var root = doc.Root;
         if (root is null) return result;
@@ -133,8 +133,17 @@ internal static class DrawingReader
         return new DrawingPoint((int)V("col") + 1, V("colOff"), (int)V("row") + 1, V("rowOff"));
     }
 
-    private static DrawingObject? ParseObject(XElement e, DrawingAnchor anchor, Ctx ctx)
+    /// <summary>
+    /// 2.2.1 (P1, SEC-S1): the deepest nesting of shape groups read. Deeper groups are a damaged or hostile file
+    /// (a 9.7 KB file with 20,000 levels overflowed the stack): <see cref="XlsxFormatException"/>, never a crash.
+    /// </summary>
+    internal const int MaxGroupNesting = 256;
+
+    private static DrawingObject? ParseObject(XElement e, DrawingAnchor anchor, Ctx ctx, int depth = 1)
     {
+        if (depth > MaxGroupNesting && e.Name.LocalName == "grpSp")
+            throw new InvalidDataException($"Drawing '{ctx.DrawingUri}': shape groups are nested deeper than {MaxGroupNesting} levels.");
+        if (!FreshStack.HasRoom) return FreshStack.Run(() => ParseObject(e, anchor, ctx, depth));   // a small stack continues on a fresh one
         var o = new DrawingObject { Anchor = anchor };
         var cNvPr = e.Descendants(Xdr + "cNvPr").FirstOrDefault();
         if (cNvPr is not null)
@@ -170,7 +179,7 @@ internal static class DrawingReader
                 o.Kind = DrawingKind.Group;
                 var children = new List<DrawingObject>();
                 foreach (var child in ObjectElements(e))
-                    if (ParseObject(child, anchor, ctx) is { } c) children.Add(c);
+                    if (ParseObject(child, anchor, ctx, depth + 1) is { } c) children.Add(c);
                 o.Children = children;
                 break;
             case "graphicFrame":

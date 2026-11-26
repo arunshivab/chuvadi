@@ -204,17 +204,24 @@ public sealed class Workbook
     /// one-time key held only in memory, owner-only and deleted on close), and the file is
     /// replaced only when the save succeeds, so a failed save keeps an existing file.
     /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="encryption"/> or its password is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is null or empty, or the password is empty (since 2.2.1).</exception>
     [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]   // SaveTo(path, null) binds here, as before 2.1.0
     public void SaveTo(string path, EncryptionOptions encryption)
     {
         if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path required.", nameof(path));
         if (encryption is null) throw new ArgumentNullException(nameof(encryption));
+        // 2.2.1 (S-15): an empty password used to write a file no one could open. A null one keeps its
+        // ArgumentNullException, as before, now thrown before anything is written.
+        if (encryption.Password is null) throw new ArgumentNullException(nameof(encryption), "Encryption password cannot be null.");
+        if (encryption.Password.Length == 0)
+            throw new ArgumentException("Encryption password cannot be empty.", nameof(encryption));
         if (_sheets.Count == 0) throw new InvalidOperationException("Workbook has no sheets.");
 
         // Since 2.0.1 (D-183): the plaintext package and the row spools go to encrypted,
         // owner-only temporary files that are deleted on close, and the encrypted file is written
         // beside the target and replaces it only on success, so a failed save keeps the old file.
-        // The password is not checked here, as before 2.0.1.
+        // Since 2.2.1 the password is checked above, before anything is written.
         using var writer = XlsxWriter.CreateForPath(path, new XlsxWriterOptions { Encryption = encryption }, checkPassword: false);
         WorkbookSerializer.WriteWorkbook(writer, this);
         writer.Save();
@@ -225,12 +232,18 @@ public sealed class Workbook
     /// The same file as <see cref="SaveTo(string, EncryptionOptions)"/> writes; the stream is flushed and not
     /// closed, and need not be seekable. No plaintext reaches the disk (see <see cref="XlsxWriterOptions.Encryption"/>).
     /// </summary>
-    /// <exception cref="ArgumentNullException"><paramref name="output"/> or <paramref name="encryption"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/>, <paramref name="encryption"/> or its password is null.</exception>
+    /// <exception cref="ArgumentException">The password is empty (since 2.2.1).</exception>
     [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]   // SaveTo(stream, null) binds here
     public void SaveTo(System.IO.Stream output, EncryptionOptions encryption)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
         if (encryption is null) throw new ArgumentNullException(nameof(encryption));
+        // 2.2.1 (S-15): an empty password used to write a file no one could open. A null one keeps its
+        // ArgumentNullException, as before, now thrown before anything is written.
+        if (encryption.Password is null) throw new ArgumentNullException(nameof(encryption), "Encryption password cannot be null.");
+        if (encryption.Password.Length == 0)
+            throw new ArgumentException("Encryption password cannot be empty.", nameof(encryption));
         if (_sheets.Count == 0) throw new InvalidOperationException("Workbook has no sheets.");
 
         using var writer = XlsxWriter.CreateForStream(output, new XlsxWriterOptions { Encryption = encryption }, checkPassword: false);
@@ -600,6 +613,9 @@ public sealed class Sheet
         ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(_cells, (row, column), out _);
         return slot ??= new Cell(row, column) { Owner = this };
     }
+
+    /// <summary>2.2.1 (P5): the number of cells the sheet holds, for the loader's MaxCells count.</summary>
+    internal int CellCount => _cells.Count;
 
     /// <summary>Returns a range descriptor for the given A1 range.</summary>
     public Range Range(string range)

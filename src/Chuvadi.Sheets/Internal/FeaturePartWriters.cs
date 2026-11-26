@@ -52,7 +52,7 @@ internal static class FeaturePartWriters
             w.WriteStartElement("tableColumn", SsNs);
             // Column id within the table — 1-based.
             w.WriteAttributeString("id", (i + 1).ToString(CultureInfo.InvariantCulture));
-            w.WriteAttributeString("name", table.ColumnHeaders[i]);
+            w.WriteAttributeString("name", XString.Encode(table.ColumnHeaders[i]));   // 2.2.1 (P8)
             w.WriteEndElement();
         }
         w.WriteEndElement(); // </tableColumns>
@@ -102,7 +102,7 @@ internal static class FeaturePartWriters
         foreach (var a in orderedAuthors)
         {
             w.WriteStartElement("author", SsNs);
-            w.WriteString(a);
+            w.WriteString(XString.Encode(a));   // 2.2.1 (P8)
             w.WriteEndElement();
         }
         w.WriteEndElement();
@@ -128,7 +128,7 @@ internal static class FeaturePartWriters
             w.WriteEndElement(); // </rPr>
             w.WriteStartElement("t", SsNs);
             w.WriteAttributeString("xml", "space", null, "preserve");
-            w.WriteString(c.Text);
+            w.WriteString(XString.Encode(c.Text));   // 2.2.1 (P8)
             w.WriteEndElement(); // </t>
             w.WriteEndElement(); // </r>
             w.WriteEndElement(); // </text>

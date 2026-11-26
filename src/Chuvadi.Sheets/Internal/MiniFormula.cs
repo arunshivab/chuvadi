@@ -56,19 +56,41 @@ internal sealed class MiniFormula
 
     private MiniFormula(Node root) { _root = root; }
 
+    /// <summary>
+    /// 2.2.1 (P1, SEC-08): the most nesting levels a formula may have. Brackets, function arguments, unary signs and
+    /// percent signs each count one level. Excel itself allows 64 nested functions in an 8,192-character formula, so
+    /// no formula Excel writes comes near it; deeper input is "not evaluated" instead of overflowing the stack.
+    /// </summary>
+    internal const int MaxNesting = 256;
+
     public static MiniFormula Parse(string formula)
     {
         var p = new Parser(formula.StartsWith("=", StringComparison.Ordinal) ? formula.Substring(1) : formula);
-        var n = p.ParseExpression();
-        p.ExpectEnd();
-        return new MiniFormula(n);
+        try
+        {
+            var n = p.ParseExpression();
+            p.ExpectEnd();
+            return new MiniFormula(n);
+        }
+        catch (InsufficientExecutionStackException)
+        {
+            // Second guard (P1): the stack ran out and no fresh stack could be used (see FreshStack).
+            throw new FormulaNotSupportedException("The formula is nested too deeply for the available stack.");
+        }
     }
 
     /// <summary>
     /// Evaluates for the cell (row, col), with relative references moved by
     /// (row - anchorRow, col - anchorCol). Returns a scalar (double, string, bool, FormulaError, null for blank).
     /// </summary>
-    public object? Evaluate(EvalContext ctx) => Scalar(Eval(_root, ctx), ctx);
+    public object? Evaluate(EvalContext ctx)
+    {
+        try { return Scalar(Eval(_root, ctx), ctx); }
+        catch (InsufficientExecutionStackException)
+        {
+            throw new FormulaNotSupportedException("The formula is nested too deeply for the available stack.");
+        }
+    }
 
     // ---- Evaluation ----------------------------------------------------------------
 
@@ -81,10 +103,17 @@ internal sealed class MiniFormula
         public required int AnchorColumn { get; init; }
         public required DateTime Today { get; init; }
         public bool Date1904 { get; init; }
+
+        /// <summary>2.2.1 (P3): the evaluator's work budget and cancellation; null outside an evaluator.</summary>
+        public EvaluationBudget? Budget { get; init; }
+
+        public void CountWork(long units) => Budget?.Add(units);
     }
 
     private static object? Eval(Node n, EvalContext c)
     {
+        if (!FreshStack.HasRoom) return FreshStack.Run(() => Eval(n, c));   // P1: a small stack continues on a fresh one
+        c.CountWork(1);
         switch (n)
         {
             case Lit l: return l.Value;
@@ -99,8 +128,17 @@ internal sealed class MiniFormula
             }
             case Percent p:
             {
-                var d = ToNumber(Scalar(Eval(p.Arg, c), c));
-                return d is double x ? x / 100 : d;
+                // A run of percent signs ("1%%%") is folded in a loop, not by recursion (P1).
+                int count = 0;
+                Node inner = p;
+                while (inner is Percent q) { count++; inner = q.Arg; }
+                var v = Eval(inner, c);
+                for (int k = 0; k < count; k++)
+                {
+                    var d = ToNumber(Scalar(v, c));
+                    v = d is double x ? x / 100 : d;
+                }
+                return v;
             }
             case Binary b: return EvalBinary(b, c);
             case Call f: return Functions.Call(f.Name, f.Args, c);
@@ -108,13 +146,29 @@ internal sealed class MiniFormula
         throw new FormulaNotSupportedException("Unknown node.");
     }
 
+    /// <summary>
+    /// A left-associative chain ("1+2+3+…", "A1&amp;B1&amp;…") is folded along its left spine in a loop (P1), so a long
+    /// chain costs no stack; the order of evaluation is unchanged (left operand, then right operand, step by step).
+    /// </summary>
     private static object? EvalBinary(Binary b, EvalContext c)
     {
-        var l = Scalar(Eval(b.Left, c), c);
-        var r = Scalar(Eval(b.Right, c), c);
+        var spine = new List<Binary>();
+        Node n = b;
+        while (n is Binary nb) { spine.Add(nb); n = nb.Left; }
+        object? acc = Scalar(Eval(n, c), c);
+        for (int k = spine.Count - 1; k >= 0; k--)
+        {
+            var step = spine[k];
+            acc = ApplyBinary(step.Op, acc, Scalar(Eval(step.Right, c), c));
+        }
+        return acc;
+    }
+
+    private static object? ApplyBinary(string op, object? l, object? r)
+    {
         if (l is FormulaError) return l;
         if (r is FormulaError) return r;
-        switch (b.Op)
+        switch (op)
         {
             case "&": return Text(l) + Text(r);
             case "=": return Compare(l, r) == 0;
@@ -127,14 +181,14 @@ internal sealed class MiniFormula
         var x = ToNumber(l); if (x is FormulaError) return x;
         var y = ToNumber(r); if (y is FormulaError) return y;
         double a = (double)x!, d = (double)y!;
-        return b.Op switch
+        return op switch
         {
             "+" => a + d,
             "-" => a - d,
             "*" => a * d,
             "/" => d == 0 ? FormulaError.Div0 : a / d,
             "^" => Math.Pow(a, d),
-            _ => throw new FormulaNotSupportedException($"Operator {b.Op}."),
+            _ => throw new FormulaNotSupportedException($"Operator {op}."),
         };
     }
 
@@ -405,25 +459,7 @@ internal sealed class MiniFormula
         {
             if (find.IndexOfAny(new[] { '*', '?', '~' }) < 0)
                 return within.IndexOf(find, start, StringComparison.OrdinalIgnoreCase);
-            var rx = new System.Text.RegularExpressions.Regex(WildcardToRegex(find, anchored: false),
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-            var m = rx.Match(within, start);
-            return m.Success ? m.Index : -1;
-        }
-
-        internal static string WildcardToRegex(string pattern, bool anchored)
-        {
-            var sb = new StringBuilder(anchored ? "^" : "");
-            for (int i = 0; i < pattern.Length; i++)
-            {
-                char ch = pattern[i];
-                if (ch == '~' && i + 1 < pattern.Length) { sb.Append(System.Text.RegularExpressions.Regex.Escape(pattern[++i].ToString())); continue; }
-                if (ch == '*') sb.Append(".*");
-                else if (ch == '?') sb.Append('.');
-                else sb.Append(System.Text.RegularExpressions.Regex.Escape(ch.ToString()));
-            }
-            if (anchored) sb.Append('$');
-            return sb.ToString();
+            return Wildcard.Compile(find).IndexOf(within, start);   // 2.2.1 (P2): no regex, no backtracking
         }
 
         /// <summary>COUNTIF criteria: a value, or text with a leading operator (">5", "&lt;&gt;x", "=a*").</summary>
@@ -441,9 +477,8 @@ internal sealed class MiniFormula
                 bool neg = op == "<>";
                 if (text.Length == 0) return v => (v is null || v is "") != neg;
                 if (isNum) return v => (v is double x && x == num) != neg;
-                var rx = new System.Text.RegularExpressions.Regex(WildcardToRegex(text, anchored: true),
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-                return v => (v is string s && rx.IsMatch(s)) != neg;
+                var wc = Wildcard.Compile(text);   // 2.2.1 (P2): no regex, no backtracking
+                return v => (v is string s && wc.IsMatch(s)) != neg;
             }
             if (isNum)
                 return v => v is double x && op switch { "<" => x < num, ">" => x > num, "<=" => x <= num, _ => x >= num };
@@ -507,7 +542,21 @@ internal sealed class MiniFormula
         private readonly string _s;
         private int _i;
 
+        private int _depth;
+
         public Parser(string s) { _s = s; }
+
+        /// <summary>
+        /// One more nesting level (P1): refused past <see cref="MaxNesting"/>. The recursive calls that follow check the
+        /// stack and continue on a fresh one when it runs low (<see cref="FreshStack"/>).
+        /// </summary>
+        private void Enter()
+        {
+            if (++_depth > MaxNesting)
+                throw new FormulaNotSupportedException($"The formula is nested deeper than {MaxNesting} levels.");
+        }
+
+        private void Leave() => _depth--;
 
         private void Ws() { while (_i < _s.Length && char.IsWhiteSpace(_s[_i])) _i++; }
         private bool Peek(string t) { Ws(); return string.CompareOrdinal(_s, _i, t, 0, t.Length) == 0; }
@@ -519,7 +568,12 @@ internal sealed class MiniFormula
             if (_i != _s.Length) throw new FormulaNotSupportedException($"Unexpected '{_s.Substring(_i)}'.");
         }
 
-        public Node ParseExpression() => Comparison();
+        public Node ParseExpression()
+        {
+            Enter();
+            try { return FreshStack.HasRoom ? Comparison() : FreshStack.Run(Comparison); }
+            finally { Leave(); }
+        }
 
         private Node Comparison()
         {
@@ -570,10 +624,20 @@ internal sealed class MiniFormula
 
         private Node UnaryNode()
         {
-            if (Accept("-")) return new Unary('-', UnaryNode());
-            if (Accept("+")) return new Unary('+', UnaryNode());
+            char sign = Accept("-") ? '-' : Accept("+") ? '+' : '\0';
+            if (sign != '\0')
+            {
+                Enter();
+                try { return new Unary(sign, FreshStack.HasRoom ? UnaryNode() : FreshStack.Run(UnaryNode)); }
+                finally { Leave(); }
+            }
             var n = Primary();
-            while (Accept("%")) n = new Percent(n);
+            int percents = 0;
+            try
+            {
+                while (Accept("%")) { Enter(); percents++; n = new Percent(n); }
+            }
+            finally { _depth -= percents; }
             return n;
         }
 

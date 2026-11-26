@@ -22,7 +22,10 @@ namespace Chuvadi.Sheets.Model;
 /// shared-string placeholders replaced by their final indices in a single byte-level pass.
 ///
 /// Dispose always cleans up temp files. Calling Save is REQUIRED to produce a valid output
-/// file; Dispose alone will not finalize the package.
+/// file; Dispose alone will not finalize the package. A writer disposed without Save writes nothing: a path
+/// target is left untouched, and a stream target gets no bytes at all. This is deliberate, so a workbook whose
+/// writing failed half-way is never saved as if it were complete. Check <see cref="IsSaved"/> (since 2.2.1)
+/// when you need to know.
 /// </summary>
 public sealed class XlsxWriter : IDisposable, IAsyncDisposable
 {
@@ -297,6 +300,12 @@ public sealed class XlsxWriter : IDisposable, IAsyncDisposable
     }
 
     // ---- Save (sync) ---------------------------------------------------------------
+
+    /// <summary>
+    /// 2.2.1 (S-01): true once <see cref="Save"/> or <see cref="SaveAsync"/> has completed and the workbook was written.
+    /// A writer disposed while this is false wrote nothing (no bytes to a stream, the target path untouched).
+    /// </summary>
+    public bool IsSaved => _saved;
 
     /// <summary>
     /// Finalizes all sheets, assembles the xlsx package, and writes everything to the output
